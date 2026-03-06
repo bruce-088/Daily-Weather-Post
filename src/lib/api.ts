@@ -105,7 +105,8 @@ export interface ScheduledPostItem {
 export async function createScheduledPost(
   city: string,
   scheduledAt: string,
-  platform: string
+  platform: string,
+  caption?: string | null
 ): Promise<boolean> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return false;
@@ -115,6 +116,7 @@ export async function createScheduledPost(
     scheduled_at: scheduledAt,
     platform,
     user_id: user.id,
+    ...(caption ? { caption } : {}),
   });
   return !error;
 }

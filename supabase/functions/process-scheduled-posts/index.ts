@@ -205,30 +205,33 @@ Deno.serve(async (req) => {
       try {
         const weather = await fetchWeatherData(post.city, openWeatherApiKey);
 
-        let caption: string | null = null;
-        const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-        if (LOVABLE_API_KEY) {
-          try {
-            const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${LOVABLE_API_KEY}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                model: "google/gemini-3-flash-preview",
-                messages: [
-                  { role: "system", content: SKYBRIEF_SYSTEM_PROMPT },
-                  { role: "user", content: buildSkyBriefUserPrompt(weather) },
-                ],
-              }),
-            });
-            if (aiRes.ok) {
-              const aiData = await aiRes.json();
-              caption = aiData.choices?.[0]?.message?.content?.trim() || null;
+        // Use pre-written caption if available, otherwise auto-generate
+        let caption: string | null = post.caption || null;
+        if (!caption) {
+          const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+          if (LOVABLE_API_KEY) {
+            try {
+              const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${LOVABLE_API_KEY}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  model: "google/gemini-3-flash-preview",
+                  messages: [
+                    { role: "system", content: SKYBRIEF_SYSTEM_PROMPT },
+                    { role: "user", content: buildSkyBriefUserPrompt(weather) },
+                  ],
+                }),
+              });
+              if (aiRes.ok) {
+                const aiData = await aiRes.json();
+                caption = aiData.choices?.[0]?.message?.content?.trim() || null;
+              }
+            } catch (e) {
+              console.error("Caption generation failed:", e);
             }
-          } catch (e) {
-            console.error("Caption generation failed:", e);
           }
         }
 
