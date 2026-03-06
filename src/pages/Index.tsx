@@ -161,13 +161,7 @@ const Index = () => {
   const handleGenerateCaption = useCallback(async () => {
     setCaptionLoading(true);
     try {
-      const result = await generateCaption(
-        weather.city,
-        weather.temperature,
-        weather.condition,
-        weather.description,
-        "instagram"
-      );
+      const result = await generateCaption(weather);
       setCaption(result);
       toast.success("Caption generated!");
     } catch (err: any) {

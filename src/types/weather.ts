@@ -1,6 +1,7 @@
 export interface WeatherData {
   city: string;
   country: string;
+  stateOrRegion: string;
   temperature: number;
   feelsLike: number;
   humidity: number;
@@ -9,6 +10,17 @@ export interface WeatherData {
   conditionIcon: string;
   description: string;
   forecast: ForecastDay[];
+  // Time-of-day breakdowns
+  morningTemp: number | null;
+  morningCondition: string | null;
+  afternoonTemp: number | null;
+  afternoonCondition: string | null;
+  eveningTemp: number | null;
+  eveningCondition: string | null;
+  rainChance: number | null;
+  windInfo: string | null;
+  sunrise: string | null;
+  sunset: string | null;
 }
 
 export interface ForecastDay {
