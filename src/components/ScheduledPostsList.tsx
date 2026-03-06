@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
 import { format } from "date-fns";
-import { CalendarClock, MapPin, XCircle } from "lucide-react";
+import { CalendarClock, MapPin, Search, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
@@ -34,9 +35,13 @@ type SortOption = "date-desc" | "date-asc" | "city-asc" | "city-desc";
 export function ScheduledPostsList({ posts, loading, onRefresh }: ScheduledPostsListProps) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState<SortOption>("date-desc");
+  const [citySearch, setCitySearch] = useState("");
 
   const filtered = useMemo(() => {
     let result = posts;
+    if (citySearch.trim()) {
+      result = result.filter((p) => p.city.toLowerCase().includes(citySearch.trim().toLowerCase()));
+    }
     if (statusFilter !== "all") {
       result = result.filter((p) => p.status === statusFilter);
     }
@@ -55,7 +60,7 @@ export function ScheduledPostsList({ posts, loading, onRefresh }: ScheduledPosts
       }
     });
     return result;
-  }, [posts, statusFilter, sortBy]);
+  }, [posts, statusFilter, sortBy, citySearch]);
 
   if (loading) {
     return (
@@ -90,6 +95,15 @@ export function ScheduledPostsList({ posts, loading, onRefresh }: ScheduledPosts
     <div className="space-y-3">
       {/* Toolbar */}
       <div className="flex items-center gap-2 flex-wrap">
+        <div className="relative flex-1 min-w-[140px] max-w-[200px]">
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search city…"
+            value={citySearch}
+            onChange={(e) => setCitySearch(e.target.value)}
+            className="h-8 text-xs pl-8"
+          />
+        </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-[130px] h-8 text-xs">
             <SelectValue placeholder="Status" />
