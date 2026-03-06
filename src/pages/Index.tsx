@@ -16,6 +16,7 @@ import {
   CalendarClock,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { NotificationBell } from "@/components/NotificationBell";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
