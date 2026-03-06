@@ -136,3 +136,21 @@ export async function cancelScheduledPost(id: string): Promise<boolean> {
     .eq("id", id);
   return !error;
 }
+
+// --- Caption Generation ---
+
+export async function generateCaption(
+  city: string,
+  temperature: number | null,
+  condition: string | null,
+  description: string | null,
+  platform: string = "instagram"
+): Promise<string> {
+  const { data, error } = await supabase.functions.invoke("generate-caption", {
+    body: { city, temperature, condition, description, platform },
+  });
+
+  if (error) throw new Error(error.message || "Failed to generate caption");
+  if (data?.error) throw new Error(data.error);
+  return data?.caption || "";
+}
