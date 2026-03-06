@@ -14,3 +14,6 @@ verify_jwt = false
 
 [functions.tiktok-auth]
 verify_jwt = false
+
+[functions.youtube-auth]
+verify_jwt = false
