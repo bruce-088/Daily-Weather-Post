@@ -60,7 +60,7 @@ export function ScheduledPostsList({ posts, loading, onRefresh }: ScheduledPosts
       }
     });
     return result;
-  }, [posts, statusFilter, sortBy]);
+  }, [posts, statusFilter, sortBy, citySearch]);
 
   if (loading) {
     return (
