@@ -63,6 +63,14 @@ TONE MODES:
 3. ALERT MODE - storms, strong wind, heavy rain, extreme heat, freezing. Tone: calm, direct, useful
 4. COZY MODE - cloudy, cool, drizzly, foggy, subdued. Tone: mellow, simple, slightly warm
 
+BRAND CONSISTENCY RULES:
+- Every caption should feel like part of the same brand system
+- Keep formatting consistent across posts
+- Vary wording slightly, but keep the structure familiar
+- The brand voice should feel local, useful, and clean
+- Write like a dependable local weather page, not a news anchor and not a meme page
+- Make the caption useful even if someone only reads the first 3 lines
+
 Return only the finished caption. Do not explain your choices. Do not output labels. Do not include quotation marks around the caption.`;
 
 Deno.serve(async (req) => {
