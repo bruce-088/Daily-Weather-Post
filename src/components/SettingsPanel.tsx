@@ -48,22 +48,12 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
       <Card className="border-border/50 bg-card/80 backdrop-blur">
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
-            <Key size={16} className="text-primary" />
-            API Keys
+            <Instagram size={16} className="text-primary" />
+            Social API Keys
           </CardTitle>
-          <CardDescription className="text-xs">Connect your accounts</CardDescription>
+          <CardDescription className="text-xs">Connect your social accounts</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div>
-            <Label className="text-xs text-muted-foreground">OpenWeatherMap API Key</Label>
-            <Input
-              type="password"
-              value={settings.openWeatherApiKey}
-              onChange={(e) => update("openWeatherApiKey", e.target.value)}
-              placeholder="Enter API key..."
-              className="bg-secondary/50 border-border/30 mt-1"
-            />
-          </div>
           <div>
             <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
               <Instagram size={12} /> Instagram Graph API Key

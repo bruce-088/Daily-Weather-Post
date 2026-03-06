@@ -1,0 +1,1 @@
+ALTER TABLE public.weather_settings DROP COLUMN openweather_api_key;

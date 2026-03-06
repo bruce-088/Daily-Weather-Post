@@ -69,8 +69,8 @@ const Index = () => {
   }, [loadHistory]);
 
   const handleFetch = useCallback(() => {
-    fetchWeather(settings.location, settings.openWeatherApiKey);
-  }, [fetchWeather, settings.location, settings.openWeatherApiKey]);
+    fetchWeather(settings.location);
+  }, [fetchWeather, settings.location]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);
