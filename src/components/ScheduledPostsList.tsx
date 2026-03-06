@@ -39,6 +39,9 @@ export function ScheduledPostsList({ posts, loading, onRefresh }: ScheduledPosts
 
   const filtered = useMemo(() => {
     let result = posts;
+    if (citySearch.trim()) {
+      result = result.filter((p) => p.city.toLowerCase().includes(citySearch.trim().toLowerCase()));
+    }
     if (statusFilter !== "all") {
       result = result.filter((p) => p.status === statusFilter);
     }
