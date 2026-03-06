@@ -23,10 +23,12 @@ import { WeatherCard } from "@/components/WeatherCard";
 import { MobilePreview } from "@/components/MobilePreview";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { PostHistoryList } from "@/components/PostHistoryList";
+import { SchedulePostForm } from "@/components/SchedulePostForm";
+import { ScheduledPostsList } from "@/components/ScheduledPostsList";
 import { useWeather } from "@/hooks/useWeather";
-import { loadSettings, saveSettings, triggerDailyPost, fetchPostHistory } from "@/lib/api";
+import { loadSettings, saveSettings, triggerDailyPost, fetchPostHistory, fetchScheduledPosts } from "@/lib/api";
 import type { AspectRatio, AutomationSettings } from "@/types/weather";
-import type { PostHistoryItem } from "@/lib/api";
+import type { PostHistoryItem, ScheduledPostItem } from "@/lib/api";
 
 const DEFAULT_SETTINGS: AutomationSettings = {
   instagramApiKey: "",
