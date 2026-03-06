@@ -92,12 +92,13 @@ Deno.serve(async (req) => {
       throw new Error("No weather settings found. Please configure your settings first.");
     }
 
-    if (!settings.openweather_api_key) {
-      throw new Error("OpenWeatherMap API key not configured.");
+    const openWeatherApiKey = Deno.env.get("OPENWEATHER_API_KEY");
+    if (!openWeatherApiKey) {
+      throw new Error("OpenWeatherMap API key not configured as a backend secret.");
     }
 
     // Fetch weather
-    const weather = await fetchWeatherData(settings.city, settings.openweather_api_key);
+    const weather = await fetchWeatherData(settings.city, openWeatherApiKey);
     console.log(`Weather fetched: ${weather.city} - ${weather.temperature}°C - ${weather.condition}`);
 
     // Generate image (placeholder)

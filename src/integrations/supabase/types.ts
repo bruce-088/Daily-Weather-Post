@@ -60,7 +60,6 @@ export type Database = {
           created_at: string
           id: string
           instagram_api_key: string | null
-          openweather_api_key: string | null
           post_time: string
           tiktok_api_key: string | null
           updated_at: string
@@ -72,7 +71,6 @@ export type Database = {
           created_at?: string
           id?: string
           instagram_api_key?: string | null
-          openweather_api_key?: string | null
           post_time?: string
           tiktok_api_key?: string | null
           updated_at?: string
@@ -84,7 +82,6 @@ export type Database = {
           created_at?: string
           id?: string
           instagram_api_key?: string | null
-          openweather_api_key?: string | null
           post_time?: string
           tiktok_api_key?: string | null
           updated_at?: string

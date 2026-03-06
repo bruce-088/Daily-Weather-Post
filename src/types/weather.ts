@@ -22,7 +22,6 @@ export interface ForecastDay {
 export type AspectRatio = "1:1" | "9:16";
 
 export interface AutomationSettings {
-  openWeatherApiKey: string;
   instagramApiKey: string;
   tiktokApiKey: string;
   postTime: string;

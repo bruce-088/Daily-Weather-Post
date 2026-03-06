@@ -2,3 +2,6 @@ project_id = "pewdswjhsesfondewucc"
 
 [functions.daily-weather-post]
 verify_jwt = false
+
+[functions.fetch-weather]
+verify_jwt = false
