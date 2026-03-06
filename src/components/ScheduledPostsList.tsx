@@ -35,6 +35,7 @@ type SortOption = "date-desc" | "date-asc" | "city-asc" | "city-desc";
 export function ScheduledPostsList({ posts, loading, onRefresh }: ScheduledPostsListProps) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState<SortOption>("date-desc");
+  const [citySearch, setCitySearch] = useState("");
 
   const filtered = useMemo(() => {
     let result = posts;
