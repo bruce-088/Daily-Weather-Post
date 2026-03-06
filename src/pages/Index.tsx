@@ -15,6 +15,8 @@ import {
   History,
   LogOut,
   CalendarClock,
+  MessageSquare,
+  RefreshCw,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { NotificationBell } from "@/components/NotificationBell";
