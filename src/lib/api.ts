@@ -89,3 +89,50 @@ export async function fetchPostHistory(limit = 10): Promise<PostHistoryItem[]> {
   if (error) return [];
   return data || [];
 }
+
+// --- Scheduled Posts ---
+
+export interface ScheduledPostItem {
+  id: string;
+  city: string;
+  scheduled_at: string;
+  platform: string;
+  status: string;
+  error_message: string | null;
+  created_at: string;
+}
+
+export async function createScheduledPost(
+  city: string,
+  scheduledAt: string,
+  platform: string
+): Promise<boolean> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return false;
+
+  const { error } = await supabase.from("scheduled_posts").insert({
+    city,
+    scheduled_at: scheduledAt,
+    platform,
+    user_id: user.id,
+  });
+  return !error;
+}
+
+export async function fetchScheduledPosts(): Promise<ScheduledPostItem[]> {
+  const { data, error } = await supabase
+    .from("scheduled_posts")
+    .select("*")
+    .order("scheduled_at", { ascending: true });
+
+  if (error) return [];
+  return data || [];
+}
+
+export async function cancelScheduledPost(id: string): Promise<boolean> {
+  const { error } = await supabase
+    .from("scheduled_posts")
+    .update({ status: "cancelled" })
+    .eq("id", id);
+  return !error;
+}

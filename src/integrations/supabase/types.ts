@@ -53,6 +53,39 @@ export type Database = {
         }
         Relationships: []
       }
+      scheduled_posts: {
+        Row: {
+          city: string
+          created_at: string
+          error_message: string | null
+          id: string
+          platform: string
+          scheduled_at: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          city: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          platform?: string
+          scheduled_at: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          city?: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          platform?: string
+          scheduled_at?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       weather_settings: {
         Row: {
           auto_post: boolean

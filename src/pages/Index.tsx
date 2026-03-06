@@ -13,6 +13,7 @@ import {
   Send,
   History,
   LogOut,
+  CalendarClock,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -22,10 +23,12 @@ import { WeatherCard } from "@/components/WeatherCard";
 import { MobilePreview } from "@/components/MobilePreview";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { PostHistoryList } from "@/components/PostHistoryList";
+import { SchedulePostForm } from "@/components/SchedulePostForm";
+import { ScheduledPostsList } from "@/components/ScheduledPostsList";
 import { useWeather } from "@/hooks/useWeather";
-import { loadSettings, saveSettings, triggerDailyPost, fetchPostHistory } from "@/lib/api";
+import { loadSettings, saveSettings, triggerDailyPost, fetchPostHistory, fetchScheduledPosts } from "@/lib/api";
 import type { AspectRatio, AutomationSettings } from "@/types/weather";
-import type { PostHistoryItem } from "@/lib/api";
+import type { PostHistoryItem, ScheduledPostItem } from "@/lib/api";
 
 const DEFAULT_SETTINGS: AutomationSettings = {
   instagramApiKey: "",
@@ -46,6 +49,8 @@ const Index = () => {
   const [posting, setPosting] = useState(false);
   const [posts, setPosts] = useState<PostHistoryItem[]>([]);
   const [postsLoading, setPostsLoading] = useState(false);
+  const [scheduledPosts, setScheduledPosts] = useState<ScheduledPostItem[]>([]);
+  const [scheduledLoading, setScheduledLoading] = useState(false);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
 
   // Load settings from DB on mount
@@ -64,9 +69,17 @@ const Index = () => {
     setPostsLoading(false);
   }, []);
 
+  const loadScheduled = useCallback(async () => {
+    setScheduledLoading(true);
+    const data = await fetchScheduledPosts();
+    setScheduledPosts(data);
+    setScheduledLoading(false);
+  }, []);
+
   useEffect(() => {
     loadHistory();
-  }, [loadHistory]);
+    loadScheduled();
+  }, [loadHistory, loadScheduled]);
 
   const handleFetch = useCallback(() => {
     fetchWeather(settings.location);
@@ -156,6 +169,9 @@ const Index = () => {
             <TabsTrigger value="preview" className="gap-1.5 text-xs">
               <Smartphone size={14} /> Preview
             </TabsTrigger>
+            <TabsTrigger value="schedule" className="gap-1.5 text-xs">
+              <CalendarClock size={14} /> Schedule
+            </TabsTrigger>
             <TabsTrigger value="history" className="gap-1.5 text-xs">
               <History size={14} /> History
             </TabsTrigger>
@@ -219,6 +235,22 @@ const Index = () => {
               <MobilePreview>
                 <WeatherCard weather={weather} aspectRatio="9:16" />
               </MobilePreview>
+            </div>
+          </TabsContent>
+
+          {/* SCHEDULE TAB */}
+          <TabsContent value="schedule">
+            <div className="max-w-2xl mx-auto grid md:grid-cols-[320px_1fr] gap-6">
+              <SchedulePostForm defaultCity={settings.location} onScheduled={loadScheduled} />
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold text-foreground">Scheduled Posts</h2>
+                  <Button size="sm" variant="outline" onClick={loadScheduled} className="text-xs gap-1.5">
+                    <CalendarClock size={14} /> Refresh
+                  </Button>
+                </div>
+                <ScheduledPostsList posts={scheduledPosts} loading={scheduledLoading} onRefresh={loadScheduled} />
+              </div>
             </div>
           </TabsContent>
 
