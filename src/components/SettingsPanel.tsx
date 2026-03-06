@@ -3,7 +3,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Clock, MapPin, Instagram, Video, RefreshCw, Save, CheckCircle, ExternalLink } from "lucide-react";
+import { Clock, MapPin, Instagram, Video, RefreshCw, Save, CheckCircle, ExternalLink, Youtube } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -17,9 +17,10 @@ interface SettingsPanelProps {
   loading: boolean;
   saving: boolean;
   tiktokConnected?: boolean;
+  youtubeConnected?: boolean;
 }
 
-export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, saving, tiktokConnected }: SettingsPanelProps) {
+export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, saving, tiktokConnected, youtubeConnected }: SettingsPanelProps) {
   const update = (key: keyof AutomationSettings, value: string | boolean) => {
     onUpdate({ ...settings, [key]: value });
   };
@@ -35,8 +36,22 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
       return;
     }
 
-    // Store state for CSRF validation
     sessionStorage.setItem("tiktok_oauth_state", data.state);
+    window.location.href = data.url;
+  };
+
+  const handleConnectYouTube = async () => {
+    const redirectUri = `${window.location.origin}/youtube/callback`;
+    const { data, error } = await supabase.functions.invoke("youtube-auth", {
+      body: { action: "get_auth_url", redirect_uri: redirectUri },
+    });
+
+    if (error || data?.error) {
+      toast.error("Failed to start YouTube authorization");
+      return;
+    }
+
+    sessionStorage.setItem("youtube_oauth_state", data.state);
     window.location.href = data.url;
   };
 
@@ -93,6 +108,30 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
               </Badge>
             ) : (
               <Button size="sm" variant="outline" onClick={handleConnectTikTok} className="gap-1.5">
+                <ExternalLink size={12} /> Connect
+              </Button>
+            )}
+          </div>
+
+          {/* YouTube OAuth */}
+          <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/30 border border-border/30">
+            <div className="flex items-center gap-3">
+              <div className="h-8 w-8 rounded-md bg-foreground/10 flex items-center justify-center">
+                <Youtube size={16} />
+              </div>
+              <div>
+                <p className="text-sm font-medium">YouTube Shorts</p>
+                <p className="text-xs text-muted-foreground">
+                  {youtubeConnected ? "Connected" : "Not connected"}
+                </p>
+              </div>
+            </div>
+            {youtubeConnected ? (
+              <Badge variant="outline" className="gap-1 text-xs border-primary/30 text-primary">
+                <CheckCircle size={12} /> Connected
+              </Badge>
+            ) : (
+              <Button size="sm" variant="outline" onClick={handleConnectYouTube} className="gap-1.5">
                 <ExternalLink size={12} /> Connect
               </Button>
             )}

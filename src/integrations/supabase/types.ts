@@ -137,6 +137,10 @@ export type Database = {
           tiktok_token_expires_at: string | null
           updated_at: string
           user_id: string | null
+          youtube_access_token: string | null
+          youtube_channel_id: string | null
+          youtube_refresh_token: string | null
+          youtube_token_expires_at: string | null
         }
         Insert: {
           auto_post?: boolean
@@ -152,6 +156,10 @@ export type Database = {
           tiktok_token_expires_at?: string | null
           updated_at?: string
           user_id?: string | null
+          youtube_access_token?: string | null
+          youtube_channel_id?: string | null
+          youtube_refresh_token?: string | null
+          youtube_token_expires_at?: string | null
         }
         Update: {
           auto_post?: boolean
@@ -167,6 +175,10 @@ export type Database = {
           tiktok_token_expires_at?: string | null
           updated_at?: string
           user_id?: string | null
+          youtube_access_token?: string | null
+          youtube_channel_id?: string | null
+          youtube_refresh_token?: string | null
+          youtube_token_expires_at?: string | null
         }
         Relationships: []
       }
