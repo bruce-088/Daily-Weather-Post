@@ -130,7 +130,11 @@ export type Database = {
           id: string
           instagram_api_key: string | null
           post_time: string
+          tiktok_access_token: string | null
           tiktok_api_key: string | null
+          tiktok_open_id: string | null
+          tiktok_refresh_token: string | null
+          tiktok_token_expires_at: string | null
           updated_at: string
           user_id: string | null
         }
@@ -141,7 +145,11 @@ export type Database = {
           id?: string
           instagram_api_key?: string | null
           post_time?: string
+          tiktok_access_token?: string | null
           tiktok_api_key?: string | null
+          tiktok_open_id?: string | null
+          tiktok_refresh_token?: string | null
+          tiktok_token_expires_at?: string | null
           updated_at?: string
           user_id?: string | null
         }
@@ -152,7 +160,11 @@ export type Database = {
           id?: string
           instagram_api_key?: string | null
           post_time?: string
+          tiktok_access_token?: string | null
           tiktok_api_key?: string | null
+          tiktok_open_id?: string | null
+          tiktok_refresh_token?: string | null
+          tiktok_token_expires_at?: string | null
           updated_at?: string
           user_id?: string | null
         }
