@@ -11,7 +11,6 @@ export async function loadSettings(): Promise<AutomationSettings | null> {
   if (error || !data) return null;
 
   return {
-    openWeatherApiKey: data.openweather_api_key || "",
     instagramApiKey: data.instagram_api_key || "",
     tiktokApiKey: data.tiktok_api_key || "",
     postTime: data.post_time?.slice(0, 5) || "08:00",
