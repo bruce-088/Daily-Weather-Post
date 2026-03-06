@@ -8,6 +8,7 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import TermsOfService from "./pages/TermsOfService";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
+import TikTokCallback from "./pages/TikTokCallback";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
