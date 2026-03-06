@@ -41,9 +41,20 @@ const DEFAULT_SETTINGS: AutomationSettings = {
 const Index = () => {
   const { signOut } = useAuth();
   const cardRef = useRef<HTMLDivElement>(null);
+  const [aspectRatio, setAspectRatio] = useState<AspectRatio>("9:16");
+  const [activeTab, setActiveTab] = useState("designer");
+  const [settings, setSettings] = useState<AutomationSettings>(DEFAULT_SETTINGS);
+  const [saving, setSaving] = useState(false);
+  const [posting, setPosting] = useState(false);
+  const [posts, setPosts] = useState<PostHistoryItem[]>([]);
+  const [postsLoading, setPostsLoading] = useState(false);
+  const [scheduledPosts, setScheduledPosts] = useState<ScheduledPostItem[]>([]);
+  const [scheduledLoading, setScheduledLoading] = useState(false);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [timeAgo, setTimeAgo] = useState("");
+
   const autoLocation = useMemo(() => settingsLoaded ? settings.location : undefined, [settingsLoaded, settings.location]);
   const { weather, loading, error, fetchWeather, lastUpdated } = useWeather(autoLocation);
-  const [timeAgo, setTimeAgo] = useState("");
 
   useEffect(() => {
     if (!lastUpdated) return;
@@ -55,16 +66,6 @@ const Index = () => {
     const id = setInterval(update, 60000);
     return () => clearInterval(id);
   }, [lastUpdated]);
-  const [aspectRatio, setAspectRatio] = useState<AspectRatio>("9:16");
-  const [activeTab, setActiveTab] = useState("designer");
-  const [settings, setSettings] = useState<AutomationSettings>(DEFAULT_SETTINGS);
-  const [saving, setSaving] = useState(false);
-  const [posting, setPosting] = useState(false);
-  const [posts, setPosts] = useState<PostHistoryItem[]>([]);
-  const [postsLoading, setPostsLoading] = useState(false);
-  const [scheduledPosts, setScheduledPosts] = useState<ScheduledPostItem[]>([]);
-  const [scheduledLoading, setScheduledLoading] = useState(false);
-  const [settingsLoaded, setSettingsLoaded] = useState(false);
 
   // Load settings from DB on mount
   useEffect(() => {
