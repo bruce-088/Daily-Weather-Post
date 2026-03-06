@@ -161,13 +161,7 @@ const Index = () => {
   const handleGenerateCaption = useCallback(async () => {
     setCaptionLoading(true);
     try {
-      const result = await generateCaption(
-        weather.city,
-        weather.temperature,
-        weather.condition,
-        weather.description,
-        "instagram"
-      );
+      const result = await generateCaption(weather);
       setCaption(result);
       toast.success("Caption generated!");
     } catch (err: any) {
@@ -299,8 +293,8 @@ const Index = () => {
                     <Textarea
                       value={caption}
                       onChange={(e) => setCaption(e.target.value)}
-                      className="text-sm bg-secondary/30 border-border/30 resize-none"
-                      rows={3}
+                      className="text-sm bg-secondary/30 border-border/30 resize-none whitespace-pre-wrap"
+                      rows={10}
                     />
                   )}
                 </div>

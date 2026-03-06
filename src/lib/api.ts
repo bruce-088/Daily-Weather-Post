@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import type { AutomationSettings } from "@/types/weather";
+import type { AutomationSettings, WeatherData } from "@/types/weather";
 
 export async function loadSettings(): Promise<AutomationSettings | null> {
   const { data, error } = await supabase
@@ -23,7 +23,6 @@ export async function saveSettings(settings: AutomationSettings): Promise<boolea
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return false;
 
-  // Get existing row for this user
   const { data: existing } = await supabase
     .from("weather_settings")
     .select("id")
@@ -140,15 +139,22 @@ export async function cancelScheduledPost(id: string): Promise<boolean> {
 
 // --- Caption Generation ---
 
-export async function generateCaption(
-  city: string,
-  temperature: number | null,
-  condition: string | null,
-  description: string | null,
-  platform: string = "instagram"
-): Promise<string> {
+export async function generateCaption(weather: WeatherData): Promise<string> {
   const { data, error } = await supabase.functions.invoke("generate-caption", {
-    body: { city, temperature, condition, description, platform },
+    body: {
+      city: weather.city,
+      stateOrRegion: weather.stateOrRegion,
+      morningTemp: weather.morningTemp,
+      morningCondition: weather.morningCondition,
+      afternoonTemp: weather.afternoonTemp,
+      afternoonCondition: weather.afternoonCondition,
+      eveningTemp: weather.eveningTemp,
+      eveningCondition: weather.eveningCondition,
+      rainChance: weather.rainChance,
+      windInfo: weather.windInfo,
+      sunrise: weather.sunrise,
+      sunset: weather.sunset,
+    },
   });
 
   if (error) throw new Error(error.message || "Failed to generate caption");

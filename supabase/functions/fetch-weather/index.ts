@@ -25,7 +25,7 @@ Deno.serve(async (req) => {
     const geoData = await geoRes.json();
     if (!geoData.length) throw new Error("Location not found");
 
-    const { lat, lon, name, country } = geoData[0];
+    const { lat, lon, name, country, state } = geoData[0];
 
     const [currentRes, forecastRes] = await Promise.all([
       fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=imperial&appid=${apiKey}`),
@@ -35,6 +35,7 @@ Deno.serve(async (req) => {
     const current = await currentRes.json();
     const forecast = await forecastRes.json();
 
+    // --- 5-day forecast ---
     const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     const dailyMap = new Map<string, { temps: number[]; condition: string; icon: string }>();
 
@@ -55,9 +56,60 @@ Deno.serve(async (req) => {
       conditionIcon: val.icon,
     }));
 
+    // --- Time-of-day breakdowns for today ---
+    const now = new Date();
+    const todayStr = now.toDateString();
+
+    let morningTemp: number | null = null;
+    let morningCondition: string | null = null;
+    let afternoonTemp: number | null = null;
+    let afternoonCondition: string | null = null;
+    let eveningTemp: number | null = null;
+    let eveningCondition: string | null = null;
+    let maxPop = 0;
+
+    for (const item of forecast.list) {
+      const dt = new Date(item.dt * 1000);
+      if (dt.toDateString() !== todayStr) continue;
+      const hour = dt.getHours();
+      const temp = Math.round(item.main.temp);
+      const cond = item.weather[0].main;
+      if (item.pop != null && item.pop > maxPop) maxPop = item.pop;
+
+      if (hour >= 6 && hour < 12 && morningTemp === null) {
+        morningTemp = temp;
+        morningCondition = cond;
+      } else if (hour >= 12 && hour < 18 && afternoonTemp === null) {
+        afternoonTemp = temp;
+        afternoonCondition = cond;
+      } else if (hour >= 18 && eveningTemp === null) {
+        eveningTemp = temp;
+        eveningCondition = cond;
+      }
+    }
+
+    // Fallback: use current data if today's forecast entries are missing
+    if (morningTemp === null && afternoonTemp === null && eveningTemp === null) {
+      const currentHour = now.getHours();
+      const temp = Math.round(current.main.temp);
+      const cond = current.weather[0].main;
+      if (currentHour < 12) { morningTemp = temp; morningCondition = cond; }
+      else if (currentHour < 18) { afternoonTemp = temp; afternoonCondition = cond; }
+      else { eveningTemp = temp; eveningCondition = cond; }
+    }
+
+    // Sunrise / sunset
+    const sunriseDate = new Date(current.sys.sunrise * 1000);
+    const sunsetDate = new Date(current.sys.sunset * 1000);
+    const formatTime = (d: Date) =>
+      d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+
+    const windInfo = `${Math.round(current.wind.speed)} mph${current.wind.gust ? `, gusts ${Math.round(current.wind.gust)} mph` : ""}`;
+
     const weather = {
       city: name,
       country,
+      stateOrRegion: state || country || "",
       temperature: Math.round(current.main.temp),
       feelsLike: Math.round(current.main.feels_like),
       humidity: current.main.humidity,
@@ -66,6 +118,16 @@ Deno.serve(async (req) => {
       conditionIcon: mapIcon(current.weather[0].main),
       description: current.weather[0].description,
       forecast: forecastDays,
+      morningTemp,
+      morningCondition,
+      afternoonTemp,
+      afternoonCondition,
+      eveningTemp,
+      eveningCondition,
+      rainChance: Math.round(maxPop * 100),
+      windInfo,
+      sunrise: formatTime(sunriseDate),
+      sunset: formatTime(sunsetDate),
     };
 
     return new Response(JSON.stringify(weather), {

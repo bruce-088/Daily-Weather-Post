@@ -7,6 +7,7 @@ const REFRESH_INTERVAL = 30 * 60 * 1000; // 30 minutes
 const MOCK_WEATHER: WeatherData = {
   city: "San Francisco",
   country: "US",
+  stateOrRegion: "California",
   temperature: 18,
   feelsLike: 16,
   humidity: 72,
@@ -21,6 +22,16 @@ const MOCK_WEATHER: WeatherData = {
     { day: "Thu", tempHigh: 16, tempLow: 11, condition: "Partly Cloudy", conditionIcon: "cloud-sun" },
     { day: "Fri", tempHigh: 20, tempLow: 13, condition: "Sunny", conditionIcon: "sun" },
   ],
+  morningTemp: 55,
+  morningCondition: "Fog",
+  afternoonTemp: 65,
+  afternoonCondition: "Partly Cloudy",
+  eveningTemp: 58,
+  eveningCondition: "Clear",
+  rainChance: 10,
+  windInfo: "14 mph",
+  sunrise: "6:45 AM",
+  sunset: "6:12 PM",
 };
 
 export function useWeather(autoRefreshLocation?: string) {
@@ -52,7 +63,6 @@ export function useWeather(autoRefreshLocation?: string) {
     }
   }, []);
 
-  // Auto-refresh when autoRefreshLocation is provided
   useEffect(() => {
     if (!autoRefreshLocation) return;
 

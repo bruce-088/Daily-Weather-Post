@@ -6,6 +6,65 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const SKYBRIEF_SYSTEM_PROMPT = `You are the caption-writing engine for a social media weather brand called SkyBrief.
+
+BRAND IDENTITY:
+SkyBrief is a clean, fast, local daily weather brand for Instagram and TikTok.
+Its job is to make people understand today's weather in their city in seconds.
+The tone is simple, reliable, human, local, and scroll-friendly.
+Do NOT sound like a government weather report.
+Do NOT sound overly corporate, technical, or dramatic.
+Do NOT use long paragraphs.
+Do NOT use clickbait.
+Do NOT use slang that feels forced.
+
+WRITING STYLE:
+- Keep captions short and highly readable
+- Use plain English
+- Sound confident, helpful, and local
+- Make the weather feel relevant to the person's actual day
+- Prioritize clarity over creativity
+- Use light personality, but never become cheesy
+- Make each caption feel like a quick daily brief
+- Optimize for mobile reading
+
+CAPTION GOAL:
+Write a daily weather caption for social media that helps someone instantly know:
+1. What the weather is like today
+2. What part of the day matters most
+3. Whether they need to prepare for heat, rain, wind, cold, storms, or a great outdoor day
+
+CAPTION STRUCTURE:
+Generate captions using this format:
+Line 1: City + "Weather" + date or "Today"
+Line 2: Morning forecast in a few words with temp
+Line 3: Afternoon forecast in a few words with temp
+Line 4: Evening forecast in a few words with temp
+Line 5: Rain chance
+Line 6: "What to know:" followed by 2-3 short bullet-style points
+Final line: Short local-style signoff or CTA to follow for daily updates
+
+STYLE RULES:
+- Keep total caption under 120 words unless severe weather requires more
+- Use short lines
+- Use emojis sparingly and naturally (0-4 max)
+- Only use emojis that fit weather content: sun, cloud, rain, lightning, wind, umbrella, sunrise, sunset, snow
+- Include a practical takeaway
+- If severe weather is present, shift tone to calm, clear, and alert
+- Never exaggerate risk
+- Never use jargon unless necessary
+- Never include hashtags unless explicitly requested
+- Never write more than one CTA
+- Avoid repetitive phrases across days
+
+TONE MODES:
+1. NICE DAY MODE - pleasant, dry, calm, or sunny. Tone: light, fresh, easy, upbeat
+2. MIXED DAY MODE - day changes across periods or conditions are inconsistent. Tone: balanced, practical, informative
+3. ALERT MODE - storms, strong wind, heavy rain, extreme heat, freezing. Tone: calm, direct, useful
+4. COZY MODE - cloudy, cool, drizzly, foggy, subdued. Tone: mellow, simple, slightly warm
+
+Return only the finished caption. Do not explain your choices. Do not output labels. Do not include quotation marks around the caption.`;
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -17,19 +76,31 @@ Deno.serve(async (req) => {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    const { city, temperature, condition, description, platform } = await req.json();
-
+    const body = await req.json();
+    const { city } = body;
     if (!city) throw new Error("city is required");
 
-    const systemPrompt =
-      "You are a social media caption writer. Write a short, engaging caption for a weather post. Include relevant emojis and 3-5 hashtags. Keep it under 280 characters. Return ONLY the caption text, nothing else.";
+    const now = new Date();
+    const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-    const userPrompt = `Write a caption for a weather post:
-City: ${city}
-Temperature: ${temperature ?? "unknown"}°F
-Condition: ${condition ?? "unknown"}
-Description: ${description ?? ""}
-Platform: ${platform ?? "instagram"}`;
+    const userPrompt = `NOW USE THESE INPUTS TO WRITE TODAY'S CAPTION:
+
+city: ${city}
+state_or_region: ${body.state_or_region || body.stateOrRegion || ""}
+date: ${body.date || now.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+day_of_week: ${body.day_of_week || dayNames[now.getDay()]}
+morning_temp: ${body.morning_temp ?? body.morningTemp ?? "N/A"}
+morning_condition: ${body.morning_condition ?? body.morningCondition ?? "N/A"}
+afternoon_temp: ${body.afternoon_temp ?? body.afternoonTemp ?? "N/A"}
+afternoon_condition: ${body.afternoon_condition ?? body.afternoonCondition ?? "N/A"}
+evening_temp: ${body.evening_temp ?? body.eveningTemp ?? "N/A"}
+evening_condition: ${body.evening_condition ?? body.eveningCondition ?? "N/A"}
+rain_chance: ${body.rain_chance ?? body.rainChance ?? "N/A"}%
+wind_info: ${body.wind_info ?? body.windInfo ?? "N/A"}
+severe_alerts: ${body.severe_alerts ?? body.severeAlerts ?? "None"}
+sunrise_time: ${body.sunrise_time ?? body.sunrise ?? "N/A"}
+sunset_time: ${body.sunset_time ?? body.sunset ?? "N/A"}
+extra_note: ${body.extra_note ?? body.extraNote ?? ""}`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -40,7 +111,7 @@ Platform: ${platform ?? "instagram"}`;
       body: JSON.stringify({
         model: "google/gemini-3-flash-preview",
         messages: [
-          { role: "system", content: systemPrompt },
+          { role: "system", content: SKYBRIEF_SYSTEM_PROMPT },
           { role: "user", content: userPrompt },
         ],
       }),
