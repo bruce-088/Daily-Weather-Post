@@ -45,6 +45,7 @@ const App = () => (
           <Route path="/auth" element={<PublicRoute><Auth /></PublicRoute>} />
           <Route path="/terms" element={<TermsOfService />} />
           <Route path="/privacy" element={<PrivacyPolicy />} />
+          <Route path="/tiktok/callback" element={<ProtectedRoute><TikTokCallback /></ProtectedRoute>} />
           <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
           <Route path="*" element={<NotFound />} />
         </Routes>
