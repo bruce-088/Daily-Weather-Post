@@ -67,7 +67,7 @@ Deno.serve(async (req) => {
       const tokenData = await tokenRes.json();
 
       if (tokenData.error || !tokenData.access_token) {
-        console.error("YouTube token exchange failed:", tokenData);
+        console.error("YouTube token exchange failed:", JSON.stringify(tokenData));
         return new Response(
           JSON.stringify({
             error: tokenData.error_description || tokenData.error || "Token exchange failed",
