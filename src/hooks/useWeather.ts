@@ -57,7 +57,7 @@ export function useWeather(autoRefreshLocation?: string) {
       setLastUpdated(new Date());
     } catch (err: any) {
       setError(err.message || "Failed to fetch weather");
-      setWeather(MOCK_WEATHER);
+      // Keep last good weather data instead of resetting to mock
     } finally {
       setLoading(false);
     }
