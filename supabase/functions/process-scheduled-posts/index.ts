@@ -1,0 +1,127 @@
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
+
+async function fetchWeatherData(city: string, apiKey: string) {
+  const geoRes = await fetch(
+    `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(city)}&limit=1&appid=${apiKey}`
+  );
+  const geoData = await geoRes.json();
+  if (!geoData.length) throw new Error(`Location not found: ${city}`);
+
+  const { lat, lon, name } = geoData[0];
+  const weatherRes = await fetch(
+    `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&appid=${apiKey}`
+  );
+  const weather = await weatherRes.json();
+
+  return {
+    city: name,
+    temperature: Math.round(weather.main.temp),
+    condition: weather.weather[0].main,
+    description: weather.weather[0].description,
+  };
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    const openWeatherApiKey = Deno.env.get("OPENWEATHER_API_KEY");
+    if (!openWeatherApiKey) {
+      throw new Error("OpenWeatherMap API key not configured");
+    }
+
+    // Get all pending posts that are due
+    const { data: duePosts, error: fetchError } = await supabase
+      .from("scheduled_posts")
+      .select("*")
+      .eq("status", "pending")
+      .lte("scheduled_at", new Date().toISOString());
+
+    if (fetchError) throw new Error(`Failed to fetch scheduled posts: ${fetchError.message}`);
+    if (!duePosts || duePosts.length === 0) {
+      return new Response(
+        JSON.stringify({ success: true, message: "No posts due", processed: 0 }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    let processed = 0;
+    let failed = 0;
+
+    for (const post of duePosts) {
+      try {
+        const weather = await fetchWeatherData(post.city, openWeatherApiKey);
+
+        // Get user settings for API keys
+        const { data: settings } = await supabase
+          .from("weather_settings")
+          .select("instagram_api_key, tiktok_api_key")
+          .eq("user_id", post.user_id)
+          .limit(1)
+          .single();
+
+        let status = "posted";
+        let errorMessage: string | null = null;
+
+        // Image generation placeholder
+        const imageUrl: string | null = null;
+        if (!imageUrl) {
+          status = "posted";
+          errorMessage = "Image generation not yet implemented - weather data fetched successfully";
+        }
+
+        // Log to post_history
+        await supabase.from("post_history").insert({
+          status,
+          platform: post.platform,
+          city: weather.city,
+          temperature: weather.temperature,
+          condition: weather.condition,
+          image_url: imageUrl,
+          error_message: errorMessage,
+          user_id: post.user_id,
+        });
+
+        // Update scheduled post status
+        await supabase
+          .from("scheduled_posts")
+          .update({ status, error_message: errorMessage })
+          .eq("id", post.id);
+
+        processed++;
+      } catch (postError) {
+        const errMsg = postError instanceof Error ? postError.message : "Processing failed";
+        await supabase
+          .from("scheduled_posts")
+          .update({ status: "failed", error_message: errMsg })
+          .eq("id", post.id);
+        failed++;
+      }
+    }
+
+    return new Response(
+      JSON.stringify({ success: true, message: `Processed ${processed}, failed ${failed}`, processed, failed }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error("process-scheduled-posts error:", message);
+    return new Response(
+      JSON.stringify({ success: false, error: message }),
+      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+});

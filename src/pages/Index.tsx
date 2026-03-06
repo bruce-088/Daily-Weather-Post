@@ -238,6 +238,22 @@ const Index = () => {
             </div>
           </TabsContent>
 
+          {/* SCHEDULE TAB */}
+          <TabsContent value="schedule">
+            <div className="max-w-2xl mx-auto grid md:grid-cols-[320px_1fr] gap-6">
+              <SchedulePostForm defaultCity={settings.location} onScheduled={loadScheduled} />
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold text-foreground">Scheduled Posts</h2>
+                  <Button size="sm" variant="outline" onClick={loadScheduled} className="text-xs gap-1.5">
+                    <CalendarClock size={14} /> Refresh
+                  </Button>
+                </div>
+                <ScheduledPostsList posts={scheduledPosts} loading={scheduledLoading} onRefresh={loadScheduled} />
+              </div>
+            </div>
+          </TabsContent>
+
           {/* HISTORY TAB */}
           <TabsContent value="history">
             <div className="max-w-2xl mx-auto">
