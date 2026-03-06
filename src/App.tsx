@@ -42,6 +42,8 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/auth" element={<PublicRoute><Auth /></PublicRoute>} />
+          <Route path="/terms" element={<TermsOfService />} />
+          <Route path="/privacy" element={<PrivacyPolicy />} />
           <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
           <Route path="*" element={<NotFound />} />
         </Routes>
