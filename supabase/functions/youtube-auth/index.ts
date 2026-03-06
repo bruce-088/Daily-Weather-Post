@@ -92,18 +92,27 @@ Deno.serve(async (req) => {
       const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
       const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000).toISOString();
 
-      const { error: updateError } = await supabaseAdmin
+      // Check if user has existing settings
+      const { data: existing } = await supabaseAdmin
         .from("weather_settings")
-        .update({
-          youtube_access_token: tokenData.access_token,
-          youtube_refresh_token: tokenData.refresh_token || null,
-          youtube_channel_id: channelId,
-          youtube_token_expires_at: expiresAt,
-        })
-        .eq("user_id", user_id);
+        .select("id")
+        .eq("user_id", user_id)
+        .maybeSingle();
 
-      if (updateError) {
-        const { error: insertError } = await supabaseAdmin
+      let dbError;
+      if (existing) {
+        const { error } = await supabaseAdmin
+          .from("weather_settings")
+          .update({
+            youtube_access_token: tokenData.access_token,
+            youtube_refresh_token: tokenData.refresh_token || null,
+            youtube_channel_id: channelId,
+            youtube_token_expires_at: expiresAt,
+          })
+          .eq("user_id", user_id);
+        dbError = error;
+      } else {
+        const { error } = await supabaseAdmin
           .from("weather_settings")
           .insert({
             user_id: user_id,
@@ -112,14 +121,17 @@ Deno.serve(async (req) => {
             youtube_channel_id: channelId,
             youtube_token_expires_at: expiresAt,
           });
+        dbError = error;
+      }
 
-        if (insertError) {
-          console.error("Failed to save YouTube tokens:", insertError);
-          return new Response(
-            JSON.stringify({ error: "Failed to save tokens" }),
-            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
+      console.log("YouTube tokens save result:", JSON.stringify({ existing: !!existing, dbError }));
+
+      if (dbError) {
+        console.error("Failed to save YouTube tokens:", JSON.stringify(dbError));
+        return new Response(
+          JSON.stringify({ error: "Failed to save tokens" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
 
       return new Response(
