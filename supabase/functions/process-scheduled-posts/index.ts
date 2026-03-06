@@ -65,18 +65,37 @@ Deno.serve(async (req) => {
       try {
         const weather = await fetchWeatherData(post.city, openWeatherApiKey);
 
-        // Get user settings for API keys
-        const { data: settings } = await supabase
-          .from("weather_settings")
-          .select("instagram_api_key, tiktok_api_key")
-          .eq("user_id", post.user_id)
-          .limit(1)
-          .single();
+        // Generate caption via Lovable AI
+        let caption: string | null = null;
+        const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+        if (LOVABLE_API_KEY) {
+          try {
+            const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${LOVABLE_API_KEY}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                model: "google/gemini-3-flash-preview",
+                messages: [
+                  { role: "system", content: "You are a social media caption writer. Write a short, engaging caption for a weather post. Include relevant emojis and 3-5 hashtags. Keep it under 280 characters. Return ONLY the caption text." },
+                  { role: "user", content: `City: ${weather.city}, Temp: ${weather.temperature}°F, Condition: ${weather.condition}, Description: ${weather.description}, Platform: ${post.platform}` },
+                ],
+              }),
+            });
+            if (aiRes.ok) {
+              const aiData = await aiRes.json();
+              caption = aiData.choices?.[0]?.message?.content?.trim() || null;
+            }
+          } catch (e) {
+            console.error("Caption generation failed:", e);
+          }
+        }
 
         let status = "posted";
         let errorMessage: string | null = null;
 
-        // Image generation placeholder
         const imageUrl: string | null = null;
         if (!imageUrl) {
           status = "posted";
@@ -92,6 +111,7 @@ Deno.serve(async (req) => {
           condition: weather.condition,
           image_url: imageUrl,
           error_message: errorMessage,
+          caption,
           user_id: post.user_id,
         });
 

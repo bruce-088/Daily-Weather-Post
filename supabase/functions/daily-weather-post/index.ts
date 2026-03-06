@@ -99,7 +99,35 @@ Deno.serve(async (req) => {
 
     // Fetch weather
     const weather = await fetchWeatherData(settings.city, openWeatherApiKey);
-    console.log(`Weather fetched: ${weather.city} - ${weather.temperature}°C - ${weather.condition}`);
+    console.log(`Weather fetched: ${weather.city} - ${weather.temperature}°F - ${weather.condition}`);
+
+    // Generate caption via Lovable AI
+    let caption: string | null = null;
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (LOVABLE_API_KEY) {
+      try {
+        const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${LOVABLE_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "google/gemini-3-flash-preview",
+            messages: [
+              { role: "system", content: "You are a social media caption writer. Write a short, engaging caption for a weather post. Include relevant emojis and 3-5 hashtags. Keep it under 280 characters. Return ONLY the caption text." },
+              { role: "user", content: `City: ${weather.city}, Temp: ${weather.temperature}°F, Condition: ${weather.condition}, Description: ${weather.description}` },
+            ],
+          }),
+        });
+        if (aiRes.ok) {
+          const aiData = await aiRes.json();
+          caption = aiData.choices?.[0]?.message?.content?.trim() || null;
+        }
+      } catch (e) {
+        console.error("Caption generation failed:", e);
+      }
+    }
 
     // Generate image (placeholder)
     const imageUrl = await generateWeatherImage(weather);
@@ -111,12 +139,12 @@ Deno.serve(async (req) => {
 
     try {
       if (settings.instagram_api_key && imageUrl) {
-        const caption = `🌤 Weather in ${weather.city}: ${weather.temperature}°C - ${weather.description} #weather #daily`;
-        await postToInstagram(imageUrl, caption, settings.instagram_api_key);
+        const postCaption = caption || `🌤 Weather in ${weather.city}: ${weather.temperature}°F - ${weather.description} #weather #daily`;
+        await postToInstagram(imageUrl, postCaption, settings.instagram_api_key);
       }
       if (settings.tiktok_api_key && imageUrl) {
-        const caption = `Weather update for ${weather.city}! ${weather.temperature}°C ${weather.condition}`;
-        await postToTikTok(imageUrl, caption, settings.tiktok_api_key);
+        const postCaption = caption || `Weather update for ${weather.city}! ${weather.temperature}°F ${weather.condition}`;
+        await postToTikTok(imageUrl, postCaption, settings.tiktok_api_key);
       }
 
       if (!imageUrl) {
@@ -137,6 +165,7 @@ Deno.serve(async (req) => {
       condition: weather.condition,
       image_url: imageUrl,
       error_message: errorMessage,
+      caption,
       user_id: userId,
     });
 
@@ -149,6 +178,7 @@ Deno.serve(async (req) => {
         success: true,
         weather,
         status,
+        caption,
         message: errorMessage || `Weather post ${status} for ${weather.city}`,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
