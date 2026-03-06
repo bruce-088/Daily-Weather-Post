@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { toPng } from "html-to-image";
 import { toast } from "sonner";
 import {
@@ -41,7 +41,6 @@ const DEFAULT_SETTINGS: AutomationSettings = {
 const Index = () => {
   const { signOut } = useAuth();
   const cardRef = useRef<HTMLDivElement>(null);
-  const { weather, loading, error, fetchWeather } = useWeather();
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("9:16");
   const [activeTab, setActiveTab] = useState("designer");
   const [settings, setSettings] = useState<AutomationSettings>(DEFAULT_SETTINGS);
@@ -52,6 +51,21 @@ const Index = () => {
   const [scheduledPosts, setScheduledPosts] = useState<ScheduledPostItem[]>([]);
   const [scheduledLoading, setScheduledLoading] = useState(false);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [timeAgo, setTimeAgo] = useState("");
+
+  const autoLocation = useMemo(() => settingsLoaded ? settings.location : undefined, [settingsLoaded, settings.location]);
+  const { weather, loading, error, fetchWeather, lastUpdated } = useWeather(autoLocation);
+
+  useEffect(() => {
+    if (!lastUpdated) return;
+    const update = () => {
+      const mins = Math.floor((Date.now() - lastUpdated.getTime()) / 60000);
+      setTimeAgo(mins < 1 ? "just now" : `${mins}m ago`);
+    };
+    update();
+    const id = setInterval(update, 60000);
+    return () => clearInterval(id);
+  }, [lastUpdated]);
 
   // Load settings from DB on mount
   useEffect(() => {
@@ -209,6 +223,9 @@ const Index = () => {
                 </div>
 
                 {error && <p className="text-sm text-destructive">{error}</p>}
+                {lastUpdated && (
+                  <p className="text-xs text-muted-foreground">Last updated: {timeAgo} · auto-refreshes every 30 min</p>
+                )}
 
                 <div className="flex items-center justify-center p-8 rounded-2xl bg-secondary/20 border border-border/20">
                   <WeatherCard ref={cardRef} weather={weather} aspectRatio={aspectRatio} />
