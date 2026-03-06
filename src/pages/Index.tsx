@@ -293,8 +293,8 @@ const Index = () => {
                     <Textarea
                       value={caption}
                       onChange={(e) => setCaption(e.target.value)}
-                      className="text-sm bg-secondary/30 border-border/30 resize-none"
-                      rows={3}
+                      className="text-sm bg-secondary/30 border-border/30 resize-none whitespace-pre-wrap"
+                      rows={10}
                     />
                   )}
                 </div>
