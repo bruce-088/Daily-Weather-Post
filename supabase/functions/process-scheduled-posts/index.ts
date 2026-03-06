@@ -101,6 +101,14 @@ Deno.serve(async (req) => {
           .update({ status, error_message: errorMessage })
           .eq("id", post.id);
 
+        // Insert notification
+        await supabase.from("notifications").insert({
+          user_id: post.user_id,
+          title: status === "posted" ? "Post Published" : "Post Issue",
+          message: `Your weather post for ${weather.city} was published on ${post.platform}.`,
+          type: "success",
+        });
+
         processed++;
       } catch (postError) {
         const errMsg = postError instanceof Error ? postError.message : "Processing failed";
@@ -108,6 +116,15 @@ Deno.serve(async (req) => {
           .from("scheduled_posts")
           .update({ status: "failed", error_message: errMsg })
           .eq("id", post.id);
+
+        // Insert failure notification
+        await supabase.from("notifications").insert({
+          user_id: post.user_id,
+          title: "Post Failed",
+          message: `Your scheduled post for ${post.city} failed: ${errMsg}`,
+          type: "error",
+        });
+
         failed++;
       }
     }

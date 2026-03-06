@@ -16,6 +16,7 @@ import {
   CalendarClock,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { NotificationBell } from "@/components/NotificationBell";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -153,6 +154,7 @@ const Index = () => {
             </Badge>
           </div>
           <div className="flex items-center gap-2">
+            <NotificationBell />
             <Button
               size="sm"
               onClick={handlePostNow}
