@@ -9,6 +9,7 @@ import Auth from "./pages/Auth";
 import TermsOfService from "./pages/TermsOfService";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TikTokCallback from "./pages/TikTokCallback";
+import YouTubeCallback from "./pages/YouTubeCallback";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
