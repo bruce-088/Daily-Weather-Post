@@ -46,6 +46,7 @@ export type Database = {
       }
       post_history: {
         Row: {
+          caption: string | null
           city: string
           condition: string | null
           created_at: string
@@ -58,6 +59,7 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          caption?: string | null
           city: string
           condition?: string | null
           created_at?: string
@@ -70,6 +72,7 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          caption?: string | null
           city?: string
           condition?: string | null
           created_at?: string

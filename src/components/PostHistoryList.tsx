@@ -60,6 +60,9 @@ export function PostHistoryList({ posts, loading }: PostHistoryListProps) {
                     <span className="text-xs text-muted-foreground">· {post.condition}</span>
                   )}
                 </div>
+                {post.caption && (
+                  <p className="text-xs text-muted-foreground truncate mt-0.5 italic">"{post.caption}"</p>
+                )}
                 {post.error_message && (
                   <p className="text-xs text-muted-foreground truncate mt-0.5">{post.error_message}</p>
                 )}

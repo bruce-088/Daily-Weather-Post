@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { toPng } from "html-to-image";
 import { toast } from "sonner";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Download,
   Smartphone,
@@ -14,6 +15,8 @@ import {
   History,
   LogOut,
   CalendarClock,
+  MessageSquare,
+  RefreshCw,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { NotificationBell } from "@/components/NotificationBell";
@@ -27,7 +30,7 @@ import { PostHistoryList } from "@/components/PostHistoryList";
 import { SchedulePostForm } from "@/components/SchedulePostForm";
 import { ScheduledPostsList } from "@/components/ScheduledPostsList";
 import { useWeather } from "@/hooks/useWeather";
-import { loadSettings, saveSettings, triggerDailyPost, fetchPostHistory, fetchScheduledPosts } from "@/lib/api";
+import { loadSettings, saveSettings, triggerDailyPost, fetchPostHistory, fetchScheduledPosts, generateCaption } from "@/lib/api";
 import type { AspectRatio, AutomationSettings } from "@/types/weather";
 import type { PostHistoryItem, ScheduledPostItem } from "@/lib/api";
 
@@ -53,7 +56,8 @@ const Index = () => {
   const [scheduledLoading, setScheduledLoading] = useState(false);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [timeAgo, setTimeAgo] = useState("");
-
+  const [caption, setCaption] = useState("");
+  const [captionLoading, setCaptionLoading] = useState(false);
   const [debouncedLocation, setDebouncedLocation] = useState<string | undefined>(undefined);
 
   useEffect(() => {
@@ -154,6 +158,25 @@ const Index = () => {
     }
   }, [aspectRatio]);
 
+  const handleGenerateCaption = useCallback(async () => {
+    setCaptionLoading(true);
+    try {
+      const result = await generateCaption(
+        weather.city,
+        weather.temperature,
+        weather.condition,
+        weather.description,
+        "instagram"
+      );
+      setCaption(result);
+      toast.success("Caption generated!");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to generate caption");
+    } finally {
+      setCaptionLoading(false);
+    }
+  }, [weather]);
+
   return (
     <div className="dark min-h-screen bg-background">
       {/* Top bar */}
@@ -246,6 +269,40 @@ const Index = () => {
 
                 <div className="flex items-center justify-center p-8 rounded-2xl bg-secondary/20 border border-border/20">
                   <WeatherCard ref={cardRef} weather={weather} aspectRatio={aspectRatio} />
+                </div>
+
+                {/* Caption Preview */}
+                <div className="w-full space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      onClick={handleGenerateCaption}
+                      disabled={captionLoading}
+                      className="gap-1.5 text-xs"
+                    >
+                      <MessageSquare size={14} />
+                      {captionLoading ? "Generating..." : caption ? "Regenerate" : "Generate Caption"}
+                    </Button>
+                    {caption && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={handleGenerateCaption}
+                        disabled={captionLoading}
+                        className="gap-1 text-xs text-muted-foreground"
+                      >
+                        <RefreshCw size={12} />
+                      </Button>
+                    )}
+                  </div>
+                  {caption && (
+                    <Textarea
+                      value={caption}
+                      onChange={(e) => setCaption(e.target.value)}
+                      className="text-sm bg-secondary/30 border-border/30 resize-none"
+                      rows={3}
+                    />
+                  )}
                 </div>
               </div>
 

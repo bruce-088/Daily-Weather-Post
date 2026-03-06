@@ -1,0 +1,1 @@
+ALTER TABLE post_history ADD COLUMN caption text;
