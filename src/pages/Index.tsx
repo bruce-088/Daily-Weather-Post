@@ -30,7 +30,7 @@ import { PostHistoryList } from "@/components/PostHistoryList";
 import { SchedulePostForm } from "@/components/SchedulePostForm";
 import { ScheduledPostsList } from "@/components/ScheduledPostsList";
 import { useWeather } from "@/hooks/useWeather";
-import { loadSettings, saveSettings, triggerDailyPost, fetchPostHistory, fetchScheduledPosts } from "@/lib/api";
+import { loadSettings, saveSettings, triggerDailyPost, fetchPostHistory, fetchScheduledPosts, generateCaption } from "@/lib/api";
 import type { AspectRatio, AutomationSettings } from "@/types/weather";
 import type { PostHistoryItem, ScheduledPostItem } from "@/lib/api";
 
