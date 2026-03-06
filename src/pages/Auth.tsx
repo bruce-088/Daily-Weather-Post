@@ -132,6 +132,12 @@ const Auth = () => {
               {isSignUp ? "Sign in" : "Sign up"}
             </button>
           </p>
+
+          <div className="flex justify-center gap-3 text-[10px] text-muted-foreground pt-2">
+            <a href="/terms" className="hover:text-foreground">Terms of Service</a>
+            <span>·</span>
+            <a href="/privacy" className="hover:text-foreground">Privacy Policy</a>
+          </div>
         </CardContent>
       </Card>
     </div>
