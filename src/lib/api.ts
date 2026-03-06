@@ -76,6 +76,7 @@ export interface PostHistoryItem {
   condition: string | null;
   image_url: string | null;
   error_message: string | null;
+  caption: string | null;
   created_at: string;
 }
 

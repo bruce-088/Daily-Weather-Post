@@ -6,5 +6,8 @@ verify_jwt = false
 [functions.fetch-weather]
 verify_jwt = false
 
+[functions.generate-caption]
+verify_jwt = false
+
 [functions.process-scheduled-posts]
 verify_jwt = false
