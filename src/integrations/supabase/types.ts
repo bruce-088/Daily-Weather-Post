@@ -88,6 +88,7 @@ export type Database = {
       }
       scheduled_posts: {
         Row: {
+          caption: string | null
           city: string
           created_at: string
           error_message: string | null
@@ -98,6 +99,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          caption?: string | null
           city: string
           created_at?: string
           error_message?: string | null
@@ -108,6 +110,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          caption?: string | null
           city?: string
           created_at?: string
           error_message?: string | null
