@@ -158,6 +158,25 @@ const Index = () => {
     }
   }, [aspectRatio]);
 
+  const handleGenerateCaption = useCallback(async () => {
+    setCaptionLoading(true);
+    try {
+      const result = await generateCaption(
+        weather.city,
+        weather.temperature,
+        weather.condition,
+        weather.description,
+        "instagram"
+      );
+      setCaption(result);
+      toast.success("Caption generated!");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to generate caption");
+    } finally {
+      setCaptionLoading(false);
+    }
+  }, [weather]);
+
   return (
     <div className="dark min-h-screen bg-background">
       {/* Top bar */}
