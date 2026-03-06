@@ -169,6 +169,9 @@ const Index = () => {
             <TabsTrigger value="preview" className="gap-1.5 text-xs">
               <Smartphone size={14} /> Preview
             </TabsTrigger>
+            <TabsTrigger value="schedule" className="gap-1.5 text-xs">
+              <CalendarClock size={14} /> Schedule
+            </TabsTrigger>
             <TabsTrigger value="history" className="gap-1.5 text-xs">
               <History size={14} /> History
             </TabsTrigger>
