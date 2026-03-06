@@ -37,6 +37,7 @@ const DEFAULT_SETTINGS: AutomationSettings = {
 };
 
 const Index = () => {
+  const { signOut } = useAuth();
   const cardRef = useRef<HTMLDivElement>(null);
   const { weather, loading, error, fetchWeather } = useWeather();
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("9:16");
