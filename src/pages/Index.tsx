@@ -54,8 +54,23 @@ const Index = () => {
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [timeAgo, setTimeAgo] = useState("");
 
-  const autoLocation = useMemo(() => settingsLoaded ? settings.location : undefined, [settingsLoaded, settings.location]);
-  const { weather, loading, error, fetchWeather, lastUpdated } = useWeather(autoLocation);
+  const [debouncedLocation, setDebouncedLocation] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    if (!settingsLoaded) {
+      setDebouncedLocation(undefined);
+      return;
+    }
+    const loc = settings.location.trim();
+    if (!loc) {
+      setDebouncedLocation(undefined);
+      return;
+    }
+    const timer = setTimeout(() => setDebouncedLocation(loc), 800);
+    return () => clearTimeout(timer);
+  }, [settingsLoaded, settings.location]);
+
+  const { weather, loading, error, fetchWeather, lastUpdated } = useWeather(debouncedLocation);
 
   useEffect(() => {
     if (!lastUpdated) return;
