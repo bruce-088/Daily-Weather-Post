@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { format } from "date-fns";
-import { CalendarIcon, Clock, MapPin, Send } from "lucide-react";
+import { CalendarIcon, Clock, MapPin, Send, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Popover,
   PopoverContent,
@@ -20,7 +21,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { createScheduledPost } from "@/lib/api";
+import { createScheduledPost, generateCaption } from "@/lib/api";
+import { supabase } from "@/integrations/supabase/client";
+import type { WeatherData } from "@/types/weather";
 
 interface SchedulePostFormProps {
   defaultCity: string;
@@ -32,7 +35,32 @@ export function SchedulePostForm({ defaultCity, onScheduled }: SchedulePostFormP
   const [time, setTime] = useState("08:00");
   const [city, setCity] = useState(defaultCity);
   const [platform, setPlatform] = useState("both");
+  const [caption, setCaption] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [generating, setGenerating] = useState(false);
+
+  const handleGenerateCaption = async () => {
+    if (!city.trim()) {
+      toast.error("Enter a city first to generate a caption");
+      return;
+    }
+
+    setGenerating(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("fetch-weather", {
+        body: { city },
+      });
+      if (error || data?.error) throw new Error(data?.error || error?.message);
+
+      const generated = await generateCaption(data as WeatherData);
+      setCaption(generated);
+      toast.success("Caption generated");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to generate caption");
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   const handleSubmit = async () => {
     if (!date) {
@@ -54,13 +82,14 @@ export function SchedulePostForm({ defaultCity, onScheduled }: SchedulePostFormP
     }
 
     setSubmitting(true);
-    const ok = await createScheduledPost(city, scheduledAt.toISOString(), platform);
+    const ok = await createScheduledPost(city, scheduledAt.toISOString(), platform, caption || null);
     setSubmitting(false);
 
     if (ok) {
       toast.success(`Post scheduled for ${format(scheduledAt, "PPP 'at' HH:mm")}`);
       setDate(undefined);
       setTime("08:00");
+      setCaption("");
       onScheduled();
     } else {
       toast.error("Failed to schedule post");
@@ -143,6 +172,32 @@ export function SchedulePostForm({ defaultCity, onScheduled }: SchedulePostFormP
               <SelectItem value="tiktok">TikTok</SelectItem>
             </SelectContent>
           </Select>
+        </div>
+
+        {/* Caption */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs text-muted-foreground flex items-center gap-1">
+              <Sparkles size={12} /> Caption
+            </Label>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleGenerateCaption}
+              disabled={generating || !city.trim()}
+              className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground"
+            >
+              <Sparkles size={10} className="mr-1" />
+              {generating ? "Generating..." : "Auto-generate"}
+            </Button>
+          </div>
+          <Textarea
+            value={caption}
+            onChange={(e) => setCaption(e.target.value)}
+            placeholder="Auto-generate or write your own caption..."
+            rows={6}
+            className="text-sm bg-secondary/30 border-border/30 resize-none"
+          />
         </div>
 
         <Button
