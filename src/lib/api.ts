@@ -19,6 +19,7 @@ export async function loadSettings(): Promise<{ settings: AutomationSettings; ti
       autoPost: data.auto_post || false,
     },
     tiktokConnected: !!(data as any).tiktok_access_token,
+    youtubeConnected: !!(data as any).youtube_access_token,
   };
 }
 
