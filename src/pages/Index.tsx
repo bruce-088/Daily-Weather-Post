@@ -145,22 +145,6 @@ const Index = () => {
               <LogOut size={14} /> Sign Out
             </Button>
           </div>
-            <Button
-              size="sm"
-              onClick={handlePostNow}
-              disabled={posting}
-              className="gap-1.5 text-xs"
-            >
-              <Send size={14} />
-              {posting ? "Posting..." : "Post Now"}
-            </Button>
-            {settings.autoPost && (
-              <Badge className="bg-accent/20 text-accent border-accent/30 text-[10px] gap-1">
-                <Zap size={10} /> Auto {settings.postTime}
-              </Badge>
-            )}
-          </div>
-        </div>
       </header>
 
       <main className="container px-4 py-6">
