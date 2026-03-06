@@ -56,7 +56,8 @@ const Index = () => {
   const [scheduledLoading, setScheduledLoading] = useState(false);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [timeAgo, setTimeAgo] = useState("");
-
+  const [caption, setCaption] = useState("");
+  const [captionLoading, setCaptionLoading] = useState(false);
   const [debouncedLocation, setDebouncedLocation] = useState<string | undefined>(undefined);
 
   useEffect(() => {
