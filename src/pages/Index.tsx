@@ -371,6 +371,7 @@ const Index = () => {
                 loading={loading}
                 saving={saving}
                 tiktokConnected={tiktokConnected}
+                youtubeConnected={youtubeConnected}
               />
             </div>
           </TabsContent>
