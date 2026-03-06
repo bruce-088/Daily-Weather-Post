@@ -95,6 +95,7 @@ const Index = () => {
       if (result) {
         setSettings(result.settings);
         setTiktokConnected(result.tiktokConnected);
+        setYoutubeConnected(result.youtubeConnected);
       }
       setSettingsLoaded(true);
     });
