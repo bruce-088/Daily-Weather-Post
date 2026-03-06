@@ -10,6 +10,8 @@ import {
   LayoutDashboard,
   CloudSun,
   Zap,
+  Send,
+  History,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -17,8 +19,11 @@ import { Badge } from "@/components/ui/badge";
 import { WeatherCard } from "@/components/WeatherCard";
 import { MobilePreview } from "@/components/MobilePreview";
 import { SettingsPanel } from "@/components/SettingsPanel";
+import { PostHistoryList } from "@/components/PostHistoryList";
 import { useWeather } from "@/hooks/useWeather";
+import { loadSettings, saveSettings, triggerDailyPost, fetchPostHistory } from "@/lib/api";
 import type { AspectRatio, AutomationSettings } from "@/types/weather";
+import type { PostHistoryItem } from "@/lib/api";
 
 const DEFAULT_SETTINGS: AutomationSettings = {
   openWeatherApiKey: "",
@@ -34,18 +39,61 @@ const Index = () => {
   const { weather, loading, error, fetchWeather } = useWeather();
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("9:16");
   const [activeTab, setActiveTab] = useState("designer");
-  const [settings, setSettings] = useState<AutomationSettings>(() => {
-    const saved = localStorage.getItem("weatherpost-settings");
-    return saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : DEFAULT_SETTINGS;
-  });
+  const [settings, setSettings] = useState<AutomationSettings>(DEFAULT_SETTINGS);
+  const [saving, setSaving] = useState(false);
+  const [posting, setPosting] = useState(false);
+  const [posts, setPosts] = useState<PostHistoryItem[]>([]);
+  const [postsLoading, setPostsLoading] = useState(false);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+
+  // Load settings from DB on mount
+  useEffect(() => {
+    loadSettings().then((s) => {
+      if (s) setSettings(s);
+      setSettingsLoaded(true);
+    });
+  }, []);
+
+  // Load post history
+  const loadHistory = useCallback(async () => {
+    setPostsLoading(true);
+    const data = await fetchPostHistory();
+    setPosts(data);
+    setPostsLoading(false);
+  }, []);
 
   useEffect(() => {
-    localStorage.setItem("weatherpost-settings", JSON.stringify(settings));
-  }, [settings]);
+    loadHistory();
+  }, [loadHistory]);
 
   const handleFetch = useCallback(() => {
     fetchWeather(settings.location, settings.openWeatherApiKey);
   }, [fetchWeather, settings.location, settings.openWeatherApiKey]);
+
+  const handleSave = useCallback(async () => {
+    setSaving(true);
+    const ok = await saveSettings(settings);
+    setSaving(false);
+    if (ok) {
+      toast.success("Settings saved to database!");
+    } else {
+      toast.error("Failed to save settings.");
+    }
+  }, [settings]);
+
+  const handlePostNow = useCallback(async () => {
+    setPosting(true);
+    toast.info("Triggering daily weather post...");
+    const result = await triggerDailyPost();
+    setPosting(false);
+    if (result.success) {
+      toast.success(result.message);
+    } else {
+      toast.error(result.message);
+    }
+    // Refresh history
+    loadHistory();
+  }, [loadHistory]);
 
   const handleExport = useCallback(async () => {
     if (!cardRef.current) return;
@@ -76,9 +124,18 @@ const Index = () => {
             </Badge>
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              onClick={handlePostNow}
+              disabled={posting}
+              className="gap-1.5 text-xs"
+            >
+              <Send size={14} />
+              {posting ? "Posting..." : "Post Now"}
+            </Button>
             {settings.autoPost && (
               <Badge className="bg-accent/20 text-accent border-accent/30 text-[10px] gap-1">
-                <Zap size={10} /> Auto-posting at {settings.postTime}
+                <Zap size={10} /> Auto {settings.postTime}
               </Badge>
             )}
           </div>
@@ -94,6 +151,9 @@ const Index = () => {
             <TabsTrigger value="preview" className="gap-1.5 text-xs">
               <Smartphone size={14} /> Preview
             </TabsTrigger>
+            <TabsTrigger value="history" className="gap-1.5 text-xs">
+              <History size={14} /> History
+            </TabsTrigger>
             <TabsTrigger value="settings" className="gap-1.5 text-xs">
               <Settings size={14} /> Settings
             </TabsTrigger>
@@ -102,9 +162,7 @@ const Index = () => {
           {/* DESIGNER TAB */}
           <TabsContent value="designer">
             <div className="grid lg:grid-cols-[1fr_320px] gap-6">
-              {/* Card area */}
               <div className="flex flex-col items-center gap-6">
-                {/* Ratio toggle + export */}
                 <div className="flex items-center gap-3 w-full justify-between">
                   <div className="flex items-center gap-2">
                     <Button
@@ -129,23 +187,21 @@ const Index = () => {
                   </Button>
                 </div>
 
-                {error && (
-                  <p className="text-sm text-destructive">{error}</p>
-                )}
+                {error && <p className="text-sm text-destructive">{error}</p>}
 
-                {/* Card */}
                 <div className="flex items-center justify-center p-8 rounded-2xl bg-secondary/20 border border-border/20">
                   <WeatherCard ref={cardRef} weather={weather} aspectRatio={aspectRatio} />
                 </div>
               </div>
 
-              {/* Sidebar settings */}
               <aside className="space-y-4">
                 <SettingsPanel
                   settings={settings}
                   onUpdate={setSettings}
                   onFetch={handleFetch}
+                  onSave={handleSave}
                   loading={loading}
+                  saving={saving}
                 />
               </aside>
             </div>
@@ -161,6 +217,19 @@ const Index = () => {
             </div>
           </TabsContent>
 
+          {/* HISTORY TAB */}
+          <TabsContent value="history">
+            <div className="max-w-2xl mx-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-foreground">Recent Posts</h2>
+                <Button size="sm" variant="outline" onClick={loadHistory} className="text-xs gap-1.5">
+                  <History size={14} /> Refresh
+                </Button>
+              </div>
+              <PostHistoryList posts={posts} loading={postsLoading} />
+            </div>
+          </TabsContent>
+
           {/* SETTINGS TAB */}
           <TabsContent value="settings">
             <div className="max-w-lg mx-auto">
@@ -168,7 +237,9 @@ const Index = () => {
                 settings={settings}
                 onUpdate={setSettings}
                 onFetch={handleFetch}
+                onSave={handleSave}
                 loading={loading}
+                saving={saving}
               />
             </div>
           </TabsContent>

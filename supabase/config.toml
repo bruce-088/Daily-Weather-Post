@@ -1,0 +1,4 @@
+project_id = "pewdswjhsesfondewucc"
+
+[functions.daily-weather-post]
+verify_jwt = false

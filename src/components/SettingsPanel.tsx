@@ -3,17 +3,19 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Key, Clock, MapPin, Instagram, Video, RefreshCw } from "lucide-react";
+import { Key, Clock, MapPin, Instagram, Video, RefreshCw, Save } from "lucide-react";
 import type { AutomationSettings } from "@/types/weather";
 
 interface SettingsPanelProps {
   settings: AutomationSettings;
   onUpdate: (settings: AutomationSettings) => void;
   onFetch: () => void;
+  onSave: () => void;
   loading: boolean;
+  saving: boolean;
 }
 
-export function SettingsPanel({ settings, onUpdate, onFetch, loading }: SettingsPanelProps) {
+export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, saving }: SettingsPanelProps) {
   const update = (key: keyof AutomationSettings, value: string | boolean) => {
     onUpdate({ ...settings, [key]: value });
   };
@@ -116,6 +118,11 @@ export function SettingsPanel({ settings, onUpdate, onFetch, loading }: Settings
           </div>
         </CardContent>
       </Card>
+
+      <Button onClick={onSave} disabled={saving} className="w-full gap-2">
+        <Save size={16} />
+        {saving ? "Saving..." : "Save Settings"}
+      </Button>
     </div>
   );
 }
