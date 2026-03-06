@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { toPng } from "html-to-image";
 import { toast } from "sonner";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Download,
   Smartphone,
