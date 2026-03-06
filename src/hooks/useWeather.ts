@@ -1,6 +1,8 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { WeatherData } from "@/types/weather";
+
+const REFRESH_INTERVAL = 30 * 60 * 1000; // 30 minutes
 
 const MOCK_WEATHER: WeatherData = {
   city: "San Francisco",
@@ -21,10 +23,12 @@ const MOCK_WEATHER: WeatherData = {
   ],
 };
 
-export function useWeather() {
+export function useWeather(autoRefreshLocation?: string) {
   const [weather, setWeather] = useState<WeatherData>(MOCK_WEATHER);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchWeather = useCallback(async (location: string) => {
     setLoading(true);
@@ -39,6 +43,7 @@ export function useWeather() {
       if (data?.error) throw new Error(data.error);
 
       setWeather(data as WeatherData);
+      setLastUpdated(new Date());
     } catch (err: any) {
       setError(err.message || "Failed to fetch weather");
       setWeather(MOCK_WEATHER);
@@ -47,5 +52,20 @@ export function useWeather() {
     }
   }, []);
 
-  return { weather, loading, error, fetchWeather };
+  // Auto-refresh when autoRefreshLocation is provided
+  useEffect(() => {
+    if (!autoRefreshLocation) return;
+
+    fetchWeather(autoRefreshLocation);
+
+    intervalRef.current = setInterval(() => {
+      fetchWeather(autoRefreshLocation);
+    }, REFRESH_INTERVAL);
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [autoRefreshLocation, fetchWeather]);
+
+  return { weather, loading, error, fetchWeather, lastUpdated };
 }

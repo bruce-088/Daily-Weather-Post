@@ -222,6 +222,9 @@ const Index = () => {
                 </div>
 
                 {error && <p className="text-sm text-destructive">{error}</p>}
+                {lastUpdated && (
+                  <p className="text-xs text-muted-foreground">Last updated: {timeAgo} · auto-refreshes every 30 min</p>
+                )}
 
                 <div className="flex items-center justify-center p-8 rounded-2xl bg-secondary/20 border border-border/20">
                   <WeatherCard ref={cardRef} weather={weather} aspectRatio={aspectRatio} />
