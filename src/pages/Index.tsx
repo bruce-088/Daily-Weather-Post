@@ -28,7 +28,6 @@ import type { AspectRatio, AutomationSettings } from "@/types/weather";
 import type { PostHistoryItem } from "@/lib/api";
 
 const DEFAULT_SETTINGS: AutomationSettings = {
-  openWeatherApiKey: "",
   instagramApiKey: "",
   tiktokApiKey: "",
   postTime: "08:00",
