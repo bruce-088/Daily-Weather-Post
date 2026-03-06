@@ -48,6 +48,7 @@ const Index = () => {
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("9:16");
   const [activeTab, setActiveTab] = useState("designer");
   const [settings, setSettings] = useState<AutomationSettings>(DEFAULT_SETTINGS);
+  const [tiktokConnected, setTiktokConnected] = useState(false);
   const [saving, setSaving] = useState(false);
   const [posting, setPosting] = useState(false);
   const [posts, setPosts] = useState<PostHistoryItem[]>([]);
