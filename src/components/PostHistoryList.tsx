@@ -53,7 +53,7 @@ export function PostHistoryList({ posts, loading }: PostHistoryListProps) {
                   <span className="text-sm font-medium text-foreground">{post.city}</span>
                   {post.temperature !== null && (
                     <span className="text-xs text-muted-foreground font-mono-display">
-                      {post.temperature}°C
+                      {post.temperature}°F
                     </span>
                   )}
                   {post.condition && (

@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
       temperature: Math.round(current.main.temp),
       feelsLike: Math.round(current.main.feels_like),
       humidity: current.main.humidity,
-      windSpeed: Math.round(current.wind.speed * 3.6),
+      windSpeed: Math.round(current.wind.speed),
       condition: current.weather[0].main,
       conditionIcon: mapIcon(current.weather[0].main),
       description: current.weather[0].description,
