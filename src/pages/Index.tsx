@@ -49,6 +49,8 @@ const Index = () => {
   const [posting, setPosting] = useState(false);
   const [posts, setPosts] = useState<PostHistoryItem[]>([]);
   const [postsLoading, setPostsLoading] = useState(false);
+  const [scheduledPosts, setScheduledPosts] = useState<ScheduledPostItem[]>([]);
+  const [scheduledLoading, setScheduledLoading] = useState(false);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
 
   // Load settings from DB on mount
