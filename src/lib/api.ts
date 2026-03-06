@@ -21,10 +21,14 @@ export async function loadSettings(): Promise<AutomationSettings | null> {
 }
 
 export async function saveSettings(settings: AutomationSettings): Promise<boolean> {
-  // Get existing row
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return false;
+
+  // Get existing row for this user
   const { data: existing } = await supabase
     .from("weather_settings")
     .select("id")
+    .eq("user_id", user.id)
     .limit(1)
     .single();
 
@@ -35,6 +39,7 @@ export async function saveSettings(settings: AutomationSettings): Promise<boolea
     tiktok_api_key: settings.tiktokApiKey || null,
     post_time: settings.postTime + ":00",
     auto_post: settings.autoPost,
+    user_id: user.id,
   };
 
   if (existing) {

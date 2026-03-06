@@ -12,7 +12,9 @@ import {
   Zap,
   Send,
   History,
+  LogOut,
 } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +37,7 @@ const DEFAULT_SETTINGS: AutomationSettings = {
 };
 
 const Index = () => {
+  const { signOut } = useAuth();
   const cardRef = useRef<HTMLDivElement>(null);
   const { weather, loading, error, fetchWeather } = useWeather();
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("9:16");
@@ -138,6 +141,9 @@ const Index = () => {
                 <Zap size={10} /> Auto {settings.postTime}
               </Badge>
             )}
+            <Button size="sm" variant="ghost" onClick={signOut} className="gap-1.5 text-xs text-muted-foreground">
+              <LogOut size={14} /> Sign Out
+            </Button>
           </div>
         </div>
       </header>

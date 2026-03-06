@@ -25,6 +25,7 @@ export type Database = {
           platform: string | null
           status: string
           temperature: number | null
+          user_id: string | null
         }
         Insert: {
           city: string
@@ -36,6 +37,7 @@ export type Database = {
           platform?: string | null
           status?: string
           temperature?: number | null
+          user_id?: string | null
         }
         Update: {
           city?: string
@@ -47,6 +49,7 @@ export type Database = {
           platform?: string | null
           status?: string
           temperature?: number | null
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -61,6 +64,7 @@ export type Database = {
           post_time: string
           tiktok_api_key: string | null
           updated_at: string
+          user_id: string | null
         }
         Insert: {
           auto_post?: boolean
@@ -72,6 +76,7 @@ export type Database = {
           post_time?: string
           tiktok_api_key?: string | null
           updated_at?: string
+          user_id?: string | null
         }
         Update: {
           auto_post?: boolean
@@ -83,6 +88,7 @@ export type Database = {
           post_time?: string
           tiktok_api_key?: string | null
           updated_at?: string
+          user_id?: string | null
         }
         Relationships: []
       }
