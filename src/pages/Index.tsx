@@ -69,9 +69,17 @@ const Index = () => {
     setPostsLoading(false);
   }, []);
 
+  const loadScheduled = useCallback(async () => {
+    setScheduledLoading(true);
+    const data = await fetchScheduledPosts();
+    setScheduledPosts(data);
+    setScheduledLoading(false);
+  }, []);
+
   useEffect(() => {
     loadHistory();
-  }, [loadHistory]);
+    loadScheduled();
+  }, [loadHistory, loadScheduled]);
 
   const handleFetch = useCallback(() => {
     fetchWeather(settings.location);
