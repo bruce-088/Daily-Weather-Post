@@ -1,13 +1,13 @@
 
 
-## Already Implemented
+## Add City Search to Scheduled Posts List
 
-The filtering and sorting options for the scheduled posts list have **already been implemented** in a previous message. The current `src/components/ScheduledPostsList.tsx` already contains:
+### Change
 
-- **Status filter** dropdown (All, Pending, Posted, Failed, Cancelled)
-- **Sort by** dropdown (Date newest/oldest, City A-Z/Z-A)
-- `useMemo`-based filtering and sorting of the posts array
-- "No posts match the selected filter" empty state
+**`src/components/ScheduledPostsList.tsx`**
+- Add a text `Input` field to the toolbar row for searching by city name
+- Update the `useMemo` filtering logic to also filter posts where `city` includes the search term (case-insensitive)
+- Import `Input` from `@/components/ui/input` and `Search` icon from `lucide-react`
 
-No further changes are needed — this feature is already live in the codebase.
+Single file change, no backend modifications needed.
 
