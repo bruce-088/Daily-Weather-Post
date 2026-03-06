@@ -270,6 +270,40 @@ const Index = () => {
                 <div className="flex items-center justify-center p-8 rounded-2xl bg-secondary/20 border border-border/20">
                   <WeatherCard ref={cardRef} weather={weather} aspectRatio={aspectRatio} />
                 </div>
+
+                {/* Caption Preview */}
+                <div className="w-full space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      onClick={handleGenerateCaption}
+                      disabled={captionLoading}
+                      className="gap-1.5 text-xs"
+                    >
+                      <MessageSquare size={14} />
+                      {captionLoading ? "Generating..." : caption ? "Regenerate" : "Generate Caption"}
+                    </Button>
+                    {caption && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={handleGenerateCaption}
+                        disabled={captionLoading}
+                        className="gap-1 text-xs text-muted-foreground"
+                      >
+                        <RefreshCw size={12} />
+                      </Button>
+                    )}
+                  </div>
+                  {caption && (
+                    <Textarea
+                      value={caption}
+                      onChange={(e) => setCaption(e.target.value)}
+                      className="text-sm bg-secondary/30 border-border/30 resize-none"
+                      rows={3}
+                    />
+                  )}
+                </div>
               </div>
 
               <aside className="space-y-4">
