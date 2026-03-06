@@ -86,7 +86,7 @@ export const WeatherCard = forwardRef<HTMLDivElement, WeatherCardProps>(
               <Wind size={14} className="text-primary-foreground/50" />
               <span className="text-xs text-primary-foreground/50">Wind</span>
               <span className="text-sm font-semibold text-primary-foreground font-mono-display">
-                {weather.windSpeed} km/h
+                {weather.windSpeed} mph
               </span>
             </div>
           </div>

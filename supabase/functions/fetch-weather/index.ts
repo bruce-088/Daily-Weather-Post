@@ -28,8 +28,8 @@ Deno.serve(async (req) => {
     const { lat, lon, name, country } = geoData[0];
 
     const [currentRes, forecastRes] = await Promise.all([
-      fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&appid=${apiKey}`),
-      fetch(`https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&units=metric&appid=${apiKey}`),
+      fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=imperial&appid=${apiKey}`),
+      fetch(`https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&units=imperial&appid=${apiKey}`),
     ]);
 
     const current = await currentRes.json();
@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
       temperature: Math.round(current.main.temp),
       feelsLike: Math.round(current.main.feels_like),
       humidity: current.main.humidity,
-      windSpeed: Math.round(current.wind.speed * 3.6),
+      windSpeed: Math.round(current.wind.speed),
       condition: current.weather[0].main,
       conditionIcon: mapIcon(current.weather[0].main),
       description: current.weather[0].description,

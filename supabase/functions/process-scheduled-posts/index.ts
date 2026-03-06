@@ -16,7 +16,7 @@ async function fetchWeatherData(city: string, apiKey: string) {
 
   const { lat, lon, name } = geoData[0];
   const weatherRes = await fetch(
-    `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&appid=${apiKey}`
+    `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=imperial&appid=${apiKey}`
   );
   const weather = await weatherRes.json();
 
