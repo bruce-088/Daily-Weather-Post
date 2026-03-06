@@ -154,6 +154,7 @@ const Index = () => {
             </Badge>
           </div>
           <div className="flex items-center gap-2">
+            <NotificationBell />
             <Button
               size="sm"
               onClick={handlePostNow}
