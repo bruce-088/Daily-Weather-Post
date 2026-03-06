@@ -36,8 +36,22 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
       return;
     }
 
-    // Store state for CSRF validation
     sessionStorage.setItem("tiktok_oauth_state", data.state);
+    window.location.href = data.url;
+  };
+
+  const handleConnectYouTube = async () => {
+    const redirectUri = `${window.location.origin}/youtube/callback`;
+    const { data, error } = await supabase.functions.invoke("youtube-auth", {
+      body: { action: "get_auth_url", redirect_uri: redirectUri },
+    });
+
+    if (error || data?.error) {
+      toast.error("Failed to start YouTube authorization");
+      return;
+    }
+
+    sessionStorage.setItem("youtube_oauth_state", data.state);
     window.location.href = data.url;
   };
 
