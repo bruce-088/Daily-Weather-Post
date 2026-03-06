@@ -17,9 +17,10 @@ interface SettingsPanelProps {
   loading: boolean;
   saving: boolean;
   tiktokConnected?: boolean;
+  youtubeConnected?: boolean;
 }
 
-export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, saving, tiktokConnected }: SettingsPanelProps) {
+export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, saving, tiktokConnected, youtubeConnected }: SettingsPanelProps) {
   const update = (key: keyof AutomationSettings, value: string | boolean) => {
     onUpdate({ ...settings, [key]: value });
   };
