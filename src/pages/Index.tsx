@@ -90,8 +90,11 @@ const Index = () => {
 
   // Load settings from DB on mount
   useEffect(() => {
-    loadSettings().then((s) => {
-      if (s) setSettings(s);
+    loadSettings().then((result) => {
+      if (result) {
+        setSettings(result.settings);
+        setTiktokConnected(result.tiktokConnected);
+      }
       setSettingsLoaded(true);
     });
   }, []);
