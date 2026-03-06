@@ -17,7 +17,9 @@ Deno.serve(async (req) => {
   const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
   try {
-    const { action, code, redirect_uri, user_id } = await req.json();
+    const body = await req.json();
+    const { action, code, redirect_uri, user_id } = body;
+    console.log("YouTube auth action:", action, "user_id:", user_id, "redirect_uri:", redirect_uri);
 
     // Step 1: Generate the Google OAuth authorization URL
     if (action === "get_auth_url") {
