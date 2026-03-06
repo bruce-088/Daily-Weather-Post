@@ -145,6 +145,7 @@ const Index = () => {
               <LogOut size={14} /> Sign Out
             </Button>
           </div>
+        </div>
       </header>
 
       <main className="container px-4 py-6">
