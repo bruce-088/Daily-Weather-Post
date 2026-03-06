@@ -14,7 +14,78 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      post_history: {
+        Row: {
+          city: string
+          condition: string | null
+          created_at: string
+          error_message: string | null
+          id: string
+          image_url: string | null
+          platform: string | null
+          status: string
+          temperature: number | null
+        }
+        Insert: {
+          city: string
+          condition?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          image_url?: string | null
+          platform?: string | null
+          status?: string
+          temperature?: number | null
+        }
+        Update: {
+          city?: string
+          condition?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          image_url?: string | null
+          platform?: string | null
+          status?: string
+          temperature?: number | null
+        }
+        Relationships: []
+      }
+      weather_settings: {
+        Row: {
+          auto_post: boolean
+          city: string
+          created_at: string
+          id: string
+          instagram_api_key: string | null
+          openweather_api_key: string | null
+          post_time: string
+          tiktok_api_key: string | null
+          updated_at: string
+        }
+        Insert: {
+          auto_post?: boolean
+          city?: string
+          created_at?: string
+          id?: string
+          instagram_api_key?: string | null
+          openweather_api_key?: string | null
+          post_time?: string
+          tiktok_api_key?: string | null
+          updated_at?: string
+        }
+        Update: {
+          auto_post?: boolean
+          city?: string
+          created_at?: string
+          id?: string
+          instagram_api_key?: string | null
+          openweather_api_key?: string | null
+          post_time?: string
+          tiktok_api_key?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
