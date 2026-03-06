@@ -136,6 +136,7 @@ Deno.serve(async (req) => {
       condition: weather.condition,
       image_url: imageUrl,
       error_message: errorMessage,
+      user_id: userId,
     });
 
     if (historyError) {
