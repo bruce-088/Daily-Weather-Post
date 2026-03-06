@@ -1,7 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { AutomationSettings, WeatherData } from "@/types/weather";
 
-export async function loadSettings(): Promise<AutomationSettings | null> {
+export async function loadSettings(): Promise<{ settings: AutomationSettings; tiktokConnected: boolean } | null> {
   const { data, error } = await supabase
     .from("weather_settings")
     .select("*")
@@ -11,11 +11,14 @@ export async function loadSettings(): Promise<AutomationSettings | null> {
   if (error || !data) return null;
 
   return {
-    instagramApiKey: data.instagram_api_key || "",
-    tiktokApiKey: data.tiktok_api_key || "",
-    postTime: data.post_time?.slice(0, 5) || "08:00",
-    location: data.city || "San Francisco",
-    autoPost: data.auto_post || false,
+    settings: {
+      instagramApiKey: data.instagram_api_key || "",
+      tiktokApiKey: data.tiktok_api_key || "",
+      postTime: data.post_time?.slice(0, 5) || "08:00",
+      location: data.city || "San Francisco",
+      autoPost: data.auto_post || false,
+    },
+    tiktokConnected: !!(data as any).tiktok_access_token,
   };
 }
 

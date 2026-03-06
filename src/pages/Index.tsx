@@ -48,6 +48,7 @@ const Index = () => {
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("9:16");
   const [activeTab, setActiveTab] = useState("designer");
   const [settings, setSettings] = useState<AutomationSettings>(DEFAULT_SETTINGS);
+  const [tiktokConnected, setTiktokConnected] = useState(false);
   const [saving, setSaving] = useState(false);
   const [posting, setPosting] = useState(false);
   const [posts, setPosts] = useState<PostHistoryItem[]>([]);
@@ -89,8 +90,11 @@ const Index = () => {
 
   // Load settings from DB on mount
   useEffect(() => {
-    loadSettings().then((s) => {
-      if (s) setSettings(s);
+    loadSettings().then((result) => {
+      if (result) {
+        setSettings(result.settings);
+        setTiktokConnected(result.tiktokConnected);
+      }
       setSettingsLoaded(true);
     });
   }, []);
@@ -308,6 +312,7 @@ const Index = () => {
                   onSave={handleSave}
                   loading={loading}
                   saving={saving}
+                  tiktokConnected={tiktokConnected}
                 />
               </aside>
             </div>
@@ -362,6 +367,7 @@ const Index = () => {
                 onSave={handleSave}
                 loading={loading}
                 saving={saving}
+                tiktokConnected={tiktokConnected}
               />
             </div>
           </TabsContent>
