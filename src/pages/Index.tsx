@@ -41,7 +41,20 @@ const DEFAULT_SETTINGS: AutomationSettings = {
 const Index = () => {
   const { signOut } = useAuth();
   const cardRef = useRef<HTMLDivElement>(null);
-  const { weather, loading, error, fetchWeather } = useWeather();
+  const autoLocation = useMemo(() => settingsLoaded ? settings.location : undefined, [settingsLoaded, settings.location]);
+  const { weather, loading, error, fetchWeather, lastUpdated } = useWeather(autoLocation);
+  const [timeAgo, setTimeAgo] = useState("");
+
+  useEffect(() => {
+    if (!lastUpdated) return;
+    const update = () => {
+      const mins = Math.floor((Date.now() - lastUpdated.getTime()) / 60000);
+      setTimeAgo(mins < 1 ? "just now" : `${mins}m ago`);
+    };
+    update();
+    const id = setInterval(update, 60000);
+    return () => clearInterval(id);
+  }, [lastUpdated]);
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("9:16");
   const [activeTab, setActiveTab] = useState("designer");
   const [settings, setSettings] = useState<AutomationSettings>(DEFAULT_SETTINGS);
