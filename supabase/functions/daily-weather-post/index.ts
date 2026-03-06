@@ -80,12 +80,13 @@ Deno.serve(async (req) => {
       userId = user?.id ?? null;
     }
 
-    // Get settings
-    const { data: settings, error: settingsError } = await supabase
+    // Get settings - scope by user if available
+    const settingsQuery = supabase
       .from("weather_settings")
       .select("*")
-      .limit(1)
-      .single();
+      .limit(1);
+    if (userId) settingsQuery.eq("user_id", userId);
+    const { data: settings, error: settingsError } = await settingsQuery.single();
 
     if (settingsError || !settings) {
       throw new Error("No weather settings found. Please configure your settings first.");
