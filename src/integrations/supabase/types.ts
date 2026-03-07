@@ -142,6 +142,9 @@ export type Database = {
           tiktok_open_id: string | null
           tiktok_refresh_token: string | null
           tiktok_token_expires_at: string | null
+          twitter_access_token: string | null
+          twitter_access_token_secret: string | null
+          twitter_user_id: string | null
           updated_at: string
           user_id: string | null
           youtube_access_token: string | null
@@ -168,6 +171,9 @@ export type Database = {
           tiktok_open_id?: string | null
           tiktok_refresh_token?: string | null
           tiktok_token_expires_at?: string | null
+          twitter_access_token?: string | null
+          twitter_access_token_secret?: string | null
+          twitter_user_id?: string | null
           updated_at?: string
           user_id?: string | null
           youtube_access_token?: string | null
@@ -194,6 +200,9 @@ export type Database = {
           tiktok_open_id?: string | null
           tiktok_refresh_token?: string | null
           tiktok_token_expires_at?: string | null
+          twitter_access_token?: string | null
+          twitter_access_token_secret?: string | null
+          twitter_user_id?: string | null
           updated_at?: string
           user_id?: string | null
           youtube_access_token?: string | null
