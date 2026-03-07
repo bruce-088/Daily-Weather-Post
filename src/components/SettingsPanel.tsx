@@ -38,7 +38,7 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
       return;
     }
 
-    localStorage.setItem("tiktok_oauth_state", data.state);
+    localorage.setItem("tiktok_oauth_state", data.state);
     window.open(data.url, "_blank");
   };
 
@@ -53,7 +53,7 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
       return;
     }
 
-    sessionStorage.setItem("youtube_oauth_state", data.state);
+    selocalorage.setItem("youtube_oauth_state", data.state);
     window.open(data.url, "_blank");
   };
 
