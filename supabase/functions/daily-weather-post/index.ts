@@ -370,38 +370,44 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
     fill_color: theme.bg1,
     elements: [
       // === BACKGROUND LAYER ===
-      // Base gradient
+      ...(videoUrl ? [
+        // Stock video background
+        {
+          type: "video", track: 1, time: 0, duration: 10,
+          source: videoUrl,
+          width: "100%", height: "100%", x: "50%", y: "50%",
+          color_filter: "grayscale(30%) brightness(40%)",
+          fit: "cover",
+        },
+        // Dark overlay for text readability
+        {
+          type: "shape", track: 2, time: 0, duration: 10,
+          shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%",
+          fill_color: `linear-gradient(180deg, ${theme.bg1}dd 0%, ${theme.bg1}88 30%, ${theme.bg1}99 70%, ${theme.bg1}ee 100%)`,
+        },
+      ] : [
+        // Fallback: gradient background
+        {
+          type: "shape", track: 1, time: 0, duration: 10,
+          shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%",
+          fill_color: `linear-gradient(160deg, ${theme.bg1} 0%, ${theme.bg2} 100%)`,
+        },
+      ]),
+      // Animated glow orbs (on top of video for atmosphere)
       {
-        type: "shape", track: 1, time: 0, duration: 10,
-        shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%",
-        fill_color: `linear-gradient(160deg, ${theme.bg1} 0%, ${theme.bg2} 100%)`,
-      },
-      // Large animated glow orb top-right
-      {
-        type: "shape", track: 2, time: 0, duration: 10,
+        type: "shape", track: 3, time: 0, duration: 10,
         shape_type: "ellipse", width: 1200, height: 1200, x: "80%", y: "15%",
         fill_color: theme.glow1,
         animations: [
           { type: "scale", start_scale: "90%", end_scale: "115%", duration: 10, easing: "linear" },
         ],
       },
-      // Medium animated glow orb bottom-left
       {
-        type: "shape", track: 3, time: 0, duration: 10,
+        type: "shape", track: 4, time: 0, duration: 10,
         shape_type: "ellipse", width: 900, height: 900, x: "15%", y: "75%",
         fill_color: theme.glow2,
         animations: [
           { type: "scale", start_scale: "100%", end_scale: "130%", duration: 10, easing: "linear" },
-        ],
-      },
-      // Small floating accent orb
-      {
-        type: "shape", track: 4, time: 0, duration: 10,
-        shape_type: "ellipse", width: 400, height: 400, x: "60%", y: "55%",
-        fill_color: theme.glow1,
-        animations: [
-          { type: "scale", start_scale: "80%", end_scale: "110%", duration: 5, easing: "linear" },
-          { type: "scale", start_scale: "110%", end_scale: "80%", duration: 5, time: 5, easing: "linear" },
         ],
       },
 
