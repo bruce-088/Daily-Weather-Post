@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Play, Upload, RefreshCw, X, Loader2 } from "lucide-react";
+import { Play, Upload, RefreshCw, X, Loader2, Pencil, Eye } from "lucide-react";
 import { generatePreview, uploadPreviewVideo } from "@/lib/api";
 import type { PreviewResult } from "@/lib/api";
 
@@ -17,10 +19,19 @@ export function VideoPreviewDialog({ open, onOpenChange, onUploaded }: VideoPrev
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [generating, setGenerating] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [editedCaption, setEditedCaption] = useState("");
+  const [isEditingCaption, setIsEditingCaption] = useState(false);
+
+  useEffect(() => {
+    if (preview?.caption) {
+      setEditedCaption(preview.caption);
+    }
+  }, [preview?.caption]);
 
   const handleGenerate = async () => {
     setGenerating(true);
     setPreview(null);
+    setIsEditingCaption(false);
     try {
       const result = await generatePreview();
       if (result.success && result.video_url) {
@@ -41,8 +52,9 @@ export function VideoPreviewDialog({ open, onOpenChange, onUploaded }: VideoPrev
     setUploading(true);
     try {
       const title = `${preview.weather.city} Weather Today — ${preview.weather.temperature}°F ${preview.weather.condition}`;
-      const desc = preview.caption || `Weather update for ${preview.weather.city}: ${preview.weather.temperature}°F, ${preview.weather.description}`;
-      const result = await uploadPreviewVideo(preview.storage_path, title, desc, preview.caption);
+      const captionToUse = editedCaption || preview.caption;
+      const desc = captionToUse || `Weather update for ${preview.weather.city}: ${preview.weather.temperature}°F, ${preview.weather.description}`;
+      const result = await uploadPreviewVideo(preview.storage_path, title, desc, captionToUse);
 
       if (result.success) {
         toast.success(result.message);
@@ -62,13 +74,14 @@ export function VideoPreviewDialog({ open, onOpenChange, onUploaded }: VideoPrev
   const handleClose = () => {
     if (!generating && !uploading) {
       setPreview(null);
+      setIsEditingCaption(false);
       onOpenChange(false);
     }
   };
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-md bg-card border-border/40">
+      <DialogContent className="sm:max-w-lg bg-card border-border/40 max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-foreground flex items-center gap-2">
             <Play size={18} className="text-primary" />
@@ -107,11 +120,11 @@ export function VideoPreviewDialog({ open, onOpenChange, onUploaded }: VideoPrev
                   autoPlay
                   loop
                   muted
-                  className="w-full max-h-[50vh] object-contain"
+                  className="w-full max-h-[40vh] object-contain"
                 />
               </div>
 
-              {/* Weather info */}
+              {/* Weather info badges */}
               {preview.weather && (
                 <div className="flex items-center gap-2 flex-wrap">
                   <Badge variant="secondary" className="text-xs">
@@ -126,14 +139,39 @@ export function VideoPreviewDialog({ open, onOpenChange, onUploaded }: VideoPrev
                 </div>
               )}
 
-              {/* Caption preview */}
-              {preview.caption && (
-                <div className="max-h-24 overflow-y-auto">
-                  <p className="text-xs text-muted-foreground italic leading-relaxed">
-                    "{preview.caption.substring(0, 200)}{preview.caption.length > 200 ? "…" : ""}"
-                  </p>
+              {/* Caption section */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium text-foreground">Caption</Label>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setIsEditingCaption(!isEditingCaption)}
+                    className="gap-1.5 text-xs h-7 px-2"
+                  >
+                    {isEditingCaption ? (
+                      <><Eye size={12} /> Preview</>
+                    ) : (
+                      <><Pencil size={12} /> Edit</>
+                    )}
+                  </Button>
                 </div>
-              )}
+
+                {isEditingCaption ? (
+                  <Textarea
+                    value={editedCaption}
+                    onChange={(e) => setEditedCaption(e.target.value)}
+                    className="min-h-[120px] text-sm bg-secondary/30 border-border/30 resize-y"
+                    placeholder="Enter caption for your post..."
+                  />
+                ) : (
+                  <div className="rounded-lg bg-secondary/30 border border-border/20 p-3 max-h-[150px] overflow-y-auto">
+                    <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
+                      {editedCaption || "No caption generated"}
+                    </p>
+                  </div>
+                )}
+              </div>
             </>
           )}
         </div>
