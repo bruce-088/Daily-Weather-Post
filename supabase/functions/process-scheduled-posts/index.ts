@@ -776,7 +776,8 @@ Deno.serve(async (req) => {
             if (ytToken) {
               const video = await generateWeatherVideo(weather);
               if (video) {
-                const title = `${weather.cigenerateSkyBriefTitle(weather.city, weather.temperature, weather.condition, weather.rainChance)     const desc = caption || `Weather update for ${weather.city}: ${weather.temperature}°F, ${weather.description}`;
+                const title = generateSkyBriefTitle(weather.city, weather.temperature, weather.condition, weather.rainChance);
+                const desc = caption || "Weather update for " + weather.city + ": " + weather.temperature + "°F, " + weather.description;
                 const result = await uploadToYouTubeShorts(ytToken, video.data, title, desc, video.mimeType);
                 if (result) {
                   console.log(`Scheduled post ${post.id}: YouTube Short published, video ID: ${result.videoId}`);
