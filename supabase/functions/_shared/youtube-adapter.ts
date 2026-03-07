@@ -106,7 +106,17 @@ export class YouTubeAdapter implements PlatformAdapter {
     if (!initRes.ok) {
       const errText = await initRes.text();
       console.error("YouTube upload init failed:", initRes.status, errText);
-      return null;
+      try {
+        const errJson = JSON.parse(errText);
+        const reason = errJson?.error?.errors?.[0]?.reason;
+        if (reason === "uploadLimitExceeded") {
+          throw new Error("YouTube daily upload limit reached. Please wait 24 hours or request a quota increase in Google Cloud Console.");
+        }
+        throw new Error(errJson?.error?.message || "YouTube upload initialization failed");
+      } catch (e) {
+        if (e instanceof Error && e.message.includes("YouTube")) throw e;
+        throw new Error(`YouTube upload init failed (${initRes.status})`);
+      }
     }
 
     const uploadUrl = initRes.headers.get("Location");
