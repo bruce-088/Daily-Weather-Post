@@ -299,7 +299,7 @@ async function uploadToYouTubeShorts(
 ): Promise<{ videoId: string } | null> {
   console.log("Uploading to YouTube Shorts: " + title + " (" + videoData.byteLength + " bytes)");
 
-  const shortTitle = (title.length > 95 ? title.substring(0, 95) : title) + " #Shorts";
+  const shortTitle = title.length > 100 ? title.substring(0, 100) : title;
 
   const initRes = await fetch(
     "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
