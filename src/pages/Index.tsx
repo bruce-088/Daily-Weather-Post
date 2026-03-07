@@ -70,16 +70,21 @@ const Index = () => {
   useEffect(() => {
     if (!settingsLoaded) {
       setDebouncedLocation(undefined);
+      setDebouncedState(undefined);
       return;
     }
     const loc = settings.location.trim();
     if (!loc) {
       setDebouncedLocation(undefined);
+      setDebouncedState(undefined);
       return;
     }
-    const timer = setTimeout(() => setDebouncedLocation(loc), 800);
+    const timer = setTimeout(() => {
+      setDebouncedLocation(loc);
+      setDebouncedState(settings.state?.trim() || undefined);
+    }, 800);
     return () => clearTimeout(timer);
-  }, [settingsLoaded, settings.location]);
+  }, [settingsLoaded, settings.location, settings.state]);
 
   const { weather, loading, error, fetchWeather, lastUpdated } = useWeather(debouncedLocation);
 
