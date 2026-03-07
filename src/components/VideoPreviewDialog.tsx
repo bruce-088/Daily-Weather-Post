@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Play, Upload, RefreshCw, X, Loader2, Pencil, Eye } from "lucide-react";
+import { Play, Upload, RefreshCw, X, Loader2, Pencil, Eye, Download } from "lucide-react";
 import { generatePreview, uploadPreviewVideo } from "@/lib/api";
 import type { PreviewResult } from "@/lib/api";
 
@@ -68,6 +68,26 @@ export function VideoPreviewDialog({ open, onOpenChange, onUploaded }: VideoPrev
       toast.error(err.message || "Upload failed");
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!preview?.video_url) return;
+    try {
+      const response = await fetch(preview.video_url);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const city = preview.weather?.city?.replace(/\s+/g, "-").toLowerCase() || "preview";
+      a.download = `skybrief-preview-${city}-${Date.now()}.mp4`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success("Video downloaded!");
+    } catch {
+      toast.error("Failed to download video");
     }
   };
 
@@ -186,6 +206,15 @@ export function VideoPreviewDialog({ open, onOpenChange, onUploaded }: VideoPrev
               className="gap-1.5 text-xs"
             >
               <RefreshCw size={14} /> Re-render
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDownload}
+              disabled={generating || uploading}
+              className="gap-1.5 text-xs"
+            >
+              <Download size={14} /> Download
             </Button>
             <Button
               variant="ghost"
