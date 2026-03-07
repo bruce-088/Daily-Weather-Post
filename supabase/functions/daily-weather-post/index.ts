@@ -470,7 +470,7 @@ async function generateWeatherVideo(weather: WeatherResponse): Promise<{ data: U
 
   console.log("Starting Creatomate render for", weather.city);
   const theme = getWeatherTheme(weather.condition);
-  const videoUrl = await fetchPexelsVideoUrl(theme.videoKeyword, weather.city);
+  const videoUrl = await fetchPexelsVideoUrl(theme.videoKeyword, weather.city, weather.stateOrRegion);
   const source = buildCreatomateSource(weather, videoUrl);
 
   // Start render
