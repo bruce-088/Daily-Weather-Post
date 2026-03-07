@@ -17,6 +17,7 @@ import {
   CalendarClock,
   MessageSquare,
   RefreshCw,
+  Eye,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { NotificationBell } from "@/components/NotificationBell";
@@ -27,6 +28,7 @@ import { WeatherCard } from "@/components/WeatherCard";
 import { MobilePreview } from "@/components/MobilePreview";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { PostHistoryList } from "@/components/PostHistoryList";
+import { VideoPreviewDialog } from "@/components/VideoPreviewDialog";
 import { SchedulePostForm } from "@/components/SchedulePostForm";
 import { ScheduledPostsList } from "@/components/ScheduledPostsList";
 import { useWeather } from "@/hooks/useWeather";
@@ -61,6 +63,7 @@ const Index = () => {
   const [caption, setCaption] = useState("");
   const [captionLoading, setCaptionLoading] = useState(false);
   const [debouncedLocation, setDebouncedLocation] = useState<string | undefined>(undefined);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   useEffect(() => {
     if (!settingsLoaded) {
@@ -193,6 +196,15 @@ const Index = () => {
           </div>
           <div className="flex items-center gap-2">
             <NotificationBell />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setPreviewOpen(true)}
+              className="gap-1.5 text-xs"
+            >
+              <Eye size={14} />
+              Preview
+            </Button>
             <Button
               size="sm"
               onClick={handlePostNow}
@@ -377,6 +389,12 @@ const Index = () => {
           </TabsContent>
         </Tabs>
       </main>
+
+      <VideoPreviewDialog
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        onUploaded={loadHistory}
+      />
     </div>
   );
 };

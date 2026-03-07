@@ -733,6 +733,13 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Parse request body for mode
+    let mode = "post"; // "post" or "preview"
+    try {
+      const body = await req.clone().json();
+      if (body?.mode === "preview") mode = "preview";
+    } catch { /* no body is fine */ }
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -790,6 +797,48 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Generate video
+    const video = await generateWeatherVideo(weather);
+
+    // === PREVIEW MODE ===
+    if (mode === "preview") {
+      if (!video || !userId) {
+        throw new Error("Failed to generate video for preview");
+      }
+      // Store in Supabase Storage
+      const fileName = `${userId}/preview-${Date.now()}.mp4`;
+      const { error: uploadError } = await supabase.storage
+        .from("weather-videos")
+        .upload(fileName, video.data, {
+          contentType: "video/mp4",
+          upsert: true,
+        });
+
+      if (uploadError) {
+        console.error("Storage upload error:", uploadError);
+        throw new Error("Failed to store preview video");
+      }
+
+      const { data: urlData } = supabase.storage
+        .from("weather-videos")
+        .getPublicUrl(fileName);
+
+      console.log("Preview video stored:", urlData.publicUrl);
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          mode: "preview",
+          video_url: urlData.publicUrl,
+          storage_path: fileName,
+          weather,
+          caption,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // === POST MODE (original behavior) ===
     let platform = "none";
     let status = "success";
     let errorMessage: string | null = null;
@@ -802,8 +851,6 @@ Deno.serve(async (req) => {
         const ytToken = await getValidYouTubeToken(supabase, userId);
 
         if (ytToken) {
-          const video = await generateWeatherVideo(weather);
-
           if (video) {
             const title = `${weather.city} Weather Today — ${weather.temperature}°F ${weather.condition}`;
             const desc = caption || `Weather update for ${weather.city}: ${weather.temperature}°F, ${weather.description}`;
@@ -823,8 +870,8 @@ Deno.serve(async (req) => {
           } else {
             platform = "youtube";
             status = "pending";
-            errorMessage = "Video generation not yet implemented — YouTube upload infrastructure is ready";
-            console.log("YouTube token valid but no video content to upload. Wire up video generation to complete the pipeline.");
+            errorMessage = "Video generation failed";
+            console.log("Video generation failed.");
           }
         } else {
           platform = "youtube";
@@ -859,7 +906,6 @@ Deno.serve(async (req) => {
       }
     }
 
-    // If no platform was attempted
     if (platform === "none") {
       status = "pending";
       errorMessage = "No social platforms connected — connect YouTube, TikTok, or Instagram in Settings";

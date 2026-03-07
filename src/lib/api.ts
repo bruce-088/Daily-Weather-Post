@@ -70,6 +70,48 @@ export async function triggerDailyPost(): Promise<{ success: boolean; message: s
   };
 }
 
+export interface PreviewResult {
+  success: boolean;
+  video_url?: string;
+  storage_path?: string;
+  weather?: any;
+  caption?: string | null;
+  error?: string;
+}
+
+export async function generatePreview(): Promise<PreviewResult> {
+  const { data, error } = await supabase.functions.invoke("daily-weather-post", {
+    body: { mode: "preview" },
+  });
+
+  if (error) {
+    return { success: false, error: error.message || "Failed to generate preview" };
+  }
+
+  return data as PreviewResult;
+}
+
+export async function uploadPreviewVideo(
+  storagePath: string,
+  title: string,
+  description: string,
+  caption?: string | null,
+): Promise<{ success: boolean; message: string; youtube_video_id?: string }> {
+  const { data, error } = await supabase.functions.invoke("upload-preview-video", {
+    body: { storage_path: storagePath, title, description, caption },
+  });
+
+  if (error) {
+    return { success: false, message: error.message || "Failed to upload video" };
+  }
+
+  return {
+    success: data?.success ?? false,
+    message: data?.message || data?.error || "Unknown response",
+    youtube_video_id: data?.youtube_video_id,
+  };
+}
+
 export interface PostHistoryItem {
   id: string;
   status: string;
