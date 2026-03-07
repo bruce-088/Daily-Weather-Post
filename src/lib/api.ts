@@ -204,6 +204,9 @@ export async function generateCaption(weather: WeatherData): Promise<string> {
       windInfo: weather.windInfo,
       sunrise: weather.sunrise,
       sunset: weather.sunset,
+      tomorrowHigh: weather.tomorrowHigh,
+      tomorrowLow: weather.tomorrowLow,
+      tomorrowCondition: weather.tomorrowCondition,
     },
   });
 
