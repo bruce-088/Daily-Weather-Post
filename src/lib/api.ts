@@ -37,6 +37,7 @@ export async function saveSettings(settings: AutomationSettings): Promise<boolea
 
   const payload = {
     city: settings.location,
+    state: settings.state || null,
     instagram_api_key: settings.instagramApiKey || null,
     tiktok_api_key: settings.tiktokApiKey || null,
     post_time: settings.postTime + ":00",

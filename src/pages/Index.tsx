@@ -41,6 +41,7 @@ const DEFAULT_SETTINGS: AutomationSettings = {
   tiktokApiKey: "",
   postTime: "08:00",
   location: "San Francisco",
+  state: "California",
   autoPost: false,
 };
 

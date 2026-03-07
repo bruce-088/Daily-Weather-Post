@@ -67,13 +67,24 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex gap-2">
-            <Input
-              value={settings.location}
-              onChange={(e) => update("location", e.target.value)}
-              placeholder="San Francisco"
-              className="bg-secondary/50 border-border/30"
-            />
-            <Button onClick={onFetch} disabled={loading} size="icon" variant="outline">
+            <div className="flex-1 space-y-2">
+              <div className="flex gap-2">
+                <Input
+                  value={settings.location}
+                  onChange={(e) => update("location", e.target.value)}
+                  placeholder="San Francisco"
+                  className="bg-secondary/50 border-border/30"
+                />
+                <Input
+                  value={settings.state}
+                  onChange={(e) => update("state", e.target.value)}
+                  placeholder="California"
+                  className="bg-secondary/50 border-border/30 w-[140px]"
+                />
+              </div>
+              <p className="text-[10px] text-muted-foreground">City and State</p>
+            </div>
+            <Button onClick={onFetch} disabled={loading} size="icon" variant="outline" className="self-start">
               <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
             </Button>
           </div>
