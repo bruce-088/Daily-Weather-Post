@@ -323,7 +323,7 @@ async function fetchPexelsVideoUrl(keyword: string): Promise<string | null> {
   }
 }
 
-function buildCreatomateSource(weather: WeatherResponse): object {
+function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | null): object {
   const now = new Date();
   const dateStr = now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
   const theme = getWeatherTheme(weather.condition);
@@ -338,10 +338,14 @@ function buildCreatomateSource(weather: WeatherResponse): object {
   return {
     width: 1080, height: 1920, duration: 10, frame_rate: 30, fill_color: theme.bg1,
     elements: [
-      { type: "shape", track: 1, time: 0, duration: 10, shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%", fill_color: `linear-gradient(160deg, ${theme.bg1} 0%, ${theme.bg2} 100%)` },
-      { type: "shape", track: 2, time: 0, duration: 10, shape_type: "ellipse", width: 1200, height: 1200, x: "80%", y: "15%", fill_color: theme.glow1, animations: [{ type: "scale", start_scale: "90%", end_scale: "115%", duration: 10, easing: "linear" }] },
-      { type: "shape", track: 3, time: 0, duration: 10, shape_type: "ellipse", width: 900, height: 900, x: "15%", y: "75%", fill_color: theme.glow2, animations: [{ type: "scale", start_scale: "100%", end_scale: "130%", duration: 10, easing: "linear" }] },
-      { type: "shape", track: 4, time: 0, duration: 10, shape_type: "ellipse", width: 400, height: 400, x: "60%", y: "55%", fill_color: theme.glow1, animations: [{ type: "scale", start_scale: "80%", end_scale: "110%", duration: 5, easing: "linear" }, { type: "scale", start_scale: "110%", end_scale: "80%", duration: 5, time: 5, easing: "linear" }] },
+      ...(videoUrl ? [
+        { type: "video", track: 1, time: 0, duration: 10, source: videoUrl, width: "100%", height: "100%", x: "50%", y: "50%", color_filter: "grayscale(30%) brightness(40%)", fit: "cover" },
+        { type: "shape", track: 2, time: 0, duration: 10, shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%", fill_color: `linear-gradient(180deg, ${theme.bg1}dd 0%, ${theme.bg1}88 30%, ${theme.bg1}99 70%, ${theme.bg1}ee 100%)` },
+      ] : [
+        { type: "shape", track: 1, time: 0, duration: 10, shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%", fill_color: `linear-gradient(160deg, ${theme.bg1} 0%, ${theme.bg2} 100%)` },
+      ]),
+      { type: "shape", track: 3, time: 0, duration: 10, shape_type: "ellipse", width: 1200, height: 1200, x: "80%", y: "15%", fill_color: theme.glow1, animations: [{ type: "scale", start_scale: "90%", end_scale: "115%", duration: 10, easing: "linear" }] },
+      { type: "shape", track: 4, time: 0, duration: 10, shape_type: "ellipse", width: 900, height: 900, x: "15%", y: "75%", fill_color: theme.glow2, animations: [{ type: "scale", start_scale: "100%", end_scale: "130%", duration: 10, easing: "linear" }] },
       { type: "text", track: 5, time: 0, duration: 10, text: "☁ SKYBRIEF", font_family: "Inter", font_weight: "600", font_size: "36", fill_color: theme.accent, letter_spacing: "12%", x: "50%", y: "6%", x_alignment: "50%", y_alignment: "50%", enter: { type: "fade", duration: 0.4 } },
       { type: "shape", track: 6, time: 0.2, duration: 9.8, shape_type: "rectangle", width: 200, height: 3, x: "50%", y: "9%", fill_color: theme.accent, border_radius: "2", enter: { type: "scale", start_scale: "0%", duration: 0.5 } },
       { type: "text", track: 7, time: 0.3, duration: 9.7, text: weather.city, font_family: "Inter", font_weight: "800", font_size: "72", fill_color: "#ffffff", x: "50%", y: "14%", x_alignment: "50%", y_alignment: "50%", enter: { type: "slide", direction: "up", duration: 0.6 } },
