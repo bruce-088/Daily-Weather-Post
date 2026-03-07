@@ -648,12 +648,6 @@ async function generateWeatherVideo(weather: WeatherResponse): Promise<{ data: U
   return null;
 }
 
-async function postToInstagram(_imageUrl: string, _caption: string, _apiKey: string): Promise<boolean> {
-  return false;
-}
-async function postToTikTok(_imageUrl: string, _caption: string, _apiKey: string): Promise<boolean> {
-  return false;
-}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
