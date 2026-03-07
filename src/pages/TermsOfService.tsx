@@ -15,7 +15,7 @@ const TermsOfService = () => {
         <div className="space-y-8 text-sm leading-relaxed text-muted-foreground">
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-2">1. Service Description</h2>
-            <p>SkyBrief ("the Service") is a weather-based social media posting application that allows users to generate and publish weather-related content to third-party platforms including TikTok and Instagram. The Service fetches weather data, generates captions, and facilitates content posting on behalf of authenticated users.</p>
+            <p>SkyBrief ("the Service") is a weather-based social media posting application that allows users to generate and publish weather-related content to third-party platforms including TikTok, YouTube, Instagram, Twitter/X, and LinkedIn. The Service fetches weather data, generates captions, and facilitates content posting on behalf of authenticated users.</p>
           </section>
 
           <section>
