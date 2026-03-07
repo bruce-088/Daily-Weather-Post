@@ -19,7 +19,7 @@ Deno.serve(async (req) => {
     if (!apiKey) throw new Error("OpenWeatherMap API key not configured");
 
     // Geocode — include state for more accurate results
-    constinputState ? `${city},${inputS`${city},${state}` : city;
+    const geoQuery = inputState ? (city + "," + inputState) : city;
     const geoRes = await fetch(
       `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(geoQuery)}&limit=1&appid=${apiKey}`
     );
