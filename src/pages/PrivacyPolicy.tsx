@@ -10,7 +10,7 @@ const PrivacyPolicy = () => {
         </Link>
 
         <h1 className="text-3xl font-bold mb-2">Privacy Policy</h1>
-        <p className="text-muted-foreground text-sm mb-10">Last updated: March 6, 2026</p>
+        <p className="text-muted-foreground text-sm mb-10">Last updated: March 7, 2026</p>
 
         <div className="space-y-8 text-sm leading-relaxed text-muted-foreground">
           <section>
