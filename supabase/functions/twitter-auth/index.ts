@@ -8,6 +8,9 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// Twitter API base for OAuth 1.0a endpoints
+const TWITTER_API = "https://api.twitter" + ".com";
+
 // --- OAuth 1.0a helpers ---
 
 function percentEncode(str: string): string {
@@ -58,6 +61,7 @@ async function buildOAuthHeader(
       oauthParams[k] = v;
     }
   }
+
   const allParams = { ...oauthParams, ...extraParams };
   const sortedKeys = Object.keys(allParams).sort();
   const paramString = sortedKeys.map((k) => percentEncode(k) + "=" + percentEncode(allParams[k])).join("&");
@@ -89,7 +93,7 @@ Deno.serve(async (req) => {
 
     // get_auth_url doesn't need auth
     if (action === "get_auth_url") {
-      const requestTokenUrl = "https://api.twitterwitterwitter.com/oauth/request_token";
+      const requestTokenUrl = TWITTER_API + "/oauth/request_token";
       const callbackUrl = redirect_uri || "oob";
       const extraParams: Record<string, string> = { oauth_callback: callbackUrl };
 
@@ -121,7 +125,7 @@ Deno.serve(async (req) => {
         });
       }
 
-      const authorizeUrl = "twitterttps:twitter/api.x.com/oauth/authorize?oauth_token=" + oauthToken;
+      const authorizeUrl = TWITTER_API + "/oauth/authorize?oauth_token=" + oauthToken;
       return new Response(
         JSON.stringify({ url: authorizeUrl, oauth_token: oauthToken, oauth_token_secret: oauthTokenSecret }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
@@ -141,7 +145,7 @@ Deno.serve(async (req) => {
       }
 
       const oauth_token_secret = body.oauth_token_secret || "";
-      const accessTokenUrl = "twitterttps://api.x.com/oauth/access_token";
+      const accessTokenUrl = TWITTER_API + "/oauth/access_token";
       const extraParams: Record<string, string> = { oauth_verifier };
 
       const authHeader = await buildOAuthHeader(
