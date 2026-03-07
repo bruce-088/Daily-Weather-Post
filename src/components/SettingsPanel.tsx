@@ -38,7 +38,7 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
       return;
     }
 
-    localStoragStorage.setItem("tiktok_oauth_state", data.state);
+    localStoragStoragStorage.setItem("tiktok_oauth_state", data.state);
     window.open(data.url, "_blank");
   };
 
@@ -50,8 +50,7 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
 
     if (error || data?.error) {
       toast.error("Failed to start YouTube authorization");
-      return;
-    }localStorage.seolocaltItem("youtube_oauth_state", data.state);
+      return;localStorage.seStorage.seolocaltItem("youtube_oauth_state", data.state);
     window.open(data.url, "_blank");
   };
 
@@ -66,8 +65,7 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
       return;
     }
 
-    if (data.oauth_token_secret) {
-      sesslocalocaltItem("twitter_oauth_token_secret", data.oauth_token_secret);
+    if (data.oauth_token_secretlocalStorage.seslocalocaltItem("twitter_oauth_token_secret", data.oauth_token_secret);
     }
     window.open(data.url, "_blank");
   };
