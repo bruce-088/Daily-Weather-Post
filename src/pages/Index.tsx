@@ -412,6 +412,12 @@ const Index = () => {
         onOpenChange={setPreviewOpen}
         onUploaded={loadHistory}
       />
+
+      <footer className="border-t border-border/50 py-4 px-6 flex items-center justify-center gap-4 text-xs text-muted-foreground">
+        <a href="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</a>
+        <span>·</span>
+        <a href="/terms" className="hover:text-foreground transition-colors">Terms of Service</a>
+      </footer>
     </div>
   );
 };
