@@ -1,0 +1,2 @@
+ALTER TABLE public.post_history DROP CONSTRAINT post_history_platform_check;
+ALTER TABLE public.post_history ADD CONSTRAINT post_history_platform_check CHECK (platform = ANY (ARRAY['instagram'::text, 'tiktok'::text, 'both'::text, 'youtube'::text, 'none'::text]));
