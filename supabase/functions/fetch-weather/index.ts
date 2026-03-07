@@ -12,7 +12,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { city, state } = await req.json();
+    const { city, state: inputState } = await req.json();
     if (!city) throw new Error("City is required");
 
     const apiKey = Deno.env.get("OPENWEATHER_API_KEY");
