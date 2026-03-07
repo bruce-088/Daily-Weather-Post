@@ -12,6 +12,7 @@ const TikTokCallback = () => {
     const exchangeCode = async () => {
       const code = searchParams.get("code");
       const error = searchParams.get("error");
+      const returnedState = searchParams.get("state");
 
       if (error) {
         toast.error("TikTok authorization was denied");
@@ -19,6 +20,16 @@ const TikTokCallback = () => {
         setTimeout(() => navigate("/"), 2000);
         return;
       }
+
+      // CSRF state validation
+      const storedState = sessionStorage.getItem("tiktok_oauth_state");
+      if (!returnedState || returnedState !== storedState) {
+        toast.error("Invalid OAuth state — possible CSRF attack");
+        setStatus("error");
+        setTimeout(() => navigate("/"), 2000);
+        return;
+      }
+      sessionStorage.removeItem("tiktok_oauth_state");
 
       if (!code) {
         toast.error("No authorization code received");
