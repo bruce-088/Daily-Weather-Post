@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.youtube-auth]
 verify_jwt = false
+
+[functions.linkedin-auth]
+verify_jwt = false
