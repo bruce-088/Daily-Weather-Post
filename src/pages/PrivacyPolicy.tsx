@@ -19,7 +19,7 @@ const PrivacyPolicy = () => {
             <ul className="list-disc pl-5 space-y-1">
               <li><strong className="text-foreground">Account information:</strong> Email address and authentication credentials when you create an account.</li>
               <li><strong className="text-foreground">Location data:</strong> City name you provide for weather lookups (not GPS coordinates).</li>
-              <li><strong className="text-foreground">API tokens:</strong> Third-party API keys or OAuth tokens you provide to connect TikTok, Instagram, or other platforms.</li>
+              <li><strong className="text-foreground">API tokens:</strong> Third-party API keys or OAuth tokens you provide to connect TikTok, YouTube, Instagram, Twitter/X, LinkedIn, or other platforms.</li>
               <li><strong className="text-foreground">Post history:</strong> Records of content generated and posted through the Service, including captions, timestamps, and status.</li>
               <li><strong className="text-foreground">Weather data:</strong> Weather information fetched for your configured city.</li>
               <li><strong className="text-foreground">Settings:</strong> Your preferences such as auto-post schedules and notification settings.</li>
