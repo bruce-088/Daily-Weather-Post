@@ -10,12 +10,12 @@ const TermsOfService = () => {
         </Link>
 
         <h1 className="text-3xl font-bold mb-2">Terms of Service</h1>
-        <p className="text-muted-foreground text-sm mb-10">Last updated: March 6, 2026</p>
+        <p className="text-muted-foreground text-sm mb-10">Last updated: March 7, 2026</p>
 
         <div className="space-y-8 text-sm leading-relaxed text-muted-foreground">
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-2">1. Service Description</h2>
-            <p>SkyBrief ("the Service") is a weather-based social media posting application that allows users to generate and publish weather-related content to third-party platforms including TikTok and Instagram. The Service fetches weather data, generates captions, and facilitates content posting on behalf of authenticated users.</p>
+            <p>SkyBrief ("the Service") is a weather-based social media posting application that allows users to generate and publish weather-related content to third-party platforms including TikTok, YouTube, Instagram, Twitter/X, and LinkedIntagram, Twitter/X, and LinkedIntagram, Twitter/X, and LinkedIn. The Service fetches weather data, generates captions, and facilitates content posting on behalf of authenticated users.</p>
           </section>
 
           <section>
@@ -30,12 +30,12 @@ const TermsOfService = () => {
 
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-2">4. Content Ownership & Posting</h2>
-            <p>You retain ownership of any content you create or post through the Service. By using the Service to post content to third-party platforms (such as TikTok or Instagram), you acknowledge that such content is also subject to the terms and policies of those platforms. You are solely responsible for the content you post and must ensure it complies with all applicable laws and platform policies.</p>
+            <p>You retain ownership of any content you create or post through the Service. By using the Se, YouTube, Instagram, Twitter/X, or LinkedIn content to third-, YouTube, Instagram, Twitter/X, or LinkedInms (such as TikTok or Instagram), you acknowledge that such content is also subject to the terms and policies of those platforms. You are solely responsible for the content you post and must ensure it complies with all applicable laws and platform policies.</p>
           </section>
 
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-2">5. Third-Party API Usage</h2>
-            <p>The Service integrates with third-party APIs including the TikTok Content Posting API, Instagram Graph API, and weather data providers. By connecting your third-party accounts, you authorize the Service to act on your behalf within the scope of permissions you grant. You may revoke access at any time through your account settings or through the respective third-party platform settings.</p>
+            <p>The Service integrates wiYouTube Data API, Instagram Graph API, Twitter/X API, LinkedInAPIs including the TikTok Content Posting API, Instagram Graph API, and weather data providers. By connecting your third-party accounts, you authorize the Service to act on your behalf within the scope of permissions you grant. You may revoke access at any time through your account settings or through the respective third-party platform settings.</p>
           </section>
 
           <section>
