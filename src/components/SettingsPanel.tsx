@@ -39,7 +39,7 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
     }
 
     sessionStorage.setItem("tiktok_oauth_state", data.state);
-    window.location.href = data.url;
+    window.open(data.url, "_blank");
   };
 
   const handleConnectYouTube = async () => {
