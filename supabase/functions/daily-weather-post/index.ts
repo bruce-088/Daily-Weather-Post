@@ -766,68 +766,32 @@ Deno.serve(async (req) => {
     let errorMessage: string | null = null;
     let youtubeVideoId: string | null = null;
 
-    if (userId && settings.youtube_access_token) {
-      try {
-        console.log("YouTube connected, attempting upload...");
-        const ytToken = await getValidYouTubeToken(supabase, userId);
+    const connectedAdapters = getConnectedAdapters(settings as Record<string, unknown>);
 
-        if (ytToken) {
-          if (video) {
-            const title = generateSkyBriefTitle(weather.city, weather.temperature, weather.condition, weather.rainChance);
-            const desc = caption || "Weather update for " + weather.city + ": " + weather.temperature + "\u00B0F, " + weather.description;
-            const result = await uploadToYouTubeShorts(ytToken, video.data, title, desc, video.mimeType);
-
-            if (result) {
-              youtubeVideoId = result.videoId;
-              platform = "youtube";
-              status = "success";
-              errorMessage = null;
-              console.log("YouTube Short published! Video ID:", youtubeVideoId);
-            } else {
-              platform = "youtube";
-              status = "failed";
-              errorMessage = "YouTube upload failed \u2014 check edge function logs for details";
-            }
-          } else {
-            platform = "youtube";
-            status = "pending";
-            errorMessage = "Video generation failed";
-            console.log("Video generation failed.");
-          }
-        } else {
-          platform = "youtube";
-          status = "failed";
-          errorMessage = "Failed to obtain valid YouTube access token";
-        }
-      } catch (e) {
-        console.error("YouTube upload error:", e);
-        platform = "youtube";
-        status = "failed";
-        errorMessage = e instanceof Error ? e.message : "YouTube upload failed";
-      }
-    }
-
-    if (settings.instagram_api_key) {
-      const postCaption = caption || "Weather in " + weather.city + ": " + weather.temperature + "\u00B0F";
-      try {
-        await postToInstagram("", postCaption, settings.instagram_api_key);
-      } catch (e) {
-        console.error("Instagram post failed:", e);
-      }
-    }
-
-    if (settings.tiktok_access_token) {
-      const postCaption = caption || "Weather in " + weather.city + ": " + weather.temperature + "\u00B0F";
-      try {
-        await postToTikTok("", postCaption, settings.tiktok_access_token);
-      } catch (e) {
-        console.error("TikTok post failed:", e);
-      }
-    }
-
-    if (platform === "none") {
+    if (connectedAdapters.length === 0) {
       status = "pending";
-      errorMessage = "No social platforms connected \u2014 connect YouTube, TikTok, or Instagram in Settings";
+      errorMessage = "No social platforms connected — connect YouTube, TikTok, or Instagram in Settings";
+    } else if (!video) {
+      status = "pending";
+      errorMessage = "Video generation failed";
+      platform = connectedAdapters[0].name;
+    } else if (userId) {
+      const title = generateSkyBriefTitle(weather.city, weather.temperature, weather.condition, weather.rainChance);
+      const desc = caption || "Weather update for " + weather.city + ": " + weather.temperature + "\u00B0F, " + weather.description;
+
+      for (const adapter of connectedAdapters) {
+        const result = await postToPlatform(adapter.name, supabase, userId, video.data, title, desc, video.mimeType);
+        if (result.success) {
+          platform = adapter.name;
+          status = "success";
+          if (adapter.name === "youtube") youtubeVideoId = result.id || null;
+          console.log(`${adapter.name} post published! ID: ${result.id}`);
+        } else {
+          platform = adapter.name;
+          status = "failed";
+          errorMessage = result.error || `${adapter.name} upload failed`;
+        }
+      }
     }
 
     const { error: historyError } = await supabase.from("post_history").insert({

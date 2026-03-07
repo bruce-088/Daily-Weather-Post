@@ -664,33 +664,24 @@ Deno.serve(async (req) => {
         let postStatus = "posted";
         let errorMessage: string | null = null;
 
-        // --- YouTube Shorts Upload ---
-        if (post.platform === "youtube" || post.platform === "both") {
-          const { data: userSettings } = await supabase
-            .from("weather_settings")
-            .select("youtube_access_token")
-            .eq("user_id", post.user_id)
-            .single();
+        // --- Platform Upload via Adapter ---
+        const platformsToPost = post.platform === "both" ? ["youtube", "tiktok"] : [post.platform];
 
-          if (userSettings?.youtube_access_token) {
-            const ytToken = await getValidYouTubeToken(supabase, post.user_id);
-            if (ytToken) {
-              const video = await generateWeatherVideo(weather);
-              if (video) {
-                const title = generateSkyBriefTitle(weather.city, weather.temperature, weather.condition, weather.rainChance);
-                const desc = caption || "Weather update for " + weather.city + ": " + weather.temperature + "°F, " + weather.description;
-                const result = await uploadToYouTubeShorts(ytToken, video.data, title, desc, video.mimeType);
-                if (result) {
-                  console.log(`Scheduled post ${post.id}: YouTube Short published, video ID: ${result.videoId}`);
-                } else {
-                  errorMessage = "YouTube upload failed after video generation";
-                }
-              } else {
-                errorMessage = "Video generation failed — check Creatomate configuration";
-              }
-            } else {
-              errorMessage = "Failed to refresh YouTube token";
-            }
+        for (const platformName of platformsToPost) {
+          const video = await generateWeatherVideo(weather);
+          if (!video) {
+            errorMessage = "Video generation failed — check Creatomate configuration";
+            break;
+          }
+
+          const title = generateSkyBriefTitle(weather.city, weather.temperature, weather.condition, weather.rainChance);
+          const desc = caption || "Weather update for " + weather.city + ": " + weather.temperature + "°F, " + weather.description;
+          const result = await postToPlatform(platformName, supabase, post.user_id, video.data, title, desc, video.mimeType);
+
+          if (result.success) {
+            console.log(`Scheduled post ${post.id}: ${platformName} published, ID: ${result.id}`);
+          } else {
+            errorMessage = result.error || `${platformName} upload failed`;
           }
         }
 
