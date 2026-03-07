@@ -389,6 +389,12 @@ const Index = () => {
           </TabsContent>
         </Tabs>
       </main>
+
+      <VideoPreviewDialog
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        onUploaded={loadHistory}
+      />
     </div>
   );
 };
