@@ -296,12 +296,246 @@ async function uploadToYouTubeShorts(
   return { videoId: result.id };
 }
 
-// --- Placeholder: Image/Video Generation ---
-// YouTube Shorts require VIDEO format (MP4, WebM, AVI, etc.)
-// This function should return video data for upload.
-// Current implementation returns null — wire up a video generation service
-// (e.g., Creatomate, Shotstack) or generate from frontend and store in Supabase Storage.
-async function generateWeatherVideo(_weather: WeatherResponse): Promise<{ data: Uint8Array; mimeType: string } | null> {
+// --- Creatomate Video Generation ---
+
+function buildCreatomateSource(weather: WeatherResponse): object {
+  const now = new Date();
+  const dateStr = now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+
+  const morningLine = weather.morningTemp != null
+    ? `Morning: ${weather.morningTemp}°F — ${weather.morningCondition}` : "Morning: —";
+  const afternoonLine = weather.afternoonTemp != null
+    ? `Afternoon: ${weather.afternoonTemp}°F — ${weather.afternoonCondition}` : "Afternoon: —";
+  const eveningLine = weather.eveningTemp != null
+    ? `Evening: ${weather.eveningTemp}°F — ${weather.eveningCondition}` : "Evening: —";
+
+  return {
+    output_format: "mp4",
+    width: 1080,
+    height: 1920,
+    duration: 7,
+    elements: [
+      {
+        type: "shape",
+        track: 1,
+        time: 0,
+        duration: 7,
+        shape_type: "rectangle",
+        width: 1080,
+        height: 1920,
+        x: "50%",
+        y: "50%",
+        fill_color: "linear-gradient(180deg, #0f172a 0%, #1e293b 50%, #0f172a 100%)",
+      },
+      {
+        type: "text",
+        track: 2,
+        time: 0,
+        duration: 7,
+        text: "SkyBrief",
+        font_family: "Inter",
+        font_weight: "700",
+        font_size: "42px",
+        fill_color: "#38bdf8",
+        x: "50%",
+        y: "8%",
+        text_align: "center",
+        enter: { type: "fade", duration: 0.5 },
+      },
+      {
+        type: "text",
+        track: 3,
+        time: 0.3,
+        duration: 6.7,
+        text: `${weather.city}, ${weather.stateOrRegion}`,
+        font_family: "Inter",
+        font_weight: "700",
+        font_size: "64px",
+        fill_color: "#ffffff",
+        x: "50%",
+        y: "18%",
+        text_align: "center",
+        enter: { type: "fade", duration: 0.5 },
+      },
+      {
+        type: "text",
+        track: 4,
+        time: 0.5,
+        duration: 6.5,
+        text: dateStr,
+        font_family: "Inter",
+        font_weight: "400",
+        font_size: "36px",
+        fill_color: "#94a3b8",
+        x: "50%",
+        y: "24%",
+        text_align: "center",
+        enter: { type: "fade", duration: 0.5 },
+      },
+      {
+        type: "text",
+        track: 5,
+        time: 0.8,
+        duration: 6.2,
+        text: `${weather.temperature}°F`,
+        font_family: "Inter",
+        font_weight: "800",
+        font_size: "140px",
+        fill_color: "#ffffff",
+        x: "50%",
+        y: "38%",
+        text_align: "center",
+        enter: { type: "fade", duration: 0.6 },
+      },
+      {
+        type: "text",
+        track: 6,
+        time: 1.0,
+        duration: 6.0,
+        text: weather.condition,
+        font_family: "Inter",
+        font_weight: "500",
+        font_size: "48px",
+        fill_color: "#e2e8f0",
+        x: "50%",
+        y: "47%",
+        text_align: "center",
+        enter: { type: "fade", duration: 0.5 },
+      },
+      {
+        type: "text",
+        track: 7,
+        time: 1.5,
+        duration: 5.5,
+        text: `${morningLine}\n${afternoonLine}\n${eveningLine}`,
+        font_family: "Inter",
+        font_weight: "500",
+        font_size: "38px",
+        line_height: "180%",
+        fill_color: "#cbd5e1",
+        x: "50%",
+        y: "60%",
+        text_align: "center",
+        enter: { type: "fade", duration: 0.6 },
+      },
+      {
+        type: "text",
+        track: 8,
+        time: 2.0,
+        duration: 5.0,
+        text: `🌧 Rain: ${weather.rainChance}%   💨 Wind: ${weather.windInfo}`,
+        font_family: "Inter",
+        font_weight: "400",
+        font_size: "32px",
+        fill_color: "#94a3b8",
+        x: "50%",
+        y: "75%",
+        text_align: "center",
+        enter: { type: "fade", duration: 0.5 },
+      },
+      {
+        type: "text",
+        track: 9,
+        time: 2.5,
+        duration: 4.5,
+        text: `🌅 ${weather.sunrise}  •  🌇 ${weather.sunset}`,
+        font_family: "Inter",
+        font_weight: "400",
+        font_size: "32px",
+        fill_color: "#94a3b8",
+        x: "50%",
+        y: "82%",
+        text_align: "center",
+        enter: { type: "fade", duration: 0.5 },
+      },
+      {
+        type: "text",
+        track: 10,
+        time: 3.0,
+        duration: 4.0,
+        text: "Follow @SkyBrief for daily updates",
+        font_family: "Inter",
+        font_weight: "500",
+        font_size: "30px",
+        fill_color: "#38bdf8",
+        x: "50%",
+        y: "92%",
+        text_align: "center",
+        enter: { type: "fade", duration: 0.5 },
+      },
+    ],
+  };
+}
+
+async function generateWeatherVideo(weather: WeatherResponse): Promise<{ data: Uint8Array; mimeType: string } | null> {
+  const apiKey = Deno.env.get("CREATOMATE_API_KEY");
+  if (!apiKey) {
+    console.error("CREATOMATE_API_KEY not configured");
+    return null;
+  }
+
+  console.log("Starting Creatomate render for", weather.city);
+  const source = buildCreatomateSource(weather);
+
+  // Start render
+  const renderRes = await fetch("https://api.creatomate.com/v2/renders", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ source }),
+  });
+
+  if (!renderRes.ok) {
+    console.error("Creatomate render request failed:", renderRes.status, await renderRes.text());
+    return null;
+  }
+
+  const renders = await renderRes.json();
+  const renderId = renders[0]?.id;
+  if (!renderId) {
+    console.error("No render ID returned from Creatomate");
+    return null;
+  }
+
+  console.log("Creatomate render started, ID:", renderId);
+
+  // Poll for completion (max ~3 minutes)
+  for (let i = 0; i < 36; i++) {
+    await new Promise((r) => setTimeout(r, 5000));
+
+    const statusRes = await fetch(`https://api.creatomate.com/v2/renders/${renderId}`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+
+    if (!statusRes.ok) {
+      console.error("Creatomate status check failed:", statusRes.status);
+      continue;
+    }
+
+    const statusData = await statusRes.json();
+    console.log(`Render ${renderId} status: ${statusData.status}`);
+
+    if (statusData.status === "succeeded" && statusData.url) {
+      console.log("Render complete, downloading video...");
+      const videoRes = await fetch(statusData.url);
+      if (!videoRes.ok) {
+        console.error("Failed to download rendered video");
+        return null;
+      }
+      const arrayBuf = await videoRes.arrayBuffer();
+      console.log(`Video downloaded: ${arrayBuf.byteLength} bytes`);
+      return { data: new Uint8Array(arrayBuf), mimeType: "video/mp4" };
+    }
+
+    if (statusData.status === "failed") {
+      console.error("Creatomate render failed:", statusData.error_message || "unknown error");
+      return null;
+    }
+  }
+
+  console.error("Creatomate render timed out after 3 minutes");
   return null;
 }
 

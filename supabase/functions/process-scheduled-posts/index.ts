@@ -352,11 +352,19 @@ Deno.serve(async (req) => {
           if (userSettings?.youtube_access_token) {
             const ytToken = await getValidYouTubeToken(supabase, post.user_id);
             if (ytToken) {
-              // TODO: Wire up video generation here
-              // const video = await generateWeatherVideo(weather);
-              // if (video) { await uploadToYouTubeShorts(ytToken, video.data, title, desc, video.mimeType); }
-              errorMessage = "YouTube upload ready — video generation not yet implemented";
-              console.log(`Scheduled post ${post.id}: YouTube token valid, awaiting video content`);
+              const video = await generateWeatherVideo(weather);
+              if (video) {
+                const title = `${weather.city} Weather Today — ${weather.temperature}°F ${weather.condition}`;
+                const desc = caption || `Weather update for ${weather.city}: ${weather.temperature}°F, ${weather.description}`;
+                const result = await uploadToYouTubeShorts(ytToken, video.data, title, desc, video.mimeType);
+                if (result) {
+                  console.log(`Scheduled post ${post.id}: YouTube Short published, video ID: ${result.videoId}`);
+                } else {
+                  errorMessage = "YouTube upload failed after video generation";
+                }
+              } else {
+                errorMessage = "Video generation failed — check Creatomate configuration";
+              }
             } else {
               errorMessage = "Failed to refresh YouTube token";
             }
