@@ -36,11 +36,19 @@ export interface ForecastDay {
 
 export type AspectRatio = "1:1" | "9:16";
 
+export type TimePeriod = "morning" | "afternoon" | "evening";
+
 export interface AutomationSettings {
   instagramApiKey: string;
   tiktokApiKey: string;
-  postTime: string;
+  postTime: string; // kept for backward compat
   location: string;
   state: string;
   autoPost: boolean;
+  morningPostTime: string;
+  afternoonPostTime: string;
+  eveningPostTime: string;
+  autoPostMorning: boolean;
+  autoPostAfternoon: boolean;
+  autoPostEvening: boolean;
 }
