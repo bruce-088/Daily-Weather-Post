@@ -21,14 +21,14 @@ export default function LinkedInCallback() {
         return;
       }
 
-      const savedState = sessionStorage.getItem("linkedin_oauth_state");
+      const savedState = localStorage.getItem("linkedin_oauth_state");
       if (state !== savedState) {
         setStatus("error");
         toast.error("Invalid state — possible CSRF attack");
         setTimeout(() => navigate("/"), 2000);
         return;
       }
-      sessionStorage.removeItem("linkedin_oauth_state");
+      localStorage.removeItem("linkedin_oauth_state");
 
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {

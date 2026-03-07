@@ -36,7 +36,7 @@ const TwitterCallback = () => {
         return;
       }
 
-      const oauthTokenSecret = sessionStorage.getItem("twitter_oauth_token_secret") || "";
+      const oauthTokenSecret = localStorage.getItem("twitter_oauth_token_secret") || "";
 
       const { data, error: fnError } = await supabase.functions.invoke("twitter-auth", {
         body: {
@@ -47,7 +47,7 @@ const TwitterCallback = () => {
         },
       });
 
-      sessionStorage.removeItem("twitter_oauth_token_secret");
+      localStorage.removeItem("twitter_oauth_token_secret");
 
       if (fnError || data?.error) {
         toast.error(data?.error || fnError?.message || "Failed to connect Twitter");
