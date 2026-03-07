@@ -753,7 +753,7 @@ Deno.serve(async (req) => {
             model: "google/gemini-3-flash-preview",
             messages: [
               { role: "system", content: SKYBRIEF_SYSTEM_PROMPT },
-              { role: "user", content: buildSkyBriefUserPrompt(weather) },
+              { role: "user", content: buildSkyBriefUserPrompt(weather, timePeriod) },
             ],
           }),
         });
