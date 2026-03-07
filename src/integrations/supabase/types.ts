@@ -134,6 +134,10 @@ export type Database = {
           evening_post_time: string
           id: string
           instagram_api_key: string | null
+          linkedin_access_token: string | null
+          linkedin_person_urn: string | null
+          linkedin_refresh_token: string | null
+          linkedin_token_expires_at: string | null
           morning_post_time: string
           post_time: string
           state: string | null
@@ -163,6 +167,10 @@ export type Database = {
           evening_post_time?: string
           id?: string
           instagram_api_key?: string | null
+          linkedin_access_token?: string | null
+          linkedin_person_urn?: string | null
+          linkedin_refresh_token?: string | null
+          linkedin_token_expires_at?: string | null
           morning_post_time?: string
           post_time?: string
           state?: string | null
@@ -192,6 +200,10 @@ export type Database = {
           evening_post_time?: string
           id?: string
           instagram_api_key?: string | null
+          linkedin_access_token?: string | null
+          linkedin_person_urn?: string | null
+          linkedin_refresh_token?: string | null
+          linkedin_token_expires_at?: string | null
           morning_post_time?: string
           post_time?: string
           state?: string | null
