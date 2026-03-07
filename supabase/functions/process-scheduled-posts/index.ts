@@ -459,18 +459,20 @@ async function generateWeatherVideo(weather: WeatherResponse): Promise<{ data: U
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ source }),
+    body: JSON.stringify({ source: JSON.stringify(source) }),
   });
 
   if (!renderRes.ok) {
-    console.error("Creatomate render request failed:", renderRes.status, await renderRes.text());
+    const errText = await renderRes.text();
+    console.error("Creatomate render request failed:", renderRes.status, errText);
     return null;
   }
 
   const renders = await renderRes.json();
-  const renderId = renders[0]?.id;
+  console.log("Creatomate response:", JSON.stringify(renders).substring(0, 500));
+  const renderId = Array.isArray(renders) ? renders[0]?.id : renders?.id;
   if (!renderId) {
-    console.error("No render ID returned from Creatomate");
+    console.error("No render ID returned from Creatomate:", JSON.stringify(renders));
     return null;
   }
 
