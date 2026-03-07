@@ -39,7 +39,7 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
     }
 
     sessionStorage.setItem("tiktok_oauth_state", data.state);
-    window.location.href = data.url;
+    window.open(data.url, "_blank");
   };
 
   const handleConnectYouTube = async () => {
@@ -54,7 +54,7 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
     }
 
     sessionStorage.setItem("youtube_oauth_state", data.state);
-    window.location.href = data.url;
+    window.open(data.url, "_blank");
   };
 
   const handleConnectTwitter = async () => {
@@ -71,7 +71,7 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
     if (data.oauth_token_secret) {
       sessionStorage.setItem("twitter_oauth_token_secret", data.oauth_token_secret);
     }
-    window.location.href = data.url;
+    window.open(data.url, "_blank");
   };
 
   const handleConnectLinkedIn = async () => {
@@ -86,7 +86,7 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
     }
 
     sessionStorage.setItem("linkedin_oauth_state", data.state);
-    window.location.href = data.url;
+    window.open(data.url, "_blank");
   };
 
   const anyAutoPost = settings.autoPostMorning || settings.autoPostAfternoon || settings.autoPostEvening;
