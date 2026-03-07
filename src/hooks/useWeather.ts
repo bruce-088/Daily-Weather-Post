@@ -41,13 +41,13 @@ export function useWeather(autoRefreshLocation?: string) {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const fetchWeather = useCallback(async (location: string) => {
+  const fetchWeather = useCallback(async (location: string, state?: string) => {
     setLoading(true);
     setError(null);
 
     try {
       const { data, error: fnError } = await supabase.functions.invoke("fetch-weather", {
-        body: { city: location },
+        body: { city: location, state: state || undefined },
       });
 
       if (fnError) throw new Error(fnError.message);
