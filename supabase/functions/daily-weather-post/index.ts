@@ -201,17 +201,19 @@ const SKYBRIEF_SYSTEM_PROMPT = [
   "Return only the finished caption. No labels, no quotes.",
 ].join("\n");
 
-function buildSkyBriefUserPrompt(weather: WeatherResponse): string {
+function buildSkyBriefUserPrompt(weather: WeatherResponse, timePeriod?: string | null): string {
   const now = new Date();
   const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   const handle = getDynamicHandle(weather.city);
   const alertLine = getAlertLine(weather);
   const tomorrowPrev = getTomorrowPreview(weather);
+  const periodLabel = timePeriod === "morning" ? "Morning Update" : timePeriod === "afternoon" ? "Afternoon Update" : timePeriod === "evening" ? "Evening Update" : "Full Day";
   const lines = [
     "city: " + weather.city,
     "state_or_region: " + weather.stateOrRegion,
     "date: " + now.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
     "day_of_week: " + dayNames[now.getDay()],
+    "time_period: " + periodLabel,
     "morning_temp: " + (weather.morningTemp ?? "N/A"),
     "morning_condition: " + (weather.morningCondition ?? "N/A"),
     "afternoon_temp: " + (weather.afternoonTemp ?? "N/A"),
@@ -225,7 +227,7 @@ function buildSkyBriefUserPrompt(weather: WeatherResponse): string {
     "sunrise_time: " + weather.sunrise,
     "sunset_time: " + weather.sunset,
     "dynamic_handle: " + handle,
-    "extra_note: ",
+    "extra_note: " + (timePeriod ? "Focus the caption on the " + timePeriod + " forecast. Lead with the " + timePeriod + " conditions." : ""),
   ];
   return lines.join("\n");
 }
