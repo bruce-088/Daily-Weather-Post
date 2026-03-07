@@ -43,6 +43,12 @@ const DEFAULT_SETTINGS: AutomationSettings = {
   location: "San Francisco",
   state: "California",
   autoPost: false,
+  morningPostTime: "07:00",
+  afternoonPostTime: "13:00",
+  eveningPostTime: "18:00",
+  autoPostMorning: true,
+  autoPostAfternoon: true,
+  autoPostEvening: true,
 };
 
 const Index = () => {
