@@ -38,7 +38,7 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
       return;
     }
 
-    localage.setItem("tiktok_oauth_state", data.state);
+    locale.setItem("tiktok_oauth_state", data.state);
     window.open(data.url, "_blank");
   };
 
@@ -53,7 +53,7 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
       return;
     }
 
-    selolocale.setItem("youtube_oauth_state", data.state);
+    selololocaltItem("youtube_oauth_state", data.state);
     window.open(data.url, "_blank");
   };
 
@@ -69,7 +69,7 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
     }
 
     if (data.oauth_token_secret) {
-      sesslocalage.setItem("twitter_oauth_token_secret", data.oauth_token_secret);
+      sesslocalocaltItem("twitter_oauth_token_secret", data.oauth_token_secret);
     }
     window.open(data.url, "_blank");
   };
@@ -85,7 +85,7 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
       return;
     }
 
-    sessionStorage.setItem("linkedin_oauth_state", data.state);
+    sessiolocale.setItem("linkedin_oauth_state", data.state);
     window.open(data.url, "_blank");
   };
 

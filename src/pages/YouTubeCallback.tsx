@@ -22,7 +22,7 @@ const YouTubeCallback = () => {
       }
 
       // CSRF state validation
-      const storedState = sessionStorage.getItem("youtube_oauth_state");
+      const storedState = localStorage.getItem("youtube_oauth_state");
       if (!returnedState || returnedState !== storedState) {
         toast.error("Invalid OAuth state — possible CSRF attack");
         setStatus("error");

@@ -22,7 +22,7 @@ const TikTokCallback = () => {
       }
 
       // CSRF state validation
-      const storedState = sessionStorage.getItem("tiktok_oauth_state");
+      const storedState = localStorage.getItem("tiktok_oauth_state");
       if (!returnedState || returnedState !== storedState) {
         toast.error("Invalid OAuth state — possible CSRF attack");
         setStatus("error");

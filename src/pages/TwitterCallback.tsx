@@ -36,7 +36,7 @@ const TwitterCallback = () => {
         return;
       }
 
-      const oauthTokenSecret = sessionStorage.getItem("twitter_oauth_token_secret") || "";
+      const oauthTokenSecret = localStorage.getItem("twitter_oauth_token_secret") || "";
 
       const { data, error: fnError } = await supabase.functions.invoke("twitter-auth", {
         body: {
