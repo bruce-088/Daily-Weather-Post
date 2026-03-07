@@ -124,7 +124,8 @@ evening_temp: ${body.evening_temp ?? body.eveningTemp ?? "N/A"}
 evening_condition: ${body.evening_condition ?? body.eveningCondition ?? "N/A"}
 rain_chance: ${body.rain_chance ?? body.rainChance ?? "N/A"}%
 wind_info: ${body.wind_info ?? body.windInfo ?? "N/A"}
-severe_alerts: ${body.severe_alerts ?? body.severeAlerts ?? "None"}
+alert_line: ${body.alert_line ?? body.alertLine ?? "None"}
+tomorrow_preview: ${body.tomorrow_preview ?? body.tomorrowPreview ?? "N/A"}
 sunrise_time: ${body.sunrise_time ?? body.sunrise ?? "N/A"}
 sunset_time: ${body.sunset_time ?? body.sunset ?? "N/A"}
 dynamic_handle: ${handle}

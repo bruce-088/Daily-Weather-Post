@@ -362,6 +362,35 @@ function getPracticalTakeaway(weather: WeatherResponse): string {
   return "Comfortable all day";
 }
 
+function getAlertLine(weather: WeatherResponse): string | null {
+  const c = weather.condition.toLowerCase();
+  const temp = weather.temperature;
+  const rain = weather.rainChance;
+  const windNum = parseInt(weather.windInfo);
+  if (c.includes("thunder") || c.includes("storm")) return "ALERT: Storms possible this afternoon";
+  if (rain > 50 && (c.includes("rain") || c.includes("drizzle"))) return "ALERT: Heavy rain expected";
+  if (windNum > 20) return "ALERT: Strong winds this afternoon";
+  if (temp > 95) return "ALERT: Extreme heat today";
+  if (temp < 35) return "ALERT: Near-freezing temperatures";
+  return null;
+}
+
+function getTomorrowPreview(weather: WeatherResponse): string {
+  if (!weather.tomorrowCondition) return "Tomorrow: check back for updates";
+  const c = weather.tomorrowCondition.toLowerCase();
+  const tempDiff = weather.tomorrowHigh != null ? weather.tomorrowHigh - weather.temperature : 0;
+  let trend = "";
+  if (tempDiff > 5) trend = "warmer";
+  else if (tempDiff < -5) trend = "cooler";
+  else trend = "similar temps";
+  if (c.includes("clear") || c.includes("sun")) return "Tomorrow: " + trend + " and sunny";
+  if (c.includes("cloud")) return "Tomorrow: " + trend + " with clouds";
+  if (c.includes("rain") || c.includes("drizzle")) return "Tomorrow: " + trend + " with rain";
+  if (c.includes("storm") || c.includes("thunder")) return "Tomorrow: storms possible again";
+  if (c.includes("snow")) return "Tomorrow: snow chances return";
+  return "Tomorrow: " + trend + " and " + c.toLowerCase();
+}
+
 async function fetchPexelsVideoUrl(keyword: string, city?: string, region?: string): Promise<string | null> {
   const pexelsKey = Deno.env.get("PEXELS_API_KEY");
   if (!pexelsKey) { console.log("PEXELS_API_KEY not configured"); return null; }

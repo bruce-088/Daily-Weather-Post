@@ -205,6 +205,8 @@ function buildSkyBriefUserPrompt(weather: WeatherResponse): string {
   const now = new Date();
   const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   const handle = getDynamicHandle(weather.city);
+  const alertLine = getAlertLine(weather);
+  const tomorrowPrev = getTomorrowPreview(weather);
   const lines = [
     "city: " + weather.city,
     "state_or_region: " + weather.stateOrRegion,
@@ -218,7 +220,8 @@ function buildSkyBriefUserPrompt(weather: WeatherResponse): string {
     "evening_condition: " + (weather.eveningCondition ?? "N/A"),
     "rain_chance: " + weather.rainChance + "%",
     "wind_info: " + weather.windInfo,
-    "severe_alerts: None",
+    "alert_line: " + (alertLine || "None"),
+    "tomorrow_preview: " + tomorrowPrev,
     "sunrise_time: " + weather.sunrise,
     "sunset_time: " + weather.sunset,
     "dynamic_handle: " + handle,
