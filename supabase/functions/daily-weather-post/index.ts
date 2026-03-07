@@ -446,7 +446,7 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
   const loStr = lo + "\u00B0";
   const rainStr = weather.rainChance + "%";
   const bgGradient = "linear-gradient(170deg, " + theme.bg1 + " 0%, " + theme.bg2 + " 50%, " + theme.bg1 + " 100%)";
-  const logoUrl = "https://pewdswjhsesfondewucc.supabase.co/storage/v1/object/public/weather-videos/brand%2Fskybrief-icon.png";
+  const logoUrl = "https://pewdswjhsesfondewucc.supabase.co/storage/v1/object/public/brand-assets/skybrief-icon.png";
 
   const elements: any[] = [
     // === BACKGROUND ===
