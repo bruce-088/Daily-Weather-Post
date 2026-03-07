@@ -289,7 +289,7 @@ async function uploadToYouTubeShorts(
       },
       body: JSON.stringify({
         snippet: {
-          title: (title.length > 95 ? title.substring(0, 95) : title) + " #Shorts",
+          title: title.length > 100 ? title.substring(0, 100) : title,
           description,
           categoryId: "22",
         },
