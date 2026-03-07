@@ -89,7 +89,7 @@ Deno.serve(async (req) => {
 
     // get_auth_url doesn't need auth
     if (action === "get_auth_url") {
-      const requestTokenUrl = "https://api.x.com/oauth/request_token";
+      const requestTokenUrl = "https://api.twitter.com/oauth/request_token";
       const callbackUrl = redirect_uri || "oob";
       const extraParams: Record<string, string> = { oauth_callback: callbackUrl };
 
