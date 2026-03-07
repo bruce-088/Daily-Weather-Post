@@ -136,6 +136,9 @@ Deno.serve(async (req) => {
       windInfo,
       sunrise: formatTime(sunriseDate),
       sunset: formatTime(sunsetDate),
+      tomorrowHigh,
+      tomorrowLow,
+      tomorrowCondition,
     };
 
     return new Response(JSON.stringify(weather), {
