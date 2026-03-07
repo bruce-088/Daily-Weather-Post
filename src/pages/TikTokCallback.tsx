@@ -29,7 +29,7 @@ const TikTokCallback = () => {
         setTimeout(() => navigate("/"), 2000);
         return;
       }
-      sessionStorage.removeItem("tiktok_oauth_state");
+      localStorage.removeItem("tiktok_oauth_state");
 
       if (!code) {
         toast.error("No authorization code received");

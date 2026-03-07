@@ -29,7 +29,7 @@ const YouTubeCallback = () => {
         setTimeout(() => navigate("/"), 2000);
         return;
       }
-      sessionStorage.removeItem("youtube_oauth_state");
+      localStorage.removeItem("youtube_oauth_state");
 
       if (!code) {
         toast.error("No authorization code received");

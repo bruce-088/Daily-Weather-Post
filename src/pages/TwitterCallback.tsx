@@ -47,7 +47,7 @@ const TwitterCallback = () => {
         },
       });
 
-      sessionStorage.removeItem("twitter_oauth_token_secret");
+      localStorage.removeItem("twitter_oauth_token_secret");
 
       if (fnError || data?.error) {
         toast.error(data?.error || fnError?.message || "Failed to connect Twitter");
