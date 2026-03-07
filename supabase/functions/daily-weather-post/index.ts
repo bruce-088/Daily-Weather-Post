@@ -332,17 +332,18 @@ function getPracticalTakeaway(weather: WeatherResponse): string {
   return "📋 Check back for updates";
 }
 
-async function fetchPexelsVideoUrl(keyword: string): Promise<string | null> {
+async function fetchPexelsVideoUrl(keyword: string, city?: string): Promise<string | null> {
   const pexelsKey = Deno.env.get("PEXELS_API_KEY");
   if (!pexelsKey) { console.log("PEXELS_API_KEY not configured, skipping stock video"); return null; }
-  try {
-    const url = `https://api.pexels.com/videos/search?query=${encodeURIComponent(keyword)}&per_page=15&orientation=portrait&size=medium`;
-    console.log("Fetching Pexels video:", keyword);
+
+  async function searchPexels(query: string): Promise<string | null> {
+    const url = `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&per_page=15&orientation=portrait&size=medium`;
+    console.log("Fetching Pexels video:", query);
     const res = await fetch(url, { headers: { Authorization: pexelsKey } });
     if (!res.ok) { console.error("Pexels API error:", res.status); return null; }
     const data = await res.json();
     const videos = data.videos || [];
-    if (!videos.length) { console.log("No Pexels videos found for:", keyword); return null; }
+    if (!videos.length) return null;
     const video = videos[Math.floor(Math.random() * videos.length)];
     const files = video.video_files || [];
     const hdFile = files.find((f: any) => f.quality === "hd" && f.width <= 1080)
@@ -351,6 +352,17 @@ async function fetchPexelsVideoUrl(keyword: string): Promise<string | null> {
       || files[0];
     if (hdFile?.link) { console.log("Pexels video:", hdFile.link.substring(0, 80)); return hdFile.link; }
     return null;
+  }
+
+  try {
+    // Try city-specific search first
+    if (city) {
+      const cityResult = await searchPexels(`${city} ${keyword}`);
+      if (cityResult) return cityResult;
+      console.log(`No Pexels videos for "${city} ${keyword}", falling back to generic`);
+    }
+    // Fallback to generic keyword
+    return await searchPexels(keyword);
   } catch (err) { console.error("Pexels fetch error:", err); return null; }
 }
 
