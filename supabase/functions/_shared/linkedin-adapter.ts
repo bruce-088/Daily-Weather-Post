@@ -53,10 +53,10 @@ export class LinkedInAdapter implements PlatformAdapter {
         })
         .eq("user_id", userId);
 
-      return data.access_token;
+      return `${data.access_token}::${settings.linkedin_person_urn}`;
     }
 
-    return settings.linkedin_access_token;
+    return `${settings.linkedin_access_token}::${settings.linkedin_person_urn}`;
   }
 
   async uploadVideo(
