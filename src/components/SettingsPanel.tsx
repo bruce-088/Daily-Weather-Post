@@ -56,6 +56,24 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
     window.location.href = data.url;
   };
 
+  const handleConnectTwitter = async () => {
+    const redirectUri = `${window.location.origin}/twitter/callback`;
+    const { data, error } = await supabase.functions.invoke("twitter-auth", {
+      body: { action: "get_auth_url", redirect_uri: redirectUri },
+    });
+
+    if (error || data?.error) {
+      toast.error("Failed to start Twitter authorization");
+      return;
+    }
+
+    // Store the request token secret for the callback exchange
+    if (data.oauth_token_secret) {
+      sessionStorage.setItem("twitter_oauth_token_secret", data.oauth_token_secret);
+    }
+    window.location.href = data.url;
+  };
+
   const anyAutoPost = settings.autoPostMorning || settings.autoPostAfternoon || settings.autoPostEvening;
 
   return (
