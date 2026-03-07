@@ -132,8 +132,8 @@ const Index = () => {
   }, [loadHistory, loadScheduled]);
 
   const handleFetch = useCallback(() => {
-    fetchWeather(settings.location);
-  }, [fetchWeather, settings.location]);
+    fetchWeather(settings.location, settings.state);
+  }, [fetchWeather, settings.location, settings.state]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);

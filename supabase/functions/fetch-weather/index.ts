@@ -12,15 +12,16 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { city } = await req.json();
+    const { city, state } = await req.json();
     if (!city) throw new Error("City is required");
 
     const apiKey = Deno.env.get("OPENWEATHER_API_KEY");
     if (!apiKey) throw new Error("OpenWeatherMap API key not configured");
 
-    // Geocode
+    // Geocode — include state for more accurate results
+    const geoQuery = state ? `${city},${state}` : city;
     const geoRes = await fetch(
-      `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(city)}&limit=1&appid=${apiKey}`
+      `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(geoQuery)}&limit=1&appid=${apiKey}`
     );
     const geoData = await geoRes.json();
     if (!geoData.length) throw new Error("Location not found");

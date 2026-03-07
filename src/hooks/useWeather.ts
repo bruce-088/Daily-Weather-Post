@@ -66,16 +66,16 @@ export function useWeather(autoRefreshLocation?: string, autoRefreshState?: stri
   useEffect(() => {
     if (!autoRefreshLocation) return;
 
-    fetchWeather(autoRefreshLocation);
+    fetchWeather(autoRefreshLocation, autoRefreshState);
 
     intervalRef.current = setInterval(() => {
-      fetchWeather(autoRefreshLocation);
+      fetchWeather(autoRefreshLocation, autoRefreshState);
     }, REFRESH_INTERVAL);
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [autoRefreshLocation, fetchWeather]);
+  }, [autoRefreshLocation, autoRefreshState, fetchWeather]);
 
   return { weather, loading, error, fetchWeather, lastUpdated };
 }
