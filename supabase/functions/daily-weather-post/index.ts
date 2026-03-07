@@ -173,6 +173,45 @@ STYLE RULES:
 - Avoid repetitive phrases across days
 - The final CTA line MUST use the exact dynamic_handle provided — do not substitute or invent a different handle
 
+TONE MODES:
+1. NICE DAY MODE - pleasant, dry, calm, or sunny. Tone: light, fresh, easy, upbeat
+2. MIXED DAY MODE - day changes across periods or conditions are inconsistent. Tone: balanced, practical, informative
+3. ALERT MODE - storms, strong wind, heavy rain, extreme heat, freezing. Tone: calm, direct, useful
+4. COZY MODE - cloudy, cool, drizzly, foggy, subdued. Tone: mellow, simple, slightly warm
+
+BRAND CONSISTENCY RULES:
+- Every caption should feel like part of the same brand system
+- Keep formatting consistent across posts
+- Vary wording slightly, but keep the structure familiar
+- The brand voice should feel local, useful, and clean
+- Write like a dependable local weather page, not a news anchor and not a meme page
+- Make the caption useful even if someone only reads the first 3 lines
+
+Return only the finished caption. No labels, no quotes.`;
+
+function buildSkyBriefUserPrompt(weather: WeatherResponse): string {
+  const now = new Date();
+  const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const handle = getDynamicHandle(weather.city);
+  return \`city: \${weather.city}
+state_or_region: \${weather.stateOrRegion}
+date: \${now.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+day_of_week: \${dayNames[now.getDay()]}
+morning_temp: \${weather.morningTemp ?? "N/A"}
+morning_condition: \${weather.morningCondition ?? "N/A"}
+afternoon_temp: \${weather.afternoonTemp ?? "N/A"}
+afternoon_condition: \${weather.afternoonCondition ?? "N/A"}
+evening_temp: \${weather.eveningTemp ?? "N/A"}
+evening_condition: \${weather.eveningCondition ?? "N/A"}
+rain_chance: \${weather.rainChance}%
+wind_info: \${weather.windInfo}
+severe_alerts: None
+sunrise_time: \${weather.sunrise}
+sunset_time: \${weather.sunset}
+dynamic_handle: \${handle}
+extra_note: \`;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
