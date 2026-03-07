@@ -147,7 +147,14 @@ export class TwitterAdapter implements PlatformAdapter {
 
     for (let offset = 0; offset < videoData.byteLength; offset += chunkSize) {
       const chunk = videoData.slice(offset, Math.min(offset + chunkSize, videoData.byteLength));
-      const chunkBase64 = btoa(String.fromCharCode(...chunk));
+      // Convert to base64 in smaller batches to avoid stack overflow
+      let binary = "";
+      const batchSize = 8192;
+      for (let i = 0; i < chunk.length; i += batchSize) {
+        const batch = chunk.subarray(i, Math.min(i + batchSize, chunk.length));
+        binary += String.fromCharCode(...batch);
+      }
+      const chunkBase64 = btoa(binary);
 
       const appendParams: Record<string, string> = {
         command: "APPEND",
