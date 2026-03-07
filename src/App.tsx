@@ -11,6 +11,7 @@ import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TikTokCallback from "./pages/TikTokCallback";
 import YouTubeCallback from "./pages/YouTubeCallback";
 import TwitterCallback from "./pages/TwitterCallback";
+import LinkedInCallback from "./pages/LinkedInCallback";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -50,6 +51,7 @@ const App = () => (
           <Route path="/tiktok/callback" element={<ProtectedRoute><TikTokCallback /></ProtectedRoute>} />
           <Route path="/youtube/callback" element={<ProtectedRoute><YouTubeCallback /></ProtectedRoute>} />
           <Route path="/twitter/callback" element={<ProtectedRoute><TwitterCallback /></ProtectedRoute>} />
+          <Route path="/linkedin/callback" element={<ProtectedRoute><LinkedInCallback /></ProtectedRoute>} />
           <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
           <Route path="*" element={<NotFound />} />
         </Routes>

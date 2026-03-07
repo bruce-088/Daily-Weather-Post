@@ -3,7 +3,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Clock, MapPin, Instagram, Video, RefreshCw, Save, CheckCircle, ExternalLink, Youtube, Sun, Sunset, Moon, Twitter } from "lucide-react";
+import { Clock, MapPin, Instagram, Video, RefreshCw, Save, CheckCircle, ExternalLink, Youtube, Sun, Sunset, Moon, Twitter, Linkedin } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -19,9 +19,10 @@ interface SettingsPanelProps {
   tiktokConnected?: boolean;
   youtubeConnected?: boolean;
   twitterConnected?: boolean;
+  linkedinConnected?: boolean;
 }
 
-export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, saving, tiktokConnected, youtubeConnected, twitterConnected }: SettingsPanelProps) {
+export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, saving, tiktokConnected, youtubeConnected, twitterConnected, linkedinConnected }: SettingsPanelProps) {
   const update = (key: keyof AutomationSettings, value: string | boolean) => {
     onUpdate({ ...settings, [key]: value });
   };
@@ -67,10 +68,24 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
       return;
     }
 
-    // Store the request token secret for the callback exchange
     if (data.oauth_token_secret) {
       sessionStorage.setItem("twitter_oauth_token_secret", data.oauth_token_secret);
     }
+    window.location.href = data.url;
+  };
+
+  const handleConnectLinkedIn = async () => {
+    const redirectUri = `${window.location.origin}/linkedin/callback`;
+    const { data, error } = await supabase.functions.invoke("linkedin-auth", {
+      body: { action: "get_auth_url", redirect_uri: redirectUri },
+    });
+
+    if (error || data?.error) {
+      toast.error("Failed to start LinkedIn authorization");
+      return;
+    }
+
+    sessionStorage.setItem("linkedin_oauth_state", data.state);
     window.location.href = data.url;
   };
 
@@ -193,7 +208,29 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
             )}
           </div>
 
-          {/* Instagram API Key (unchanged) */}
+          {/* LinkedIn OAuth */}
+          <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/30 border border-border/30">
+            <div className="flex items-center gap-3">
+              <div className="h-8 w-8 rounded-md bg-foreground/10 flex items-center justify-center">
+                <Linkedin size={16} />
+              </div>
+              <div>
+                <p className="text-sm font-medium">LinkedIn</p>
+                <p className="text-xs text-muted-foreground">
+                  {linkedinConnected ? "Connected" : "Not connected"}
+                </p>
+              </div>
+            </div>
+            {linkedinConnected ? (
+              <Badge variant="outline" className="gap-1 text-xs border-primary/30 text-primary">
+                <CheckCircle size={12} /> Connected
+              </Badge>
+            ) : (
+              <Button size="sm" variant="outline" onClick={handleConnectLinkedIn} className="gap-1.5">
+                <ExternalLink size={12} /> Connect
+              </Button>
+            )}
+          </div>
           <div>
             <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
               <Instagram size={12} /> Instagram Graph API Key

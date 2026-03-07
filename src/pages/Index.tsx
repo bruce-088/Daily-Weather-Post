@@ -60,6 +60,7 @@ const Index = () => {
   const [tiktokConnected, setTiktokConnected] = useState(false);
   const [youtubeConnected, setYoutubeConnected] = useState(false);
   const [twitterConnected, setTwitterConnected] = useState(false);
+  const [linkedinConnected, setLinkedinConnected] = useState(false);
   const [saving, setSaving] = useState(false);
   const [posting, setPosting] = useState(false);
   const [posts, setPosts] = useState<PostHistoryItem[]>([]);
@@ -114,6 +115,7 @@ const Index = () => {
         setTiktokConnected(result.tiktokConnected);
         setYoutubeConnected(result.youtubeConnected);
         setTwitterConnected(result.twitterConnected);
+        setLinkedinConnected(result.linkedinConnected);
       }
       setSettingsLoaded(true);
     });
@@ -344,6 +346,7 @@ const Index = () => {
                   tiktokConnected={tiktokConnected}
                   youtubeConnected={youtubeConnected}
                   twitterConnected={twitterConnected}
+                  linkedinConnected={linkedinConnected}
                 />
               </aside>
             </div>
@@ -401,6 +404,7 @@ const Index = () => {
                 tiktokConnected={tiktokConnected}
                 youtubeConnected={youtubeConnected}
                 twitterConnected={twitterConnected}
+                linkedinConnected={linkedinConnected}
               />
             </div>
           </TabsContent>
