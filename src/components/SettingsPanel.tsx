@@ -68,10 +68,24 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
       return;
     }
 
-    // Store the request token secret for the callback exchange
     if (data.oauth_token_secret) {
       sessionStorage.setItem("twitter_oauth_token_secret", data.oauth_token_secret);
     }
+    window.location.href = data.url;
+  };
+
+  const handleConnectLinkedIn = async () => {
+    const redirectUri = `${window.location.origin}/linkedin/callback`;
+    const { data, error } = await supabase.functions.invoke("linkedin-auth", {
+      body: { action: "get_auth_url", redirect_uri: redirectUri },
+    });
+
+    if (error || data?.error) {
+      toast.error("Failed to start LinkedIn authorization");
+      return;
+    }
+
+    sessionStorage.setItem("linkedin_oauth_state", data.state);
     window.location.href = data.url;
   };
 
