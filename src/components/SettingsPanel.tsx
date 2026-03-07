@@ -169,6 +169,30 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
             )}
           </div>
 
+          {/* Twitter/X OAuth */}
+          <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/30 border border-border/30">
+            <div className="flex items-center gap-3">
+              <div className="h-8 w-8 rounded-md bg-foreground/10 flex items-center justify-center">
+                <Twitter size={16} />
+              </div>
+              <div>
+                <p className="text-sm font-medium">Twitter / X</p>
+                <p className="text-xs text-muted-foreground">
+                  {twitterConnected ? "Connected" : "Not connected"}
+                </p>
+              </div>
+            </div>
+            {twitterConnected ? (
+              <Badge variant="outline" className="gap-1 text-xs border-primary/30 text-primary">
+                <CheckCircle size={12} /> Connected
+              </Badge>
+            ) : (
+              <Button size="sm" variant="outline" onClick={handleConnectTwitter} className="gap-1.5">
+                <ExternalLink size={12} /> Connect
+              </Button>
+            )}
+          </div>
+
           {/* Instagram API Key (unchanged) */}
           <div>
             <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
