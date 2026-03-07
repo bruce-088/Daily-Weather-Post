@@ -10,6 +10,7 @@ import TermsOfService from "./pages/TermsOfService";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TikTokCallback from "./pages/TikTokCallback";
 import YouTubeCallback from "./pages/YouTubeCallback";
+import TwitterCallback from "./pages/TwitterCallback";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
