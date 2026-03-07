@@ -452,7 +452,7 @@ async function generateWeatherVideo(weather: WeatherResponse): Promise<{ data: U
   console.log("Starting Creatomate render for", weather.city);
   const source = buildCreatomateSource(weather);
 
-  const requestBody = JSON.stringify({ output_format: "mp4", source });
+  const requestBody = JSON.stringify({ output_format: "mp4", ...source });
   console.log("Creatomate request body (first 300 chars):", requestBody.substring(0, 300));
   
   const renderRes = await fetch("https://api.creatomate.com/v2/renders", {
