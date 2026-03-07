@@ -86,7 +86,7 @@ const Index = () => {
     return () => clearTimeout(timer);
   }, [settingsLoaded, settings.location, settings.state]);
 
-  const { weather, loading, error, fetchWeather, lastUpdated } = useWeather(debouncedLocation);
+  const { weather, loading, error, fetchWeather, lastUpdated } = useWeather(debouncedLocation, debouncedState);
 
   useEffect(() => {
     if (!lastUpdated) return;
