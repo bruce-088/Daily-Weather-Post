@@ -36,12 +36,14 @@ import { YouTubeAdapter } from "./youtube-adapter.ts";
 import { TikTokAdapter } from "./tiktok-adapter.ts";
 import { InstagramAdapter } from "./instagram-adapter.ts";
 import { TwitterAdapter } from "./twitter-adapter.ts";
+import { LinkedInAdapter } from "./linkedin-adapter.ts";
 
 const adapters: PlatformAdapter[] = [
   new YouTubeAdapter(),
   new TikTokAdapter(),
   new InstagramAdapter(),
   new TwitterAdapter(),
+  new LinkedInAdapter(),
 ];
 
 /** Get adapter by platform name */

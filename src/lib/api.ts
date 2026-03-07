@@ -1,7 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { AutomationSettings, WeatherData } from "@/types/weather";
 
-export async function loadSettings(): Promise<{ settings: AutomationSettings; tiktokConnected: boolean; youtubeConnected: boolean; twitterConnected: boolean } | null> {
+export async function loadSettings(): Promise<{ settings: AutomationSettings; tiktokConnected: boolean; youtubeConnected: boolean; twitterConnected: boolean; linkedinConnected: boolean } | null> {
   const { data, error } = await supabase
     .from("weather_settings")
     .select("*")
