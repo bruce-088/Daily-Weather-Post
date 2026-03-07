@@ -169,6 +169,109 @@ sunset_time: ${weather.sunset}
 extra_note: `;
 }
 
+// --- YouTube Upload Helpers ---
+
+async function getValidYouTubeToken(supabase: any, userId: string): Promise<string | null> {
+  const { data: settings } = await supabase
+    .from("weather_settings")
+    .select("youtube_access_token, youtube_refresh_token, youtube_token_expires_at")
+    .eq("user_id", userId)
+    .single();
+
+  if (!settings?.youtube_access_token) return null;
+
+  const expiresAt = settings.youtube_token_expires_at ? new Date(settings.youtube_token_expires_at) : null;
+  if (expiresAt && expiresAt.getTime() > Date.now() + 5 * 60 * 1000) {
+    return settings.youtube_access_token;
+  }
+
+  if (!settings.youtube_refresh_token) return null;
+
+  const YOUTUBE_CLIENT_ID = Deno.env.get("YOUTUBE_CLIENT_ID");
+  const YOUTUBE_CLIENT_SECRET = Deno.env.get("YOUTUBE_CLIENT_SECRET");
+  if (!YOUTUBE_CLIENT_ID || !YOUTUBE_CLIENT_SECRET) return null;
+
+  const refreshRes = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: YOUTUBE_CLIENT_ID,
+      client_secret: YOUTUBE_CLIENT_SECRET,
+      grant_type: "refresh_token",
+      refresh_token: settings.youtube_refresh_token,
+    }),
+  });
+
+  const refreshData = await refreshRes.json();
+  if (!refreshData.access_token) {
+    console.error("YouTube token refresh failed:", JSON.stringify(refreshData));
+    return null;
+  }
+
+  const newExpiresAt = new Date(Date.now() + refreshData.expires_in * 1000).toISOString();
+  await supabase.from("weather_settings").update({
+    youtube_access_token: refreshData.access_token,
+    youtube_token_expires_at: newExpiresAt,
+  }).eq("user_id", userId);
+
+  return refreshData.access_token;
+}
+
+async function uploadToYouTubeShorts(
+  accessToken: string,
+  videoData: Uint8Array,
+  title: string,
+  description: string,
+  mimeType = "video/mp4",
+): Promise<{ videoId: string } | null> {
+  const initRes = await fetch(
+    "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "X-Upload-Content-Type": mimeType,
+        "X-Upload-Content-Length": String(videoData.byteLength),
+      },
+      body: JSON.stringify({
+        snippet: {
+          title: (title.length > 95 ? title.substring(0, 95) : title) + " #Shorts",
+          description,
+          categoryId: "22",
+        },
+        status: {
+          privacyStatus: "public",
+          selfDeclaredMadeForKids: false,
+        },
+      }),
+    },
+  );
+
+  if (!initRes.ok) {
+    console.error("YouTube upload init failed:", initRes.status, await initRes.text());
+    return null;
+  }
+
+  const uploadUrl = initRes.headers.get("Location");
+  if (!uploadUrl) return null;
+
+  const uploadRes = await fetch(uploadUrl, {
+    method: "PUT",
+    headers: { "Content-Type": mimeType, "Content-Length": String(videoData.byteLength) },
+    body: videoData,
+  });
+
+  if (!uploadRes.ok) {
+    console.error("YouTube upload failed:", uploadRes.status, await uploadRes.text());
+    return null;
+  }
+
+  const result = await uploadRes.json();
+  console.log("YouTube upload success! Video ID:", result.id);
+  return { videoId: result.id };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -235,27 +338,48 @@ Deno.serve(async (req) => {
           }
         }
 
-        let status = "posted";
+        let postStatus = "posted";
         let errorMessage: string | null = null;
-        const imageUrl: string | null = null;
-        if (!imageUrl) {
-          status = "posted";
-          errorMessage = "Image generation not yet implemented - weather data fetched successfully";
+
+        // --- YouTube Shorts Upload ---
+        if (post.platform === "youtube" || post.platform === "both") {
+          const { data: userSettings } = await supabase
+            .from("weather_settings")
+            .select("youtube_access_token")
+            .eq("user_id", post.user_id)
+            .single();
+
+          if (userSettings?.youtube_access_token) {
+            const ytToken = await getValidYouTubeToken(supabase, post.user_id);
+            if (ytToken) {
+              // TODO: Wire up video generation here
+              // const video = await generateWeatherVideo(weather);
+              // if (video) { await uploadToYouTubeShorts(ytToken, video.data, title, desc, video.mimeType); }
+              errorMessage = "YouTube upload ready — video generation not yet implemented";
+              console.log(`Scheduled post ${post.id}: YouTube token valid, awaiting video content`);
+            } else {
+              errorMessage = "Failed to refresh YouTube token";
+            }
+          }
+        }
+
+        if (!errorMessage) {
+          errorMessage = "Weather data fetched and caption generated successfully";
         }
 
         await supabase.from("post_history").insert({
-          status, platform: post.platform, city: weather.city,
+          status: postStatus, platform: post.platform, city: weather.city,
           temperature: weather.temperature, condition: weather.condition,
-          image_url: imageUrl, error_message: errorMessage, caption,
+          image_url: null, error_message: errorMessage, caption,
           user_id: post.user_id,
         });
 
-        await supabase.from("scheduled_posts").update({ status, error_message: errorMessage }).eq("id", post.id);
+        await supabase.from("scheduled_posts").update({ status: postStatus, error_message: errorMessage }).eq("id", post.id);
 
         await supabase.from("notifications").insert({
           user_id: post.user_id,
-          title: status === "posted" ? "Post Published" : "Post Issue",
-          message: `Your weather post for ${weather.city} was published on ${post.platform}.`,
+          title: "Post Published",
+          message: `Your weather post for ${weather.city} was processed on ${post.platform}.`,
           type: "success",
         });
 

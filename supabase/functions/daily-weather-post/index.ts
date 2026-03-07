@@ -169,10 +169,142 @@ sunset_time: ${weather.sunset}
 extra_note: `;
 }
 
-// Placeholder functions
-async function generateWeatherImage(_weather: WeatherResponse): Promise<string | null> {
+// --- YouTube Upload Helpers ---
+
+async function getValidYouTubeToken(supabase: any, userId: string): Promise<string | null> {
+  const { data: settings } = await supabase
+    .from("weather_settings")
+    .select("youtube_access_token, youtube_refresh_token, youtube_token_expires_at")
+    .eq("user_id", userId)
+    .single();
+
+  if (!settings?.youtube_access_token) return null;
+
+  // Check if token is still valid (5 min buffer)
+  const expiresAt = settings.youtube_token_expires_at ? new Date(settings.youtube_token_expires_at) : null;
+  if (expiresAt && expiresAt.getTime() > Date.now() + 5 * 60 * 1000) {
+    return settings.youtube_access_token;
+  }
+
+  // Refresh token
+  if (!settings.youtube_refresh_token) {
+    console.error("No YouTube refresh token available");
+    return null;
+  }
+
+  const YOUTUBE_CLIENT_ID = Deno.env.get("YOUTUBE_CLIENT_ID");
+  const YOUTUBE_CLIENT_SECRET = Deno.env.get("YOUTUBE_CLIENT_SECRET");
+  if (!YOUTUBE_CLIENT_ID || !YOUTUBE_CLIENT_SECRET) {
+    console.error("YouTube client credentials not configured");
+    return null;
+  }
+
+  const refreshRes = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: YOUTUBE_CLIENT_ID,
+      client_secret: YOUTUBE_CLIENT_SECRET,
+      grant_type: "refresh_token",
+      refresh_token: settings.youtube_refresh_token,
+    }),
+  });
+
+  const refreshData = await refreshRes.json();
+  if (!refreshData.access_token) {
+    console.error("YouTube token refresh failed:", JSON.stringify(refreshData));
+    return null;
+  }
+
+  const newExpiresAt = new Date(Date.now() + refreshData.expires_in * 1000).toISOString();
+  await supabase
+    .from("weather_settings")
+    .update({
+      youtube_access_token: refreshData.access_token,
+      youtube_token_expires_at: newExpiresAt,
+    })
+    .eq("user_id", userId);
+
+  console.log("YouTube token refreshed successfully");
+  return refreshData.access_token;
+}
+
+async function uploadToYouTubeShorts(
+  accessToken: string,
+  videoData: Uint8Array,
+  title: string,
+  description: string,
+  mimeType = "video/mp4",
+): Promise<{ videoId: string } | null> {
+  console.log(`Uploading to YouTube Shorts: "${title}" (${videoData.byteLength} bytes, ${mimeType})`);
+
+  // Step 1: Initiate resumable upload
+  const initRes = await fetch(
+    "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "X-Upload-Content-Type": mimeType,
+        "X-Upload-Content-Length": String(videoData.byteLength),
+      },
+      body: JSON.stringify({
+        snippet: {
+          title: (title.length > 95 ? title.substring(0, 95) : title) + " #Shorts",
+          description,
+          categoryId: "22", // People & Blogs
+        },
+        status: {
+          privacyStatus: "public",
+          selfDeclaredMadeForKids: false,
+        },
+      }),
+    },
+  );
+
+  if (!initRes.ok) {
+    const errText = await initRes.text();
+    console.error("YouTube upload init failed:", initRes.status, errText);
+    return null;
+  }
+
+  const uploadUrl = initRes.headers.get("Location");
+  if (!uploadUrl) {
+    console.error("No upload URL returned from YouTube");
+    return null;
+  }
+
+  // Step 2: Upload the video data
+  const uploadRes = await fetch(uploadUrl, {
+    method: "PUT",
+    headers: {
+      "Content-Type": mimeType,
+      "Content-Length": String(videoData.byteLength),
+    },
+    body: videoData,
+  });
+
+  if (!uploadRes.ok) {
+    const errText = await uploadRes.text();
+    console.error("YouTube video upload failed:", uploadRes.status, errText);
+    return null;
+  }
+
+  const result = await uploadRes.json();
+  console.log("YouTube upload success! Video ID:", result.id);
+  return { videoId: result.id };
+}
+
+// --- Placeholder: Image/Video Generation ---
+// YouTube Shorts require VIDEO format (MP4, WebM, AVI, etc.)
+// This function should return video data for upload.
+// Current implementation returns null — wire up a video generation service
+// (e.g., Creatomate, Shotstack) or generate from frontend and store in Supabase Storage.
+async function generateWeatherVideo(_weather: WeatherResponse): Promise<{ data: Uint8Array; mimeType: string } | null> {
   return null;
 }
+
 async function postToInstagram(_imageUrl: string, _caption: string, _apiKey: string): Promise<boolean> {
   return false;
 }
@@ -243,39 +375,95 @@ Deno.serve(async (req) => {
       }
     }
 
-    const imageUrl = await generateWeatherImage(weather);
-
-    let platform = "both";
+    let platform = "none";
     let status = "success";
     let errorMessage: string | null = null;
+    let youtubeVideoId: string | null = null;
 
-    try {
-      if (settings.instagram_api_key && imageUrl) {
-        const postCaption = caption || `Weather in ${weather.city}: ${weather.temperature}°F`;
-        await postToInstagram(imageUrl, postCaption, settings.instagram_api_key);
+    // --- YouTube Shorts Upload ---
+    if (userId && settings.youtube_access_token) {
+      try {
+        console.log("YouTube connected, attempting upload...");
+        const ytToken = await getValidYouTubeToken(supabase, userId);
+
+        if (ytToken) {
+          const video = await generateWeatherVideo(weather);
+
+          if (video) {
+            const title = `${weather.city} Weather Today — ${weather.temperature}°F ${weather.condition}`;
+            const desc = caption || `Weather update for ${weather.city}: ${weather.temperature}°F, ${weather.description}`;
+            const result = await uploadToYouTubeShorts(ytToken, video.data, title, desc, video.mimeType);
+
+            if (result) {
+              youtubeVideoId = result.videoId;
+              platform = "youtube";
+              status = "success";
+              errorMessage = null;
+              console.log("YouTube Short published! Video ID:", youtubeVideoId);
+            } else {
+              platform = "youtube";
+              status = "failed";
+              errorMessage = "YouTube upload failed — check edge function logs for details";
+            }
+          } else {
+            platform = "youtube";
+            status = "pending";
+            errorMessage = "Video generation not yet implemented — YouTube upload infrastructure is ready";
+            console.log("YouTube token valid but no video content to upload. Wire up video generation to complete the pipeline.");
+          }
+        } else {
+          platform = "youtube";
+          status = "failed";
+          errorMessage = "Failed to obtain valid YouTube access token";
+        }
+      } catch (e) {
+        console.error("YouTube upload error:", e);
+        platform = "youtube";
+        status = "failed";
+        errorMessage = e instanceof Error ? e.message : "YouTube upload failed";
       }
-      if (settings.tiktok_api_key && imageUrl) {
-        const postCaption = caption || `Weather in ${weather.city}: ${weather.temperature}°F`;
-        await postToTikTok(imageUrl, postCaption, settings.tiktok_api_key);
+    }
+
+    // --- Instagram ---
+    if (settings.instagram_api_key) {
+      const postCaption = caption || `Weather in ${weather.city}: ${weather.temperature}°F`;
+      try {
+        await postToInstagram("", postCaption, settings.instagram_api_key);
+      } catch (e) {
+        console.error("Instagram post failed:", e);
       }
-      if (!imageUrl) {
-        status = "pending";
-        errorMessage = "Image generation not yet implemented - weather data fetched successfully";
+    }
+
+    // --- TikTok ---
+    if (settings.tiktok_access_token) {
+      const postCaption = caption || `Weather in ${weather.city}: ${weather.temperature}°F`;
+      try {
+        await postToTikTok("", postCaption, settings.tiktok_access_token);
+      } catch (e) {
+        console.error("TikTok post failed:", e);
       }
-    } catch (postError) {
-      status = "failed";
-      errorMessage = postError instanceof Error ? postError.message : "Posting failed";
+    }
+
+    // If no platform was attempted
+    if (platform === "none") {
+      status = "pending";
+      errorMessage = "No social platforms connected — connect YouTube, TikTok, or Instagram in Settings";
     }
 
     const { error: historyError } = await supabase.from("post_history").insert({
       status, platform, city: weather.city, temperature: weather.temperature,
-      condition: weather.condition, image_url: imageUrl, error_message: errorMessage,
+      condition: weather.condition, image_url: null, error_message: errorMessage,
       caption, user_id: userId,
     });
     if (historyError) console.error("Failed to log post history:", historyError);
 
     return new Response(
-      JSON.stringify({ success: true, weather, status, caption, message: errorMessage || `Weather post ${status} for ${weather.city}` }),
+      JSON.stringify({
+        success: status === "success",
+        weather, status, caption, platform,
+        youtube_video_id: youtubeVideoId,
+        message: errorMessage || `Weather post ${status} for ${weather.city}`,
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
