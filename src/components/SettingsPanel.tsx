@@ -3,7 +3,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Clock, MapPin, Instagram, Video, RefreshCw, Save, CheckCircle, ExternalLink, Youtube } from "lucide-react";
+import { Clock, MapPin, Instagram, Video, RefreshCw, Save, CheckCircle, ExternalLink, Youtube, Sun, Sunset, Moon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -54,6 +54,8 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
     sessionStorage.setItem("youtube_oauth_state", data.state);
     window.location.href = data.url;
   };
+
+  const anyAutoPost = settings.autoPostMorning || settings.autoPostAfternoon || settings.autoPostEvening;
 
   return (
     <div className="space-y-4">
@@ -170,23 +172,66 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
             <Clock size={16} className="text-primary" />
             Automation
           </CardTitle>
-          <CardDescription className="text-xs">Schedule daily posts</CardDescription>
+          <CardDescription className="text-xs">Schedule 3 daily posts — morning, afternoon, evening</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex items-center justify-between">
-            <Label className="text-sm">Auto-post daily</Label>
-            <Switch
-              checked={settings.autoPost}
-              onCheckedChange={(v) => update("autoPost", v)}
-            />
-          </div>
-          <div>
-            <Label className="text-xs text-muted-foreground">Post time</Label>
+        <CardContent className="space-y-4">
+          {/* Morning */}
+          <div className="p-3 rounded-lg bg-secondary/30 border border-border/30 space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm flex items-center gap-2">
+                <Sun size={14} className="text-amber-400" /> Morning
+              </Label>
+              <Switch
+                checked={settings.autoPostMorning}
+                onCheckedChange={(v) => update("autoPostMorning", v)}
+              />
+            </div>
             <Input
               type="time"
-              value={settings.postTime}
-              onChange={(e) => update("postTime", e.target.value)}
-              className="bg-secondary/50 border-border/30 mt-1"
+              value={settings.morningPostTime}
+              onChange={(e) => update("morningPostTime", e.target.value)}
+              className="bg-secondary/50 border-border/30"
+              disabled={!settings.autoPostMorning}
+            />
+          </div>
+
+          {/* Afternoon */}
+          <div className="p-3 rounded-lg bg-secondary/30 border border-border/30 space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm flex items-center gap-2">
+                <Sunset size={14} className="text-orange-400" /> Afternoon
+              </Label>
+              <Switch
+                checked={settings.autoPostAfternoon}
+                onCheckedChange={(v) => update("autoPostAfternoon", v)}
+              />
+            </div>
+            <Input
+              type="time"
+              value={settings.afternoonPostTime}
+              onChange={(e) => update("afternoonPostTime", e.target.value)}
+              className="bg-secondary/50 border-border/30"
+              disabled={!settings.autoPostAfternoon}
+            />
+          </div>
+
+          {/* Evening */}
+          <div className="p-3 rounded-lg bg-secondary/30 border border-border/30 space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm flex items-center gap-2">
+                <Moon size={14} className="text-blue-400" /> Evening
+              </Label>
+              <Switch
+                checked={settings.autoPostEvening}
+                onCheckedChange={(v) => update("autoPostEvening", v)}
+              />
+            </div>
+            <Input
+              type="time"
+              value={settings.eveningPostTime}
+              onChange={(e) => update("eveningPostTime", e.target.value)}
+              className="bg-secondary/50 border-border/30"
+              disabled={!settings.autoPostEvening}
             />
           </div>
         </CardContent>

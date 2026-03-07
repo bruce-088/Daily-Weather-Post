@@ -18,6 +18,12 @@ export async function loadSettings(): Promise<{ settings: AutomationSettings; ti
       location: data.city || "San Francisco",
       state: (data as any).state || "",
       autoPost: data.auto_post || false,
+      morningPostTime: (data as any).morning_post_time?.slice(0, 5) || "07:00",
+      afternoonPostTime: (data as any).afternoon_post_time?.slice(0, 5) || "13:00",
+      eveningPostTime: (data as any).evening_post_time?.slice(0, 5) || "18:00",
+      autoPostMorning: (data as any).auto_post_morning ?? true,
+      autoPostAfternoon: (data as any).auto_post_afternoon ?? true,
+      autoPostEvening: (data as any).auto_post_evening ?? true,
     },
     tiktokConnected: !!(data as any).tiktok_access_token,
     youtubeConnected: !!(data as any).youtube_access_token,
@@ -42,6 +48,12 @@ export async function saveSettings(settings: AutomationSettings): Promise<boolea
     tiktok_api_key: settings.tiktokApiKey || null,
     post_time: settings.postTime + ":00",
     auto_post: settings.autoPost,
+    morning_post_time: settings.morningPostTime + ":00",
+    afternoon_post_time: settings.afternoonPostTime + ":00",
+    evening_post_time: settings.eveningPostTime + ":00",
+    auto_post_morning: settings.autoPostMorning,
+    auto_post_afternoon: settings.autoPostAfternoon,
+    auto_post_evening: settings.autoPostEvening,
     user_id: user.id,
   };
 
@@ -59,8 +71,10 @@ export async function saveSettings(settings: AutomationSettings): Promise<boolea
   }
 }
 
-export async function triggerDailyPost(): Promise<{ success: boolean; message: string }> {
-  const { data, error } = await supabase.functions.invoke("daily-weather-post");
+export async function triggerDailyPost(timePeriod?: string): Promise<{ success: boolean; message: string }> {
+  const { data, error } = await supabase.functions.invoke("daily-weather-post", {
+    body: timePeriod ? { time_period: timePeriod } : undefined,
+  });
 
   if (error) {
     return { success: false, message: error.message || "Failed to trigger post" };
