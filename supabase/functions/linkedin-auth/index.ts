@@ -101,7 +101,7 @@ Deno.serve(async (req) => {
       let organizations: Array<{ urn: string; name: string }> = [];
       try {
         const orgsRes = await fetch(
-          "https://api.linkedin.com/rest/organizationAcls?q=roleAssignee&role=ADMINISTRATOR&projection=(elements*(organization~(localizedName),organization))",
+          "https://api.linkedin.com/rest/organizationAcls?q=roleAssignee&role=ADMINISTRATOR",
           {
             headers: {
               Authorization: `Bearer ${accessToken}`,
@@ -114,11 +114,29 @@ Deno.serve(async (req) => {
         console.log("LinkedIn orgs response:", JSON.stringify(orgsData));
 
         if (orgsData.elements) {
-          organizations = orgsData.elements.map((el: any) => {
-            const orgUrn = el.organization;
-            const name = el["organization~"]?.localizedName || orgUrn;
-            return { urn: orgUrn, name };
-          });
+          // Fetch each org's name individually
+          for (const el of orgsData.elements) {
+            const orgUrn = el.organization; // e.g. "urn:li:organization:12345"
+            const orgId = orgUrn.split(":").pop();
+            let name = orgUrn;
+            try {
+              const orgRes = await fetch(
+                `https://api.linkedin.com/rest/organizations/${orgId}`,
+                {
+                  headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                    "LinkedIn-Version": "202401",
+                    "X-Restli-Protocol-Version": "2.0.0",
+                  },
+                },
+              );
+              const orgData = await orgRes.json();
+              name = orgData.localizedName || orgUrn;
+            } catch (e) {
+              console.error("Failed to fetch org name for", orgUrn, e);
+            }
+            organizations.push({ urn: orgUrn, name });
+          }
         }
       } catch (orgErr) {
         console.error("Failed to fetch LinkedIn organizations:", orgErr);
