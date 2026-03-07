@@ -208,6 +208,15 @@ export function VideoPreviewDialog({ open, onOpenChange, onUploaded }: VideoPrev
               <RefreshCw size={14} /> Re-render
             </Button>
             <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDownload}
+              disabled={generating || uploading}
+              className="gap-1.5 text-xs"
+            >
+              <Download size={14} /> Download
+            </Button>
+            <Button
               variant="ghost"
               size="sm"
               onClick={handleClose}
