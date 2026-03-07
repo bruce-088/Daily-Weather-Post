@@ -73,13 +73,13 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
                   value={settings.location}
                   onChange={(e) => update("location", e.target.value)}
                   placeholder="San Francisco"
-                  className="bg-secondary/50 border-border/30"
+                  className="bg-secondary/50 border-border/30 flex-1"
                 />
                 <Input
                   value={settings.state}
                   onChange={(e) => update("state", e.target.value)}
                   placeholder="California"
-                  className="bg-secondary/50 border-border/30 w-[140px]"
+                  className="bg-secondary/50 border-border/30 flex-1"
                 />
               </div>
               <p className="text-[10px] text-muted-foreground">City and State</p>
