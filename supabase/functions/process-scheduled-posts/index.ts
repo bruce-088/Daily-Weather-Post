@@ -47,6 +47,10 @@ async function fetchWeatherData(city: string, apiKey: string): Promise<WeatherRe
 
   const now = new Date();
   const todayStr = now.toDateString();
+  const tomorrowDate = new Date(now);
+  tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+  const tomorrowStr = tomorrowDate.toDateString();
+
   let morningTemp: number | null = null;
   let morningCondition: string | null = null;
   let afternoonTemp: number | null = null;
@@ -54,21 +58,31 @@ async function fetchWeatherData(city: string, apiKey: string): Promise<WeatherRe
   let eveningTemp: number | null = null;
   let eveningCondition: string | null = null;
   let maxPop = 0;
+  const tomorrowTemps: number[] = [];
+  let tomorrowCondition: string | null = null;
 
   for (const item of forecast.list) {
     const dt = new Date(item.dt * 1000);
-    if (dt.toDateString() !== todayStr) continue;
-    const hour = dt.getHours();
-    const temp = Math.round(item.main.temp);
-    const cond = item.weather[0].main;
-    if (item.pop != null && item.pop > maxPop) maxPop = item.pop;
+    const dtStr = dt.toDateString();
 
-    if (hour >= 6 && hour < 12 && morningTemp === null) {
-      morningTemp = temp; morningCondition = cond;
-    } else if (hour >= 12 && hour < 18 && afternoonTemp === null) {
-      afternoonTemp = temp; afternoonCondition = cond;
-    } else if (hour >= 18 && eveningTemp === null) {
-      eveningTemp = temp; eveningCondition = cond;
+    if (dtStr === todayStr) {
+      const hour = dt.getHours();
+      const temp = Math.round(item.main.temp);
+      const cond = item.weather[0].main;
+      if (item.pop != null && item.pop > maxPop) maxPop = item.pop;
+
+      if (hour >= 6 && hour < 12 && morningTemp === null) {
+        morningTemp = temp; morningCondition = cond;
+      } else if (hour >= 12 && hour < 18 && afternoonTemp === null) {
+        afternoonTemp = temp; afternoonCondition = cond;
+      } else if (hour >= 18 && eveningTemp === null) {
+        eveningTemp = temp; eveningCondition = cond;
+      }
+    }
+
+    if (dtStr === tomorrowStr) {
+      tomorrowTemps.push(Math.round(item.main.temp));
+      if (!tomorrowCondition) tomorrowCondition = item.weather[0].main;
     }
   }
 
@@ -80,6 +94,9 @@ async function fetchWeatherData(city: string, apiKey: string): Promise<WeatherRe
     else if (h < 18) { afternoonTemp = t; afternoonCondition = c; }
     else { eveningTemp = t; eveningCondition = c; }
   }
+
+  const tomorrowHigh = tomorrowTemps.length ? Math.max(...tomorrowTemps) : null;
+  const tomorrowLow = tomorrowTemps.length ? Math.min(...tomorrowTemps) : null;
 
   const sunriseDate = new Date(current.sys.sunrise * 1000);
   const sunsetDate = new Date(current.sys.sunset * 1000);
@@ -98,6 +115,7 @@ async function fetchWeatherData(city: string, apiKey: string): Promise<WeatherRe
     sunrise: fmt(sunriseDate),
     sunset: fmt(sunsetDate),
     stateOrRegion: state || country || "",
+    tomorrowHigh, tomorrowLow, tomorrowCondition,
   };
 }
 
