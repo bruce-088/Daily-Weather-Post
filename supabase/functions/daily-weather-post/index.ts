@@ -741,17 +741,22 @@ Deno.serve(async (req) => {
         throw new Error("Failed to store preview video");
       }
 
-      const { data: urlData } = supabase.storage
+      const { data: signedUrlData, error: signedUrlError } = await supabase.storage
         .from("weather-videos")
-        .getPublicUrl(fileName);
+        .createSignedUrl(fileName, 3600); // 1 hour TTL
 
-      console.log("Preview video stored:", urlData.publicUrl);
+      if (signedUrlError || !signedUrlData?.signedUrl) {
+        console.error("Signed URL error:", signedUrlError);
+        throw new Error("Failed to create signed URL for preview video");
+      }
+
+      console.log("Preview video stored with signed URL");
 
       return new Response(
         JSON.stringify({
           success: true,
           mode: "preview",
-          video_url: urlData.publicUrl,
+          video_url: signedUrlData.signedUrl,
           storage_path: fileName,
           weather,
           caption,
