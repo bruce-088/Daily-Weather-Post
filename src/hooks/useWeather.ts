@@ -34,7 +34,7 @@ const MOCK_WEATHER: WeatherData = {
   sunset: "6:12 PM",
 };
 
-export function useWeather(autoRefreshLocation?: string) {
+export function useWeather(autoRefreshLocation?: string, autoRefreshState?: string) {
   const [weather, setWeather] = useState<WeatherData>(MOCK_WEATHER);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
