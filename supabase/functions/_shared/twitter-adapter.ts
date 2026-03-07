@@ -147,29 +147,22 @@ export class TwitterAdapter implements PlatformAdapter {
 
     for (let offset = 0; offset < videoData.byteLength; offset += chunkSize) {
       const chunk = videoData.slice(offset, Math.min(offset + chunkSize, videoData.byteLength));
-      const chunkBase64 = btoa(String.fromCharCode(...chunk));
 
-      const appendParams: Record<string, string> = {
-        command: "APPEND",
-        media_id: mediaId,
-        segment_index: String(segmentIndex),
-      };
+      // For APPEND, do NOT include body params in OAuth signature — use multipart/form-data
+      const appendAuth = await buildOAuthHeader("POST", mediaUploadUrl, consumerKey, consumerSecret, access_token, access_token_secret);
 
-      // For APPEND, we need to send media_data in the body but NOT in the OAuth signature
-      const appendAuth = await buildOAuthHeader("POST", mediaUploadUrl, consumerKey, consumerSecret, access_token, access_token_secret, appendParams);
-
-      const formData = new URLSearchParams({
-        ...appendParams,
-        media_data: chunkBase64,
-      });
+      const formData = new FormData();
+      formData.append("command", "APPEND");
+      formData.append("media_id", mediaId);
+      formData.append("segment_index", String(segmentIndex));
+      formData.append("media", new Blob([chunk], { type: "application/octet-stream" }), "video.mp4");
 
       const appendRes = await fetch(mediaUploadUrl, {
         method: "POST",
         headers: {
           Authorization: appendAuth,
-          "Content-Type": "application/x-www-form-urlencoded",
         },
-        body: formData.toString(),
+        body: formData,
       });
 
       if (!appendRes.ok) {
