@@ -52,6 +52,12 @@ async function buildOAuthHeader(
   };
   if (tokenOrEmpty) oauthParams["oauth_token"] = tokenOrEmpty;
 
+  // Merge oauth_* extra params (like oauth_callback) into oauthParams so they appear in the header
+  for (const [k, v] of Object.entries(extraParams)) {
+    if (k.startsWith("oauth_")) {
+      oauthParams[k] = v;
+    }
+  }
   const allParams = { ...oauthParams, ...extraParams };
   const sortedKeys = Object.keys(allParams).sort();
   const paramString = sortedKeys.map((k) => percentEncode(k) + "=" + percentEncode(allParams[k])).join("&");
