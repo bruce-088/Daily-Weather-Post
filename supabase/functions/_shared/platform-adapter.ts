@@ -35,11 +35,13 @@ export interface PlatformAdapter {
 import { YouTubeAdapter } from "./youtube-adapter.ts";
 import { TikTokAdapter } from "./tiktok-adapter.ts";
 import { InstagramAdapter } from "./instagram-adapter.ts";
+import { TwitterAdapter } from "./twitter-adapter.ts";
 
 const adapters: PlatformAdapter[] = [
   new YouTubeAdapter(),
   new TikTokAdapter(),
   new InstagramAdapter(),
+  new TwitterAdapter(),
 ];
 
 /** Get adapter by platform name */
