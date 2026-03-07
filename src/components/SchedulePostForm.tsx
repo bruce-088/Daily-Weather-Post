@@ -171,6 +171,8 @@ export function SchedulePostForm({ defaultCity, onScheduled }: SchedulePostFormP
               <SelectItem value="instagram">Instagram</SelectItem>
               <SelectItem value="tiktok">TikTok</SelectItem>
               <SelectItem value="youtube">YouTube Shorts</SelectItem>
+              <SelectItem value="twitter">X (Twitter)</SelectItem>
+              <SelectItem value="linkedin">LinkedIn</SelectItem>
             </SelectContent>
           </Select>
         </div>
