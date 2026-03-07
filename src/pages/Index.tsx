@@ -113,6 +113,7 @@ const Index = () => {
         setSettings(result.settings);
         setTiktokConnected(result.tiktokConnected);
         setYoutubeConnected(result.youtubeConnected);
+        setTwitterConnected(result.twitterConnected);
       }
       setSettingsLoaded(true);
     });
