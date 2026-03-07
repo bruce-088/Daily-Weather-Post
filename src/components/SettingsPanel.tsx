@@ -79,7 +79,10 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
 
     if (error || data?.error) {
       toast.error("Failed to start LinkedIn authorization");
-      return;localStorag sessiolocale.setItem("linkedin_oauth_state", data.state);
+      return;
+    }
+
+    localStorage.setItem("linkedin_oauth_state", data.state);
     window.open(data.url, "_blank");
   };
 
