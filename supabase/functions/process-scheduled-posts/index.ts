@@ -308,11 +308,13 @@ function getPracticalTakeaway(weather: WeatherResponse): string {
   return "📋 Check back for updates";
 }
 
-async function fetchPexelsVideoUrl(keyword: string): Promise<string | null> {
+async function fetchPexelsVideoUrl(keyword: string, city?: string): Promise<string | null> {
   const pexelsKey = Deno.env.get("PEXELS_API_KEY");
   if (!pexelsKey) { console.log("PEXELS_API_KEY not configured"); return null; }
-  try {
-    const url = `https://api.pexels.com/videos/search?query=${encodeURIComponent(keyword)}&per_page=15&orientation=portrait&size=medium`;
+
+  async function searchPexels(query: string): Promise<string | null> {
+    const url = `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&per_page=15&orientation=portrait&size=medium`;
+    console.log("Fetching Pexels video:", query);
     const res = await fetch(url, { headers: { Authorization: pexelsKey } });
     if (!res.ok) return null;
     const data = await res.json();
@@ -325,6 +327,15 @@ async function fetchPexelsVideoUrl(keyword: string): Promise<string | null> {
       || files.find((f: any) => f.quality === "sd")
       || files[0];
     return hdFile?.link || null;
+  }
+
+  try {
+    if (city) {
+      const cityResult = await searchPexels(`${city} ${keyword}`);
+      if (cityResult) return cityResult;
+      console.log(`No Pexels videos for "${city} ${keyword}", falling back to generic`);
+    }
+    return await searchPexels(keyword);
   } catch { return null; }
 }
 
@@ -424,7 +435,7 @@ async function generateWeatherVideo(weather: WeatherResponse): Promise<{ data: U
 
   console.log("Starting Creatomate render for", weather.city);
   const theme = getWeatherTheme(weather.condition);
-  const videoUrl = await fetchPexelsVideoUrl(theme.videoKeyword);
+  const videoUrl = await fetchPexelsVideoUrl(theme.videoKeyword, weather.city);
   const source = buildCreatomateSource(weather, videoUrl);
 
   const requestBody = JSON.stringify({ output_format: "mp4", ...source });
