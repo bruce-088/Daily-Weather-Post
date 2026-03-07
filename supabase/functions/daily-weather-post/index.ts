@@ -700,9 +700,11 @@ Deno.serve(async (req) => {
 
   try {
     let mode = "post";
+    let timePeriod: string | null = null;
     try {
       const body = await req.clone().json();
       if (body?.mode === "preview") mode = "preview";
+      if (body?.time_period) timePeriod = body.time_period; // "morning" | "afternoon" | "evening"
     } catch { /* no body is fine */ }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
