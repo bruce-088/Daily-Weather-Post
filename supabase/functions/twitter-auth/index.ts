@@ -89,7 +89,7 @@ Deno.serve(async (req) => {
 
     // get_auth_url doesn't need auth
     if (action === "get_auth_url") {
-      const requestTokenUrl = "https://api.twitter.com/oauth/request_token";
+      const requestTokenUrl = "https://api.twitterequest_token";
       const callbackUrl = redirect_uri || "oob";
       const extraParams: Record<string, string> = { oauth_callback: callbackUrl };
 
@@ -121,7 +121,7 @@ Deno.serve(async (req) => {
         });
       }
 
-      const authorizeUrl = "twitterttps:twitter/api.x.com/oauth/authorize?oauth_token=" + oauthToken;
+      const authorizeUrl = "twitterttps:https://api.twitteruthorize?oauth_token=" + oauthToken;
       return new Response(
         JSON.stringify({ url: authorizeUrl, oauth_token: oauthToken, oauth_token_secret: oauthTokenSecret }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
