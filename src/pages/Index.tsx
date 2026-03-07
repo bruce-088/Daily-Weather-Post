@@ -198,6 +198,15 @@ const Index = () => {
             <NotificationBell />
             <Button
               size="sm"
+              variant="outline"
+              onClick={() => setPreviewOpen(true)}
+              className="gap-1.5 text-xs"
+            >
+              <Eye size={14} />
+              Preview
+            </Button>
+            <Button
+              size="sm"
               onClick={handlePostNow}
               disabled={posting}
               className="gap-1.5 text-xs"
