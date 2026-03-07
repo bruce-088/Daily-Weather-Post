@@ -375,7 +375,7 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
           type: "video", track: 1, time: 0, duration: 10,
           source: videoUrl,
           width: "100%", height: "100%", x: "50%", y: "50%",
-          color_filter: "grayscale(30%) brightness(40%)",
+          color_filter: "grayscale",
           fit: "cover",
         },
         // Dark overlay for text readability

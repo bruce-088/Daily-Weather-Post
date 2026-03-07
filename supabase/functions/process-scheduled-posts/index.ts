@@ -339,7 +339,7 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
     width: 1080, height: 1920, duration: 10, frame_rate: 30, fill_color: theme.bg1,
     elements: [
       ...(videoUrl ? [
-        { type: "video", track: 1, time: 0, duration: 10, source: videoUrl, width: "100%", height: "100%", x: "50%", y: "50%", color_filter: "grayscale(30%) brightness(40%)", fit: "cover" },
+        { type: "video", track: 1, time: 0, duration: 10, source: videoUrl, width: "100%", height: "100%", x: "50%", y: "50%", color_filter: "grayscale", fit: "cover" },
         { type: "shape", track: 2, time: 0, duration: 10, shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%", fill_color: `linear-gradient(180deg, ${theme.bg1}dd 0%, ${theme.bg1}88 30%, ${theme.bg1}99 70%, ${theme.bg1}ee 100%)` },
       ] : [
         { type: "shape", track: 1, time: 0, duration: 10, shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%", fill_color: `linear-gradient(160deg, ${theme.bg1} 0%, ${theme.bg2} 100%)` },
