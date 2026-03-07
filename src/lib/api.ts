@@ -28,6 +28,7 @@ export async function loadSettings(): Promise<{ settings: AutomationSettings; ti
     tiktokConnected: !!(data as any).tiktok_access_token,
     youtubeConnected: !!(data as any).youtube_access_token,
     twitterConnected: !!(data as any).twitter_access_token,
+    linkedinConnected: !!(data as any).linkedin_access_token,
   };
 }
 
