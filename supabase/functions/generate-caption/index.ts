@@ -6,6 +6,21 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// --- Dynamic Handle System ---
+
+const HANDLE_MAP: Record<string, string> = {
+  "Gainesville": "@SkyBriefGNV",
+  "Miami": "@SkyBriefMiami",
+  "Orlando": "@SkyBriefOrlando",
+  "Tampa": "@SkyBriefTampa",
+};
+
+function getDynamicHandle(city: string): string {
+  if (HANDLE_MAP[city]) return HANDLE_MAP[city];
+  const cleaned = city.replace(/\s+/g, "");
+  return `@SkyBrief${cleaned}`;
+}
+
 const SKYBRIEF_SYSTEM_PROMPT = `You are the caption-writing engine for a social media weather brand called SkyBrief.
 
 BRAND IDENTITY:
@@ -42,7 +57,7 @@ Line 3: Afternoon forecast in a few words with temp
 Line 4: Evening forecast in a few words with temp
 Line 5: Rain chance
 Line 6: "What to know:" followed by 2-3 short bullet-style points
-Final line: Short local-style signoff or CTA to follow for daily updates
+Final line: A habit-forming CTA using the provided dynamic_handle (e.g. "Follow @SkyBriefGNV for tomorrow's forecast" or "Check back tomorrow on @SkyBriefMiami")
 
 STYLE RULES:
 - Keep total caption under 120 words unless severe weather requires more
@@ -56,6 +71,7 @@ STYLE RULES:
 - Never include hashtags unless explicitly requested
 - Never write more than one CTA
 - Avoid repetitive phrases across days
+- The final CTA line MUST use the exact dynamic_handle provided — do not substitute or invent a different handle
 
 TONE MODES:
 1. NICE DAY MODE - pleasant, dry, calm, or sunny. Tone: light, fresh, easy, upbeat
@@ -90,6 +106,7 @@ Deno.serve(async (req) => {
 
     const now = new Date();
     const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const handle = getDynamicHandle(city);
 
     const userPrompt = `NOW USE THESE INPUTS TO WRITE TODAY'S CAPTION:
 
@@ -108,6 +125,7 @@ wind_info: ${body.wind_info ?? body.windInfo ?? "N/A"}
 severe_alerts: ${body.severe_alerts ?? body.severeAlerts ?? "None"}
 sunrise_time: ${body.sunrise_time ?? body.sunrise ?? "N/A"}
 sunset_time: ${body.sunset_time ?? body.sunset ?? "N/A"}
+dynamic_handle: ${handle}
 extra_note: ${body.extra_note ?? body.extraNote ?? ""}`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {

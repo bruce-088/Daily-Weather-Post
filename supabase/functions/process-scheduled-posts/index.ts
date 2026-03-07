@@ -98,6 +98,35 @@ async function fetchWeatherData(city: string, apiKey: string): Promise<WeatherRe
   };
 }
 
+// --- Dynamic Handle System ---
+
+const HANDLE_MAP: Record<string, string> = {
+  "Gainesville": "@SkyBriefGNV",
+  "Miami": "@SkyBriefMiami",
+  "Orlando": "@SkyBriefOrlando",
+  "Tampa": "@SkyBriefTampa",
+};
+
+function getDynamicHandle(city: string): string {
+  if (HANDLE_MAP[city]) return HANDLE_MAP[city];
+  const cleaned = city.replace(/\s+/g, "");
+  return `@SkyBrief${cleaned}`;
+}
+
+function getHabitCTA(city: string): string {
+  const handle = getDynamicHandle(city);
+  const ctas = [
+    `Follow ${handle} for tomorrow's forecast`,
+    `Tomorrow's forecast drops at ${handle}`,
+    `Daily weather every morning at ${handle}`,
+    `Check back tomorrow on ${handle}`,
+  ];
+  const dayIndex = new Date().getDay();
+  return ctas[dayIndex % ctas.length];
+}
+
+// --- Caption Prompt ---
+
 const SKYBRIEF_SYSTEM_PROMPT = `You are the caption-writing engine for a social media weather brand called SkyBrief.
 
 BRAND IDENTITY:
@@ -127,7 +156,7 @@ Line 3: Afternoon forecast in a few words with temp
 Line 4: Evening forecast in a few words with temp
 Line 5: Rain chance
 Line 6: "What to know:" followed by 2-3 short bullet-style points
-Final line: Short local-style signoff or CTA to follow for daily updates
+Final line: A habit-forming CTA using the provided dynamic_handle (e.g. "Follow @SkyBriefGNV for tomorrow's forecast" or "Check back tomorrow on @SkyBriefMiami")
 
 STYLE RULES:
 - Keep total caption under 120 words
@@ -137,6 +166,7 @@ STYLE RULES:
 - Never exaggerate risk
 - Never include hashtags unless explicitly requested
 - Never write more than one CTA
+- The final CTA line MUST use the exact dynamic_handle provided — do not substitute or invent a different handle
 
 BRAND CONSISTENCY RULES:
 - Every caption should feel like part of the same brand system
@@ -151,6 +181,7 @@ Return only the finished caption. No labels, no quotes.`;
 function buildSkyBriefUserPrompt(weather: WeatherResponse): string {
   const now = new Date();
   const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const handle = getDynamicHandle(weather.city);
   return `city: ${weather.city}
 state_or_region: ${weather.stateOrRegion}
 date: ${now.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
@@ -166,6 +197,7 @@ wind_info: ${weather.windInfo}
 severe_alerts: None
 sunrise_time: ${weather.sunrise}
 sunset_time: ${weather.sunset}
+dynamic_handle: ${handle}
 extra_note: `;
 }
 
@@ -277,35 +309,36 @@ async function uploadToYouTubeShorts(
 interface WeatherTheme {
   bg1: string; bg2: string; accent: string;
   glow1: string; glow2: string; emoji: string;
-  videoKeyword: string; panelBg: string;
+  videoKeyword: string;
 }
 
 function getWeatherTheme(condition: string): WeatherTheme {
   const c = condition.toLowerCase();
-  if (c.includes("rain") || c.includes("drizzle")) return { bg1: "#0a1628", bg2: "#152238", accent: "#60a5fa", glow1: "rgba(96,165,250,0.10)", glow2: "rgba(59,130,246,0.06)", emoji: "🌧️", videoKeyword: "rain window dark moody", panelBg: "rgba(10,22,40,0.82)" };
-  if (c.includes("thunder") || c.includes("storm")) return { bg1: "#110820", bg2: "#1e1038", accent: "#a78bfa", glow1: "rgba(167,139,250,0.10)", glow2: "rgba(139,92,246,0.06)", emoji: "⛈️", videoKeyword: "lightning storm dark sky", panelBg: "rgba(17,8,32,0.82)" };
-  if (c.includes("snow")) return { bg1: "#0c1524", bg2: "#162340", accent: "#93c5fd", glow1: "rgba(147,197,253,0.10)", glow2: "rgba(191,219,254,0.06)", emoji: "❄️", videoKeyword: "snow falling slow motion", panelBg: "rgba(12,21,36,0.82)" };
-  if (c.includes("cloud") || c.includes("overcast")) return { bg1: "#0e1420", bg2: "#1a2030", accent: "#94a3b8", glow1: "rgba(148,163,184,0.08)", glow2: "rgba(100,116,139,0.05)", emoji: "☁️", videoKeyword: "clouds sky timelapse moody", panelBg: "rgba(14,20,32,0.82)" };
-  if (c.includes("fog") || c.includes("mist") || c.includes("haze")) return { bg1: "#12121e", bg2: "#1e1e30", accent: "#a1a1aa", glow1: "rgba(161,161,170,0.08)", glow2: "rgba(113,113,122,0.05)", emoji: "🌫️", videoKeyword: "fog mist morning forest", panelBg: "rgba(18,18,30,0.82)" };
-  return { bg1: "#0a1020", bg2: "#14203a", accent: "#fbbf24", glow1: "rgba(251,191,36,0.08)", glow2: "rgba(245,158,11,0.05)", emoji: "☀️", videoKeyword: "blue sky sun golden hour", panelBg: "rgba(10,16,32,0.82)" };
+  if (c.includes("rain") || c.includes("drizzle")) return { bg1: "#0a1628", bg2: "#152238", accent: "#60a5fa", glow1: "rgba(96,165,250,0.10)", glow2: "rgba(59,130,246,0.06)", emoji: "🌧️", videoKeyword: "rain window dark moody" };
+  if (c.includes("thunder") || c.includes("storm")) return { bg1: "#110820", bg2: "#1e1038", accent: "#a78bfa", glow1: "rgba(167,139,250,0.10)", glow2: "rgba(139,92,246,0.06)", emoji: "⛈️", videoKeyword: "lightning storm dark sky" };
+  if (c.includes("snow")) return { bg1: "#0c1524", bg2: "#162340", accent: "#93c5fd", glow1: "rgba(147,197,253,0.10)", glow2: "rgba(191,219,254,0.06)", emoji: "❄️", videoKeyword: "snow falling slow motion" };
+  if (c.includes("cloud") || c.includes("overcast")) return { bg1: "#0e1420", bg2: "#1a2030", accent: "#94a3b8", glow1: "rgba(148,163,184,0.08)", glow2: "rgba(100,116,139,0.05)", emoji: "☁️", videoKeyword: "clouds sky timelapse moody" };
+  if (c.includes("fog") || c.includes("mist") || c.includes("haze")) return { bg1: "#12121e", bg2: "#1e1e30", accent: "#a1a1aa", glow1: "rgba(161,161,170,0.08)", glow2: "rgba(113,113,122,0.05)", emoji: "🌫️", videoKeyword: "fog mist morning forest" };
+  return { bg1: "#0a1020", bg2: "#14203a", accent: "#fbbf24", glow1: "rgba(251,191,36,0.08)", glow2: "rgba(245,158,11,0.05)", emoji: "☀️", videoKeyword: "blue sky sun golden hour" };
 }
 
 function getPracticalTakeaway(weather: WeatherResponse): string {
   const c = weather.condition.toLowerCase();
   const temp = weather.temperature;
   const rain = weather.rainChance;
-  if (c.includes("thunder") || c.includes("storm")) return "⚡ Stay indoors if possible";
-  if (rain >= 70) return "☔ Bring an umbrella today";
-  if (rain >= 40) return "🌂 Rain possible — pack a layer";
-  if (c.includes("snow")) return "❄️ Bundle up and drive safe";
-  if (c.includes("fog") || c.includes("mist")) return "🌫️ Low visibility — drive carefully";
-  if (temp >= 95) return "🥵 Stay hydrated, limit sun exposure";
-  if (temp >= 80 && c.includes("clear")) return "☀️ Great day to be outside";
-  if (temp >= 70) return "👍 Comfortable temps all day";
-  if (temp >= 50) return "🧥 Grab a jacket for later";
-  if (temp < 32) return "🧊 Below freezing — dress warm";
-  if (temp < 50) return "🧣 Chilly — layer up today";
-  return "📋 Check back for updates";
+  if (c.includes("thunder") || c.includes("storm")) return "Stay indoors if possible";
+  if (rain >= 70) return "Bring an umbrella today";
+  if (rain >= 40) return "Rain possible later";
+  if (c.includes("snow")) return "Bundle up and drive safe";
+  if (c.includes("fog") || c.includes("mist")) return "Low visibility this morning";
+  if (temp >= 95) return "Stay hydrated today";
+  if (temp >= 85) return "Hot and humid today";
+  if (temp >= 80 && c.includes("clear")) return "Great day to be outside";
+  if (temp >= 70) return "Comfortable all day";
+  if (temp >= 50) return "Grab a jacket for later";
+  if (temp < 32) return "Below freezing — dress warm";
+  if (temp < 50) return "Chilly — layer up today";
+  return "Comfortable all day";
 }
 
 async function fetchPexelsVideoUrl(keyword: string, city?: string, region?: string): Promise<string | null> {
@@ -330,16 +363,25 @@ async function fetchPexelsVideoUrl(keyword: string, city?: string, region?: stri
   }
 
   try {
+    // Tier 1: Local landmark/skyline
+    if (city) {
+      const landmarkResult = await searchPexels(`${city} skyline landmark`);
+      if (landmarkResult) return landmarkResult;
+      console.log(`No landmark video for "${city}", trying city + weather`);
+    }
+    // Tier 2: City + weather condition
     if (city) {
       const cityResult = await searchPexels(`${city} ${keyword}`);
       if (cityResult) return cityResult;
       console.log(`No Pexels videos for "${city} ${keyword}", trying region fallback`);
     }
+    // Tier 3: Region + weather condition
     if (region && region !== city) {
       const regionResult = await searchPexels(`${region} ${keyword}`);
       if (regionResult) return regionResult;
       console.log(`No Pexels videos for "${region} ${keyword}", falling back to generic`);
     }
+    // Tier 4: Generic weather keyword
     return await searchPexels(keyword);
   } catch { return null; }
 }
@@ -349,12 +391,14 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
   const dateStr = now.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
   const theme = getWeatherTheme(weather.condition);
   const takeaway = getPracticalTakeaway(weather);
+  const habitCTA = getHabitCTA(weather.city);
   const temps = [weather.morningTemp, weather.afternoonTemp, weather.eveningTemp].filter((t): t is number => t != null);
   const hi = temps.length ? Math.max(...temps) : weather.temperature;
   const lo = temps.length ? Math.min(...temps) : weather.temperature;
   const windSpeed = weather.windInfo.split(" ")[0] + " mph";
   let t = 0;
   const nt = () => ++t;
+  const txtShadow = "0px 1px 4px rgba(0,0,0,0.4)";
 
   return {
     width: 1080, height: 1920, duration: 10, frame_rate: 30, fill_color: theme.bg1,
@@ -365,54 +409,64 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
       ] : [
         { type: "shape", track: nt(), time: 0, duration: 10, shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%", fill_color: `linear-gradient(170deg, ${theme.bg1} 0%, ${theme.bg2} 50%, ${theme.bg1} 100%)` },
       ]),
+
+      // === 3-ZONE GRADIENT OVERLAY ===
       { type: "shape", track: nt(), time: 0, duration: 10, shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%",
-        fill_color: `linear-gradient(180deg, ${theme.bg1}e6 0%, ${theme.bg1}b3 20%, ${theme.bg1}99 45%, ${theme.bg1}b3 65%, ${theme.bg1}e6 85%, ${theme.bg1}f2 100%)` },
+        fill_color: "linear-gradient(180deg, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.25) 40%, rgba(0,0,0,0.25) 60%, rgba(0,0,0,0.45) 100%)" },
+
+      // Subtle glow
       { type: "shape", track: nt(), time: 0, duration: 10, shape_type: "ellipse", width: 1400, height: 1400, x: "75%", y: "30%", fill_color: theme.glow1,
         animations: [{ type: "scale", start_scale: "95%", end_scale: "108%", duration: 10, easing: "linear" }] },
 
       // === BRAND ===
       { type: "text", track: nt(), time: 0, duration: 10, text: "SKYBRIEF", font_family: "Inter", font_weight: "700", font_size: "42", fill_color: "#ffffff", letter_spacing: "18%",
-        x: "50%", y: "7%", x_alignment: "50%", y_alignment: "50%", enter: { type: "fade", duration: 0.5 } },
+        x: "50%", y: "7%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.5 } },
       { type: "shape", track: nt(), time: 0.2, duration: 9.8, shape_type: "rectangle", width: 60, height: 3, x: "50%", y: "9.5%", fill_color: theme.accent, border_radius: "2",
         enter: { type: "scale", start_scale: "0%", duration: 0.6 } },
 
+      // === CITY HEADER GLASS PANEL ===
+      { type: "shape", track: nt(), time: 0.2, duration: 9.8, shape_type: "rectangle", width: 800, height: 200, x: "50%", y: "18%",
+        fill_color: "rgba(0,0,0,0.35)", border_radius: "14",
+        enter: { type: "fade", duration: 0.4 } },
+
       // === CITY + DATE ===
       { type: "text", track: nt(), time: 0.3, duration: 9.7, text: weather.city.toUpperCase(), font_family: "Inter", font_weight: "800", font_size: "76", fill_color: "#ffffff",
-        x: "50%", y: "16%", x_alignment: "50%", y_alignment: "50%", enter: { type: "slide", direction: "up", duration: 0.5 } },
+        x: "50%", y: "16%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "slide", direction: "up", duration: 0.5 } },
       { type: "text", track: nt(), time: 0.5, duration: 9.5, text: `${weather.stateOrRegion}  ·  ${dateStr}`, font_family: "Inter", font_weight: "500", font_size: "30", fill_color: "rgba(255,255,255,0.65)",
-        x: "50%", y: "21%", x_alignment: "50%", y_alignment: "50%", enter: { type: "fade", duration: 0.5 } },
+        x: "50%", y: "21%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.5 } },
 
       // === HERO TEMPERATURE ===
       { type: "text", track: nt(), time: 0.6, duration: 9.4, text: theme.emoji, font_size: "80",
         x: "50%", y: "30%", x_alignment: "50%", y_alignment: "50%", enter: { type: "scale", start_scale: "50%", duration: 0.6 } },
       { type: "text", track: nt(), time: 0.7, duration: 9.3, text: `${weather.temperature}°`, font_family: "Inter", font_weight: "900", font_size: "180", fill_color: "#ffffff",
-        x: "50%", y: "42%", x_alignment: "50%", y_alignment: "50%", enter: { type: "scale", start_scale: "60%", duration: 0.6 } },
+        x: "50%", y: "42%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "scale", start_scale: "60%", duration: 0.6 } },
       { type: "text", track: nt(), time: 0.9, duration: 9.1, text: weather.description.charAt(0).toUpperCase() + weather.description.slice(1),
         font_family: "Inter", font_weight: "600", font_size: "38", fill_color: theme.accent,
-        x: "50%", y: "51%", x_alignment: "50%", y_alignment: "50%", enter: { type: "fade", duration: 0.5 } },
+        x: "50%", y: "51%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.5 } },
 
-      // === DETAIL CARD ===
+      // === DETAIL CARD (frosted glass) ===
       { type: "shape", track: nt(), time: 1.3, duration: 8.7, shape_type: "rectangle", width: 920, height: 260, x: "50%", y: "65%",
-        fill_color: theme.panelBg, border_radius: "28", border_width: 1, border_color: "rgba(255,255,255,0.10)",
+        fill_color: "rgba(10,15,30,0.65)", border_radius: "28", border_width: 1, border_color: "rgba(255,255,255,0.10)",
+        shadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
         enter: { type: "scale", start_scale: "92%", duration: 0.5 } },
       // Labels
       { type: "text", track: nt(), time: 1.5, duration: 8.5, text: "HIGH", font_family: "Inter", font_weight: "600", font_size: "22", fill_color: "rgba(255,255,255,0.45)", letter_spacing: "6%",
-        x: "17%", y: "60.5%", x_alignment: "50%", y_alignment: "50%", enter: { type: "fade", duration: 0.3 } },
+        x: "17%", y: "60.5%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.3 } },
       { type: "text", track: nt(), time: 1.5, duration: 8.5, text: "LOW", font_family: "Inter", font_weight: "600", font_size: "22", fill_color: "rgba(255,255,255,0.45)", letter_spacing: "6%",
-        x: "39%", y: "60.5%", x_alignment: "50%", y_alignment: "50%", enter: { type: "fade", duration: 0.3 } },
+        x: "39%", y: "60.5%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.3 } },
       { type: "text", track: nt(), time: 1.5, duration: 8.5, text: "RAIN", font_family: "Inter", font_weight: "600", font_size: "22", fill_color: "rgba(255,255,255,0.45)", letter_spacing: "6%",
-        x: "61%", y: "60.5%", x_alignment: "50%", y_alignment: "50%", enter: { type: "fade", duration: 0.3 } },
+        x: "61%", y: "60.5%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.3 } },
       { type: "text", track: nt(), time: 1.5, duration: 8.5, text: "WIND", font_family: "Inter", font_weight: "600", font_size: "22", fill_color: "rgba(255,255,255,0.45)", letter_spacing: "6%",
-        x: "83%", y: "60.5%", x_alignment: "50%", y_alignment: "50%", enter: { type: "fade", duration: 0.3 } },
+        x: "83%", y: "60.5%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.3 } },
       // Values
       { type: "text", track: nt(), time: 1.7, duration: 8.3, text: `${hi}°`, font_family: "Inter", font_weight: "700", font_size: "44", fill_color: "#ffffff",
-        x: "17%", y: "65.5%", x_alignment: "50%", y_alignment: "50%", enter: { type: "slide", direction: "up", duration: 0.4 } },
+        x: "17%", y: "65.5%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "slide", direction: "up", duration: 0.4 } },
       { type: "text", track: nt(), time: 1.8, duration: 8.2, text: `${lo}°`, font_family: "Inter", font_weight: "700", font_size: "44", fill_color: "#ffffff",
-        x: "39%", y: "65.5%", x_alignment: "50%", y_alignment: "50%", enter: { type: "slide", direction: "up", duration: 0.4 } },
+        x: "39%", y: "65.5%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "slide", direction: "up", duration: 0.4 } },
       { type: "text", track: nt(), time: 1.9, duration: 8.1, text: `${weather.rainChance}%`, font_family: "Inter", font_weight: "700", font_size: "44", fill_color: "#ffffff",
-        x: "61%", y: "65.5%", x_alignment: "50%", y_alignment: "50%", enter: { type: "slide", direction: "up", duration: 0.4 } },
+        x: "61%", y: "65.5%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "slide", direction: "up", duration: 0.4 } },
       { type: "text", track: nt(), time: 2.0, duration: 8.0, text: windSpeed, font_family: "Inter", font_weight: "700", font_size: "44", fill_color: "#ffffff",
-        x: "83%", y: "65.5%", x_alignment: "50%", y_alignment: "50%", enter: { type: "slide", direction: "up", duration: 0.4 } },
+        x: "83%", y: "65.5%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "slide", direction: "up", duration: 0.4 } },
       // Dividers
       { type: "shape", track: nt(), time: 1.6, duration: 8.4, shape_type: "rectangle", width: 1, height: 80, x: "28%", y: "63.5%", fill_color: "rgba(255,255,255,0.08)", enter: { type: "fade", duration: 0.3 } },
       { type: "shape", track: nt(), time: 1.6, duration: 8.4, shape_type: "rectangle", width: 1, height: 80, x: "50%", y: "63.5%", fill_color: "rgba(255,255,255,0.08)", enter: { type: "fade", duration: 0.3 } },
@@ -420,13 +474,13 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
 
       // === TAKEAWAY ===
       { type: "text", track: nt(), time: 2.5, duration: 7.5, text: takeaway, font_family: "Inter", font_weight: "600", font_size: "34", fill_color: "#ffffff",
-        x: "50%", y: "76%", x_alignment: "50%", y_alignment: "50%", enter: { type: "fade", duration: 0.6 } },
+        x: "50%", y: "76%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.6 } },
 
       // === CTA ===
       { type: "shape", track: nt(), time: 3.5, duration: 6.5, shape_type: "rectangle", width: 80, height: 2, x: "50%", y: "84%", fill_color: theme.accent, border_radius: "1",
         enter: { type: "scale", start_scale: "0%", duration: 0.5 } },
-      { type: "text", track: nt(), time: 3.8, duration: 6.2, text: "Follow @SkyBrief for daily updates", font_family: "Inter", font_weight: "500", font_size: "28", fill_color: "rgba(255,255,255,0.55)",
-        x: "50%", y: "88%", x_alignment: "50%", y_alignment: "50%", enter: { type: "fade", duration: 0.6 } },
+      { type: "text", track: nt(), time: 3.8, duration: 6.2, text: habitCTA, font_family: "Inter", font_weight: "500", font_size: "28", fill_color: "rgba(255,255,255,0.55)",
+        x: "50%", y: "88%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.6 } },
     ],
   };
 }
