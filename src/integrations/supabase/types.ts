@@ -130,6 +130,7 @@ export type Database = {
           id: string
           instagram_api_key: string | null
           post_time: string
+          state: string | null
           tiktok_access_token: string | null
           tiktok_api_key: string | null
           tiktok_open_id: string | null
@@ -149,6 +150,7 @@ export type Database = {
           id?: string
           instagram_api_key?: string | null
           post_time?: string
+          state?: string | null
           tiktok_access_token?: string | null
           tiktok_api_key?: string | null
           tiktok_open_id?: string | null
@@ -168,6 +170,7 @@ export type Database = {
           id?: string
           instagram_api_key?: string | null
           post_time?: string
+          state?: string | null
           tiktok_access_token?: string | null
           tiktok_api_key?: string | null
           tiktok_open_id?: string | null

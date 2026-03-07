@@ -16,6 +16,7 @@ export async function loadSettings(): Promise<{ settings: AutomationSettings; ti
       tiktokApiKey: data.tiktok_api_key || "",
       postTime: data.post_time?.slice(0, 5) || "08:00",
       location: data.city || "San Francisco",
+      state: (data as any).state || "",
       autoPost: data.auto_post || false,
     },
     tiktokConnected: !!(data as any).tiktok_access_token,
@@ -36,6 +37,7 @@ export async function saveSettings(settings: AutomationSettings): Promise<boolea
 
   const payload = {
     city: settings.location,
+    state: settings.state || null,
     instagram_api_key: settings.instagramApiKey || null,
     tiktok_api_key: settings.tiktokApiKey || null,
     post_time: settings.postTime + ":00",

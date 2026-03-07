@@ -38,5 +38,6 @@ export interface AutomationSettings {
   tiktokApiKey: string;
   postTime: string;
   location: string;
+  state: string;
   autoPost: boolean;
 }
