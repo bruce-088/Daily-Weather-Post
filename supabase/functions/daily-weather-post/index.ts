@@ -869,7 +869,7 @@ Deno.serve(async (req) => {
 
         if (ytToken) {
           if (video) {
-            const title = weather.city + " Weather Today \u2014 " + weather.temperature + "\u00B0F " + weather.condition;
+            const title = generateSkyBriefTitle(weather.city, weather.temperature, weather.condition, weather.rainChance);
             const desc = caption || "Weather update for " + weather.city + ": " + weather.temperature + "\u00B0F, " + weather.description;
             const result = await uploadToYouTubeShorts(ytToken, video.data, title, desc, video.mimeType);
 

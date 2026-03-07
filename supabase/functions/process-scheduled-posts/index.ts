@@ -289,8 +289,7 @@ async function uploadToYouTubeShorts(
       },
       body: JSON.stringify({
         snippet: {
-          title: title.length > 100 ? title.substring(0, 100) : title,
-          description,
+          title: title.length > 100 ? title.substring(0, 100) : titleescription,
           categoryId: "22",
         },
         status: {
@@ -745,8 +744,7 @@ Deno.serve(async (req) => {
             if (ytToken) {
               const video = await generateWeatherVideo(weather);
               if (video) {
-                const title = `${weather.city} Weather Today — ${weather.temperature}°F ${weather.condition}`;
-                const desc = caption || `Weather update for ${weather.city}: ${weather.temperature}°F, ${weather.description}`;
+                const title = `${weather.cigenerateSkyBriefTitle(weather.city, weather.temperature, weather.condition, weather.rainChance)     const desc = caption || `Weather update for ${weather.city}: ${weather.temperature}°F, ${weather.description}`;
                 const result = await uploadToYouTubeShorts(ytToken, video.data, title, desc, video.mimeType);
                 if (result) {
                   console.log(`Scheduled post ${post.id}: YouTube Short published, video ID: ${result.videoId}`);
