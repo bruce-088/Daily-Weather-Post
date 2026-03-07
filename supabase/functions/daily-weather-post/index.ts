@@ -447,10 +447,37 @@ async function fetchPexelsVideoUrl(keyword: string, city: string, region: string
     return null;
   }
 
-  // Build location qualifier to avoid wrong-city matches (e.g. "Gainesville" → Rome)
+  // City-specific search keywords for cities that don't return accurate Pexels results
+  const cityKeywords: Record<string, string[]> = {
+    "gainesville": ["university of florida campus", "florida swamp nature", "florida oak trees spanish moss"],
+    "tallahassee": ["florida capitol building", "tallahassee florida trees", "florida panhandle nature"],
+    "jacksonville": ["jacksonville florida bridge", "jacksonville beach florida", "st johns river florida"],
+    "orlando": ["orlando florida lake", "orlando florida downtown", "florida theme park"],
+    "tampa": ["tampa bay florida", "tampa skyline waterfront", "tampa riverwalk"],
+    "miami": ["miami beach ocean", "miami skyline biscayne", "south beach florida"],
+    "st. petersburg": ["st pete florida pier", "st petersburg florida waterfront", "tampa bay sunset"],
+    "fort lauderdale": ["fort lauderdale beach", "fort lauderdale florida canal", "south florida coast"],
+    "naples": ["naples florida beach", "naples pier florida", "gulf of mexico florida"],
+    "sarasota": ["sarasota florida beach", "siesta key florida", "sarasota bay"],
+    "pensacola": ["pensacola beach florida", "emerald coast florida", "pensacola bay"],
+    "daytona beach": ["daytona beach florida", "daytona speedway", "florida atlantic coast"],
+    "ocala": ["ocala florida horses", "florida springs nature", "ocala national forest"],
+  };
+
+  // Build location qualifier to avoid wrong-city matches
   const locationTag = region && region !== city ? `${city} ${region}` : city;
+  const cityLower = city.toLowerCase();
 
   try {
+    // Tier 0: City-specific curated keywords
+    const specificKeywords = cityKeywords[cityLower];
+    if (specificKeywords) {
+      const randomKeyword = specificKeywords[Math.floor(Math.random() * specificKeywords.length)];
+      const specificResult = await searchPexels(randomKeyword);
+      if (specificResult) return specificResult;
+      console.log("No city-specific video for " + city + ", trying skyline");
+    }
+
     // Tier 1: City + state skyline (avoids international false matches)
     if (city) {
       const skylineResult = await searchPexels(locationTag + " skyline");
