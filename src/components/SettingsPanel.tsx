@@ -38,7 +38,7 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
       return;
     }
 
-    localStoragStoragStoragStorage.setItem("tiktok_oauth_state", data.state);
+    localStorage.setItem("tiktok_oauth_state", data.state);
     window.open(data.url, "_blank");
   };
 
@@ -50,7 +50,10 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
 
     if (error || data?.error) {
       toast.error("Failed to start YouTube authorization");
-      rlocalStorage.seStorage.seStorage.seolocaltItem("youtube_oauth_state", data.state);
+      return;
+    }
+
+    localStorage.setItem("youtube_oauth_state", data.state);
     window.open(data.url, "_blank");
   };
 
