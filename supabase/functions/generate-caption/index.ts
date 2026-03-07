@@ -56,7 +56,9 @@ Line 2: Morning forecast in a few words with temp
 Line 3: Afternoon forecast in a few words with temp
 Line 4: Evening forecast in a few words with temp
 Line 5: Rain chance
-Line 6: "What to know:" followed by 2-3 short bullet-style points
+Line 6: If alert_line is provided (not "None"), include it as a short calm alert line
+Line 7: "What to know:" followed by 2-3 short bullet-style points
+Line 8: Tomorrow preview line (use the provided tomorrow_preview)
 Final line: A habit-forming CTA using the provided dynamic_handle (e.g. "Follow @SkyBriefGNV for tomorrow's forecast" or "Check back tomorrow on @SkyBriefMiami")
 
 STYLE RULES:
