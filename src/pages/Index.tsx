@@ -17,6 +17,7 @@ import {
   CalendarClock,
   MessageSquare,
   RefreshCw,
+  Eye,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { NotificationBell } from "@/components/NotificationBell";
