@@ -23,6 +23,9 @@ interface WeatherResponse {
   sunrise: string;
   sunset: string;
   stateOrRegion: string;
+  tomorrowHigh: number | null;
+  tomorrowLow: number | null;
+  tomorrowCondition: string | null;
 }
 
 async function fetchWeatherData(city: string, apiKey: string): Promise<WeatherResponse> {
