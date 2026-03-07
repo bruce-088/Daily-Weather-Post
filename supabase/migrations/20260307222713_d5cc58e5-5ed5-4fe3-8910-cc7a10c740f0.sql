@@ -1,0 +1,1 @@
+ALTER TABLE public.weather_settings ADD COLUMN linkedin_organization_urn text DEFAULT NULL;
