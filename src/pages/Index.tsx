@@ -343,6 +343,7 @@ const Index = () => {
                   saving={saving}
                   tiktokConnected={tiktokConnected}
                   youtubeConnected={youtubeConnected}
+                  twitterConnected={twitterConnected}
                 />
               </aside>
             </div>
