@@ -65,7 +65,8 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
       return;
     }
 
-    if (data.oauth_tolocalStorage.sealStorage.seslocalocaltItem("twitter_oauth_token_secret", data.oauth_token_secret);
+    if (data.oauth_token_secret) {
+      localStorage.setItem("twitter_oauth_token_secret", data.oauth_token_secret);
     }
     window.open(data.url, "_blank");
   };
