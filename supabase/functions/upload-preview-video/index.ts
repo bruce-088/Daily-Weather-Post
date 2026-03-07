@@ -1,93 +1,12 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { postToPlatform } from "../_shared/platform-adapter.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
-
-async function getValidYouTubeToken(supabase: any, userId: string): Promise<string | null> {
-  const { data: settings } = await supabase
-    .from("weather_settings")
-    .select("youtube_access_token, youtube_refresh_token, youtube_token_expires_at")
-    .eq("user_id", userId)
-    .single();
-
-  if (!settings?.youtube_access_token) return null;
-
-  const expiresAt = settings.youtube_token_expires_at ? new Date(settings.youtube_token_expires_at) : null;
-  if (expiresAt && expiresAt > new Date(Date.now() + 60000)) {
-    return settings.youtube_access_token;
-  }
-
-  if (!settings.youtube_refresh_token) return null;
-
-  const clientId = Deno.env.get("YOUTUBE_CLIENT_ID");
-  const clientSecret = Deno.env.get("YOUTUBE_CLIENT_SECRET");
-  if (!clientId || !clientSecret) return null;
-
-  const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
-      refresh_token: settings.youtube_refresh_token,
-      grant_type: "refresh_token",
-    }),
-  });
-
-  if (!tokenRes.ok) return null;
-
-  const tokenData = await tokenRes.json();
-  const newToken = tokenData.access_token;
-  const newExpiry = new Date(Date.now() + (tokenData.expires_in || 3600) * 1000).toISOString();
-
-  await supabase.from("weather_settings").update({
-    youtube_access_token: newToken,
-    youtube_token_expires_at: newExpiry,
-  }).eq("user_id", userId);
-
-  return newToken;
-}
-
-async function uploadToYouTubeShorts(
-  accessToken: string, videoData: Uint8Array, title: string, description: string, mimeType = "video/mp4"
-): Promise<{ videoId: string } | null> {
-  const metadata = {
-    snippet: { title, description, categoryId: "28", tags: ["weather", "shorts"] },
-    status: { privacyStatus: "public", selfDeclaredMadeForKids: false },
-  };
-
-  const initRes = await fetch(
-    "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json; charset=UTF-8",
-        "X-Upload-Content-Length": String(videoData.byteLength),
-        "X-Upload-Content-Type": mimeType,
-      },
-      body: JSON.stringify(metadata),
-    }
-  );
-
-  const uploadUrl = initRes.headers.get("Location");
-  if (!uploadUrl) return null;
-
-  const uploadRes = await fetch(uploadUrl, {
-    method: "PUT",
-    headers: { "Content-Type": mimeType, "Content-Length": String(videoData.byteLength) },
-    body: videoData,
-  });
-
-  if (!uploadRes.ok) return null;
-
-  const result = await uploadRes.json();
-  return { videoId: result.id };
-}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -132,28 +51,23 @@ Deno.serve(async (req) => {
     const videoData = new Uint8Array(await videoBlob.arrayBuffer());
     console.log(`Downloaded preview video: ${videoData.byteLength} bytes`);
 
-    // Get YouTube token
-    const ytToken = await getValidYouTubeToken(supabase, userId);
-    if (!ytToken) {
-      throw new Error("No valid YouTube token found. Please reconnect YouTube in Settings.");
-    }
-
-    // Upload to YouTube
-    const result = await uploadToYouTubeShorts(
-      ytToken,
+    // Upload to YouTube via shared adapter
+    const result = await postToPlatform(
+      "youtube",
+      supabase,
+      userId,
       videoData,
       title || "Weather Update",
       description || caption || "Daily weather update",
     );
 
-    if (!result) {
-      throw new Error("YouTube upload failed");
+    if (!result.success) {
+      throw new Error(result.error || "YouTube upload failed");
     }
 
-    console.log("YouTube Short published from preview! Video ID:", result.videoId);
+    console.log("YouTube Short published from preview! Video ID:", result.id);
 
     // Log to post history
-    // Extract city from title (format: "City Weather Today — ...")
     const city = title?.split(" Weather")?.[0] || "Unknown";
     await supabase.from("post_history").insert({
       status: "success",
@@ -169,8 +83,8 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        youtube_video_id: result.videoId,
-        message: `YouTube Short published! Video ID: ${result.videoId}`,
+        youtube_video_id: result.id,
+        message: `YouTube Short published! Video ID: ${result.id}`,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
