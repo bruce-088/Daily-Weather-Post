@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { verifyUser } from "../_shared/auth-helpers.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,9 +18,9 @@ Deno.serve(async (req) => {
   const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
   try {
-    const { action, code, redirect_uri, user_id } = await req.json();
+    const { action, code, redirect_uri } = await req.json();
 
-    // Step 1: Generate the TikTok authorization URL
+    // get_auth_url doesn't need auth — user hasn't connected yet
     if (action === "get_auth_url") {
       const csrfState = crypto.randomUUID();
       const params = new URLSearchParams({
@@ -39,11 +40,15 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Step 2: Exchange authorization code for access token
+    // All other actions require authenticated user
+    const auth = await verifyUser(req);
+    if (auth.response) return auth.response;
+    const userId = auth.userId;
+
     if (action === "exchange_code") {
-      if (!code || !redirect_uri || !user_id) {
+      if (!code || !redirect_uri) {
         return new Response(
-          JSON.stringify({ error: "Missing code, redirect_uri, or user_id" }),
+          JSON.stringify({ error: "Missing code or redirect_uri" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -72,9 +77,7 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Store tokens in weather_settings
       const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
       const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000).toISOString();
 
       const { error: updateError } = await supabaseAdmin
@@ -85,14 +88,13 @@ Deno.serve(async (req) => {
           tiktok_open_id: tokenData.open_id,
           tiktok_token_expires_at: expiresAt,
         })
-        .eq("user_id", user_id);
+        .eq("user_id", userId);
 
       if (updateError) {
-        // If no row exists yet, insert one
         const { error: insertError } = await supabaseAdmin
           .from("weather_settings")
           .insert({
-            user_id: user_id,
+            user_id: userId,
             tiktok_access_token: tokenData.access_token,
             tiktok_refresh_token: tokenData.refresh_token,
             tiktok_open_id: tokenData.open_id,
@@ -109,29 +111,17 @@ Deno.serve(async (req) => {
       }
 
       return new Response(
-        JSON.stringify({
-          success: true,
-          open_id: tokenData.open_id,
-          scope: tokenData.scope,
-        }),
+        JSON.stringify({ success: true, open_id: tokenData.open_id, scope: tokenData.scope }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Step 3: Refresh token
     if (action === "refresh_token") {
-      if (!user_id) {
-        return new Response(
-          JSON.stringify({ error: "Missing user_id" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
       const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
       const { data: settings } = await supabaseAdmin
         .from("weather_settings")
         .select("tiktok_refresh_token")
-        .eq("user_id", user_id)
+        .eq("user_id", userId)
         .single();
 
       if (!settings?.tiktok_refresh_token) {
@@ -171,7 +161,7 @@ Deno.serve(async (req) => {
           tiktok_open_id: refreshData.open_id,
           tiktok_token_expires_at: expiresAt,
         })
-        .eq("user_id", user_id);
+        .eq("user_id", userId);
 
       return new Response(
         JSON.stringify({ success: true }),
