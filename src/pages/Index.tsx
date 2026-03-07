@@ -227,9 +227,9 @@ const Index = () => {
               <Send size={14} />
               {posting ? "Posting..." : "Post Now"}
             </Button>
-            {settings.autoPost && (
+            {(settings.autoPostMorning || settings.autoPostAfternoon || settings.autoPostEvening) && (
               <Badge className="bg-accent/20 text-accent border-accent/30 text-[10px] gap-1">
-                <Zap size={10} /> Auto {settings.postTime}
+                <Zap size={10} /> Auto 3x/day
               </Badge>
             )}
             <Button size="sm" variant="ghost" onClick={signOut} className="gap-1.5 text-xs text-muted-foreground">
