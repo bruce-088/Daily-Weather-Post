@@ -349,9 +349,10 @@ async function fetchPexelsVideoUrl(keyword: string): Promise<string | null> {
   }
 }
 
-function buildCreatomateSource(weather: WeatherResponse): object {
+function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | null): object {
   const now = new Date();
   const dateStr = now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+  const theme = getWeatherTheme(weather.condition);
   const theme = getWeatherTheme(weather.condition);
 
   const mornLabel = weather.morningTemp != null ? `${weather.morningTemp}°` : "—";
