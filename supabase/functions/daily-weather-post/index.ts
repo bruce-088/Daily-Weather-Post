@@ -447,27 +447,42 @@ async function fetchPexelsVideoUrl(keyword: string, city: string, region: string
     return null;
   }
 
+  // Build location qualifier to avoid wrong-city matches (e.g. "Gainesville" → Rome)
+  const locationTag = region && region !== city ? `${city} ${region}` : city;
+
   try {
-    // Tier 1: Local landmark/skyline
+    // Tier 1: City + state skyline (avoids international false matches)
     if (city) {
-      const landmarkResult = await searchPexels(city + " skyline landmark");
-      if (landmarkResult) return landmarkResult;
-      console.log("No landmark video for " + city + ", trying city + weather");
+      const skylineResult = await searchPexels(locationTag + " skyline");
+      if (skylineResult) return skylineResult;
+      console.log("No skyline video for " + locationTag + ", trying city + weather");
     }
-    // Tier 2: City + weather condition
+    // Tier 2: City + state + weather condition
     if (city) {
-      const cityResult = await searchPexels(city + " " + keyword);
+      const cityResult = await searchPexels(locationTag + " " + keyword);
       if (cityResult) return cityResult;
-      console.log("No Pexels videos for city + keyword, trying region fallback");
+      console.log("No Pexels videos for " + locationTag + " " + keyword + ", trying region");
     }
-    // Tier 3: Region + weather condition
+    // Tier 3: Region/state + weather condition
     if (region && region !== city) {
       const regionResult = await searchPexels(region + " " + keyword);
       if (regionResult) return regionResult;
-      console.log("No Pexels videos for region, falling back to generic");
+      console.log("No Pexels videos for " + region + ", trying nature fallback");
     }
-    // Tier 4: Generic weather keyword
-    return await searchPexels(keyword);
+    // Tier 4: Nature-based weather (avoids city-name collisions entirely)
+    const natureFallbacks: Record<string, string> = {
+      sunny: "sunshine blue sky nature",
+      clear: "clear sky sunrise nature",
+      cloudy: "cloudy sky timelapse",
+      rain: "rain drops nature",
+      storm: "thunderstorm lightning",
+      snow: "snowfall winter nature",
+      fog: "fog morning nature",
+      wind: "windy trees nature",
+    };
+    const conditionKey = Object.keys(natureFallbacks).find(k => keyword.toLowerCase().includes(k));
+    const fallbackQuery = conditionKey ? natureFallbacks[conditionKey] : keyword + " weather nature";
+    return await searchPexels(fallbackQuery);
   } catch (err) { console.error("Pexels fetch error:", err); return null; }
 }
 
