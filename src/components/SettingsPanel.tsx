@@ -22,7 +22,7 @@ interface SettingsPanelProps {
   linkedinConnected?: boolean;
 }
 
-export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, saving, tiktokConnected, youtubeConnected, twitterConnected }: SettingsPanelProps) {
+export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, saving, tiktokConnected, youtubeConnected, twitterConnected, linkedinConnected }: SettingsPanelProps) {
   const update = (key: keyof AutomationSettings, value: string | boolean) => {
     onUpdate({ ...settings, [key]: value });
   };
