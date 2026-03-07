@@ -438,7 +438,8 @@ async function fetchPexelsVideoUrl(keyword: string, city: string, region: string
     if (!videos.length) return null;
     const video = videos[Math.floor(Math.random() * videos.length)];
     const files = video.video_files || [];
-    const hdFile = files.find((f: any) => f.quality === "hd" && f.width <= 1080)
+    const hdFile = files.find((f: any) => f.quality === "hd" && f.width >= 1440)
+      || files.find((f: any) => f.quality === "hd" && f.width >= 1080)
       || files.find((f: any) => f.quality === "hd")
       || files.find((f: any) => f.quality === "sd")
       || files[0];
