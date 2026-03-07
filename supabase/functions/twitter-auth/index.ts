@@ -89,7 +89,7 @@ Deno.serve(async (req) => {
 
     // get_auth_url doesn't need auth
     if (action === "get_auth_url") {
-      const requestTokenUrl = "https:" + "//api.twitter.com/oauth/request_tokenitter.com/oauth/request_token";
+      const requestTokenUrl = "https:" + "//api.twitter.com/oauth/request_tokenitter.com/oauth/request_tokenitter.com/oauth/request_token";
       const callbackUrl = redirect_uri || "oob";
       const extraParams: Record<string, string> = { oauth_callback: callbackUrl };
 
@@ -117,10 +117,7 @@ Deno.serve(async (req) => {
 
       if (!oauthToken) {
         return new Response(JSON.stringify({ error: "No oauth_token returned" }), {
-          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-https:" + "//api.twitter.com/oauth/authorize?oauth_toktps://api.https://api.twitteren=" + oauthToken;
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/https:" + "//api.twitter.com/oauth/authorize?oauth_tokpi.twitter.com/oauth/authorize?oauth_toktps://api.https://api.twitteren=" + oauthToken;
       return new Response(
         JSON.stringify({ url: authorizeUrl, oauth_token: oauthToken, oauth_token_secret: oauthTokenSecret }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
@@ -139,8 +136,7 @@ https:" + "//api.twitter.com/oauth/authorize?oauth_toktps://api.https://api.twit
         });
       }
 
-      const oauth_token_secret = body.oauth_token_secret || "";
-      const accessTokenUrl = "twitterttps://api.https://api.twittertoken";
+      const oauth_token_secret = body.oauth_token_secrhttps:" + "//api.twitter.com/oauth/access_= "twitterttps://api.https://api.twittertoken";
       const extraParams: Record<string, string> = { oauth_verifier };
 
       const authHeader = await buildOAuthHeader(
