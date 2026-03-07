@@ -124,11 +124,17 @@ export type Database = {
       }
       weather_settings: {
         Row: {
+          afternoon_post_time: string
           auto_post: boolean
+          auto_post_afternoon: boolean
+          auto_post_evening: boolean
+          auto_post_morning: boolean
           city: string
           created_at: string
+          evening_post_time: string
           id: string
           instagram_api_key: string | null
+          morning_post_time: string
           post_time: string
           state: string | null
           tiktok_access_token: string | null
@@ -144,11 +150,17 @@ export type Database = {
           youtube_token_expires_at: string | null
         }
         Insert: {
+          afternoon_post_time?: string
           auto_post?: boolean
+          auto_post_afternoon?: boolean
+          auto_post_evening?: boolean
+          auto_post_morning?: boolean
           city?: string
           created_at?: string
+          evening_post_time?: string
           id?: string
           instagram_api_key?: string | null
+          morning_post_time?: string
           post_time?: string
           state?: string | null
           tiktok_access_token?: string | null
@@ -164,11 +176,17 @@ export type Database = {
           youtube_token_expires_at?: string | null
         }
         Update: {
+          afternoon_post_time?: string
           auto_post?: boolean
+          auto_post_afternoon?: boolean
+          auto_post_evening?: boolean
+          auto_post_morning?: boolean
           city?: string
           created_at?: string
+          evening_post_time?: string
           id?: string
           instagram_api_key?: string | null
+          morning_post_time?: string
           post_time?: string
           state?: string | null
           tiktok_access_token?: string | null
