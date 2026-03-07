@@ -286,7 +286,6 @@ function buildCreatomateSource(weather: WeatherResponse): object {
     ? `Evening: ${weather.eveningTemp}°F — ${weather.eveningCondition}` : "Evening: —";
 
   return {
-    output_format: "mp4",
     width: 1080,
     height: 1920,
     duration: 7,
