@@ -12,14 +12,14 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { city, state } = await req.json();
+    const { city, state: inputState } = await req.json();
     if (!city) throw new Error("City is required");
 
     const apiKey = Deno.env.get("OPENWEATHER_API_KEY");
     if (!apiKey) throw new Error("OpenWeatherMap API key not configured");
 
     // Geocode — include state for more accurate results
-    const geoQuery = state ? `${city},${state}` : city;
+    const geoQuery = inputState ? (city + "," + inputState) : city;
     const geoRes = await fetch(
       `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(geoQuery)}&limit=1&appid=${apiKey}`
     );
