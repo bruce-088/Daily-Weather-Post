@@ -26,12 +26,12 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { action, code, redirect_uri, state } = await req.json();
+    const { action, code, redirect_uri, state, organization_urn } = await req.json();
 
     // --- Generate Auth URL ---
     if (action === "get_auth_url") {
       const oauthState = crypto.randomUUID();
-      const scopes = "openid profile w_member_social";
+      const scopes = "openid profile w_member_social r_organization_social w_organization_social";
       const url = new URL("https://www.linkedin.com/oauth/v2/authorization");
       url.searchParams.set("response_type", "code");
       url.searchParams.set("client_id", clientId);
@@ -94,6 +94,33 @@ Deno.serve(async (req) => {
         );
       }
 
+      // Fetch administered organizations
+      let organizations: Array<{ urn: string; name: string }> = [];
+      try {
+        const orgsRes = await fetch(
+          "https://api.linkedin.com/rest/organizationAcls?q=roleAssignee&role=ADMINISTRATOR&projection=(elements*(organization~(localizedName),organization))",
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "LinkedIn-Version": "202401",
+              "X-Restli-Protocol-Version": "2.0.0",
+            },
+          },
+        );
+        const orgsData = await orgsRes.json();
+        console.log("LinkedIn orgs response:", JSON.stringify(orgsData));
+
+        if (orgsData.elements) {
+          organizations = orgsData.elements.map((el: any) => {
+            const orgUrn = el.organization;
+            const name = el["organization~"]?.localizedName || orgUrn;
+            return { urn: orgUrn, name };
+          });
+        }
+      } catch (orgErr) {
+        console.error("Failed to fetch LinkedIn organizations:", orgErr);
+      }
+
       // Store tokens
       const supabase = createClient(supabaseUrl, serviceRoleKey);
       const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
@@ -105,6 +132,8 @@ Deno.serve(async (req) => {
           linkedin_refresh_token: refreshToken,
           linkedin_token_expires_at: expiresAt,
           linkedin_person_urn: personUrn,
+          // If only one org, auto-select it
+          ...(organizations.length === 1 ? { linkedin_organization_urn: organizations[0].urn } : {}),
         })
         .eq("user_id", auth.userId);
 
@@ -117,7 +146,42 @@ Deno.serve(async (req) => {
       }
 
       return new Response(
-        JSON.stringify({ success: true, person_urn: personUrn }),
+        JSON.stringify({
+          success: true,
+          person_urn: personUrn,
+          organizations,
+        }),
+        { headers: corsHeaders },
+      );
+    }
+
+    // --- Set Organization URN ---
+    if (action === "set_organization") {
+      const auth = await verifyUser(req);
+      if (auth.error) return auth.response!;
+
+      if (!organization_urn) {
+        return new Response(
+          JSON.stringify({ error: "organization_urn is required" }),
+          { status: 400, headers: corsHeaders },
+        );
+      }
+
+      const supabase = createClient(supabaseUrl, serviceRoleKey);
+      const { error: dbError } = await supabase
+        .from("weather_settings")
+        .update({ linkedin_organization_urn: organization_urn })
+        .eq("user_id", auth.userId);
+
+      if (dbError) {
+        return new Response(
+          JSON.stringify({ error: "Failed to save organization" }),
+          { status: 500, headers: corsHeaders },
+        );
+      }
+
+      return new Response(
+        JSON.stringify({ success: true }),
         { headers: corsHeaders },
       );
     }
