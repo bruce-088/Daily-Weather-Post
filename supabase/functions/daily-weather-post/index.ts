@@ -353,7 +353,6 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
   const now = new Date();
   const dateStr = now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
   const theme = getWeatherTheme(weather.condition);
-  const theme = getWeatherTheme(weather.condition);
 
   const mornLabel = weather.morningTemp != null ? `${weather.morningTemp}°` : "—";
   const mornCond = weather.morningCondition ?? "";
