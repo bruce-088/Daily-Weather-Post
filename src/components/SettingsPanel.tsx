@@ -3,7 +3,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Clock, MapPin, Instagram, Video, RefreshCw, Save, CheckCircle, ExternalLink, Youtube, Sun, Sunset, Moon } from "lucide-react";
+import { Clock, MapPin, Instagram, Video, RefreshCw, Save, CheckCircle, ExternalLink, Youtube, Sun, Sunset, Moon, Twitter } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -18,9 +18,10 @@ interface SettingsPanelProps {
   saving: boolean;
   tiktokConnected?: boolean;
   youtubeConnected?: boolean;
+  twitterConnected?: boolean;
 }
 
-export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, saving, tiktokConnected, youtubeConnected }: SettingsPanelProps) {
+export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, saving, tiktokConnected, youtubeConnected, twitterConnected }: SettingsPanelProps) {
   const update = (key: keyof AutomationSettings, value: string | boolean) => {
     onUpdate({ ...settings, [key]: value });
   };
@@ -52,6 +53,24 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
     }
 
     sessionStorage.setItem("youtube_oauth_state", data.state);
+    window.location.href = data.url;
+  };
+
+  const handleConnectTwitter = async () => {
+    const redirectUri = `${window.location.origin}/twitter/callback`;
+    const { data, error } = await supabase.functions.invoke("twitter-auth", {
+      body: { action: "get_auth_url", redirect_uri: redirectUri },
+    });
+
+    if (error || data?.error) {
+      toast.error("Failed to start Twitter authorization");
+      return;
+    }
+
+    // Store the request token secret for the callback exchange
+    if (data.oauth_token_secret) {
+      sessionStorage.setItem("twitter_oauth_token_secret", data.oauth_token_secret);
+    }
     window.location.href = data.url;
   };
 
@@ -145,6 +164,30 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
               </Badge>
             ) : (
               <Button size="sm" variant="outline" onClick={handleConnectYouTube} className="gap-1.5">
+                <ExternalLink size={12} /> Connect
+              </Button>
+            )}
+          </div>
+
+          {/* Twitter/X OAuth */}
+          <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/30 border border-border/30">
+            <div className="flex items-center gap-3">
+              <div className="h-8 w-8 rounded-md bg-foreground/10 flex items-center justify-center">
+                <Twitter size={16} />
+              </div>
+              <div>
+                <p className="text-sm font-medium">Twitter / X</p>
+                <p className="text-xs text-muted-foreground">
+                  {twitterConnected ? "Connected" : "Not connected"}
+                </p>
+              </div>
+            </div>
+            {twitterConnected ? (
+              <Badge variant="outline" className="gap-1 text-xs border-primary/30 text-primary">
+                <CheckCircle size={12} /> Connected
+              </Badge>
+            ) : (
+              <Button size="sm" variant="outline" onClick={handleConnectTwitter} className="gap-1.5">
                 <ExternalLink size={12} /> Connect
               </Button>
             )}

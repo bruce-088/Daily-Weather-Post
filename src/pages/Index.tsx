@@ -59,6 +59,7 @@ const Index = () => {
   const [settings, setSettings] = useState<AutomationSettings>(DEFAULT_SETTINGS);
   const [tiktokConnected, setTiktokConnected] = useState(false);
   const [youtubeConnected, setYoutubeConnected] = useState(false);
+  const [twitterConnected, setTwitterConnected] = useState(false);
   const [saving, setSaving] = useState(false);
   const [posting, setPosting] = useState(false);
   const [posts, setPosts] = useState<PostHistoryItem[]>([]);
@@ -112,6 +113,7 @@ const Index = () => {
         setSettings(result.settings);
         setTiktokConnected(result.tiktokConnected);
         setYoutubeConnected(result.youtubeConnected);
+        setTwitterConnected(result.twitterConnected);
       }
       setSettingsLoaded(true);
     });
@@ -341,6 +343,7 @@ const Index = () => {
                   saving={saving}
                   tiktokConnected={tiktokConnected}
                   youtubeConnected={youtubeConnected}
+                  twitterConnected={twitterConnected}
                 />
               </aside>
             </div>
@@ -397,6 +400,7 @@ const Index = () => {
                 saving={saving}
                 tiktokConnected={tiktokConnected}
                 youtubeConnected={youtubeConnected}
+                twitterConnected={twitterConnected}
               />
             </div>
           </TabsContent>
