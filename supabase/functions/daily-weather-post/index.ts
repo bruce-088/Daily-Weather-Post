@@ -422,6 +422,7 @@ function getTomorrowPreview(weather: WeatherResponse): string {
   return "Tomorrow: " + trend + " and " + c.toLowerCase();
 }
 
+async function fetchPexelsVideoUrl(keyword: string, city: string, region: string): Promise<string | null> {
   const pexelsKey = Deno.env.get("PEXELS_API_KEY");
   if (!pexelsKey) { console.log("PEXELS_API_KEY not configured, skipping stock video"); return null; }
 
