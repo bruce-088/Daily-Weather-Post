@@ -44,7 +44,6 @@ const TwitterCallback = () => {
           oauth_token: oauthToken,
           oauth_verifier: oauthVerifier,
           oauth_token_secret: oauthTokenSecret,
-          user_id: user.id,
         },
       });
 

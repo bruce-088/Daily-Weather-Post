@@ -40,7 +40,6 @@ const TikTokCallback = () => {
           action: "exchange_code",
           code,
           redirect_uri: `${window.location.origin}/tiktok/callback`,
-          user_id: user.id,
         },
       });
 

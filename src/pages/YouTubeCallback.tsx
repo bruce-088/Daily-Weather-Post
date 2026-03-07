@@ -40,7 +40,6 @@ const YouTubeCallback = () => {
           action: "exchange_code",
           code,
           redirect_uri: `${window.location.origin}/youtube/callback`,
-          user_id: user.id,
         },
       });
 

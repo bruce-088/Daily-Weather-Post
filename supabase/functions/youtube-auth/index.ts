@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { verifyUser } from "../_shared/auth-helpers.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -18,10 +19,10 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { action, code, redirect_uri, user_id } = body;
-    console.log("YouTube auth action:", action, "user_id:", user_id, "redirect_uri:", redirect_uri);
+    const { action, code, redirect_uri } = body;
+    console.log("YouTube auth action:", action);
 
-    // Step 1: Generate the Google OAuth authorization URL
+    // get_auth_url doesn't need auth
     if (action === "get_auth_url") {
       const csrfState = crypto.randomUUID();
       const params = new URLSearchParams({
@@ -43,11 +44,15 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Step 2: Exchange authorization code for access token
+    // All other actions require authenticated user
+    const auth = await verifyUser(req);
+    if (auth.response) return auth.response;
+    const userId = auth.userId;
+
     if (action === "exchange_code") {
-      if (!code || !redirect_uri || !user_id) {
+      if (!code || !redirect_uri) {
         return new Response(
-          JSON.stringify({ error: "Missing code, redirect_uri, or user_id" }),
+          JSON.stringify({ error: "Missing code or redirect_uri" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -76,7 +81,6 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Fetch channel ID
       let channelId = null;
       try {
         const channelRes = await fetch(
@@ -92,11 +96,10 @@ Deno.serve(async (req) => {
       const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
       const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000).toISOString();
 
-      // Check if user has existing settings
       const { data: existing } = await supabaseAdmin
         .from("weather_settings")
         .select("id")
-        .eq("user_id", user_id)
+        .eq("user_id", userId)
         .maybeSingle();
 
       let dbError;
@@ -109,13 +112,13 @@ Deno.serve(async (req) => {
             youtube_channel_id: channelId,
             youtube_token_expires_at: expiresAt,
           })
-          .eq("user_id", user_id);
+          .eq("user_id", userId);
         dbError = error;
       } else {
         const { error } = await supabaseAdmin
           .from("weather_settings")
           .insert({
-            user_id: user_id,
+            user_id: userId,
             youtube_access_token: tokenData.access_token,
             youtube_refresh_token: tokenData.refresh_token || null,
             youtube_channel_id: channelId,
@@ -123,8 +126,6 @@ Deno.serve(async (req) => {
           });
         dbError = error;
       }
-
-      console.log("YouTube tokens save result:", JSON.stringify({ existing: !!existing, dbError }));
 
       if (dbError) {
         console.error("Failed to save YouTube tokens:", JSON.stringify(dbError));
@@ -140,20 +141,12 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Step 3: Refresh token
     if (action === "refresh_token") {
-      if (!user_id) {
-        return new Response(
-          JSON.stringify({ error: "Missing user_id" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
       const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
       const { data: settings } = await supabaseAdmin
         .from("weather_settings")
         .select("youtube_refresh_token")
-        .eq("user_id", user_id)
+        .eq("user_id", userId)
         .single();
 
       if (!settings?.youtube_refresh_token) {
@@ -191,7 +184,7 @@ Deno.serve(async (req) => {
           youtube_access_token: refreshData.access_token,
           youtube_token_expires_at: expiresAt,
         })
-        .eq("user_id", user_id);
+        .eq("user_id", userId);
 
       return new Response(
         JSON.stringify({ success: true }),

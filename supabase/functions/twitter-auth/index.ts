@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { verifyUser } from "../_shared/auth-helpers.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -77,10 +78,10 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { action, oauth_token, oauth_verifier, redirect_uri, user_id } = body;
+    const { action, oauth_token, oauth_verifier, redirect_uri } = body;
     console.log("Twitter auth action:", action);
 
-    // Step 1: Get request token and return authorize URL
+    // get_auth_url doesn't need auth
     if (action === "get_auth_url") {
       const requestTokenUrl = "https://api.x.com/oauth/request_token";
       const callbackUrl = redirect_uri || "oob";
@@ -121,10 +122,14 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Step 2: Exchange request token for access token
+    // All other actions require authenticated user
+    const auth = await verifyUser(req);
+    if (auth.response) return auth.response;
+    const userId = auth.userId;
+
     if (action === "exchange_token") {
-      if (!oauth_token || !oauth_verifier || !user_id) {
-        return new Response(JSON.stringify({ error: "Missing oauth_token, oauth_verifier, or user_id" }), {
+      if (!oauth_token || !oauth_verifier) {
+        return new Response(JSON.stringify({ error: "Missing oauth_token or oauth_verifier" }), {
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
@@ -167,13 +172,12 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Save to weather_settings
       const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
       const { data: existing } = await supabase
         .from("weather_settings")
         .select("id")
-        .eq("user_id", user_id)
+        .eq("user_id", userId)
         .single();
 
       const tokenPayload = {
@@ -183,12 +187,12 @@ Deno.serve(async (req) => {
       };
 
       if (existing) {
-        await supabase.from("weather_settings").update(tokenPayload).eq("user_id", user_id);
+        await supabase.from("weather_settings").update(tokenPayload).eq("user_id", userId);
       } else {
-        await supabase.from("weather_settings").insert({ ...tokenPayload, user_id });
+        await supabase.from("weather_settings").insert({ ...tokenPayload, user_id: userId });
       }
 
-      console.log("Twitter connected for user:", user_id, "screen_name:", screenName);
+      console.log("Twitter connected for user:", userId, "screen_name:", screenName);
       return new Response(
         JSON.stringify({ success: true, screen_name: screenName }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
