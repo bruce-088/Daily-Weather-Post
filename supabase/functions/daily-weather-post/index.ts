@@ -119,6 +119,38 @@ async function fetchWeatherData(city: string, apiKey: string): Promise<WeatherRe
   };
 }
 
+// --- SkyBrief Title Generator ---
+
+function getWeatherEmoji(condition: string): string {
+  const c = condition.toLowerCase();
+  if (c.includes("thunder") || c.includes("storm")) return "⛈";
+  if (c.includes("snow") || c.includes("sleet") || c.includes("blizzard")) return "❄️";
+  if (c.includes("rain") || c.includes("drizzle") || c.includes("shower")) return "🌧";
+  if (c.includes("fog") || c.includes("mist") || c.includes("haze")) return "🌫";
+  if (c.includes("cloud") || c.includes("overcast")) return "☁️";
+  if (c.includes("partly") || c.includes("scatter")) return "🌤";
+  return "☀️";
+}
+
+function generateSkyBriefTitle(city: string, temp: number, condition: string, rainChance?: number): string {
+  const emoji = getWeatherEmoji(condition);
+  const isStorm = /thunder|storm|tornado|hurricane/i.test(condition);
+
+  if (rainChance != null && rainChance >= 60 && isStorm) {
+    return `Storms in ${city}? ⛈ Weather Update`;
+  }
+
+  const variant = new Date().getDay() % 3;
+  let title: string;
+  switch (variant) {
+    case 0: title = `${city} Weather Today ${emoji} | ${temp}° ${condition}`; break;
+    case 1: title = `Today's Weather in ${city} ${emoji} Quick Forecast`; break;
+    default: title = `${city} Forecast Today ${emoji} Weather Update`; break;
+  }
+
+  return title.length > 60 ? title.substring(0, 57) + "..." : title;
+}
+
 // --- Dynamic Handle System ---
 
 const HANDLE_MAP: Record<string, string> = {
@@ -299,7 +331,7 @@ async function uploadToYouTubeShorts(
 ): Promise<{ videoId: string } | null> {
   console.log("Uploading to YouTube Shorts: " + title + " (" + videoData.byteLength + " bytes)");
 
-  const shortTitle = (title.length > 95 ? title.substring(0, 95) : title) + " #Shorts";
+  const shortTitle = title.length > 100 ? title.substring(0, 100) : title;
 
   const initRes = await fetch(
     "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
@@ -869,7 +901,7 @@ Deno.serve(async (req) => {
 
         if (ytToken) {
           if (video) {
-            const title = weather.city + " Weather Today \u2014 " + weather.temperature + "\u00B0F " + weather.condition;
+            const title = generateSkyBriefTitle(weather.city, weather.temperature, weather.condition, weather.rainChance);
             const desc = caption || "Weather update for " + weather.city + ": " + weather.temperature + "\u00B0F, " + weather.description;
             const result = await uploadToYouTubeShorts(ytToken, video.data, title, desc, video.mimeType);
 
