@@ -3,8 +3,14 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
+interface LinkedInOrg {
+  urn: string;
+  name: string;
+}
+
 export default function LinkedInCallback() {
-  const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
+  const [status, setStatus] = useState<"loading" | "select_org" | "success" | "error">("loading");
+  const [organizations, setOrganizations] = useState<LinkedInOrg[]>([]);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
@@ -50,6 +56,14 @@ export default function LinkedInCallback() {
         return;
       }
 
+      // If multiple organizations returned, let user pick
+      if (data?.organizations && data.organizations.length > 1) {
+        setOrganizations(data.organizations);
+        setStatus("select_org");
+        return;
+      }
+
+      // Single org or no orgs — already auto-saved
       setStatus("success");
       toast.success("LinkedIn connected successfully!");
       setTimeout(() => navigate("/"), 1500);
@@ -58,14 +72,47 @@ export default function LinkedInCallback() {
     connect();
   }, []);
 
+  const handleSelectOrg = async (org: LinkedInOrg) => {
+    const { error } = await supabase.functions.invoke("linkedin-auth", {
+      body: { action: "set_organization", organization_urn: org.urn },
+    });
+
+    if (error) {
+      toast.error("Failed to save organization selection");
+      return;
+    }
+
+    setStatus("success");
+    toast.success(`LinkedIn connected to ${org.name}!`);
+    setTimeout(() => navigate("/"), 1500);
+  };
+
   return (
     <div className="dark min-h-screen bg-background flex items-center justify-center">
-      <div className="text-center space-y-4">
+      <div className="text-center space-y-4 max-w-md px-4">
         {status === "loading" && (
           <>
             <div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full mx-auto" />
             <p className="text-muted-foreground">Connecting LinkedIn…</p>
           </>
+        )}
+        {status === "select_org" && (
+          <div className="space-y-4">
+            <h2 className="text-lg font-semibold text-foreground">Select Company Page</h2>
+            <p className="text-sm text-muted-foreground">Choose which LinkedIn Company Page to post to:</p>
+            <div className="space-y-2">
+              {organizations.map((org) => (
+                <button
+                  key={org.urn}
+                  onClick={() => handleSelectOrg(org)}
+                  className="w-full p-3 rounded-lg border border-border/50 bg-card hover:bg-accent text-left transition-colors"
+                >
+                  <p className="text-sm font-medium text-foreground">{org.name}</p>
+                  <p className="text-xs text-muted-foreground">{org.urn}</p>
+                </button>
+              ))}
+            </div>
+          </div>
         )}
         {status === "success" && <p className="text-primary font-medium">LinkedIn connected!</p>}
         {status === "error" && <p className="text-destructive font-medium">Connection failed</p>}

@@ -135,6 +135,7 @@ export type Database = {
           id: string
           instagram_api_key: string | null
           linkedin_access_token: string | null
+          linkedin_organization_urn: string | null
           linkedin_person_urn: string | null
           linkedin_refresh_token: string | null
           linkedin_token_expires_at: string | null
@@ -168,6 +169,7 @@ export type Database = {
           id?: string
           instagram_api_key?: string | null
           linkedin_access_token?: string | null
+          linkedin_organization_urn?: string | null
           linkedin_person_urn?: string | null
           linkedin_refresh_token?: string | null
           linkedin_token_expires_at?: string | null
@@ -201,6 +203,7 @@ export type Database = {
           id?: string
           instagram_api_key?: string | null
           linkedin_access_token?: string | null
+          linkedin_organization_urn?: string | null
           linkedin_person_urn?: string | null
           linkedin_refresh_token?: string | null
           linkedin_token_expires_at?: string | null

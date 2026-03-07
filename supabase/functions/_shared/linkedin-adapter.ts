@@ -10,7 +10,7 @@ export class LinkedInAdapter implements PlatformAdapter {
   async getValidToken(supabase: any, userId: string): Promise<string | null> {
     const { data: settings } = await supabase
       .from("weather_settings")
-      .select("linkedin_access_token, linkedin_refresh_token, linkedin_token_expires_at, linkedin_person_urn")
+      .select("linkedin_access_token, linkedin_refresh_token, linkedin_token_expires_at, linkedin_person_urn, linkedin_organization_urn")
       .eq("user_id", userId)
       .single();
 
@@ -20,6 +20,8 @@ export class LinkedInAdapter implements PlatformAdapter {
     const expiresAt = settings.linkedin_token_expires_at
       ? new Date(settings.linkedin_token_expires_at).getTime()
       : 0;
+
+    let accessToken = settings.linkedin_access_token;
 
     if (Date.now() > expiresAt - 5 * 60 * 1000 && settings.linkedin_refresh_token) {
       console.log("LinkedIn token expired, refreshing...");
@@ -53,10 +55,12 @@ export class LinkedInAdapter implements PlatformAdapter {
         })
         .eq("user_id", userId);
 
-      return `${data.access_token}::${settings.linkedin_person_urn}`;
+      accessToken = data.access_token;
     }
 
-    return `${settings.linkedin_access_token}::${settings.linkedin_person_urn}`;
+    // Prefer organization URN for company page posting, fallback to person URN
+    const authorUrn = settings.linkedin_organization_urn || settings.linkedin_person_urn;
+    return `${accessToken}::${authorUrn}`;
   }
 
   async uploadVideo(
@@ -66,20 +70,18 @@ export class LinkedInAdapter implements PlatformAdapter {
     description: string,
     _mimeType?: string,
   ): Promise<UploadResult | null> {
-    // We need the person URN — extract from token context isn't possible,
-    // so we pass it via a special token format: "access_token::person_urn"
     const parts = token.split("::");
     const accessToken = parts[0];
-    const personUrn = parts[1];
+    const authorUrn = parts[1];
 
-    if (!personUrn) {
-      console.error("LinkedIn: person URN not provided in token");
+    if (!authorUrn) {
+      console.error("LinkedIn: author URN not provided in token");
       return null;
     }
 
     try {
       // Step 1: Register the upload
-      console.log("LinkedIn: Registering video upload...");
+      console.log("LinkedIn: Registering video upload for", authorUrn);
       const registerRes = await fetch(
         "https://api.linkedin.com/rest/videos?action=initializeUpload",
         {
@@ -92,7 +94,7 @@ export class LinkedInAdapter implements PlatformAdapter {
           },
           body: JSON.stringify({
             initializeUploadRequest: {
-              owner: personUrn,
+              owner: authorUrn,
               fileSizeBytes: videoData.length,
               uploadCaptions: false,
               uploadThumbnail: false,
@@ -136,7 +138,7 @@ export class LinkedInAdapter implements PlatformAdapter {
       // Step 3: Create the post with the video
       console.log("LinkedIn: Creating post with video...");
       const postBody: any = {
-        author: personUrn,
+        author: authorUrn,
         commentary: description || title,
         visibility: "PUBLIC",
         distribution: {
