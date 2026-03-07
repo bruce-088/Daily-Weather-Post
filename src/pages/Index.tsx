@@ -28,6 +28,7 @@ import { WeatherCard } from "@/components/WeatherCard";
 import { MobilePreview } from "@/components/MobilePreview";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { PostHistoryList } from "@/components/PostHistoryList";
+import { VideoPreviewDialog } from "@/components/VideoPreviewDialog";
 import { SchedulePostForm } from "@/components/SchedulePostForm";
 import { ScheduledPostsList } from "@/components/ScheduledPostsList";
 import { useWeather } from "@/hooks/useWeather";
