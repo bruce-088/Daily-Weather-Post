@@ -59,6 +59,7 @@ const Index = () => {
   const [settings, setSettings] = useState<AutomationSettings>(DEFAULT_SETTINGS);
   const [tiktokConnected, setTiktokConnected] = useState(false);
   const [youtubeConnected, setYoutubeConnected] = useState(false);
+  const [twitterConnected, setTwitterConnected] = useState(false);
   const [saving, setSaving] = useState(false);
   const [posting, setPosting] = useState(false);
   const [posts, setPosts] = useState<PostHistoryItem[]>([]);
