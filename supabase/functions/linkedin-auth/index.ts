@@ -39,6 +39,9 @@ Deno.serve(async (req) => {
       url.searchParams.set("state", oauthState);
       url.searchParams.set("scope", scopes);
 
+      console.log("LinkedIn auth URL redirect_uri:", redirect_uri);
+      console.log("LinkedIn auth full URL:", url.toString());
+
       return new Response(
         JSON.stringify({ url: url.toString(), state: oauthState }),
         { headers: corsHeaders },
