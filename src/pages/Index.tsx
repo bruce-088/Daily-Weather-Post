@@ -404,6 +404,7 @@ const Index = () => {
                 tiktokConnected={tiktokConnected}
                 youtubeConnected={youtubeConnected}
                 twitterConnected={twitterConnected}
+                linkedinConnected={linkedinConnected}
               />
             </div>
           </TabsContent>
