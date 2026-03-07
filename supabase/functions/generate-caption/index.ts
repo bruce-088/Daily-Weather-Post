@@ -56,7 +56,9 @@ Line 2: Morning forecast in a few words with temp
 Line 3: Afternoon forecast in a few words with temp
 Line 4: Evening forecast in a few words with temp
 Line 5: Rain chance
-Line 6: "What to know:" followed by 2-3 short bullet-style points
+Line 6: If alert_line is provided (not "None"), include it as a short calm alert line
+Line 7: "What to know:" followed by 2-3 short bullet-style points
+Line 8: Tomorrow preview line (use the provided tomorrow_preview)
 Final line: A habit-forming CTA using the provided dynamic_handle (e.g. "Follow @SkyBriefGNV for tomorrow's forecast" or "Check back tomorrow on @SkyBriefMiami")
 
 STYLE RULES:
@@ -122,7 +124,8 @@ evening_temp: ${body.evening_temp ?? body.eveningTemp ?? "N/A"}
 evening_condition: ${body.evening_condition ?? body.eveningCondition ?? "N/A"}
 rain_chance: ${body.rain_chance ?? body.rainChance ?? "N/A"}%
 wind_info: ${body.wind_info ?? body.windInfo ?? "N/A"}
-severe_alerts: ${body.severe_alerts ?? body.severeAlerts ?? "None"}
+alert_line: ${body.alert_line ?? body.alertLine ?? "None"}
+tomorrow_preview: ${body.tomorrow_preview ?? body.tomorrowPreview ?? "N/A"}
 sunrise_time: ${body.sunrise_time ?? body.sunrise ?? "N/A"}
 sunset_time: ${body.sunset_time ?? body.sunset ?? "N/A"}
 dynamic_handle: ${handle}

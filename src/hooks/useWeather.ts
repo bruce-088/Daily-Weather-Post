@@ -32,6 +32,9 @@ const MOCK_WEATHER: WeatherData = {
   windInfo: "14 mph",
   sunrise: "6:45 AM",
   sunset: "6:12 PM",
+  tomorrowHigh: 68,
+  tomorrowLow: 54,
+  tomorrowCondition: "Sunny",
 };
 
 export function useWeather(autoRefreshLocation?: string, autoRefreshState?: string) {

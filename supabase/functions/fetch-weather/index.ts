@@ -49,13 +49,20 @@ Deno.serve(async (req) => {
       dailyMap.get(dayKey)!.temps.push(item.main.temp);
     });
 
-    const forecastDays = Array.from(dailyMap.entries()).slice(1, 6).map(([key, val]) => ({
+    const allDays = Array.from(dailyMap.entries());
+    const forecastDays = allDays.slice(1, 6).map(([key, val]) => ({
       day: dayNames[new Date(key).getDay()],
       tempHigh: Math.round(Math.max(...val.temps)),
       tempLow: Math.round(Math.min(...val.temps)),
       condition: val.condition,
       conditionIcon: val.icon,
     }));
+
+    // Tomorrow's forecast
+    const tomorrowEntry = allDays.length > 1 ? allDays[1] : null;
+    const tomorrowHigh = tomorrowEntry ? Math.round(Math.max(...tomorrowEntry[1].temps)) : null;
+    const tomorrowLow = tomorrowEntry ? Math.round(Math.min(...tomorrowEntry[1].temps)) : null;
+    const tomorrowCondition = tomorrowEntry ? tomorrowEntry[1].condition : null;
 
     // --- Time-of-day breakdowns for today ---
     const now = new Date();
@@ -129,6 +136,9 @@ Deno.serve(async (req) => {
       windInfo,
       sunrise: formatTime(sunriseDate),
       sunset: formatTime(sunsetDate),
+      tomorrowHigh,
+      tomorrowLow,
+      tomorrowCondition,
     };
 
     return new Response(JSON.stringify(weather), {

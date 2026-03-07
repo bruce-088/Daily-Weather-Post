@@ -21,6 +21,9 @@ export interface WeatherData {
   windInfo: string | null;
   sunrise: string | null;
   sunset: string | null;
+  tomorrowHigh: number | null;
+  tomorrowLow: number | null;
+  tomorrowCondition: string | null;
 }
 
 export interface ForecastDay {
