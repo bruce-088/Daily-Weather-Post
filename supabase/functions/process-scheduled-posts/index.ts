@@ -274,14 +274,53 @@ async function uploadToYouTubeShorts(
 
 // --- Creatomate Video Generation ---
 
-function getWeatherTheme(condition: string): { bg1: string; bg2: string; accent: string; glow1: string; glow2: string; emoji: string } {
+interface WeatherTheme { bg1: string; bg2: string; accent: string; glow1: string; glow2: string; emoji: string; videoKeyword: string }
+
+function getWeatherTheme(condition: string): WeatherTheme {
   const c = condition.toLowerCase();
-  if (c.includes("rain") || c.includes("drizzle")) return { bg1: "#0c1929", bg2: "#1a2744", accent: "#60a5fa", glow1: "rgba(96, 165, 250, 0.15)", glow2: "rgba(59, 130, 246, 0.1)", emoji: "🌧️" };
-  if (c.includes("thunder") || c.includes("storm")) return { bg1: "#1a0a2e", bg2: "#2d1b4e", accent: "#a78bfa", glow1: "rgba(167, 139, 250, 0.15)", glow2: "rgba(139, 92, 246, 0.1)", emoji: "⛈️" };
-  if (c.includes("snow")) return { bg1: "#0f1b2d", bg2: "#1e3048", accent: "#93c5fd", glow1: "rgba(147, 197, 253, 0.15)", glow2: "rgba(191, 219, 254, 0.1)", emoji: "❄️" };
-  if (c.includes("cloud") || c.includes("overcast")) return { bg1: "#111827", bg2: "#1f2937", accent: "#9ca3af", glow1: "rgba(156, 163, 175, 0.12)", glow2: "rgba(107, 114, 128, 0.08)", emoji: "☁️" };
-  if (c.includes("fog") || c.includes("mist") || c.includes("haze")) return { bg1: "#1a1a2e", bg2: "#2d2d44", accent: "#a1a1aa", glow1: "rgba(161, 161, 170, 0.12)", glow2: "rgba(113, 113, 122, 0.08)", emoji: "🌫️" };
-  return { bg1: "#0c1220", bg2: "#1a2540", accent: "#fbbf24", glow1: "rgba(251, 191, 36, 0.12)", glow2: "rgba(245, 158, 11, 0.08)", emoji: "☀️" };
+  if (c.includes("rain") || c.includes("drizzle")) return { bg1: "#0c1929", bg2: "#1a2744", accent: "#60a5fa", glow1: "rgba(96, 165, 250, 0.15)", glow2: "rgba(59, 130, 246, 0.1)", emoji: "🌧️", videoKeyword: "rain drops dark" };
+  if (c.includes("thunder") || c.includes("storm")) return { bg1: "#1a0a2e", bg2: "#2d1b4e", accent: "#a78bfa", glow1: "rgba(167, 139, 250, 0.15)", glow2: "rgba(139, 92, 246, 0.1)", emoji: "⛈️", videoKeyword: "lightning storm dark sky" };
+  if (c.includes("snow")) return { bg1: "#0f1b2d", bg2: "#1e3048", accent: "#93c5fd", glow1: "rgba(147, 197, 253, 0.15)", glow2: "rgba(191, 219, 254, 0.1)", emoji: "❄️", videoKeyword: "snow falling winter" };
+  if (c.includes("cloud") || c.includes("overcast")) return { bg1: "#111827", bg2: "#1f2937", accent: "#9ca3af", glow1: "rgba(156, 163, 175, 0.12)", glow2: "rgba(107, 114, 128, 0.08)", emoji: "☁️", videoKeyword: "clouds moving sky timelapse" };
+  if (c.includes("fog") || c.includes("mist") || c.includes("haze")) return { bg1: "#1a1a2e", bg2: "#2d2d44", accent: "#a1a1aa", glow1: "rgba(161, 161, 170, 0.12)", glow2: "rgba(113, 113, 122, 0.08)", emoji: "🌫️", videoKeyword: "fog mist forest" };
+  return { bg1: "#0c1220", bg2: "#1a2540", accent: "#fbbf24", glow1: "rgba(251, 191, 36, 0.12)", glow2: "rgba(245, 158, 11, 0.08)", emoji: "☀️", videoKeyword: "golden sun rays nature" };
+}
+
+async function fetchPexelsVideoUrl(keyword: string): Promise<string | null> {
+  const pexelsKey = Deno.env.get("PEXELS_API_KEY");
+  if (!pexelsKey) {
+    console.log("PEXELS_API_KEY not configured, skipping stock video background");
+    return null;
+  }
+  try {
+    const url = `https://api.pexels.com/videos/search?query=${encodeURIComponent(keyword)}&per_page=15&orientation=portrait&size=medium`;
+    console.log("Fetching Pexels video:", keyword);
+    const res = await fetch(url, { headers: { Authorization: pexelsKey } });
+    if (!res.ok) {
+      console.error("Pexels API error:", res.status);
+      return null;
+    }
+    const data = await res.json();
+    const videos = data.videos || [];
+    if (!videos.length) {
+      console.log("No Pexels videos found for:", keyword);
+      return null;
+    }
+    const video = videos[Math.floor(Math.random() * videos.length)];
+    const files = video.video_files || [];
+    const hdFile = files.find((f: any) => f.quality === "hd" && f.width <= 1080) 
+      || files.find((f: any) => f.quality === "hd")
+      || files.find((f: any) => f.quality === "sd")
+      || files[0];
+    if (hdFile?.link) {
+      console.log("Pexels video found:", hdFile.link.substring(0, 80), `(${hdFile.width}x${hdFile.height})`);
+      return hdFile.link;
+    }
+    return null;
+  } catch (err) {
+    console.error("Pexels fetch error:", err);
+    return null;
+  }
 }
 
 function buildCreatomateSource(weather: WeatherResponse): object {
