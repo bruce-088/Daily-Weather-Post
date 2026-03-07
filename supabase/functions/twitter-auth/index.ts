@@ -81,10 +81,12 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const CONSUMER_KEY = Deno.env.get("TWITTER_CONSUMER_KEY")!;
-  const CONSUMER_SECRET = Deno.env.get("TWITTER_CONSUMER_SECRET")!;
+  const CONSUMER_KEY = (Deno.env.get("TWITTER_CONSUMER_KEY") || "").trim();
+  const CONSUMER_SECRET = (Deno.env.get("TWITTER_CONSUMER_SECRET") || "").trim();
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
   const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+  console.log("Consumer key length:", CONSUMER_KEY.length, "first 4 chars:", CONSUMER_KEY.substring(0, 4));
 
   try {
     const body = await req.json();
