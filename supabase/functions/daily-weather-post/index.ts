@@ -332,7 +332,7 @@ function getPracticalTakeaway(weather: WeatherResponse): string {
   return "📋 Check back for updates";
 }
 
-async function fetchPexelsVideoUrl(keyword: string, city?: string): Promise<string | null> {
+async function fetchPexelsVideoUrl(keyword: string, city?: string, region?: string): Promise<string | null> {
   const pexelsKey = Deno.env.get("PEXELS_API_KEY");
   if (!pexelsKey) { console.log("PEXELS_API_KEY not configured, skipping stock video"); return null; }
 
@@ -359,7 +359,13 @@ async function fetchPexelsVideoUrl(keyword: string, city?: string): Promise<stri
     if (city) {
       const cityResult = await searchPexels(`${city} ${keyword}`);
       if (cityResult) return cityResult;
-      console.log(`No Pexels videos for "${city} ${keyword}", falling back to generic`);
+      console.log(`No Pexels videos for "${city} ${keyword}", trying region fallback`);
+    }
+    // Try region/country fallback
+    if (region && region !== city) {
+      const regionResult = await searchPexels(`${region} ${keyword}`);
+      if (regionResult) return regionResult;
+      console.log(`No Pexels videos for "${region} ${keyword}", falling back to generic`);
     }
     // Fallback to generic keyword
     return await searchPexels(keyword);
