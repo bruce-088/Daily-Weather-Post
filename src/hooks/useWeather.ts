@@ -34,20 +34,20 @@ const MOCK_WEATHER: WeatherData = {
   sunset: "6:12 PM",
 };
 
-export function useWeather(autoRefreshLocation?: string) {
+export function useWeather(autoRefreshLocation?: string, autoRefreshState?: string) {
   const [weather, setWeather] = useState<WeatherData>(MOCK_WEATHER);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const fetchWeather = useCallback(async (location: string) => {
+  const fetchWeather = useCallback(async (location: string, state?: string) => {
     setLoading(true);
     setError(null);
 
     try {
       const { data, error: fnError } = await supabase.functions.invoke("fetch-weather", {
-        body: { city: location },
+        body: { city: location, state: state || undefined },
       });
 
       if (fnError) throw new Error(fnError.message);
@@ -66,16 +66,16 @@ export function useWeather(autoRefreshLocation?: string) {
   useEffect(() => {
     if (!autoRefreshLocation) return;
 
-    fetchWeather(autoRefreshLocation);
+    fetchWeather(autoRefreshLocation, autoRefreshState);
 
     intervalRef.current = setInterval(() => {
-      fetchWeather(autoRefreshLocation);
+      fetchWeather(autoRefreshLocation, autoRefreshState);
     }, REFRESH_INTERVAL);
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [autoRefreshLocation, fetchWeather]);
+  }, [autoRefreshLocation, autoRefreshState, fetchWeather]);
 
   return { weather, loading, error, fetchWeather, lastUpdated };
 }

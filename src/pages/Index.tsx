@@ -64,23 +64,29 @@ const Index = () => {
   const [caption, setCaption] = useState("");
   const [captionLoading, setCaptionLoading] = useState(false);
   const [debouncedLocation, setDebouncedLocation] = useState<string | undefined>(undefined);
+  const [debouncedState, setDebouncedState] = useState<string | undefined>(undefined);
   const [previewOpen, setPreviewOpen] = useState(false);
 
   useEffect(() => {
     if (!settingsLoaded) {
       setDebouncedLocation(undefined);
+      setDebouncedState(undefined);
       return;
     }
     const loc = settings.location.trim();
     if (!loc) {
       setDebouncedLocation(undefined);
+      setDebouncedState(undefined);
       return;
     }
-    const timer = setTimeout(() => setDebouncedLocation(loc), 800);
+    const timer = setTimeout(() => {
+      setDebouncedLocation(loc);
+      setDebouncedState(settings.state?.trim() || undefined);
+    }, 800);
     return () => clearTimeout(timer);
-  }, [settingsLoaded, settings.location]);
+  }, [settingsLoaded, settings.location, settings.state]);
 
-  const { weather, loading, error, fetchWeather, lastUpdated } = useWeather(debouncedLocation);
+  const { weather, loading, error, fetchWeather, lastUpdated } = useWeather(debouncedLocation, debouncedState);
 
   useEffect(() => {
     if (!lastUpdated) return;
@@ -126,8 +132,8 @@ const Index = () => {
   }, [loadHistory, loadScheduled]);
 
   const handleFetch = useCallback(() => {
-    fetchWeather(settings.location);
-  }, [fetchWeather, settings.location]);
+    fetchWeather(settings.location, settings.state);
+  }, [fetchWeather, settings.location, settings.state]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);

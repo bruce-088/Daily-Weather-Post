@@ -652,7 +652,7 @@ Deno.serve(async (req) => {
       throw new Error("OpenWeatherMap API key not configured as a backend secret.");
     }
 
-    const weather = await fetchWeatherData(settings.city, openWeatherApiKey);
+    const weather = await fetchWeatherData(settings.state ? settings.city + "," + settings.state : settings.city, openWeatherApiKey);
 
     // Generate caption via SkyBrief prompt
     let caption: string | null = null;
