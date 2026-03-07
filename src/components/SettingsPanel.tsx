@@ -86,7 +86,7 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
     }
 
     sessionStorage.setItem("linkedin_oauth_state", data.state);
-    window.location.href = data.url;
+    window.open(data.url, "_blank");
   };
 
   const anyAutoPost = settings.autoPostMorning || settings.autoPostAfternoon || settings.autoPostEvening;
