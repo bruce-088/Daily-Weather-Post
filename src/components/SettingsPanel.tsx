@@ -54,7 +54,7 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
     }
 
     sessionStorage.setItem("youtube_oauth_state", data.state);
-    window.location.href = data.url;
+    window.open(data.url, "_blank");
   };
 
   const handleConnectTwitter = async () => {
