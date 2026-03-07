@@ -63,6 +63,7 @@ const Index = () => {
   const [caption, setCaption] = useState("");
   const [captionLoading, setCaptionLoading] = useState(false);
   const [debouncedLocation, setDebouncedLocation] = useState<string | undefined>(undefined);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   useEffect(() => {
     if (!settingsLoaded) {
