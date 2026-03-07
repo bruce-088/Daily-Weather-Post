@@ -71,6 +71,26 @@ export function VideoPreviewDialog({ open, onOpenChange, onUploaded }: VideoPrev
     }
   };
 
+  const handleDownload = async () => {
+    if (!preview?.video_url) return;
+    try {
+      const response = await fetch(preview.video_url);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const city = preview.weather?.city?.replace(/\s+/g, "-").toLowerCase() || "preview";
+      a.download = `skybrief-preview-${city}-${Date.now()}.mp4`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success("Video downloaded!");
+    } catch {
+      toast.error("Failed to download video");
+    }
+  };
+
   const handleClose = () => {
     if (!generating && !uploading) {
       setPreview(null);
