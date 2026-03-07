@@ -71,7 +71,7 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
     if (data.oauth_token_secret) {
       sessionStorage.setItem("twitter_oauth_token_secret", data.oauth_token_secret);
     }
-    window.location.href = data.url;
+    window.open(data.url, "_blank");
   };
 
   const handleConnectLinkedIn = async () => {
