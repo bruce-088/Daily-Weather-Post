@@ -37,6 +37,7 @@ export function ScheduledPostsList({ posts, loading, onRefresh }: ScheduledPosts
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState<SortOption>("date-desc");
   const [citySearch, setCitySearch] = useState("");
+  const [editingPost, setEditingPost] = useState<ScheduledPostItem | null>(null);
 
   const filtered = useMemo(() => {
     let result = posts;
