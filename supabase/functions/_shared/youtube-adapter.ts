@@ -137,7 +137,24 @@ export class YouTubeAdapter implements PlatformAdapter {
     if (!uploadRes.ok) {
       const errText = await uploadRes.text();
       console.error("YouTube video upload failed:", uploadRes.status, errText);
-      return null;
+      try {
+        const errJson = JSON.parse(errText);
+        const reason = errJson?.error?.errors?.[0]?.reason;
+        const message = errJson?.error?.message || "Video processing failed";
+        if (reason === "processingFailure") {
+          throw new Error(`YouTube rejected the video: processing failure. The video format or codec may be unsupported.`);
+        }
+        if (reason === "videoTooLong") {
+          throw new Error("YouTube rejected the video: video exceeds maximum duration for Shorts (60s).");
+        }
+        if (reason === "invalidVideoMetadata") {
+          throw new Error("YouTube rejected the video: invalid metadata. Check title and description length.");
+        }
+        throw new Error(`YouTube upload failed: ${message} (${reason || uploadRes.status})`);
+      } catch (e) {
+        if (e instanceof Error && e.message.includes("YouTube")) throw e;
+        throw new Error(`YouTube upload failed with status ${uploadRes.status}`);
+      }
     }
 
     const result = await uploadRes.json();
