@@ -657,10 +657,12 @@ Deno.serve(async (req) => {
   try {
     let mode = "post";
     let timePeriod: string | null = null;
+    let selectedPlatforms: string[] | null = null;
     try {
       const body = await req.clone().json();
       if (body?.mode === "preview") mode = "preview";
       if (body?.time_period) timePeriod = body.time_period; // "morning" | "afternoon" | "evening"
+      if (body?.platforms && Array.isArray(body.platforms)) selectedPlatforms = body.platforms;
     } catch { /* no body is fine */ }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -771,7 +773,11 @@ Deno.serve(async (req) => {
     let errorMessage: string | null = null;
     let youtubeVideoId: string | null = null;
 
-    const connectedAdapters = getConnectedAdapters(settings as Record<string, unknown>);
+    let connectedAdapters = getConnectedAdapters(settings as Record<string, unknown>);
+    // Filter to only selected platforms if specified
+    if (selectedPlatforms && selectedPlatforms.length > 0) {
+      connectedAdapters = connectedAdapters.filter((a) => selectedPlatforms!.includes(a.name));
+    }
 
     if (connectedAdapters.length === 0) {
       status = "pending";
