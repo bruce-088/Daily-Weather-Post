@@ -173,17 +173,20 @@ const Index = () => {
 
   const handlePostNow = useCallback(async () => {
     setPosting(true);
-    toast.info("Triggering daily weather post...");
-    const result = await triggerDailyPost();
+    const platformNames = selectedPlatforms.length > 0
+      ? selectedPlatforms
+      : availablePlatforms.map((p) => p.id);
+    const label = platformNames.join(", ");
+    toast.info(`Posting to ${label}...`);
+    const result = await triggerDailyPost(undefined, platformNames);
     setPosting(false);
     if (result.success) {
       toast.success(result.message);
     } else {
       toast.error(result.message);
     }
-    // Refresh history
     loadHistory();
-  }, [loadHistory]);
+  }, [loadHistory, selectedPlatforms, availablePlatforms]);
 
   const handleExport = useCallback(async () => {
     if (!cardRef.current) return;
