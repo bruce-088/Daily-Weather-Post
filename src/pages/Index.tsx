@@ -240,15 +240,60 @@ const Index = () => {
               <Eye size={14} />
               Preview
             </Button>
-            <Button
-              size="sm"
-              onClick={handlePostNow}
-              disabled={posting}
-              className="gap-1.5 text-xs"
-            >
-              <Send size={14} />
-              {posting ? "Posting..." : "Post Now"}
-            </Button>
+            <div className="flex items-center">
+              <Button
+                size="sm"
+                onClick={handlePostNow}
+                disabled={posting || availablePlatforms.length === 0}
+                className="gap-1.5 text-xs rounded-r-none"
+              >
+                <Send size={14} />
+                {posting ? "Posting..." : selectedPlatforms.length > 0 ? `Post (${selectedPlatforms.length})` : "Post All"}
+              </Button>
+              <Popover open={platformPickerOpen} onOpenChange={setPlatformPickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    size="sm"
+                    className="rounded-l-none border-l border-primary-foreground/20 px-1.5"
+                    disabled={posting || availablePlatforms.length === 0}
+                  >
+                    <ChevronDown size={14} />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-48 p-2" align="end">
+                  <p className="text-xs font-medium text-muted-foreground mb-2 px-1">Post to:</p>
+                  {availablePlatforms.map((p) => (
+                    <label
+                      key={p.id}
+                      className="flex items-center gap-2 px-1 py-1.5 rounded hover:bg-secondary/50 cursor-pointer text-sm"
+                    >
+                      <Checkbox
+                        checked={selectedPlatforms.includes(p.id)}
+                        onCheckedChange={(checked) => {
+                          setSelectedPlatforms((prev) =>
+                            checked ? [...prev, p.id] : prev.filter((x) => x !== p.id)
+                          );
+                        }}
+                      />
+                      {p.label}
+                    </label>
+                  ))}
+                  {availablePlatforms.length === 0 && (
+                    <p className="text-xs text-muted-foreground px-1">No platforms connected</p>
+                  )}
+                  {selectedPlatforms.length > 0 && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="w-full mt-1 text-xs"
+                      onClick={() => setSelectedPlatforms([])}
+                    >
+                      Clear selection (post all)
+                    </Button>
+                  )}
+                </PopoverContent>
+              </Popover>
+            </div>
             {(settings.autoPostMorning || settings.autoPostAfternoon || settings.autoPostEvening) && (
               <Badge className="bg-accent/20 text-accent border-accent/30 text-[10px] gap-1">
                 <Zap size={10} /> Auto 3x/day
