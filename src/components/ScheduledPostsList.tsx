@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { format } from "date-fns";
-import { CalendarClock, MapPin, Search, XCircle } from "lucide-react";
+import { CalendarClock, MapPin, Pencil, Search, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import { cancelScheduledPost } from "@/lib/api";
 import type { ScheduledPostItem } from "@/lib/api";
+import { EditScheduledPostDialog } from "@/components/EditScheduledPostDialog";
 
 interface ScheduledPostsListProps {
   posts: ScheduledPostItem[];
