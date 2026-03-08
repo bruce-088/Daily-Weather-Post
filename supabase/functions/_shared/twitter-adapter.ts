@@ -91,6 +91,111 @@ export class TwitterAdapter implements PlatformAdapter {
     });
   }
 
+  /** Upload an image using simple media upload (base64) */
+  async uploadImage(
+    tokenJson: string,
+    imageData: Uint8Array,
+    text: string,
+    mimeType = "image/png",
+  ): Promise<UploadResult | null> {
+    const consumerKey = Deno.env.get("TWITTER_CONSUMER_KEY")?.trim();
+    const consumerSecret = Deno.env.get("TWITTER_CONSUMER_SECRET")?.trim();
+    if (!consumerKey || !consumerSecret) {
+      console.error("Twitter consumer credentials not configured");
+      return null;
+    }
+
+    const { access_token, access_token_secret } = JSON.parse(tokenJson);
+    const mediaUploadUrl = "https://upload.twitter.com/1.1/media/upload.json";
+
+    console.log("Uploading image to Twitter/X (" + imageData.byteLength + " bytes)");
+
+    // Step 1: INIT with tweet_image category
+    const initParams: Record<string, string> = {
+      command: "INIT",
+      total_bytes: String(imageData.byteLength),
+      media_type: mimeType,
+      media_category: "tweet_image",
+    };
+
+    const initAuth = await buildOAuthHeader("POST", mediaUploadUrl, consumerKey, consumerSecret, access_token, access_token_secret, initParams);
+    const initRes = await fetch(mediaUploadUrl, {
+      method: "POST",
+      headers: { Authorization: initAuth, "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams(initParams).toString(),
+    });
+
+    if (!initRes.ok) {
+      const errText = await initRes.text();
+      console.error("Twitter image INIT failed:", initRes.status, errText);
+      return null;
+    }
+
+    const initData = await initRes.json();
+    const mediaId = initData.media_id_string;
+    console.log("Twitter image INIT success, media_id:", mediaId);
+
+    // Step 2: APPEND (single chunk for images)
+    const appendAuth = await buildOAuthHeader("POST", mediaUploadUrl, consumerKey, consumerSecret, access_token, access_token_secret);
+    const formData = new FormData();
+    formData.append("command", "APPEND");
+    formData.append("media_id", mediaId);
+    formData.append("segment_index", "0");
+    formData.append("media", new Blob([imageData], { type: "application/octet-stream" }), "image.png");
+
+    const appendRes = await fetch(mediaUploadUrl, {
+      method: "POST",
+      headers: { Authorization: appendAuth },
+      body: formData,
+    });
+
+    if (!appendRes.ok) {
+      const errText = await appendRes.text();
+      console.error("Twitter image APPEND failed:", appendRes.status, errText);
+      return null;
+    }
+    await appendRes.text();
+
+    // Step 3: FINALIZE
+    const finalizeParams: Record<string, string> = { command: "FINALIZE", media_id: mediaId };
+    const finalizeAuth = await buildOAuthHeader("POST", mediaUploadUrl, consumerKey, consumerSecret, access_token, access_token_secret, finalizeParams);
+    const finalizeRes = await fetch(mediaUploadUrl, {
+      method: "POST",
+      headers: { Authorization: finalizeAuth, "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams(finalizeParams).toString(),
+    });
+
+    if (!finalizeRes.ok) {
+      const errText = await finalizeRes.text();
+      console.error("Twitter image FINALIZE failed:", finalizeRes.status, errText);
+      return null;
+    }
+    await finalizeRes.json();
+    console.log("Twitter image FINALIZE success");
+
+    // Step 4: Create tweet with image
+    const tweetUrl = "https://api.x.com/2/tweets";
+    const tweetText = text.length > 280 ? text.substring(0, 277) + "..." : text;
+    const tweetAuth = await buildOAuthHeader("POST", tweetUrl, consumerKey, consumerSecret, access_token, access_token_secret);
+
+    const tweetRes = await fetch(tweetUrl, {
+      method: "POST",
+      headers: { Authorization: tweetAuth, "Content-Type": "application/json" },
+      body: JSON.stringify({ text: tweetText, media: { media_ids: [mediaId] } }),
+    });
+
+    if (!tweetRes.ok) {
+      const errText = await tweetRes.text();
+      console.error("Twitter tweet (image) creation failed:", tweetRes.status, errText);
+      return null;
+    }
+
+    const tweetData = await tweetRes.json();
+    const tweetId = tweetData.data?.id;
+    console.log("Twitter image tweet posted! ID:", tweetId);
+    return { id: tweetId };
+  }
+
   async uploadVideo(
     tokenJson: string,
     videoData: Uint8Array,
@@ -98,8 +203,8 @@ export class TwitterAdapter implements PlatformAdapter {
     description: string,
     mimeType = "video/mp4",
   ): Promise<UploadResult | null> {
-    const consumerKey = Deno.env.get("TWITTER_CONSUMER_KEY");
-    const consumerSecret = Deno.env.get("TWITTER_CONSUMER_SECRET");
+    const consumerKey = Deno.env.get("TWITTER_CONSUMER_KEY")?.trim();
+    const consumerSecret = Deno.env.get("TWITTER_CONSUMER_SECRET")?.trim();
     if (!consumerKey || !consumerSecret) {
       console.error("Twitter consumer credentials not configured");
       return null;
