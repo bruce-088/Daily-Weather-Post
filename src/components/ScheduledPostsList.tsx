@@ -159,14 +159,24 @@ export function ScheduledPostsList({ posts, loading, onRefresh }: ScheduledPosts
                   )}
                 </div>
                 {post.status === "pending" && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleCancel(post.id)}
-                    className="text-muted-foreground hover:text-destructive shrink-0"
-                  >
-                    <XCircle size={16} />
-                  </Button>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setEditingPost(post)}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <Pencil size={14} />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleCancel(post.id)}
+                      className="text-muted-foreground hover:text-destructive"
+                    >
+                      <XCircle size={16} />
+                    </Button>
+                  </div>
                 )}
               </div>
             </Card>
