@@ -773,7 +773,11 @@ Deno.serve(async (req) => {
     let errorMessage: string | null = null;
     let youtubeVideoId: string | null = null;
 
-    const connectedAdapters = getConnectedAdapters(settings as Record<string, unknown>);
+    let connectedAdapters = getConnectedAdapters(settings as Record<string, unknown>);
+    // Filter to only selected platforms if specified
+    if (selectedPlatforms && selectedPlatforms.length > 0) {
+      connectedAdapters = connectedAdapters.filter((a) => selectedPlatforms!.includes(a.name));
+    }
 
     if (connectedAdapters.length === 0) {
       status = "pending";

@@ -73,9 +73,13 @@ export async function saveSettings(settings: AutomationSettings): Promise<boolea
   }
 }
 
-export async function triggerDailyPost(timePeriod?: string): Promise<{ success: boolean; message: string }> {
+export async function triggerDailyPost(timePeriod?: string, platforms?: string[]): Promise<{ success: boolean; message: string }> {
+  const body: Record<string, any> = {};
+  if (timePeriod) body.time_period = timePeriod;
+  if (platforms && platforms.length > 0) body.platforms = platforms;
+
   const { data, error } = await supabase.functions.invoke("daily-weather-post", {
-    body: timePeriod ? { time_period: timePeriod } : undefined,
+    body: Object.keys(body).length > 0 ? body : undefined,
   });
 
   if (error) {
