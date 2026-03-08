@@ -976,7 +976,7 @@ Deno.serve(async (req) => {
         await supabase.from("post_history").insert({
           status: postStatus, platform: post.platform, city: weather.city,
           temperature: weather.temperature, condition: weather.condition,
-          image_url: null, error_message: errorMessage, caption,
+          image_url: storedImageUrl, error_message: errorMessage, caption,
           user_id: post.user_id,
         });
 
