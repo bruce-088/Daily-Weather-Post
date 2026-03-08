@@ -14,6 +14,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { cancelScheduledPost } from "@/lib/api";
 import type { ScheduledPostItem } from "@/lib/api";
 import { EditScheduledPostDialog } from "@/components/EditScheduledPostDialog";
@@ -38,6 +48,7 @@ export function ScheduledPostsList({ posts, loading, onRefresh }: ScheduledPosts
   const [sortBy, setSortBy] = useState<SortOption>("date-desc");
   const [citySearch, setCitySearch] = useState("");
   const [editingPost, setEditingPost] = useState<ScheduledPostItem | null>(null);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     let result = posts;
@@ -83,8 +94,10 @@ export function ScheduledPostsList({ posts, loading, onRefresh }: ScheduledPosts
     );
   }
 
-  const handleCancel = async (id: string) => {
-    const ok = await cancelScheduledPost(id);
+  const handleCancel = async () => {
+    if (!cancellingId) return;
+    const ok = await cancelScheduledPost(cancellingId);
+    setCancellingId(null);
     if (ok) {
       toast.success("Post cancelled");
       onRefresh();
@@ -171,7 +184,7 @@ export function ScheduledPostsList({ posts, loading, onRefresh }: ScheduledPosts
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => handleCancel(post.id)}
+                      onClick={() => setCancellingId(post.id)}
                       className="text-muted-foreground hover:text-destructive"
                     >
                       <XCircle size={16} />
@@ -189,6 +202,22 @@ export function ScheduledPostsList({ posts, loading, onRefresh }: ScheduledPosts
         onOpenChange={(open) => !open && setEditingPost(null)}
         onSaved={onRefresh}
       />
+      <AlertDialog open={!!cancellingId} onOpenChange={(open) => !open && setCancellingId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel scheduled post?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will cancel the post and it won't be published. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep it</AlertDialogCancel>
+            <AlertDialogAction onClick={handleCancel} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Cancel post
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
