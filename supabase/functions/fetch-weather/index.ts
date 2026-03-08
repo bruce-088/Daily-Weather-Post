@@ -96,15 +96,33 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Fallback: use current data if today's forecast entries are missing
-    if (morningTemp === null && afternoonTemp === null && eveningTemp === null) {
-      const currentHour = now.getHours();
-      const temp = Math.round(current.main.temp);
-      const cond = current.weather[0].main;
-      if (currentHour < 12) { morningTemp = temp; morningCondition = cond; }
-      else if (currentHour < 18) { afternoonTemp = temp; afternoonCondition = cond; }
-      else { eveningTemp = temp; eveningCondition = cond; }
+    // Step 2: Fill gaps from tomorrow's forecast
+    const tomorrowDate = new Date(now);
+    tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+    const tomorrowStr = tomorrowDate.toDateString();
+
+    for (const item of forecast.list) {
+      const dt = new Date(item.dt * 1000);
+      if (dt.toDateString() !== tomorrowStr) continue;
+      const hour = dt.getHours();
+      const temp = Math.round(item.main.temp);
+      const cond = item.weather[0].main;
+
+      if (hour >= 6 && hour < 12 && morningTemp === null) {
+        morningTemp = temp; morningCondition = cond;
+      } else if (hour >= 12 && hour < 18 && afternoonTemp === null) {
+        afternoonTemp = temp; afternoonCondition = cond;
+      } else if (hour >= 18 && eveningTemp === null) {
+        eveningTemp = temp; eveningCondition = cond;
+      }
     }
+
+    // Step 3: Fill any remaining nulls with current weather as estimate
+    const currentTemp = Math.round(current.main.temp);
+    const currentCond = current.weather[0].main;
+    if (morningTemp === null) { morningTemp = currentTemp; morningCondition = currentCond; }
+    if (afternoonTemp === null) { afternoonTemp = currentTemp; afternoonCondition = currentCond; }
+    if (eveningTemp === null) { eveningTemp = currentTemp; eveningCondition = currentCond; }
 
     // Sunrise / sunset
     const sunriseDate = new Date(current.sys.sunrise * 1000);
