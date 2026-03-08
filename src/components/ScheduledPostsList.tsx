@@ -184,7 +184,7 @@ export function ScheduledPostsList({ posts, loading, onRefresh }: ScheduledPosts
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => handleCancel(post.id)}
+                      onClick={() => setCancellingId(post.id)}
                       className="text-muted-foreground hover:text-destructive"
                     >
                       <XCircle size={16} />
