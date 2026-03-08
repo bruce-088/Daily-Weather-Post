@@ -438,7 +438,7 @@ async function fetchPexelsVideoUrl(keyword: string, city: string, region: string
   } catch (err) { console.error("Pexels fetch error:", err); return null; }
 }
 
-function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | null): object {
+function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | null, timePeriod?: string | null): object {
   const now = new Date();
   const dateStr = now.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
   const theme = getWeatherTheme(weather.condition);
