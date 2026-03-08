@@ -438,7 +438,7 @@ async function fetchPexelsVideoUrl(keyword: string, city: string, region: string
   } catch (err) { console.error("Pexels fetch error:", err); return null; }
 }
 
-function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | null): object {
+function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | null, timePeriod?: string | null): object {
   const now = new Date();
   const dateStr = now.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
   const theme = getWeatherTheme(weather.condition);
@@ -453,6 +453,19 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
   let t = 0;
   const nt = () => ++t;
   const txtShadow = "0px 2px 6px rgba(0,0,0,0.5)";
+
+  // Determine time period label
+  let periodLabel: string;
+  if (timePeriod === "morning") periodLabel = "☀️  MORNING UPDATE";
+  else if (timePeriod === "afternoon") periodLabel = "🌤️  AFTERNOON UPDATE";
+  else if (timePeriod === "evening") periodLabel = "🌙  EVENING UPDATE";
+  else {
+    const hour = now.getHours();
+    if (hour >= 6 && hour < 12) periodLabel = "☀️  MORNING UPDATE";
+    else if (hour >= 12 && hour < 17) periodLabel = "🌤️  AFTERNOON UPDATE";
+    else periodLabel = "🌙  EVENING UPDATE";
+  }
+
   const cityUpper = weather.city.toUpperCase();
   const regionDate = weather.stateOrRegion + "  \u00B7  " + dateStr;
   const tempStr = weather.temperature + "\u00B0";
@@ -489,6 +502,13 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
       x: "56%", y: "5.5%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.5 } },
     { type: "shape", track: nt(), time: 0.2, duration: 9.8, shape_type: "rectangle", width: 80, height: 4, x: "50%", y: "8%", fill_color: theme.accent, border_radius: "2",
       enter: { type: "scale", start_scale: "0%", duration: 0.6 } },
+
+    // === TIME PERIOD BADGE ===
+    { type: "shape", track: nt(), time: 0.3, duration: 9.7, shape_type: "rectangle", width: 520, height: 60, x: "50%", y: "11%",
+      fill_color: "rgba(255,255,255,0.12)", border_radius: "30",
+      enter: { type: "fade", duration: 0.4 } },
+    { type: "text", track: nt(), time: 0.3, duration: 9.7, text: periodLabel, font_family: "Inter", font_weight: "700", font_size: "34", fill_color: theme.accent, letter_spacing: "4%",
+      x: "50%", y: "11%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.4 } },
 
     // === CITY HEADER GLASS PANEL (stronger backdrop) ===
     { type: "shape", track: nt(), time: 0.2, duration: 9.8, shape_type: "rectangle", width: 1100, height: 280, x: "50%", y: "17%",
@@ -578,7 +598,7 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
   };
 }
 
-async function generateWeatherVideo(weather: WeatherResponse): Promise<{ data: Uint8Array; mimeType: string } | null> {
+async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: string | null): Promise<{ data: Uint8Array; mimeType: string } | null> {
   const apiKey = Deno.env.get("CREATOMATE_API_KEY");
   if (!apiKey) {
     console.error("CREATOMATE_API_KEY not configured");
@@ -588,7 +608,7 @@ async function generateWeatherVideo(weather: WeatherResponse): Promise<{ data: U
   console.log("Starting Creatomate render for", weather.city);
   const theme = getWeatherTheme(weather.condition);
   const videoUrl = await fetchPexelsVideoUrl(theme.videoKeyword, weather.city, weather.stateOrRegion);
-  const source = buildCreatomateSource(weather, videoUrl);
+  const source = buildCreatomateSource(weather, videoUrl, timePeriod);
 
   const requestBody = JSON.stringify({ output_format: "mp4", ...source });
   console.log("Creatomate request body (first 300 chars):", requestBody.substring(0, 300));
@@ -935,7 +955,7 @@ Deno.serve(async (req) => {
     }
 
     // Generate video
-    const video = await generateWeatherVideo(weather);
+    const video = await generateWeatherVideo(weather, timePeriod);
 
     // === PREVIEW MODE ===
     if (mode === "preview") {

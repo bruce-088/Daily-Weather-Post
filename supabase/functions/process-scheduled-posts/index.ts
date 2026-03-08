@@ -424,7 +424,7 @@ async function fetchPexelsVideoUrl(keyword: string, city?: string, region?: stri
   } catch { return null; }
 }
 
-function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | null): object {
+function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | null, timePeriod?: string | null): object {
   const now = new Date();
   const dateStr = now.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
   const theme = getWeatherTheme(weather.condition);
@@ -440,6 +440,18 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
   const nt = () => ++t;
   const txtShadow = "0px 1px 4px rgba(0,0,0,0.4)";
 
+  // Determine time period label
+  let periodLabel: string;
+  if (timePeriod === "morning") periodLabel = "☀️  MORNING UPDATE";
+  else if (timePeriod === "afternoon") periodLabel = "🌤️  AFTERNOON UPDATE";
+  else if (timePeriod === "evening") periodLabel = "🌙  EVENING UPDATE";
+  else {
+    const hour = now.getHours();
+    if (hour >= 6 && hour < 12) periodLabel = "☀️  MORNING UPDATE";
+    else if (hour >= 12 && hour < 17) periodLabel = "🌤️  AFTERNOON UPDATE";
+    else periodLabel = "🌙  EVENING UPDATE";
+  }
+
   const elements: any[] = [
     ...(videoUrl ? [
       { type: "video", track: nt(), time: 0, duration: 10, source: videoUrl, width: "100%", height: "100%", x: "50%", y: "50%", fit: "cover" },
@@ -454,6 +466,14 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
       x: "50%", y: "7%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.5 } },
     { type: "shape", track: nt(), time: 0.2, duration: 9.8, shape_type: "rectangle", width: 60, height: 3, x: "50%", y: "9.5%", fill_color: theme.accent, border_radius: "2",
       enter: { type: "scale", start_scale: "0%", duration: 0.6 } },
+
+    // === TIME PERIOD BADGE ===
+    { type: "shape", track: nt(), time: 0.3, duration: 9.7, shape_type: "rectangle", width: 420, height: 50, x: "50%", y: "12%",
+      fill_color: "rgba(255,255,255,0.12)", border_radius: "25",
+      enter: { type: "fade", duration: 0.4 } },
+    { type: "text", track: nt(), time: 0.3, duration: 9.7, text: periodLabel, font_family: "Inter", font_weight: "700", font_size: "28", fill_color: theme.accent, letter_spacing: "4%",
+      x: "50%", y: "12%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.4 } },
+
     { type: "shape", track: nt(), time: 0.2, duration: 9.8, shape_type: "rectangle", width: 800, height: 200, x: "50%", y: "18%",
       fill_color: "rgba(0,0,0,0.35)", border_radius: "14", enter: { type: "fade", duration: 0.4 } },
     { type: "text", track: nt(), time: 0.3, duration: 9.7, text: weather.city.toUpperCase(), font_family: "Inter", font_weight: "800", font_size: "76", fill_color: "#ffffff",
@@ -525,7 +545,7 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
   };
 }
 
-async function generateWeatherVideo(weather: WeatherResponse): Promise<{ data: Uint8Array; mimeType: string } | null> {
+async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: string | null): Promise<{ data: Uint8Array; mimeType: string } | null> {
   const apiKey = Deno.env.get("CREATOMATE_API_KEY");
   if (!apiKey) {
     console.error("CREATOMATE_API_KEY not configured");
@@ -535,7 +555,7 @@ async function generateWeatherVideo(weather: WeatherResponse): Promise<{ data: U
   console.log("Starting Creatomate render for", weather.city);
   const theme = getWeatherTheme(weather.condition);
   const videoUrl = await fetchPexelsVideoUrl(theme.videoKeyword, weather.city, weather.stateOrRegion);
-  const source = buildCreatomateSource(weather, videoUrl);
+  const source = buildCreatomateSource(weather, videoUrl, timePeriod);
 
   const requestBody = JSON.stringify({ output_format: "mp4", ...source });
   console.log("Creatomate request body (first 300 chars):", requestBody.substring(0, 300));
