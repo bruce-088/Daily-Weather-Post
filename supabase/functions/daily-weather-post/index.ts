@@ -86,14 +86,29 @@ async function fetchWeatherData(city: string, apiKey: string): Promise<WeatherRe
     }
   }
 
-  if (morningTemp === null && afternoonTemp === null && eveningTemp === null) {
-    const h = now.getHours();
-    const t = Math.round(current.main.temp);
-    const c = current.weather[0].main;
-    if (h < 12) { morningTemp = t; morningCondition = c; }
-    else if (h < 18) { afternoonTemp = t; afternoonCondition = c; }
-    else { eveningTemp = t; eveningCondition = c; }
+  // Step 2: Fill gaps from tomorrow's forecast
+  for (const item of forecast.list) {
+    const dt = new Date(item.dt * 1000);
+    if (dt.toDateString() !== tomorrowStr) continue;
+    const hour = dt.getHours();
+    const temp = Math.round(item.main.temp);
+    const cond = item.weather[0].main;
+
+    if (hour >= 6 && hour < 12 && morningTemp === null) {
+      morningTemp = temp; morningCondition = cond;
+    } else if (hour >= 12 && hour < 18 && afternoonTemp === null) {
+      afternoonTemp = temp; afternoonCondition = cond;
+    } else if (hour >= 18 && eveningTemp === null) {
+      eveningTemp = temp; eveningCondition = cond;
+    }
   }
+
+  // Step 3: Fill any remaining nulls with current weather as estimate
+  const currentTemp = Math.round(current.main.temp);
+  const currentCond = current.weather[0].main;
+  if (morningTemp === null) { morningTemp = currentTemp; morningCondition = currentCond; }
+  if (afternoonTemp === null) { afternoonTemp = currentTemp; afternoonCondition = currentCond; }
+  if (eveningTemp === null) { eveningTemp = currentTemp; eveningCondition = currentCond; }
 
   const tomorrowHigh = tomorrowTemps.length ? Math.max(...tomorrowTemps) : null;
   const tomorrowLow = tomorrowTemps.length ? Math.min(...tomorrowTemps) : null;
