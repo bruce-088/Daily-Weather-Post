@@ -453,6 +453,19 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
   let t = 0;
   const nt = () => ++t;
   const txtShadow = "0px 2px 6px rgba(0,0,0,0.5)";
+
+  // Determine time period label
+  let periodLabel: string;
+  if (timePeriod === "morning") periodLabel = "☀️  MORNING UPDATE";
+  else if (timePeriod === "afternoon") periodLabel = "🌤️  AFTERNOON UPDATE";
+  else if (timePeriod === "evening") periodLabel = "🌙  EVENING UPDATE";
+  else {
+    const hour = now.getHours();
+    if (hour >= 6 && hour < 12) periodLabel = "☀️  MORNING UPDATE";
+    else if (hour >= 12 && hour < 17) periodLabel = "🌤️  AFTERNOON UPDATE";
+    else periodLabel = "🌙  EVENING UPDATE";
+  }
+
   const cityUpper = weather.city.toUpperCase();
   const regionDate = weather.stateOrRegion + "  \u00B7  " + dateStr;
   const tempStr = weather.temperature + "\u00B0";

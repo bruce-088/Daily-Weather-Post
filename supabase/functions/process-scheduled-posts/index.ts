@@ -440,6 +440,18 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
   const nt = () => ++t;
   const txtShadow = "0px 1px 4px rgba(0,0,0,0.4)";
 
+  // Determine time period label
+  let periodLabel: string;
+  if (timePeriod === "morning") periodLabel = "☀️  MORNING UPDATE";
+  else if (timePeriod === "afternoon") periodLabel = "🌤️  AFTERNOON UPDATE";
+  else if (timePeriod === "evening") periodLabel = "🌙  EVENING UPDATE";
+  else {
+    const hour = now.getHours();
+    if (hour >= 6 && hour < 12) periodLabel = "☀️  MORNING UPDATE";
+    else if (hour >= 12 && hour < 17) periodLabel = "🌤️  AFTERNOON UPDATE";
+    else periodLabel = "🌙  EVENING UPDATE";
+  }
+
   const elements: any[] = [
     ...(videoUrl ? [
       { type: "video", track: nt(), time: 0, duration: 10, source: videoUrl, width: "100%", height: "100%", x: "50%", y: "50%", fit: "cover" },
