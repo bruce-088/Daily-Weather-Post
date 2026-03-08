@@ -15,6 +15,7 @@ import {
   Send,
   History,
   LogOut,
+  FileDown,
   CalendarClock,
   MessageSquare,
   RefreshCw,
