@@ -1,0 +1,1 @@
+ALTER TABLE public.post_history DROP CONSTRAINT post_history_platform_check;
