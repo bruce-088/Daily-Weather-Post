@@ -202,6 +202,22 @@ export function ScheduledPostsList({ posts, loading, onRefresh }: ScheduledPosts
         onOpenChange={(open) => !open && setEditingPost(null)}
         onSaved={onRefresh}
       />
+      <AlertDialog open={!!cancellingId} onOpenChange={(open) => !open && setCancellingId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel scheduled post?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will cancel the post and it won't be published. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep it</AlertDialogCancel>
+            <AlertDialogAction onClick={handleCancel} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Cancel post
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
