@@ -445,6 +445,7 @@ const Index = () => {
                   youtubeConnected={youtubeConnected}
                   twitterConnected={twitterConnected}
                   linkedinConnected={linkedinConnected}
+                  onDisconnect={handleDisconnect}
                 />
               </aside>
             </div>
