@@ -698,6 +698,42 @@ Professional weather app style, no photographs.`;
   }
 }
 
+// --- Store generated image to Supabase Storage ---
+async function storeGeneratedImage(
+  supabase: any,
+  userId: string,
+  imageData: Uint8Array,
+  mimeType: string,
+  city: string
+): Promise<{ storagePath: string; signedUrl: string } | null> {
+  try {
+    const ext = mimeType.includes("png") ? "png" : mimeType.includes("jpeg") ? "jpg" : "png";
+    const filename = `${userId}/${city.toLowerCase().replace(/\s+/g, "-")}-${Date.now()}.${ext}`;
+    
+    const { error: uploadError } = await supabase.storage
+      .from("generated-images")
+      .upload(filename, imageData, {
+        contentType: mimeType,
+        upsert: false,
+      });
+    
+    if (uploadError) {
+      console.error("Failed to store generated image:", uploadError);
+      return null;
+    }
+    
+    const { data: signedData } = await supabase.storage
+      .from("generated-images")
+      .createSignedUrl(filename, 3600); // 1 hour
+    
+    console.log(`Image stored: ${filename}`);
+    return { storagePath: filename, signedUrl: signedData?.signedUrl || "" };
+  } catch (err) {
+    console.error("Image storage error:", err);
+    return null;
+  }
+}
+
 // --- Fallback: Post image to LinkedIn ---
 async function postLinkedInImage(token: string, imageData: Uint8Array, title: string, description: string): Promise<string | null> {
   const parts = token.split("::");
@@ -860,6 +896,7 @@ Deno.serve(async (req) => {
 
         let postStatus = "posted";
         let errorMessage: string | null = null;
+        let storedImageUrl: string | null = null;
 
         // --- Platform Upload via Adapter ---
         const platformsToPost = post.platform === "both" ? ["youtube", "tiktok"] : post.platform.split(",").map((p: string) => p.trim());
@@ -887,6 +924,13 @@ Deno.serve(async (req) => {
           if (!fallbackImage) {
             errorMessage = "Both video and fallback image generation failed";
           } else {
+            // Store the generated image to Supabase Storage
+            const stored = await storeGeneratedImage(supabase, post.user_id, fallbackImage.data, fallbackImage.mimeType, weather.city);
+            if (stored) {
+              storedImageUrl = stored.signedUrl;
+              console.log("Image stored at:", stored.storagePath);
+            }
+            
             const imageCapablePlatforms = ["linkedin", "twitter"];
             const videoOnlyPlatforms = ["youtube", "tiktok", "instagram"];
             let postedAny = false;
@@ -932,7 +976,7 @@ Deno.serve(async (req) => {
         await supabase.from("post_history").insert({
           status: postStatus, platform: post.platform, city: weather.city,
           temperature: weather.temperature, condition: weather.condition,
-          image_url: null, error_message: errorMessage, caption,
+          image_url: storedImageUrl, error_message: errorMessage, caption,
           user_id: post.user_id,
         });
 

@@ -2,7 +2,7 @@ import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CheckCircle, XCircle, Clock, History } from "lucide-react";
+import { CheckCircle, XCircle, Clock, History, Image } from "lucide-react";
 import type { PostHistoryItem } from "@/lib/api";
 
 interface PostHistoryListProps {
@@ -47,7 +47,20 @@ export function PostHistoryList({ posts, loading }: PostHistoryListProps) {
         return (
           <Card key={post.id} className="border-border/30 bg-card/60 backdrop-blur">
             <CardContent className="py-3 px-4 flex items-center gap-3">
-              <Icon size={18} className={config.color} />
+              {post.image_url ? (
+                <div className="relative shrink-0">
+                  <img
+                    src={post.image_url}
+                    alt={`Weather post for ${post.city}`}
+                    className="w-12 h-12 rounded-lg object-cover border border-border/30"
+                  />
+                  <div className="absolute -bottom-1 -right-1 bg-background rounded-full p-0.5 border border-border/30">
+                    <Icon size={12} className={config.color} />
+                  </div>
+                </div>
+              ) : (
+                <Icon size={18} className={config.color} />
+              )}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium text-foreground">{post.city}</span>
@@ -58,6 +71,9 @@ export function PostHistoryList({ posts, loading }: PostHistoryListProps) {
                   )}
                   {post.condition && (
                     <span className="text-xs text-muted-foreground">· {post.condition}</span>
+                  )}
+                  {post.image_url && (
+                    <Image size={12} className="text-muted-foreground" />
                   )}
                 </div>
                 {post.caption && (

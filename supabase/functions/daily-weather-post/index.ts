@@ -760,6 +760,42 @@ Professional weather app style, no photographs.`;
   }
 }
 
+// --- Store generated image to Supabase Storage ---
+async function storeGeneratedImage(
+  supabase: any,
+  userId: string,
+  imageData: Uint8Array,
+  mimeType: string,
+  city: string
+): Promise<{ storagePath: string; signedUrl: string } | null> {
+  try {
+    const ext = mimeType.includes("png") ? "png" : mimeType.includes("jpeg") ? "jpg" : "png";
+    const filename = `${userId}/${city.toLowerCase().replace(/\s+/g, "-")}-${Date.now()}.${ext}`;
+    
+    const { error: uploadError } = await supabase.storage
+      .from("generated-images")
+      .upload(filename, imageData, {
+        contentType: mimeType,
+        upsert: false,
+      });
+    
+    if (uploadError) {
+      console.error("Failed to store generated image:", uploadError);
+      return null;
+    }
+    
+    const { data: signedData } = await supabase.storage
+      .from("generated-images")
+      .createSignedUrl(filename, 3600); // 1 hour
+    
+    console.log(`Image stored: ${filename}`);
+    return { storagePath: filename, signedUrl: signedData?.signedUrl || "" };
+  } catch (err) {
+    console.error("Image storage error:", err);
+    return null;
+  }
+}
+
 // --- Fallback: Post image to LinkedIn ---
 async function postLinkedInImage(token: string, imageData: Uint8Array, title: string, description: string): Promise<string | null> {
   const parts = token.split("::");
@@ -1004,6 +1040,7 @@ Deno.serve(async (req) => {
     let status = "success";
     let errorMessage: string | null = null;
     let youtubeVideoId: string | null = null;
+    let storedImageUrl: string | null = null;
 
     let connectedAdapters = getConnectedAdapters(settings as Record<string, unknown>);
     // Filter to only selected platforms if specified
@@ -1025,6 +1062,14 @@ Deno.serve(async (req) => {
         platform = connectedAdapters[0].name;
       } else {
         console.log("Using fallback image for posting");
+        
+        // Store the generated image to Supabase Storage
+        const stored = await storeGeneratedImage(supabase, userId, fallbackImage.data, fallbackImage.mimeType, weather.city);
+        if (stored) {
+          storedImageUrl = stored.signedUrl;
+          console.log("Image stored at:", stored.storagePath);
+        }
+        
         const title = generateSkyBriefTitle(weather.city, weather.temperature, weather.condition, weather.rainChance);
         const desc = caption || "Weather update for " + weather.city + ": " + weather.temperature + "\u00B0F, " + weather.description;
         
@@ -1101,7 +1146,7 @@ Deno.serve(async (req) => {
 
     const { error: historyError } = await supabase.from("post_history").insert({
       status, platform, city: weather.city, temperature: weather.temperature,
-      condition: weather.condition, image_url: null, error_message: errorMessage,
+      condition: weather.condition, image_url: storedImageUrl, error_message: errorMessage,
       caption, user_id: userId,
     });
     if (historyError) console.error("Failed to log post history:", historyError);
