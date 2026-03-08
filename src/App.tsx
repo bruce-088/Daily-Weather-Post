@@ -13,6 +13,7 @@ import YouTubeCallback from "./pages/YouTubeCallback";
 import TwitterCallback from "./pages/TwitterCallback";
 import LinkedInCallback from "./pages/LinkedInCallback";
 import NotFound from "./pages/NotFound";
+import ExportSpec from "./pages/ExportSpec";
 
 const queryClient = new QueryClient();
 
