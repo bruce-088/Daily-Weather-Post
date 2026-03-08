@@ -2,7 +2,7 @@ import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CheckCircle, XCircle, Clock, History } from "lucide-react";
+import { CheckCircle, XCircle, Clock, History, Image } from "lucide-react";
 import type { PostHistoryItem } from "@/lib/api";
 
 interface PostHistoryListProps {
