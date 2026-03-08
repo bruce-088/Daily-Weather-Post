@@ -503,8 +503,9 @@ const Index = () => {
                 tiktokConnected={tiktokConnected}
                 youtubeConnected={youtubeConnected}
                 twitterConnected={twitterConnected}
-                linkedinConnected={linkedinConnected}
-              />
+                  linkedinConnected={linkedinConnected}
+                  onDisconnect={handleDisconnect}
+                />
             </div>
           </TabsContent>
         </Tabs>
