@@ -924,6 +924,13 @@ Deno.serve(async (req) => {
           if (!fallbackImage) {
             errorMessage = "Both video and fallback image generation failed";
           } else {
+            // Store the generated image to Supabase Storage
+            const stored = await storeGeneratedImage(supabase, post.user_id, fallbackImage.data, fallbackImage.mimeType, weather.city);
+            if (stored) {
+              storedImageUrl = stored.signedUrl;
+              console.log("Image stored at:", stored.storagePath);
+            }
+            
             const imageCapablePlatforms = ["linkedin", "twitter"];
             const videoOnlyPlatforms = ["youtube", "tiktok", "instagram"];
             let postedAny = false;
