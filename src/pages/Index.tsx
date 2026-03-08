@@ -338,6 +338,9 @@ const Index = () => {
                 <Zap size={10} /> Auto 3x/day
               </Badge>
             )}
+            <Button size="sm" variant="ghost" onClick={() => navigate("/export-spec")} className="gap-1.5 text-xs text-muted-foreground">
+              <FileDown size={14} /> Export Spec
+            </Button>
             <Button size="sm" variant="ghost" onClick={signOut} className="gap-1.5 text-xs text-muted-foreground">
               <LogOut size={14} /> Sign Out
             </Button>

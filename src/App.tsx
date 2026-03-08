@@ -53,6 +53,7 @@ const App = () => (
           <Route path="/youtube/callback" element={<ProtectedRoute><YouTubeCallback /></ProtectedRoute>} />
           <Route path="/twitter/callback" element={<ProtectedRoute><TwitterCallback /></ProtectedRoute>} />
           <Route path="/linkedin/callback" element={<ProtectedRoute><LinkedInCallback /></ProtectedRoute>} />
+          <Route path="/export-spec" element={<ProtectedRoute><ExportSpec /></ProtectedRoute>} />
           <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
           <Route path="*" element={<NotFound />} />
         </Routes>
