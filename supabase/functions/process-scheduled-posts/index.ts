@@ -818,8 +818,8 @@ async function postTwitterImage(token: string, imageData: Uint8Array, text: stri
   try {
     const { TwitterAdapter } = await import("../_shared/twitter-adapter.ts");
     const adapter = new TwitterAdapter();
-    console.log("Posting image to Twitter via media upload...");
-    const result = await adapter.uploadVideo(token, imageData, "", text, "image/png");
+    console.log("Posting image to Twitter via image upload...");
+    const result = await adapter.uploadImage(token, imageData, text, "image/png");
     if (result) {
       console.log("Twitter image post created:", result.id);
       return result.id;
