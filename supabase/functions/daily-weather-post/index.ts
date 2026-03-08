@@ -935,7 +935,7 @@ Deno.serve(async (req) => {
     }
 
     // Generate video
-    const video = await generateWeatherVideo(weather);
+    const video = await generateWeatherVideo(weather, timePeriod);
 
     // === PREVIEW MODE ===
     if (mode === "preview") {
