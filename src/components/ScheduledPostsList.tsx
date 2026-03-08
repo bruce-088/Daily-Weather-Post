@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { format } from "date-fns";
-import { CalendarClock, MapPin, Search, XCircle } from "lucide-react";
+import { CalendarClock, MapPin, Pencil, Search, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import { cancelScheduledPost } from "@/lib/api";
 import type { ScheduledPostItem } from "@/lib/api";
+import { EditScheduledPostDialog } from "@/components/EditScheduledPostDialog";
 
 interface ScheduledPostsListProps {
   posts: ScheduledPostItem[];
@@ -36,6 +37,7 @@ export function ScheduledPostsList({ posts, loading, onRefresh }: ScheduledPosts
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState<SortOption>("date-desc");
   const [citySearch, setCitySearch] = useState("");
+  const [editingPost, setEditingPost] = useState<ScheduledPostItem | null>(null);
 
   const filtered = useMemo(() => {
     let result = posts;
@@ -157,20 +159,36 @@ export function ScheduledPostsList({ posts, loading, onRefresh }: ScheduledPosts
                   )}
                 </div>
                 {post.status === "pending" && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleCancel(post.id)}
-                    className="text-muted-foreground hover:text-destructive shrink-0"
-                  >
-                    <XCircle size={16} />
-                  </Button>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setEditingPost(post)}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <Pencil size={14} />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleCancel(post.id)}
+                      className="text-muted-foreground hover:text-destructive"
+                    >
+                      <XCircle size={16} />
+                    </Button>
+                  </div>
                 )}
               </div>
             </Card>
           );
         })
       )}
+      <EditScheduledPostDialog
+        post={editingPost}
+        open={!!editingPost}
+        onOpenChange={(open) => !open && setEditingPost(null)}
+        onSaved={onRefresh}
+      />
     </div>
   );
 }

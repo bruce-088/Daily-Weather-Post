@@ -203,6 +203,18 @@ export async function cancelScheduledPost(id: string): Promise<boolean> {
   return !error;
 }
 
+export async function updateScheduledPost(
+  id: string,
+  updates: { city?: string; scheduled_at?: string; platform?: string; caption?: string | null }
+): Promise<boolean> {
+  const { error } = await supabase
+    .from("scheduled_posts")
+    .update(updates)
+    .eq("id", id)
+    .eq("status", "pending");
+  return !error;
+}
+
 // --- Caption Generation ---
 
 export async function generateCaption(weather: WeatherData): Promise<string> {
