@@ -78,7 +78,18 @@ const Index = () => {
   const [debouncedLocation, setDebouncedLocation] = useState<string | undefined>(undefined);
   const [debouncedState, setDebouncedState] = useState<string | undefined>(undefined);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
+  const [platformPickerOpen, setPlatformPickerOpen] = useState(false);
 
+  // Build available platforms list from connection status
+  const availablePlatforms = useMemo(() => {
+    const platforms: { id: string; label: string }[] = [];
+    if (youtubeConnected) platforms.push({ id: "youtube", label: "YouTube" });
+    if (twitterConnected) platforms.push({ id: "twitter", label: "Twitter / X" });
+    if (linkedinConnected) platforms.push({ id: "linkedin", label: "LinkedIn" });
+    if (tiktokConnected) platforms.push({ id: "tiktok", label: "TikTok" });
+    return platforms;
+  }, [youtubeConnected, twitterConnected, linkedinConnected, tiktokConnected]);
   useEffect(() => {
     if (!settingsLoaded) {
       setDebouncedLocation(undefined);
