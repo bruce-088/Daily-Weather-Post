@@ -827,23 +827,66 @@ Deno.serve(async (req) => {
         let errorMessage: string | null = null;
 
         // --- Platform Upload via Adapter ---
-        const platformsToPost = post.platform === "both" ? ["youtube", "tiktok"] : [post.platform];
+        const platformsToPost = post.platform === "both" ? ["youtube", "tiktok"] : post.platform.split(",").map((p: string) => p.trim());
+        const title = generateSkyBriefTitle(weather.city, weather.temperature, weather.condition, weather.rainChance);
+        const desc = caption || "Weather update for " + weather.city + ": " + weather.temperature + "°F, " + weather.description;
 
-        for (const platformName of platformsToPost) {
-          const video = await generateWeatherVideo(weather);
-          if (!video) {
-            errorMessage = "Video generation failed — check Creatomate configuration";
-            break;
+        // Try video generation once
+        const video = await generateWeatherVideo(weather);
+
+        if (video) {
+          // Video succeeded — post to all platforms
+          for (const platformName of platformsToPost) {
+            const result = await postToPlatform(platformName, supabase, post.user_id, video.data, title, desc, video.mimeType);
+            if (result.success) {
+              console.log(`Scheduled post ${post.id}: ${platformName} published, ID: ${result.id}`);
+            } else {
+              errorMessage = result.error || `${platformName} upload failed`;
+            }
           }
+        } else {
+          // Video failed — fallback to image for image-capable platforms
+          console.log("Video generation failed for scheduled post, attempting fallback image...");
+          const fallbackImage = await generateFallbackImage(weather);
 
-          const title = generateSkyBriefTitle(weather.city, weather.temperature, weather.condition, weather.rainChance);
-          const desc = caption || "Weather update for " + weather.city + ": " + weather.temperature + "°F, " + weather.description;
-          const result = await postToPlatform(platformName, supabase, post.user_id, video.data, title, desc, video.mimeType);
-
-          if (result.success) {
-            console.log(`Scheduled post ${post.id}: ${platformName} published, ID: ${result.id}`);
+          if (!fallbackImage) {
+            errorMessage = "Both video and fallback image generation failed";
           } else {
-            errorMessage = result.error || `${platformName} upload failed`;
+            const imageCapablePlatforms = ["linkedin", "twitter"];
+            const videoOnlyPlatforms = ["youtube", "tiktok", "instagram"];
+            let postedAny = false;
+
+            for (const platformName of platformsToPost) {
+              if (imageCapablePlatforms.includes(platformName)) {
+                try {
+                  const { getAdapter } = await import("../_shared/platform-adapter.ts");
+                  const adapter = getAdapter(platformName);
+                  if (!adapter) continue;
+                  const token = await adapter.getValidToken(supabase, post.user_id);
+                  if (!token) { console.error(`${platformName}: failed to get token for image post`); continue; }
+
+                  if (platformName === "linkedin") {
+                    const postResult = await postLinkedInImage(token, fallbackImage.data, title, desc);
+                    if (postResult) { postedAny = true; console.log(`Scheduled ${post.id}: linkedin image posted, ID: ${postResult}`); }
+                    else { errorMessage = "LinkedIn image post failed"; }
+                  } else if (platformName === "twitter") {
+                    const postResult = await postTwitterImage(token, fallbackImage.data, desc);
+                    if (postResult) { postedAny = true; console.log(`Scheduled ${post.id}: twitter image posted, ID: ${postResult}`); }
+                    else { errorMessage = "Twitter image post failed"; }
+                  }
+                } catch (err) {
+                  console.error(`${platformName} image post error:`, err);
+                  errorMessage = `${platformName} image post failed`;
+                }
+              } else if (videoOnlyPlatforms.includes(platformName)) {
+                console.log(`Skipping ${platformName} — requires video (fallback image only)`);
+                errorMessage = (errorMessage || "") + `${platformName} skipped (video unavailable); `;
+              }
+            }
+
+            if (!postedAny && !errorMessage) {
+              errorMessage = "No image-capable platforms in selection — video generation failed";
+            }
           }
         }
 
