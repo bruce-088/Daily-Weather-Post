@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { format } from "date-fns";
-import { CalendarIcon, Clock, MapPin, Send, Sparkles } from "lucide-react";
+import { CalendarIcon, Clock, MapPin, Send, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -13,17 +13,20 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { createScheduledPost, generateCaption } from "@/lib/api";
 import { supabase } from "@/integrations/supabase/client";
 import type { WeatherData } from "@/types/weather";
+
+const PLATFORMS = [
+  { value: "instagram", label: "Instagram" },
+  { value: "tiktok", label: "TikTok" },
+  { value: "youtube", label: "YouTube Shorts" },
+  { value: "twitter", label: "X (Twitter)" },
+  { value: "linkedin", label: "LinkedIn" },
+] as const;
 
 interface SchedulePostFormProps {
   defaultCity: string;
@@ -34,10 +37,21 @@ export function SchedulePostForm({ defaultCity, onScheduled }: SchedulePostFormP
   const [date, setDate] = useState<Date>();
   const [time, setTime] = useState("08:00");
   const [city, setCity] = useState(defaultCity);
-  const [platform, setPlatform] = useState("both");
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(PLATFORMS.map(p => p.value));
   const [caption, setCaption] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [generating, setGenerating] = useState(false);
+
+  const togglePlatform = (value: string) => {
+    setSelectedPlatforms(prev =>
+      prev.includes(value)
+        ? prev.filter(p => p !== value)
+        : [...prev, value]
+    );
+  };
+
+  const selectAll = () => setSelectedPlatforms(PLATFORMS.map(p => p.value));
+  const deselectAll = () => setSelectedPlatforms([]);
 
   const handleGenerateCaption = async () => {
     if (!city.trim()) {
@@ -71,6 +85,10 @@ export function SchedulePostForm({ defaultCity, onScheduled }: SchedulePostFormP
       toast.error("Please enter a city");
       return;
     }
+    if (selectedPlatforms.length === 0) {
+      toast.error("Please select at least one platform");
+      return;
+    }
 
     const [hours, minutes] = time.split(":").map(Number);
     const scheduledAt = new Date(date);
@@ -82,17 +100,35 @@ export function SchedulePostForm({ defaultCity, onScheduled }: SchedulePostFormP
     }
 
     setSubmitting(true);
-    const ok = await createScheduledPost(city, scheduledAt.toISOString(), platform, caption || null);
+
+    // Create one scheduled post per selected platform
+    const platformValue = selectedPlatforms.length === PLATFORMS.length
+      ? "both"
+      : selectedPlatforms.join(",");
+
+    const results = await Promise.all(
+      selectedPlatforms.length === PLATFORMS.length
+        ? [createScheduledPost(city, scheduledAt.toISOString(), "both", caption || null)]
+        : selectedPlatforms.map(p =>
+            createScheduledPost(city, scheduledAt.toISOString(), p, caption || null)
+          )
+    );
+
     setSubmitting(false);
 
-    if (ok) {
-      toast.success(`Post scheduled for ${format(scheduledAt, "PPP 'at' HH:mm")}`);
+    const allOk = results.every(Boolean);
+    if (allOk) {
+      const platformNames = selectedPlatforms.length === PLATFORMS.length
+        ? "all platforms"
+        : selectedPlatforms.map(p => PLATFORMS.find(pl => pl.value === p)?.label).join(", ");
+      toast.success(`Post scheduled for ${format(scheduledAt, "PPP 'at' HH:mm")} on ${platformNames}`);
       setDate(undefined);
       setTime("08:00");
       setCaption("");
+      setSelectedPlatforms(PLATFORMS.map(p => p.value));
       onScheduled();
     } else {
-      toast.error("Failed to schedule post");
+      toast.error("Some posts failed to schedule");
     }
   };
 
@@ -159,22 +195,57 @@ export function SchedulePostForm({ defaultCity, onScheduled }: SchedulePostFormP
           />
         </div>
 
-        {/* Platform */}
+        {/* Platforms - Multi-select */}
         <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground">Platform</Label>
-          <Select value={platform} onValueChange={setPlatform}>
-            <SelectTrigger className="h-9 text-sm bg-secondary/30 border-border/30">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="both">All Platforms</SelectItem>
-              <SelectItem value="instagram">Instagram</SelectItem>
-              <SelectItem value="tiktok">TikTok</SelectItem>
-              <SelectItem value="youtube">YouTube Shorts</SelectItem>
-              <SelectItem value="twitter">X (Twitter)</SelectItem>
-              <SelectItem value="linkedin">LinkedIn</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex items-center justify-between">
+            <Label className="text-xs text-muted-foreground">Platforms</Label>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={selectedPlatforms.length === PLATFORMS.length ? deselectAll : selectAll}
+              className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
+            >
+              {selectedPlatforms.length === PLATFORMS.length ? "Deselect all" : "Select all"}
+            </Button>
+          </div>
+          <div className="space-y-2 rounded-md border border-border/30 bg-secondary/30 p-2.5">
+            {PLATFORMS.map((p) => (
+              <label
+                key={p.value}
+                className="flex items-center gap-2 cursor-pointer text-sm hover:text-foreground text-muted-foreground transition-colors"
+              >
+                <Checkbox
+                  checked={selectedPlatforms.includes(p.value)}
+                  onCheckedChange={() => togglePlatform(p.value)}
+                  className="h-3.5 w-3.5"
+                />
+                <span className={cn(
+                  "text-xs",
+                  selectedPlatforms.includes(p.value) && "text-foreground"
+                )}>
+                  {p.label}
+                </span>
+              </label>
+            ))}
+          </div>
+          {selectedPlatforms.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-1">
+              {selectedPlatforms.map(p => {
+                const pl = PLATFORMS.find(x => x.value === p);
+                return (
+                  <Badge
+                    key={p}
+                    variant="secondary"
+                    className="text-[10px] h-5 gap-0.5 cursor-pointer hover:bg-destructive/20"
+                    onClick={() => togglePlatform(p)}
+                  >
+                    {pl?.label}
+                    <X size={8} />
+                  </Badge>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Caption */}
@@ -205,12 +276,12 @@ export function SchedulePostForm({ defaultCity, onScheduled }: SchedulePostFormP
 
         <Button
           onClick={handleSubmit}
-          disabled={submitting || !date}
+          disabled={submitting || !date || selectedPlatforms.length === 0}
           className="w-full gap-1.5 text-xs"
           size="sm"
         >
           <Send size={14} />
-          {submitting ? "Scheduling..." : "Schedule Post"}
+          {submitting ? "Scheduling..." : `Schedule to ${selectedPlatforms.length} platform${selectedPlatforms.length !== 1 ? "s" : ""}`}
         </Button>
       </CardContent>
     </Card>
