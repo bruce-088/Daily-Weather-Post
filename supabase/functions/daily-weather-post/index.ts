@@ -732,10 +732,13 @@ async function postLinkedInImage(token: string, imageData: Uint8Array, title: st
   const authorUrn = parts[1];
   if (!authorUrn) { console.error("LinkedIn: no author URN"); return null; }
 
+  // Try org URN first, fallback to person URN if org permissions fail
+  const personUrn = parts.length > 2 ? parts[2] : null;
+  
   try {
     // Step 1: Register image upload
-    console.log("LinkedIn: Registering image upload...");
-    const registerRes = await fetch("https://api.linkedin.com/rest/images?action=initializeUpload", {
+    console.log("LinkedIn: Registering image upload for", authorUrn);
+    let registerRes = await fetch("https://api.linkedin.com/rest/images?action=initializeUpload", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -749,7 +752,29 @@ async function postLinkedInImage(token: string, imageData: Uint8Array, title: st
         },
       }),
     });
-    const registerData = await registerRes.json();
+    let registerData = await registerRes.json();
+    
+    // If org posting fails due to permissions, fallback to person URN
+    let effectiveAuthor = authorUrn;
+    if (!registerRes.ok && personUrn && authorUrn !== personUrn) {
+      console.log("LinkedIn org image failed, falling back to person URN:", personUrn);
+      registerRes = await fetch("https://api.linkedin.com/rest/images?action=initializeUpload", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+          "LinkedIn-Version": "202601",
+          "X-Restli-Protocol-Version": "2.0.0",
+        },
+        body: JSON.stringify({
+          initializeUploadRequest: {
+            owner: personUrn,
+          },
+        }),
+      });
+      registerData = await registerRes.json();
+      effectiveAuthor = personUrn;
+    }
     if (!registerRes.ok) { console.error("LinkedIn image register failed:", registerData); return null; }
 
     const uploadUrl = registerData.value?.uploadUrl;
@@ -779,7 +804,7 @@ async function postLinkedInImage(token: string, imageData: Uint8Array, title: st
         "X-Restli-Protocol-Version": "2.0.0",
       },
       body: JSON.stringify({
-        author: authorUrn,
+        author: effectiveAuthor,
         commentary: description || title,
         visibility: "PUBLIC",
         distribution: { feedDistribution: "MAIN_FEED", targetEntities: [], thirdPartyDistributionChannels: [] },

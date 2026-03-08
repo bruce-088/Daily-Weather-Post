@@ -60,7 +60,9 @@ export class LinkedInAdapter implements PlatformAdapter {
 
     // Prefer organization URN for company page posting, fallback to person URN
     const authorUrn = settings.linkedin_organization_urn || settings.linkedin_person_urn;
-    return `${accessToken}::${authorUrn}`;
+    const personUrn = settings.linkedin_person_urn;
+    // Format: accessToken::authorUrn::personUrn (personUrn used as fallback)
+    return `${accessToken}::${authorUrn}::${personUrn}`;
   }
 
   async uploadVideo(
@@ -73,6 +75,7 @@ export class LinkedInAdapter implements PlatformAdapter {
     const parts = token.split("::");
     const accessToken = parts[0];
     const authorUrn = parts[1];
+    const personUrn = parts.length > 2 ? parts[2] : null;
 
     if (!authorUrn) {
       console.error("LinkedIn: author URN not provided in token");
