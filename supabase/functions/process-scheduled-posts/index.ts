@@ -931,8 +931,8 @@ Deno.serve(async (req) => {
               console.log("Image stored at:", stored.storagePath);
             }
             
-            const imageCapablePlatforms = ["linkedin", "twitter"];
-            const videoOnlyPlatforms = ["youtube", "tiktok", "instagram"];
+            const imageCapablePlatforms = ["linkedin", "twitter", "tiktok"];
+            const videoOnlyPlatforms = ["youtube", "instagram"];
             let postedAny = false;
 
             for (const platformName of platformsToPost) {

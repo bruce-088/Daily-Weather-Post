@@ -1065,8 +1065,8 @@ Deno.serve(async (req) => {
         const desc = caption || "Weather update for " + weather.city + ": " + weather.temperature + "\u00B0F, " + weather.description;
         
         // Image-capable platforms
-        const imageCapablePlatforms = ["linkedin", "twitter"];
-        const videoOnlyPlatforms = ["youtube", "tiktok", "instagram"];
+        const imageCapablePlatforms = ["linkedin", "twitter", "tiktok"];
+        const videoOnlyPlatforms = ["youtube", "instagram"];
         
         for (const adapter of connectedAdapters) {
           if (imageCapablePlatforms.includes(adapter.name)) {
