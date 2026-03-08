@@ -209,9 +209,14 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
               </div>
             </div>
             {twitterConnected ? (
-              <Badge variant="outline" className="gap-1 text-xs border-primary/30 text-primary">
-                <CheckCircle size={12} /> Connected
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="gap-1 text-xs border-primary/30 text-primary">
+                  <CheckCircle size={12} /> Connected
+                </Badge>
+                <Button size="sm" variant="ghost" onClick={() => onDisconnect?.("twitter")} className="gap-1 text-xs text-destructive hover:text-destructive h-7 px-2">
+                  <Unlink size={12} /> Disconnect
+                </Button>
+              </div>
             ) : (
               <Button size="sm" variant="outline" onClick={handleConnectTwitter} className="gap-1.5">
                 <ExternalLink size={12} /> Connect
