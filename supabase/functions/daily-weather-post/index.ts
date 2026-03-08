@@ -648,6 +648,83 @@ async function generateWeatherVideo(weather: WeatherResponse): Promise<{ data: U
   return null;
 }
 
+// --- Fallback: AI-generated static weather image ---
+async function generateFallbackImage(weather: WeatherResponse): Promise<{ data: Uint8Array; mimeType: string } | null> {
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) {
+    console.error("LOVABLE_API_KEY not set, cannot generate fallback image");
+    return null;
+  }
+
+  const theme = getWeatherTheme(weather.condition);
+  const temps = [weather.morningTemp, weather.afternoonTemp, weather.eveningTemp].filter((t): t is number => t != null);
+  const hi = temps.length ? Math.max(...temps) : weather.temperature;
+  const lo = temps.length ? Math.min(...temps) : weather.temperature;
+
+  const prompt = `Create a clean, modern weather infographic for social media (vertical 9:16 portrait). 
+Dark navy/slate background with subtle gradient. 
+City: ${weather.city}, ${weather.stateOrRegion}
+Temperature: ${weather.temperature}°F
+Condition: ${weather.description} ${theme.emoji}
+High: ${hi}°F / Low: ${lo}°F
+Rain: ${weather.rainChance}%
+Wind: ${weather.windInfo}
+Include "SKYBRIEF" branding at top. Use clean typography, accent color ${theme.accent}. 
+Professional weather app style, no photographs.`;
+
+  try {
+    console.log("Generating fallback weather image via AI...");
+    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + LOVABLE_API_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash-image",
+        messages: [{ role: "user", content: prompt }],
+        modalities: ["image", "text"],
+      }),
+    });
+
+    if (!aiRes.ok) {
+      const errText = await aiRes.text();
+      console.error("AI image generation failed:", aiRes.status, errText);
+      return null;
+    }
+
+    const aiData = await aiRes.json();
+    const imageUrl = aiData.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    if (!imageUrl) {
+      console.error("No image in AI response");
+      return null;
+    }
+
+    // Extract base64 data
+    const base64Match = imageUrl.match(/^data:image\/(\w+);base64,(.+)$/);
+    if (!base64Match) {
+      console.error("Unexpected image URL format from AI");
+      return null;
+    }
+
+    const imageType = base64Match[1]; // png, jpeg, etc.
+    const base64Data = base64Match[2];
+
+    // Decode base64 to Uint8Array
+    const binaryString = atob(base64Data);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+
+    console.log(`Fallback image generated: ${bytes.length} bytes (${imageType})`);
+    return { data: bytes, mimeType: `image/${imageType}` };
+  } catch (err) {
+    console.error("Fallback image generation error:", err);
+    return null;
+  }
+}
+
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
