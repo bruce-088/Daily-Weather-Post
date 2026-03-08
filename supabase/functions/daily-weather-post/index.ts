@@ -760,6 +760,42 @@ Professional weather app style, no photographs.`;
   }
 }
 
+// --- Store generated image to Supabase Storage ---
+async function storeGeneratedImage(
+  supabase: any,
+  userId: string,
+  imageData: Uint8Array,
+  mimeType: string,
+  city: string
+): Promise<{ storagePath: string; signedUrl: string } | null> {
+  try {
+    const ext = mimeType.includes("png") ? "png" : mimeType.includes("jpeg") ? "jpg" : "png";
+    const filename = `${userId}/${city.toLowerCase().replace(/\s+/g, "-")}-${Date.now()}.${ext}`;
+    
+    const { error: uploadError } = await supabase.storage
+      .from("generated-images")
+      .upload(filename, imageData, {
+        contentType: mimeType,
+        upsert: false,
+      });
+    
+    if (uploadError) {
+      console.error("Failed to store generated image:", uploadError);
+      return null;
+    }
+    
+    const { data: signedData } = await supabase.storage
+      .from("generated-images")
+      .createSignedUrl(filename, 3600); // 1 hour
+    
+    console.log(`Image stored: ${filename}`);
+    return { storagePath: filename, signedUrl: signedData?.signedUrl || "" };
+  } catch (err) {
+    console.error("Image storage error:", err);
+    return null;
+  }
+}
+
 // --- Fallback: Post image to LinkedIn ---
 async function postLinkedInImage(token: string, imageData: Uint8Array, title: string, description: string): Promise<string | null> {
   const parts = token.split("::");
