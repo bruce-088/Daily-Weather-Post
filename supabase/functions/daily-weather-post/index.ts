@@ -804,7 +804,7 @@ async function postLinkedInImage(token: string, imageData: Uint8Array, title: st
         "X-Restli-Protocol-Version": "2.0.0",
       },
       body: JSON.stringify({
-        author: authorUrn,
+        author: effectiveAuthor,
         commentary: description || title,
         visibility: "PUBLIC",
         distribution: { feedDistribution: "MAIN_FEED", targetEntities: [], thirdPartyDistributionChannels: [] },
