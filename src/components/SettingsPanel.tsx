@@ -20,6 +20,7 @@ interface SettingsPanelProps {
   youtubeConnected?: boolean;
   twitterConnected?: boolean;
   linkedinConnected?: boolean;
+  onDisconnect?: (platform: string) => void;
 }
 
 export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, saving, tiktokConnected, youtubeConnected, twitterConnected, linkedinConnected }: SettingsPanelProps) {
