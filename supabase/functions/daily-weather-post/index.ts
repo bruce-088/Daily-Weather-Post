@@ -490,6 +490,13 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
     { type: "shape", track: nt(), time: 0.2, duration: 9.8, shape_type: "rectangle", width: 80, height: 4, x: "50%", y: "8%", fill_color: theme.accent, border_radius: "2",
       enter: { type: "scale", start_scale: "0%", duration: 0.6 } },
 
+    // === TIME PERIOD BADGE ===
+    { type: "shape", track: nt(), time: 0.3, duration: 9.7, shape_type: "rectangle", width: 520, height: 60, x: "50%", y: "11%",
+      fill_color: "rgba(255,255,255,0.12)", border_radius: "30",
+      enter: { type: "fade", duration: 0.4 } },
+    { type: "text", track: nt(), time: 0.3, duration: 9.7, text: periodLabel, font_family: "Inter", font_weight: "700", font_size: "34", fill_color: theme.accent, letter_spacing: "4%",
+      x: "50%", y: "11%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.4 } },
+
     // === CITY HEADER GLASS PANEL (stronger backdrop) ===
     { type: "shape", track: nt(), time: 0.2, duration: 9.8, shape_type: "rectangle", width: 1100, height: 280, x: "50%", y: "17%",
       fill_color: "rgba(0,0,0,0.45)", border_radius: "16",
