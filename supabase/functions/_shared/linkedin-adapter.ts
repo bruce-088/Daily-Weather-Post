@@ -135,40 +135,9 @@ export class LinkedInAdapter implements PlatformAdapter {
         return null;
       }
 
-      // Step 3: Wait for video processing to complete
-      console.log("LinkedIn: Waiting for video processing...");
-      const maxAttempts = 30; // up to ~60 seconds
-      for (let i = 0; i < maxAttempts; i++) {
-        await new Promise((r) => setTimeout(r, 2000));
-        const statusRes = await fetch(
-          `https://api.linkedin.com/rest/videos/${encodeURIComponent(videoUrn)}`,
-          {
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              "LinkedIn-Version": "202601",
-              "X-Restli-Protocol-Version": "2.0.0",
-            },
-          },
-        );
-        if (statusRes.ok) {
-          const statusData = await statusRes.json();
-          const status = statusData.status;
-          console.log(`LinkedIn video status (attempt ${i + 1}): ${status}`);
-          if (status === "AVAILABLE" || status === "PROCESSING_COMPLETE") {
-            break;
-          }
-          if (status === "PROCESSING_FAILED") {
-            console.error("LinkedIn video processing failed:", statusData);
-            return null;
-          }
-        } else {
-          // If status check fails, continue waiting
-          const errText = await statusRes.text();
-          console.log(`LinkedIn video status check failed (attempt ${i + 1}): ${errText}`);
-        }
-      }
-
-      // Step 4: Create the post with the video
+      // Step 3: Create the post with the video
+      // Note: LinkedIn processes video asynchronously after post creation.
+      // The video will appear on the post once LinkedIn finishes processing.
       console.log("LinkedIn: Creating post with video...");
       const postBody: any = {
         author: authorUrn,
