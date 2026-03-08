@@ -13,6 +13,7 @@ import YouTubeCallback from "./pages/YouTubeCallback";
 import TwitterCallback from "./pages/TwitterCallback";
 import LinkedInCallback from "./pages/LinkedInCallback";
 import NotFound from "./pages/NotFound";
+import ExportSpec from "./pages/ExportSpec";
 
 const queryClient = new QueryClient();
 
@@ -52,6 +53,7 @@ const App = () => (
           <Route path="/youtube/callback" element={<ProtectedRoute><YouTubeCallback /></ProtectedRoute>} />
           <Route path="/twitter/callback" element={<ProtectedRoute><TwitterCallback /></ProtectedRoute>} />
           <Route path="/linkedin/callback" element={<ProtectedRoute><LinkedInCallback /></ProtectedRoute>} />
+          <Route path="/export-spec" element={<ProtectedRoute><ExportSpec /></ProtectedRoute>} />
           <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
           <Route path="*" element={<NotFound />} />
         </Routes>

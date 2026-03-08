@@ -15,6 +15,7 @@ import {
   Send,
   History,
   LogOut,
+  FileDown,
   CalendarClock,
   MessageSquare,
   RefreshCw,
@@ -23,6 +24,7 @@ import {
   Check,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useNavigate } from "react-router-dom";
 import { NotificationBell } from "@/components/NotificationBell";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -58,6 +60,7 @@ const DEFAULT_SETTINGS: AutomationSettings = {
 
 const Index = () => {
   const { signOut } = useAuth();
+  const navigate = useNavigate();
   const cardRef = useRef<HTMLDivElement>(null);
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("9:16");
   const [activeTab, setActiveTab] = useState("designer");
@@ -335,6 +338,9 @@ const Index = () => {
                 <Zap size={10} /> Auto 3x/day
               </Badge>
             )}
+            <Button size="sm" variant="ghost" onClick={() => navigate("/export-spec")} className="gap-1.5 text-xs text-muted-foreground">
+              <FileDown size={14} /> Export Spec
+            </Button>
             <Button size="sm" variant="ghost" onClick={signOut} className="gap-1.5 text-xs text-muted-foreground">
               <LogOut size={14} /> Sign Out
             </Button>
