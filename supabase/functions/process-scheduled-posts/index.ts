@@ -466,6 +466,14 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
       x: "50%", y: "7%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.5 } },
     { type: "shape", track: nt(), time: 0.2, duration: 9.8, shape_type: "rectangle", width: 60, height: 3, x: "50%", y: "9.5%", fill_color: theme.accent, border_radius: "2",
       enter: { type: "scale", start_scale: "0%", duration: 0.6 } },
+
+    // === TIME PERIOD BADGE ===
+    { type: "shape", track: nt(), time: 0.3, duration: 9.7, shape_type: "rectangle", width: 420, height: 50, x: "50%", y: "12%",
+      fill_color: "rgba(255,255,255,0.12)", border_radius: "25",
+      enter: { type: "fade", duration: 0.4 } },
+    { type: "text", track: nt(), time: 0.3, duration: 9.7, text: periodLabel, font_family: "Inter", font_weight: "700", font_size: "28", fill_color: theme.accent, letter_spacing: "4%",
+      x: "50%", y: "12%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.4 } },
+
     { type: "shape", track: nt(), time: 0.2, duration: 9.8, shape_type: "rectangle", width: 800, height: 200, x: "50%", y: "18%",
       fill_color: "rgba(0,0,0,0.35)", border_radius: "14", enter: { type: "fade", duration: 0.4 } },
     { type: "text", track: nt(), time: 0.3, duration: 9.7, text: weather.city.toUpperCase(), font_family: "Inter", font_weight: "800", font_size: "76", fill_color: "#ffffff",
