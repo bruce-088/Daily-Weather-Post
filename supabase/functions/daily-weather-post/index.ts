@@ -1040,6 +1040,7 @@ Deno.serve(async (req) => {
     let status = "success";
     let errorMessage: string | null = null;
     let youtubeVideoId: string | null = null;
+    let storedImageUrl: string | null = null;
 
     let connectedAdapters = getConnectedAdapters(settings as Record<string, unknown>);
     // Filter to only selected platforms if specified
