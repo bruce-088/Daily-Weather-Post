@@ -14,6 +14,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { cancelScheduledPost } from "@/lib/api";
 import type { ScheduledPostItem } from "@/lib/api";
 import { EditScheduledPostDialog } from "@/components/EditScheduledPostDialog";
