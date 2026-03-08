@@ -860,9 +860,71 @@ Deno.serve(async (req) => {
       status = "pending";
       errorMessage = "No social platforms connected — connect YouTube, TikTok, or Instagram in Settings";
     } else if (!video) {
-      status = "pending";
-      errorMessage = "Video generation failed";
-      platform = connectedAdapters[0].name;
+      // === FALLBACK: Generate static image when video fails ===
+      console.log("Video generation failed, attempting fallback image...");
+      const fallbackImage = await generateFallbackImage(weather);
+      
+      if (!fallbackImage || !userId) {
+        status = "pending";
+        errorMessage = "Both video and fallback image generation failed";
+        platform = connectedAdapters[0].name;
+      } else {
+        console.log("Using fallback image for posting");
+        const title = generateSkyBriefTitle(weather.city, weather.temperature, weather.condition, weather.rainChance);
+        const desc = caption || "Weather update for " + weather.city + ": " + weather.temperature + "\u00B0F, " + weather.description;
+        
+        // Image-capable platforms
+        const imageCapablePlatforms = ["linkedin", "twitter"];
+        const videoOnlyPlatforms = ["youtube", "tiktok", "instagram"];
+        
+        for (const adapter of connectedAdapters) {
+          if (imageCapablePlatforms.includes(adapter.name)) {
+            try {
+              const token = await adapter.getValidToken(supabase, userId);
+              if (!token) {
+                console.error(`${adapter.name}: failed to get token for image post`);
+                continue;
+              }
+              
+              if (adapter.name === "linkedin") {
+                const postResult = await postLinkedInImage(token, fallbackImage.data, title, desc);
+                if (postResult) {
+                  platform = "linkedin";
+                  status = "success";
+                  console.log(`linkedin image post published! ID: ${postResult}`);
+                } else {
+                  platform = "linkedin";
+                  status = "failed";
+                  errorMessage = "LinkedIn image post failed";
+                }
+              } else if (adapter.name === "twitter") {
+                const postResult = await postTwitterImage(token, fallbackImage.data, desc);
+                if (postResult) {
+                  platform = "twitter";
+                  status = "success";
+                  console.log(`twitter image post published! ID: ${postResult}`);
+                } else {
+                  platform = "twitter";
+                  status = "failed";
+                  errorMessage = "Twitter image post failed";
+                }
+              }
+            } catch (err) {
+              console.error(`${adapter.name} image post error:`, err);
+              platform = adapter.name;
+              status = "failed";
+              errorMessage = `${adapter.name} image post failed`;
+            }
+          } else if (videoOnlyPlatforms.includes(adapter.name)) {
+            console.log(`Skipping ${adapter.name} — requires video (fallback image only)`);
+          }
+        }
+        
+        if (status !== "success") {
+          status = "pending";
+          errorMessage = (errorMessage || "Video unavailable") + " — posted as image where possible";
+        }
+      }
     } else if (userId) {
       const title = generateSkyBriefTitle(weather.city, weather.temperature, weather.condition, weather.rainChance);
       const desc = caption || "Weather update for " + weather.city + ": " + weather.temperature + "\u00B0F, " + weather.description;
