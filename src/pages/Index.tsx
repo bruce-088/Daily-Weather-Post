@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { toPng } from "html-to-image";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Download,
@@ -66,6 +67,41 @@ const Index = () => {
   const [twitterConnected, setTwitterConnected] = useState(false);
   const [linkedinConnected, setLinkedinConnected] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  const handleDisconnect = async (platform: string) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const columnMap: Record<string, Record<string, null>> = {
+      tiktok: { tiktok_access_token: null, tiktok_refresh_token: null, tiktok_open_id: null, tiktok_token_expires_at: null, tiktok_api_key: null },
+      youtube: { youtube_access_token: null, youtube_refresh_token: null, youtube_channel_id: null, youtube_token_expires_at: null },
+      twitter: { twitter_access_token: null, twitter_access_token_secret: null, twitter_user_id: null },
+      linkedin: { linkedin_access_token: null, linkedin_refresh_token: null, linkedin_person_urn: null, linkedin_organization_urn: null, linkedin_token_expires_at: null },
+    };
+
+    const updates = columnMap[platform];
+    if (!updates) return;
+
+    const { error } = await supabase
+      .from("weather_settings")
+      .update(updates)
+      .eq("user_id", user.id);
+
+    if (error) {
+      toast.error(`Failed to disconnect ${platform}`);
+      return;
+    }
+
+    const setters: Record<string, (v: boolean) => void> = {
+      tiktok: setTiktokConnected,
+      youtube: setYoutubeConnected,
+      twitter: setTwitterConnected,
+      linkedin: setLinkedinConnected,
+    };
+    setters[platform]?.(false);
+    toast.success(`${platform.charAt(0).toUpperCase() + platform.slice(1)} disconnected`);
+  };
+
   const [posting, setPosting] = useState(false);
   const [posts, setPosts] = useState<PostHistoryItem[]>([]);
   const [postsLoading, setPostsLoading] = useState(false);
@@ -410,6 +446,7 @@ const Index = () => {
                   youtubeConnected={youtubeConnected}
                   twitterConnected={twitterConnected}
                   linkedinConnected={linkedinConnected}
+                  onDisconnect={handleDisconnect}
                 />
               </aside>
             </div>
@@ -467,8 +504,9 @@ const Index = () => {
                 tiktokConnected={tiktokConnected}
                 youtubeConnected={youtubeConnected}
                 twitterConnected={twitterConnected}
-                linkedinConnected={linkedinConnected}
-              />
+                  linkedinConnected={linkedinConnected}
+                  onDisconnect={handleDisconnect}
+                />
             </div>
           </TabsContent>
         </Tabs>

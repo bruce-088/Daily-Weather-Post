@@ -3,7 +3,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Clock, MapPin, Instagram, Video, RefreshCw, Save, CheckCircle, ExternalLink, Youtube, Sun, Sunset, Moon, Twitter, Linkedin } from "lucide-react";
+import { Clock, MapPin, Instagram, Video, RefreshCw, Save, CheckCircle, ExternalLink, Youtube, Sun, Sunset, Moon, Twitter, Linkedin, Unlink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -20,9 +20,10 @@ interface SettingsPanelProps {
   youtubeConnected?: boolean;
   twitterConnected?: boolean;
   linkedinConnected?: boolean;
+  onDisconnect?: (platform: string) => void;
 }
 
-export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, saving, tiktokConnected, youtubeConnected, twitterConnected, linkedinConnected }: SettingsPanelProps) {
+export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, saving, tiktokConnected, youtubeConnected, twitterConnected, linkedinConnected, onDisconnect }: SettingsPanelProps) {
   const update = (key: keyof AutomationSettings, value: string | boolean) => {
     onUpdate({ ...settings, [key]: value });
   };
@@ -150,9 +151,14 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
               </div>
             </div>
             {tiktokConnected ? (
-              <Badge variant="outline" className="gap-1 text-xs border-primary/30 text-primary">
-                <CheckCircle size={12} /> Connected
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="gap-1 text-xs border-primary/30 text-primary">
+                  <CheckCircle size={12} /> Connected
+                </Badge>
+                <Button size="sm" variant="ghost" onClick={() => onDisconnect?.("tiktok")} className="gap-1 text-xs text-destructive hover:text-destructive h-7 px-2">
+                  <Unlink size={12} /> Disconnect
+                </Button>
+              </div>
             ) : (
               <Button size="sm" variant="outline" onClick={handleConnectTikTok} className="gap-1.5">
                 <ExternalLink size={12} /> Connect
@@ -174,9 +180,14 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
               </div>
             </div>
             {youtubeConnected ? (
-              <Badge variant="outline" className="gap-1 text-xs border-primary/30 text-primary">
-                <CheckCircle size={12} /> Connected
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="gap-1 text-xs border-primary/30 text-primary">
+                  <CheckCircle size={12} /> Connected
+                </Badge>
+                <Button size="sm" variant="ghost" onClick={() => onDisconnect?.("youtube")} className="gap-1 text-xs text-destructive hover:text-destructive h-7 px-2">
+                  <Unlink size={12} /> Disconnect
+                </Button>
+              </div>
             ) : (
               <Button size="sm" variant="outline" onClick={handleConnectYouTube} className="gap-1.5">
                 <ExternalLink size={12} /> Connect
@@ -198,9 +209,14 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
               </div>
             </div>
             {twitterConnected ? (
-              <Badge variant="outline" className="gap-1 text-xs border-primary/30 text-primary">
-                <CheckCircle size={12} /> Connected
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="gap-1 text-xs border-primary/30 text-primary">
+                  <CheckCircle size={12} /> Connected
+                </Badge>
+                <Button size="sm" variant="ghost" onClick={() => onDisconnect?.("twitter")} className="gap-1 text-xs text-destructive hover:text-destructive h-7 px-2">
+                  <Unlink size={12} /> Disconnect
+                </Button>
+              </div>
             ) : (
               <Button size="sm" variant="outline" onClick={handleConnectTwitter} className="gap-1.5">
                 <ExternalLink size={12} /> Connect
@@ -222,9 +238,14 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
               </div>
             </div>
             {linkedinConnected ? (
-              <Badge variant="outline" className="gap-1 text-xs border-primary/30 text-primary">
-                <CheckCircle size={12} /> Connected
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="gap-1 text-xs border-primary/30 text-primary">
+                  <CheckCircle size={12} /> Connected
+                </Badge>
+                <Button size="sm" variant="ghost" onClick={() => onDisconnect?.("linkedin")} className="gap-1 text-xs text-destructive hover:text-destructive h-7 px-2">
+                  <Unlink size={12} /> Disconnect
+                </Button>
+              </div>
             ) : (
               <Button size="sm" variant="outline" onClick={handleConnectLinkedIn} className="gap-1.5">
                 <ExternalLink size={12} /> Connect
