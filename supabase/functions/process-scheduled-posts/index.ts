@@ -595,6 +595,168 @@ async function generateWeatherVideo(weather: WeatherResponse): Promise<{ data: U
   return null;
 }
 
+// --- Fallback: AI-generated static weather image ---
+async function generateFallbackImage(weather: WeatherResponse): Promise<{ data: Uint8Array; mimeType: string } | null> {
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) {
+    console.error("LOVABLE_API_KEY not set, cannot generate fallback image");
+    return null;
+  }
+
+  const theme = getWeatherTheme(weather.condition);
+  const temps = [weather.morningTemp, weather.afternoonTemp, weather.eveningTemp].filter((t): t is number => t != null);
+  const hi = temps.length ? Math.max(...temps) : weather.temperature;
+  const lo = temps.length ? Math.min(...temps) : weather.temperature;
+
+  const prompt = `Create a clean, modern weather infographic for social media (vertical 9:16 portrait). 
+Dark navy/slate background with subtle gradient. 
+City: ${weather.city}, ${weather.stateOrRegion}
+Temperature: ${weather.temperature}°F
+Condition: ${weather.description} ${theme.emoji}
+High: ${hi}°F / Low: ${lo}°F
+Rain: ${weather.rainChance}%
+Wind: ${weather.windInfo}
+Include "SKYBRIEF" branding at top. Use clean typography, accent color ${theme.accent}. 
+Professional weather app style, no photographs.`;
+
+  try {
+    console.log("Generating fallback weather image via AI...");
+    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + LOVABLE_API_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash-image",
+        messages: [{ role: "user", content: prompt }],
+        modalities: ["image", "text"],
+      }),
+    });
+
+    if (!aiRes.ok) {
+      const errText = await aiRes.text();
+      console.error("AI image generation failed:", aiRes.status, errText);
+      return null;
+    }
+
+    const aiData = await aiRes.json();
+    const imageUrl = aiData.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    if (!imageUrl) { console.error("No image in AI response"); return null; }
+
+    const base64Match = imageUrl.match(/^data:image\/(\w+);base64,(.+)$/);
+    if (!base64Match) { console.error("Unexpected image URL format from AI"); return null; }
+
+    const imageType = base64Match[1];
+    const base64Data = base64Match[2];
+    const binaryString = atob(base64Data);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+
+    console.log(`Fallback image generated: ${bytes.length} bytes (${imageType})`);
+    return { data: bytes, mimeType: `image/${imageType}` };
+  } catch (err) {
+    console.error("Fallback image generation error:", err);
+    return null;
+  }
+}
+
+// --- Fallback: Post image to LinkedIn ---
+async function postLinkedInImage(token: string, imageData: Uint8Array, title: string, description: string): Promise<string | null> {
+  const parts = token.split("::");
+  const accessToken = parts[0];
+  const authorUrn = parts[1];
+  if (!authorUrn) { console.error("LinkedIn: no author URN"); return null; }
+  const personUrn = parts.length > 2 ? parts[2] : null;
+
+  try {
+    console.log("LinkedIn: Registering image upload for", authorUrn);
+    let registerRes = await fetch("https://api.linkedin.com/rest/images?action=initializeUpload", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "LinkedIn-Version": "202601",
+        "X-Restli-Protocol-Version": "2.0.0",
+      },
+      body: JSON.stringify({ initializeUploadRequest: { owner: authorUrn } }),
+    });
+    let registerData = await registerRes.json();
+
+    let effectiveAuthor = authorUrn;
+    if (!registerRes.ok && personUrn && authorUrn !== personUrn) {
+      console.log("LinkedIn org image failed, falling back to person URN:", personUrn);
+      registerRes = await fetch("https://api.linkedin.com/rest/images?action=initializeUpload", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+          "LinkedIn-Version": "202601",
+          "X-Restli-Protocol-Version": "2.0.0",
+        },
+        body: JSON.stringify({ initializeUploadRequest: { owner: personUrn } }),
+      });
+      registerData = await registerRes.json();
+      effectiveAuthor = personUrn;
+    }
+    if (!registerRes.ok) { console.error("LinkedIn image register failed:", registerData); return null; }
+
+    const uploadUrl = registerData.value?.uploadUrl;
+    const imageUrn = registerData.value?.image;
+    if (!uploadUrl || !imageUrn) { console.error("LinkedIn: Missing image upload URL or URN"); return null; }
+
+    console.log("LinkedIn: Uploading image binary...");
+    const uploadRes = await fetch(uploadUrl, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/octet-stream" },
+      body: imageData,
+    });
+    if (!uploadRes.ok) { const err = await uploadRes.text(); console.error("LinkedIn image upload failed:", err); return null; }
+
+    console.log("LinkedIn: Creating image post...");
+    const postRes = await fetch("https://api.linkedin.com/rest/posts", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "LinkedIn-Version": "202601",
+        "X-Restli-Protocol-Version": "2.0.0",
+      },
+      body: JSON.stringify({
+        author: effectiveAuthor,
+        commentary: description || title,
+        visibility: "PUBLIC",
+        distribution: { feedDistribution: "MAIN_FEED", targetEntities: [], thirdPartyDistributionChannels: [] },
+        content: { media: { title, id: imageUrn } },
+        lifecycleState: "PUBLISHED",
+        isReshareDisabledByAuthor: false,
+      }),
+    });
+    if (!postRes.ok) { const err = await postRes.text(); console.error("LinkedIn image post failed:", err); return null; }
+
+    const postId = postRes.headers.get("x-restli-id") || imageUrn;
+    console.log("LinkedIn image post created:", postId);
+    return postId;
+  } catch (err) { console.error("LinkedIn image post error:", err); return null; }
+}
+
+// --- Fallback: Post image to Twitter ---
+async function postTwitterImage(token: string, imageData: Uint8Array, text: string): Promise<string | null> {
+  try {
+    const { TwitterAdapter } = await import("../_shared/twitter-adapter.ts");
+    const adapter = new TwitterAdapter();
+    console.log("Posting image to Twitter via media upload...");
+    const result = await adapter.uploadVideo(token, imageData, "", text, "image/png");
+    if (result) {
+      console.log("Twitter image post created:", result.id);
+      return result.id;
+    }
+    return null;
+  } catch (err) { console.error("Twitter image post error:", err); return null; }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
