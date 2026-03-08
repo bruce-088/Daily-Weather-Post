@@ -1061,6 +1061,14 @@ Deno.serve(async (req) => {
         platform = connectedAdapters[0].name;
       } else {
         console.log("Using fallback image for posting");
+        
+        // Store the generated image to Supabase Storage
+        const stored = await storeGeneratedImage(supabase, userId, fallbackImage.data, fallbackImage.mimeType, weather.city);
+        if (stored) {
+          storedImageUrl = stored.signedUrl;
+          console.log("Image stored at:", stored.storagePath);
+        }
+        
         const title = generateSkyBriefTitle(weather.city, weather.temperature, weather.condition, weather.rainChance);
         const desc = caption || "Weather update for " + weather.city + ": " + weather.temperature + "\u00B0F, " + weather.description;
         
