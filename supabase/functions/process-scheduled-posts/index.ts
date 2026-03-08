@@ -931,8 +931,8 @@ Deno.serve(async (req) => {
               console.log("Image stored at:", stored.storagePath);
             }
             
-            const imageCapablePlatforms = ["linkedin", "twitter"];
-            const videoOnlyPlatforms = ["youtube", "tiktok", "instagram"];
+            const imageCapablePlatforms = ["linkedin", "twitter", "tiktok"];
+            const videoOnlyPlatforms = ["youtube", "instagram"];
             let postedAny = false;
 
             for (const platformName of platformsToPost) {
@@ -952,6 +952,16 @@ Deno.serve(async (req) => {
                     const postResult = await postTwitterImage(token, fallbackImage.data, desc);
                     if (postResult) { postedAny = true; console.log(`Scheduled ${post.id}: twitter image posted, ID: ${postResult}`); }
                     else { errorMessage = "Twitter image post failed"; }
+                  } else if (platformName === "tiktok") {
+                    if (storedImageUrl) {
+                      const { TikTokAdapter } = await import("../_shared/tiktok-adapter.ts");
+                      const tiktokAdapter = new TikTokAdapter();
+                      const postResult = await tiktokAdapter.uploadImage(token, storedImageUrl, title, desc);
+                      if (postResult) { postedAny = true; console.log(`Scheduled ${post.id}: tiktok photo posted, publish_id: ${postResult}`); }
+                      else { errorMessage = "TikTok photo post failed"; }
+                    } else {
+                      console.log(`Skipping TikTok for scheduled ${post.id} — no stored image URL`);
+                    }
                   }
                 } catch (err) {
                   console.error(`${platformName} image post error:`, err);

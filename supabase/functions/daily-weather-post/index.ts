@@ -1065,8 +1065,8 @@ Deno.serve(async (req) => {
         const desc = caption || "Weather update for " + weather.city + ": " + weather.temperature + "\u00B0F, " + weather.description;
         
         // Image-capable platforms
-        const imageCapablePlatforms = ["linkedin", "twitter"];
-        const videoOnlyPlatforms = ["youtube", "tiktok", "instagram"];
+        const imageCapablePlatforms = ["linkedin", "twitter", "tiktok"];
+        const videoOnlyPlatforms = ["youtube", "instagram"];
         
         for (const adapter of connectedAdapters) {
           if (imageCapablePlatforms.includes(adapter.name)) {
@@ -1098,6 +1098,24 @@ Deno.serve(async (req) => {
                   platform = "twitter";
                   status = "failed";
                   errorMessage = "Twitter image post failed";
+                }
+              } else if (adapter.name === "tiktok") {
+                // TikTok photo post requires a publicly accessible URL
+                if (storedImageUrl) {
+                  const { TikTokAdapter } = await import("../_shared/tiktok-adapter.ts");
+                  const tiktokAdapter = new TikTokAdapter();
+                  const postResult = await tiktokAdapter.uploadImage(token, storedImageUrl, title, desc);
+                  if (postResult) {
+                    platform = "tiktok";
+                    status = "success";
+                    console.log(`tiktok photo post published! publish_id: ${postResult}`);
+                  } else {
+                    platform = "tiktok";
+                    status = "failed";
+                    errorMessage = "TikTok photo post failed";
+                  }
+                } else {
+                  console.log("Skipping TikTok — no stored image URL available for photo post");
                 }
               }
             } catch (err) {
