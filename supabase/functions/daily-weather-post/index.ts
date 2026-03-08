@@ -1146,7 +1146,7 @@ Deno.serve(async (req) => {
 
     const { error: historyError } = await supabase.from("post_history").insert({
       status, platform, city: weather.city, temperature: weather.temperature,
-      condition: weather.condition, image_url: null, error_message: errorMessage,
+      condition: weather.condition, image_url: storedImageUrl, error_message: errorMessage,
       caption, user_id: userId,
     });
     if (historyError) console.error("Failed to log post history:", historyError);
