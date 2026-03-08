@@ -183,6 +183,12 @@ export function ScheduledPostsList({ posts, loading, onRefresh }: ScheduledPosts
           );
         })
       )}
+      <EditScheduledPostDialog
+        post={editingPost}
+        open={!!editingPost}
+        onOpenChange={(open) => !open && setEditingPost(null)}
+        onSaved={onRefresh}
+      />
     </div>
   );
 }
