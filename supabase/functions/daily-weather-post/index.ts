@@ -895,19 +895,10 @@ async function postLinkedInImage(token: string, imageData: Uint8Array, title: st
 // --- Fallback: Post image to Twitter ---
 async function postTwitterImage(token: string, imageData: Uint8Array, text: string): Promise<string | null> {
   try {
-    // Twitter adapter token format: accessToken::accessTokenSecret::consumerKey::consumerSecret
-    // But for the image fallback we need OAuth 1.0a — reuse the twitter-adapter approach
-    // Import the signing logic
     const { TwitterAdapter } = await import("../_shared/twitter-adapter.ts");
     const adapter = new TwitterAdapter();
-
-    // The token already contains all needed credentials, but we need to call uploadVideo
-    // with image data — Twitter's media upload supports images too with the same INIT/APPEND/FINALIZE flow
-    console.log("Posting image to Twitter via media upload...");
-
-    // Use the existing adapter's uploadVideo which handles chunked upload
-    // Twitter media upload supports images with media_category "tweet_image"
-    const result = await adapter.uploadVideo(token, imageData, "", text, "image/png");
+    console.log("Posting image to Twitter via image upload...");
+    const result = await adapter.uploadImage(token, imageData, text, "image/png");
     if (result) {
       console.log("Twitter image post created:", result.id);
       return result.id;
