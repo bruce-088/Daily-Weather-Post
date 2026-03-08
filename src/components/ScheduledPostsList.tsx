@@ -94,8 +94,10 @@ export function ScheduledPostsList({ posts, loading, onRefresh }: ScheduledPosts
     );
   }
 
-  const handleCancel = async (id: string) => {
-    const ok = await cancelScheduledPost(id);
+  const handleCancel = async () => {
+    if (!cancellingId) return;
+    const ok = await cancelScheduledPost(cancellingId);
+    setCancellingId(null);
     if (ok) {
       toast.success("Post cancelled");
       onRefresh();
