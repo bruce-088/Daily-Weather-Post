@@ -18,6 +18,8 @@ import {
   MessageSquare,
   RefreshCw,
   Eye,
+  ChevronDown,
+  Check,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { NotificationBell } from "@/components/NotificationBell";
