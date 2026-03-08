@@ -725,6 +725,101 @@ Professional weather app style, no photographs.`;
   }
 }
 
+// --- Fallback: Post image to LinkedIn ---
+async function postLinkedInImage(token: string, imageData: Uint8Array, title: string, description: string): Promise<string | null> {
+  const parts = token.split("::");
+  const accessToken = parts[0];
+  const authorUrn = parts[1];
+  if (!authorUrn) { console.error("LinkedIn: no author URN"); return null; }
+
+  try {
+    // Step 1: Register image upload
+    console.log("LinkedIn: Registering image upload...");
+    const registerRes = await fetch("https://api.linkedin.com/rest/images?action=initializeUpload", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "LinkedIn-Version": "202601",
+        "X-Restli-Protocol-Version": "2.0.0",
+      },
+      body: JSON.stringify({
+        initializeUploadRequest: {
+          owner: authorUrn,
+        },
+      }),
+    });
+    const registerData = await registerRes.json();
+    if (!registerRes.ok) { console.error("LinkedIn image register failed:", registerData); return null; }
+
+    const uploadUrl = registerData.value?.uploadUrl;
+    const imageUrn = registerData.value?.image;
+    if (!uploadUrl || !imageUrn) { console.error("LinkedIn: Missing image upload URL or URN"); return null; }
+
+    // Step 2: Upload image binary
+    console.log("LinkedIn: Uploading image binary...");
+    const uploadRes = await fetch(uploadUrl, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/octet-stream",
+      },
+      body: imageData,
+    });
+    if (!uploadRes.ok) { const err = await uploadRes.text(); console.error("LinkedIn image upload failed:", err); return null; }
+
+    // Step 3: Create post with image
+    console.log("LinkedIn: Creating image post...");
+    const postRes = await fetch("https://api.linkedin.com/rest/posts", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "LinkedIn-Version": "202601",
+        "X-Restli-Protocol-Version": "2.0.0",
+      },
+      body: JSON.stringify({
+        author: authorUrn,
+        commentary: description || title,
+        visibility: "PUBLIC",
+        distribution: { feedDistribution: "MAIN_FEED", targetEntities: [], thirdPartyDistributionChannels: [] },
+        content: { media: { title, id: imageUrn } },
+        lifecycleState: "PUBLISHED",
+        isReshareDisabledByAuthor: false,
+      }),
+    });
+    if (!postRes.ok) { const err = await postRes.text(); console.error("LinkedIn image post failed:", err); return null; }
+
+    const postId = postRes.headers.get("x-restli-id") || imageUrn;
+    console.log("LinkedIn image post created:", postId);
+    return postId;
+  } catch (err) { console.error("LinkedIn image post error:", err); return null; }
+}
+
+// --- Fallback: Post image to Twitter ---
+async function postTwitterImage(token: string, imageData: Uint8Array, text: string): Promise<string | null> {
+  try {
+    // Twitter adapter token format: accessToken::accessTokenSecret::consumerKey::consumerSecret
+    // But for the image fallback we need OAuth 1.0a — reuse the twitter-adapter approach
+    // Import the signing logic
+    const { TwitterAdapter } = await import("../_shared/twitter-adapter.ts");
+    const adapter = new TwitterAdapter();
+
+    // The token already contains all needed credentials, but we need to call uploadVideo
+    // with image data — Twitter's media upload supports images too with the same INIT/APPEND/FINALIZE flow
+    console.log("Posting image to Twitter via media upload...");
+
+    // Use the existing adapter's uploadVideo which handles chunked upload
+    // Twitter media upload supports images with media_category "tweet_image"
+    const result = await adapter.uploadVideo(token, imageData, "", text, "image/png");
+    if (result) {
+      console.log("Twitter image post created:", result.id);
+      return result.id;
+    }
+    return null;
+  } catch (err) { console.error("Twitter image post error:", err); return null; }
+}
+
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
