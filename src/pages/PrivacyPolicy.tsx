@@ -54,7 +54,7 @@ const PrivacyPolicy = () => {
 
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-2">4. Data Storage & Security</h2>
-            <p>Your data is stored securely using industry-standard encryption and access controls. API tokens and credentials are stored in encrypted form. We use row-level security to ensure users can only access their own data.</p>
+            <p>Your data is stored securely by SkyBrief using industry-standard encryption and access controls. API tokens and credentials are stored in encrypted form. We use row-level security to ensure users can only access their own data.</p>
           </section>
 
           <section>
