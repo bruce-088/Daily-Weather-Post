@@ -74,7 +74,7 @@ const PrivacyPolicy = () => {
 
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-2">7. Cookies</h2>
-            <p>The Service uses essential cookies and local storage for authentication and session management. We do not use tracking or advertising cookies.</p>
+            <p>SkyBrief uses essential cookies and local storage for authentication and session management. We do not use tracking or advertising cookies.</p>
           </section>
 
           <section>
