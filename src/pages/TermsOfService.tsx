@@ -30,7 +30,7 @@ const TermsOfService = () => {
 
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-2">4. Content Ownership & Posting</h2>
-            <p>You retain ownership of any content you create or post through the Service. By using the Se, YouTube, Instagram, Twitter/X, or LinkedIn content to third-, YouTube, Instagram, Twitter/X, or LinkedInms (such as TikTok or Instagram), you acknowledge that such content is also subject to the terms and policies of those platforms. You are solely responsible for the content you post and must ensure it complies with all applicable laws and platform policies.</p>
+            <p>You retain ownership of any content you create or post through SkyBrief. By using SkyBrief to publish content to third-party platforms (such as TikTok, YouTube, Instagram, Twitter/X, or LinkedIn), you acknowledge that such content is also subject to the terms and policies of those platforms. You are solely responsible for the content you post and must ensure it complies with all applicable laws and platform policies.</p>
           </section>
 
           <section>
