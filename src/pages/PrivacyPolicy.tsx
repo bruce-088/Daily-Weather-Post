@@ -49,7 +49,7 @@ const PrivacyPolicy = () => {
               <li><strong className="text-foreground">Weather data providers:</strong> Used to fetch current weather information for your configured city.</li>
               <li><strong className="text-foreground">Google OAuth:</strong> Used for optional sign-in authentication.</li>
             </ul>
-            <p className="mt-2">We only access third-party platforms within the scope of permissions you explicitly grant. We do not sell or share your data with third parties for advertising purposes.</p>
+            <p className="mt-2">SkyBrief only accesses third-party platforms within the scope of permissions you explicitly grant. We do not sell or share your data with third parties for advertising purposes.</p>
           </section>
 
           <section>
