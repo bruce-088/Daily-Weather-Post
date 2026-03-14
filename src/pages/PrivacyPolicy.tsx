@@ -49,12 +49,12 @@ const PrivacyPolicy = () => {
               <li><strong className="text-foreground">Weather data providers:</strong> Used to fetch current weather information for your configured city.</li>
               <li><strong className="text-foreground">Google OAuth:</strong> Used for optional sign-in authentication.</li>
             </ul>
-            <p className="mt-2">We only access third-party platforms within the scope of permissions you explicitly grant. We do not sell or share your data with third parties for advertising purposes.</p>
+            <p className="mt-2">SkyBrief only accesses third-party platforms within the scope of permissions you explicitly grant. We do not sell or share your data with third parties for advertising purposes.</p>
           </section>
 
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-2">4. Data Storage & Security</h2>
-            <p>Your data is stored securely using industry-standard encryption and access controls. API tokens and credentials are stored in encrypted form. We use row-level security to ensure users can only access their own data.</p>
+            <p>Your data is stored securely by SkyBrief using industry-standard encryption and access controls. API tokens and credentials are stored in encrypted form. We use row-level security to ensure users can only access their own data.</p>
           </section>
 
           <section>
@@ -74,12 +74,12 @@ const PrivacyPolicy = () => {
 
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-2">7. Cookies</h2>
-            <p>The Service uses essential cookies and local storage for authentication and session management. We do not use tracking or advertising cookies.</p>
+            <p>SkyBrief uses essential cookies and local storage for authentication and session management. We do not use tracking or advertising cookies.</p>
           </section>
 
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-2">8. Children's Privacy</h2>
-            <p>The Service is not intended for users under the age of 13. We do not knowingly collect information from children under 13.</p>
+            <p>SkyBrief is not intended for users under the age of 13. We do not knowingly collect information from children under 13.</p>
           </section>
 
           <section>
@@ -89,7 +89,7 @@ const PrivacyPolicy = () => {
 
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-2">10. Contact</h2>
-            <p>If you have questions about this Privacy Policy or wish to exercise your data rights, please contact us at <span className="text-primary">privacy@skybrief.app</span>.</p>
+            <p>If you have questions about this Privacy Policy or wish to exercise your data rights, please contact SkyBrief at <span className="text-primary">privacy@skybrief.app</span>.</p>
           </section>
         </div>
 

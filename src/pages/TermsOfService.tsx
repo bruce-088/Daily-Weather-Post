@@ -15,7 +15,7 @@ const TermsOfService = () => {
         <div className="space-y-8 text-sm leading-relaxed text-muted-foreground">
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-2">1. Service Description</h2>
-            <p>SkyBrief ("the Service") is a weather-based social media posting application that allows users to generate and publish weather-related content to third-party platforms including TikTok, YouTube, Instagram, Twitter/X, and LinkedIntagram, Twitter/X, and LinkedIntagram, Twitter/X, and LinkedIn. The Service fetches weather data, generates captions, and facilitates content posting on behalf of authenticated users.</p>
+            <p>SkyBrief ("the Service", "we", "us", or "our") is a weather-based social media posting application that allows users to generate and publish weather-related content to third-party platforms including TikTok, YouTube, Instagram, Twitter/X, and LinkedIn. SkyBrief fetches weather data, generates captions, and facilitates content posting on behalf of authenticated users.</p>
           </section>
 
           <section>
@@ -30,12 +30,12 @@ const TermsOfService = () => {
 
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-2">4. Content Ownership & Posting</h2>
-            <p>You retain ownership of any content you create or post through the Service. By using the Se, YouTube, Instagram, Twitter/X, or LinkedIn content to third-, YouTube, Instagram, Twitter/X, or LinkedInms (such as TikTok or Instagram), you acknowledge that such content is also subject to the terms and policies of those platforms. You are solely responsible for the content you post and must ensure it complies with all applicable laws and platform policies.</p>
+            <p>You retain ownership of any content you create or post through SkyBrief. By using SkyBrief to publish content to third-party platforms (such as TikTok, YouTube, Instagram, Twitter/X, or LinkedIn), you acknowledge that such content is also subject to the terms and policies of those platforms. You are solely responsible for the content you post and must ensure it complies with all applicable laws and platform policies.</p>
           </section>
 
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-2">5. Third-Party API Usage</h2>
-            <p>The Service integrates wiYouTube Data API, Instagram Graph API, Twitter/X API, LinkedInAPIs including the TikTok Content Posting API, Instagram Graph API, and weather data providers. By connecting your third-party accounts, you authorize the Service to act on your behalf within the scope of permissions you grant. You may revoke access at any time through your account settings or through the respective third-party platform settings.</p>
+            <p>SkyBrief integrates with third-party APIs including the TikTok Content Posting API, YouTube Data API, Instagram Graph API, Twitter/X API, LinkedIn API, and weather data providers. By connecting your third-party accounts, you authorize SkyBrief to act on your behalf within the scope of permissions you grant. You may revoke access at any time through your account settings or through the respective third-party platform settings.</p>
           </section>
 
           <section>
@@ -55,7 +55,7 @@ const TermsOfService = () => {
 
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-2">8. Limitation of Liability</h2>
-            <p>The Service is provided "as is" without warranties of any kind. We are not liable for any damages arising from the use of the Service, including but not limited to failed posts, data loss, or issues with third-party platform integrations. We do not guarantee uninterrupted or error-free operation of the Service.</p>
+            <p>SkyBrief is provided "as is" without warranties of any kind. We are not liable for any damages arising from the use of SkyBrief, including but not limited to failed posts, data loss, or issues with third-party platform integrations. We do not guarantee uninterrupted or error-free operation of SkyBrief.</p>
           </section>
 
           <section>
