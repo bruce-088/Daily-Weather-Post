@@ -35,7 +35,7 @@ const TermsOfService = () => {
 
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-2">5. Third-Party API Usage</h2>
-            <p>The Service integrates wiYouTube Data API, Instagram Graph API, Twitter/X API, LinkedInAPIs including the TikTok Content Posting API, Instagram Graph API, and weather data providers. By connecting your third-party accounts, you authorize the Service to act on your behalf within the scope of permissions you grant. You may revoke access at any time through your account settings or through the respective third-party platform settings.</p>
+            <p>SkyBrief integrates with third-party APIs including the TikTok Content Posting API, YouTube Data API, Instagram Graph API, Twitter/X API, LinkedIn API, and weather data providers. By connecting your third-party accounts, you authorize SkyBrief to act on your behalf within the scope of permissions you grant. You may revoke access at any time through your account settings or through the respective third-party platform settings.</p>
           </section>
 
           <section>
