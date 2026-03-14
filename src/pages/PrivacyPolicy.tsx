@@ -79,7 +79,7 @@ const PrivacyPolicy = () => {
 
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-2">8. Children's Privacy</h2>
-            <p>The Service is not intended for users under the age of 13. We do not knowingly collect information from children under 13.</p>
+            <p>SkyBrief is not intended for users under the age of 13. We do not knowingly collect information from children under 13.</p>
           </section>
 
           <section>
