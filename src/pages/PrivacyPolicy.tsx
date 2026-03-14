@@ -89,7 +89,7 @@ const PrivacyPolicy = () => {
 
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-2">10. Contact</h2>
-            <p>If you have questions about this Privacy Policy or wish to exercise your data rights, please contact us at <span className="text-primary">privacy@skybrief.app</span>.</p>
+            <p>If you have questions about this Privacy Policy or wish to exercise your data rights, please contact SkyBrief at <span className="text-primary">privacy@skybrief.app</span>.</p>
           </section>
         </div>
 

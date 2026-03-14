@@ -55,7 +55,7 @@ const TermsOfService = () => {
 
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-2">8. Limitation of Liability</h2>
-            <p>The Service is provided "as is" without warranties of any kind. We are not liable for any damages arising from the use of the Service, including but not limited to failed posts, data loss, or issues with third-party platform integrations. We do not guarantee uninterrupted or error-free operation of the Service.</p>
+            <p>SkyBrief is provided "as is" without warranties of any kind. We are not liable for any damages arising from the use of SkyBrief, including but not limited to failed posts, data loss, or issues with third-party platform integrations. We do not guarantee uninterrupted or error-free operation of SkyBrief.</p>
           </section>
 
           <section>
