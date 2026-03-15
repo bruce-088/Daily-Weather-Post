@@ -80,9 +80,19 @@ export function PostHistoryList({ posts, loading }: PostHistoryListProps) {
                   {post.condition && (
                     <span className="text-xs text-muted-foreground">· {post.condition}</span>
                   )}
-                  {post.image_url && (
-                    <Image size={12} className="text-muted-foreground" />
-                  )}
+                   {post.platform && platformConfig[post.platform] && (() => {
+                     const pCfg = platformConfig[post.platform!];
+                     const PIcon = pCfg.icon;
+                     return (
+                       <span className={`inline-flex items-center gap-0.5 ${pCfg.color}`} title={pCfg.label}>
+                         <PIcon size={12} />
+                         <span className="text-[10px]">{pCfg.label}</span>
+                       </span>
+                     );
+                   })()}
+                   {post.image_url && (
+                     <Image size={12} className="text-muted-foreground" />
+                   )}
                 </div>
                 {post.caption && (
                   <p className="text-xs text-muted-foreground truncate mt-0.5 italic">"{post.caption}"</p>
