@@ -235,18 +235,20 @@ export function VideoPreviewDialog({ open, onOpenChange, onUploaded }: VideoPrev
             >
               <X size={14} /> Discard
             </Button>
-            <Button
-              size="sm"
-              onClick={handleUpload}
-              disabled={uploading}
-              className="gap-1.5 text-xs"
-            >
-              {uploading ? (
-                <><Loader2 size={14} className="animate-spin" /> Uploading…</>
-              ) : (
-                <><Upload size={14} /> Upload to YouTube</>
-              )}
-            </Button>
+            {preview?.content_type !== "image" && (
+              <Button
+                size="sm"
+                onClick={handleUpload}
+                disabled={uploading}
+                className="gap-1.5 text-xs"
+              >
+                {uploading ? (
+                  <><Loader2 size={14} className="animate-spin" /> Uploading…</>
+                ) : (
+                  <><Upload size={14} /> Upload to YouTube</>
+                )}
+              </Button>
+            )}
           </DialogFooter>
         )}
       </DialogContent>
