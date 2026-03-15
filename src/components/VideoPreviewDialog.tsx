@@ -216,6 +216,19 @@ export function VideoPreviewDialog({ open, onOpenChange, onUploaded, postPlatfor
                 </div>
               )}
 
+              {/* YouTube warning when only image is available */}
+              {isPostFlow && preview.content_type === "image" && postPlatforms.some(p => p === "youtube") && (
+                <div className="flex items-start gap-2 rounded-lg bg-destructive/10 border border-destructive/20 p-3">
+                  <AlertTriangle size={16} className="text-destructive shrink-0 mt-0.5" />
+                  <div className="text-xs text-destructive">
+                    <p className="font-medium">YouTube requires video content</p>
+                    <p className="mt-0.5 text-destructive/80">
+                      Video generation is unavailable (credits depleted). YouTube will be skipped — other platforms will receive the image post.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* Caption section */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
