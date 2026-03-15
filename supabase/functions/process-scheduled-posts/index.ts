@@ -1001,8 +1001,8 @@ Deno.serve(async (req) => {
                   errorMessage = `${platformName} image post failed`;
                 }
               } else if (videoOnlyPlatforms.includes(platformName)) {
-                console.log(`Skipping ${platformName} — requires video (fallback image only)`);
-                errorMessage = (errorMessage || "") + `${platformName} skipped (video unavailable); `;
+                console.log("Skipping " + platformName + " — requires video (image fallback only)");
+                errorMessage = (errorMessage || "") + platformName + " skipped (video required, credits depleted); ";
               }
             }
 

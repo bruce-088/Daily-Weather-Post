@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Play, Upload, RefreshCw, X, Loader2, Pencil, Eye, Download, Send } from "lucide-react";
+import { Play, Upload, RefreshCw, X, Loader2, Pencil, Eye, Download, Send, AlertTriangle } from "lucide-react";
 import { generatePreview, uploadPreviewVideo, triggerDailyPost } from "@/lib/api";
 import type { PreviewResult } from "@/lib/api";
 
@@ -213,6 +213,19 @@ export function VideoPreviewDialog({ open, onOpenChange, onUploaded, postPlatfor
                       → {postPlatforms.join(", ")}
                     </Badge>
                   )}
+                </div>
+              )}
+
+              {/* YouTube warning when only image is available */}
+              {isPostFlow && preview.content_type === "image" && postPlatforms.some(p => p === "youtube") && (
+                <div className="flex items-start gap-2 rounded-lg bg-destructive/10 border border-destructive/20 p-3">
+                  <AlertTriangle size={16} className="text-destructive shrink-0 mt-0.5" />
+                  <div className="text-xs text-destructive">
+                    <p className="font-medium">YouTube requires video content</p>
+                    <p className="mt-0.5 text-destructive/80">
+                      Video generation is unavailable (credits depleted). YouTube will be skipped — other platforms will receive the image post.
+                    </p>
+                  </div>
                 </div>
               )}
 
