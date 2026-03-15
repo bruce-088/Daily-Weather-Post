@@ -2,7 +2,15 @@ import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CheckCircle, XCircle, Clock, History, Image } from "lucide-react";
+import { CheckCircle, XCircle, Clock, History, Image, Youtube, Twitter, Linkedin } from "lucide-react";
+
+const platformConfig: Record<string, { icon: React.ElementType; label: string; color: string }> = {
+  youtube: { icon: Youtube, label: "YouTube", color: "text-red-500" },
+  tiktok: { icon: () => <span className="text-[10px] font-bold">TT</span>, label: "TikTok", color: "text-foreground" },
+  twitter: { icon: Twitter, label: "Twitter/X", color: "text-sky-400" },
+  linkedin: { icon: Linkedin, label: "LinkedIn", color: "text-blue-500" },
+  instagram: { icon: Image, label: "Instagram", color: "text-pink-500" },
+};
 import type { PostHistoryItem } from "@/lib/api";
 
 interface PostHistoryListProps {
