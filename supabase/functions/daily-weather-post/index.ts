@@ -1193,6 +1193,11 @@ Deno.serve(async (req) => {
             }
           } else if (videoOnlyPlatforms.includes(adapter.name)) {
             console.log(`Skipping ${adapter.name} — requires video (fallback image only)`);
+            // Record that this platform was skipped
+            if (!errorMessage) errorMessage = "";
+            errorMessage += `${adapter.name} skipped (requires video); `;
+            if (status !== "failed") status = "failed";
+            platform = adapter.name;
           }
         }
         
