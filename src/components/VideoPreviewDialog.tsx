@@ -34,7 +34,7 @@ export function VideoPreviewDialog({ open, onOpenChange, onUploaded }: VideoPrev
     setIsEditingCaption(false);
     try {
       const result = await generatePreview();
-      if (result.success && result.video_url) {
+      if (result.success && (result.video_url || result.image_url)) {
         setPreview(result);
         toast.success("Preview video generated!");
       } else {

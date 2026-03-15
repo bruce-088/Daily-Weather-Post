@@ -94,7 +94,9 @@ export async function triggerDailyPost(timePeriod?: string, platforms?: string[]
 
 export interface PreviewResult {
   success: boolean;
+  content_type?: "video" | "image";
   video_url?: string;
+  image_url?: string;
   storage_path?: string;
   weather?: any;
   caption?: string | null;

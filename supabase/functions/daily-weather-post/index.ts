@@ -1010,39 +1010,82 @@ Deno.serve(async (req) => {
 
     // === PREVIEW MODE ===
     if (mode === "preview") {
-      if (!video || !userId) {
-        throw new Error("Failed to generate video for preview");
+      if (video && userId) {
+        // Video preview path
+        const fileName = userId + "/preview-" + Date.now() + ".mp4";
+        const { error: uploadError } = await supabase.storage
+          .from("weather-videos")
+          .upload(fileName, video.data, {
+            contentType: "video/mp4",
+            upsert: true,
+          });
+
+        if (uploadError) {
+          console.error("Storage upload error:", uploadError);
+          throw new Error("Failed to store preview video");
+        }
+
+        const { data: signedUrlData, error: signedUrlError } = await supabase.storage
+          .from("weather-videos")
+          .createSignedUrl(fileName, 3600);
+
+        if (signedUrlError || !signedUrlData?.signedUrl) {
+          console.error("Signed URL error:", signedUrlError);
+          throw new Error("Failed to create signed URL for preview video");
+        }
+
+        console.log("Preview video stored with signed URL");
+        return new Response(
+          JSON.stringify({
+            success: true,
+            mode: "preview",
+            content_type: "video",
+            video_url: signedUrlData.signedUrl,
+            storage_path: fileName,
+            weather,
+            caption,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
-      const fileName = userId + "/preview-" + Date.now() + ".mp4";
-      const { error: uploadError } = await supabase.storage
-        .from("weather-videos")
-        .upload(fileName, video.data, {
-          contentType: "video/mp4",
+
+      // Image preview fallback
+      console.log("Video generation failed for preview, trying enhanced image fallback...");
+      const fallbackImage = await generateFallbackImage(weather);
+      if (!fallbackImage || !userId) {
+        throw new Error("Failed to generate both video and image for preview");
+      }
+
+      const ext = fallbackImage.mimeType.includes("png") ? "png" : "jpg";
+      const imgFileName = userId + "/preview-" + Date.now() + "." + ext;
+      const { error: imgUploadError } = await supabase.storage
+        .from("generated-images")
+        .upload(imgFileName, fallbackImage.data, {
+          contentType: fallbackImage.mimeType,
           upsert: true,
         });
 
-      if (uploadError) {
-        console.error("Storage upload error:", uploadError);
-        throw new Error("Failed to store preview video");
+      if (imgUploadError) {
+        console.error("Image storage upload error:", imgUploadError);
+        throw new Error("Failed to store preview image");
       }
 
-      const { data: signedUrlData, error: signedUrlError } = await supabase.storage
-        .from("weather-videos")
-        .createSignedUrl(fileName, 3600); // 1 hour TTL
+      const { data: imgSignedData, error: imgSignedError } = await supabase.storage
+        .from("generated-images")
+        .createSignedUrl(imgFileName, 3600);
 
-      if (signedUrlError || !signedUrlData?.signedUrl) {
-        console.error("Signed URL error:", signedUrlError);
-        throw new Error("Failed to create signed URL for preview video");
+      if (imgSignedError || !imgSignedData?.signedUrl) {
+        throw new Error("Failed to create signed URL for preview image");
       }
 
-      console.log("Preview video stored with signed URL");
-
+      console.log("Preview image stored with signed URL");
       return new Response(
         JSON.stringify({
           success: true,
           mode: "preview",
-          video_url: signedUrlData.signedUrl,
-          storage_path: fileName,
+          content_type: "image",
+          image_url: imgSignedData.signedUrl,
+          storage_path: imgFileName,
           weather,
           caption,
         }),
