@@ -683,7 +683,7 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
   return null;
 }
 
-// --- Fallback: AI-generated static weather image ---
+// --- Enhanced Fallback: AI-generated branded weather infographic ---
 async function generateFallbackImage(weather: WeatherResponse): Promise<{ data: Uint8Array; mimeType: string } | null> {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) {
@@ -695,20 +695,47 @@ async function generateFallbackImage(weather: WeatherResponse): Promise<{ data: 
   const temps = [weather.morningTemp, weather.afternoonTemp, weather.eveningTemp].filter((t): t is number => t != null);
   const hi = temps.length ? Math.max(...temps) : weather.temperature;
   const lo = temps.length ? Math.min(...temps) : weather.temperature;
+  const takeaway = getPracticalTakeaway(weather);
+  const alertLine = getAlertLine(weather);
+  const tomorrowLine = getTomorrowPreview(weather);
+  const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
 
-  const prompt = `Create a clean, modern weather infographic for social media (vertical 9:16 portrait). 
-Dark navy/slate background with subtle gradient. 
-City: ${weather.city}, ${weather.stateOrRegion}
-Temperature: ${weather.temperature}°F
-Condition: ${weather.description} ${theme.emoji}
-High: ${hi}°F / Low: ${lo}°F
-Rain: ${weather.rainChance}%
-Wind: ${weather.windInfo}
-Include "SKYBRIEF" branding at top. Use clean typography, accent color ${theme.accent}. 
-Professional weather app style, no photographs.`;
+  const promptParts = [
+    "Create a premium weather infographic for social media (vertical 9:16, 1080x1920 pixels).",
+    "",
+    "DESIGN REQUIREMENTS:",
+    "- Dark gradient background blending from " + theme.bg1 + " to " + theme.bg2,
+    '- "SKYBRIEF" logo text centered at top in clean sans-serif, white, with a subtle glow',
+    "- Small badge below logo reading: \"DAILY UPDATE\"",
+    "",
+    "MAIN CONTENT (centered, top to bottom):",
+    "- City name large and bold: " + weather.city,
+    "- Subtitle: " + (weather.stateOrRegion || "") + " | " + today,
+    "- Large temperature display: " + weather.temperature + "\u00B0F with weather emoji " + theme.emoji,
+    "- Condition text in accent color " + theme.accent + ": " + weather.description,
+    "",
+    "STATS ROW (horizontal, icon-style):",
+    "- High: " + hi + "\u00B0F  |  Low: " + lo + "\u00B0F  |  Rain: " + weather.rainChance + "%  |  Wind: " + weather.windInfo,
+    "",
+    "TIME PERIODS (if available):",
+  ];
+
+  if (weather.morningTemp != null) promptParts.push("- Morning: " + weather.morningTemp + "\u00B0F " + (weather.morningCondition || ""));
+  if (weather.afternoonTemp != null) promptParts.push("- Afternoon: " + weather.afternoonTemp + "\u00B0F " + (weather.afternoonCondition || ""));
+  if (weather.eveningTemp != null) promptParts.push("- Evening: " + weather.eveningTemp + "\u00B0F " + (weather.eveningCondition || ""));
+
+  promptParts.push("");
+  promptParts.push("BOTTOM SECTION:");
+  promptParts.push("- Practical tip in a subtle card: \"" + takeaway + "\"");
+  if (alertLine) promptParts.push("- Alert banner with warning icon: \"" + alertLine + "\"");
+  promptParts.push("- Tomorrow preview line: \"" + tomorrowLine + "\"");
+  promptParts.push("");
+  promptParts.push("STYLE: Clean, minimal, professional weather app aesthetic. No photographs. Sharp typography. Subtle depth with shadows and glow effects. Premium feel.");
+
+  const prompt = promptParts.join("\n");
 
   try {
-    console.log("Generating fallback weather image via AI...");
+    console.log("Generating enhanced fallback weather image via AI...");
     const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -716,7 +743,7 @@ Professional weather app style, no photographs.`;
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash-image",
+        model: "google/gemini-3-pro-image-preview",
         messages: [{ role: "user", content: prompt }],
         modalities: ["image", "text"],
       }),
@@ -735,25 +762,22 @@ Professional weather app style, no photographs.`;
       return null;
     }
 
-    // Extract base64 data
     const base64Match = imageUrl.match(/^data:image\/(\w+);base64,(.+)$/);
     if (!base64Match) {
       console.error("Unexpected image URL format from AI");
       return null;
     }
 
-    const imageType = base64Match[1]; // png, jpeg, etc.
+    const imageType = base64Match[1];
     const base64Data = base64Match[2];
-
-    // Decode base64 to Uint8Array
     const binaryString = atob(base64Data);
     const bytes = new Uint8Array(binaryString.length);
     for (let i = 0; i < binaryString.length; i++) {
       bytes[i] = binaryString.charCodeAt(i);
     }
 
-    console.log(`Fallback image generated: ${bytes.length} bytes (${imageType})`);
-    return { data: bytes, mimeType: `image/${imageType}` };
+    console.log("Enhanced fallback image generated: " + bytes.length + " bytes (" + imageType + ")");
+    return { data: bytes, mimeType: "image/" + imageType };
   } catch (err) {
     console.error("Fallback image generation error:", err);
     return null;
@@ -986,39 +1010,82 @@ Deno.serve(async (req) => {
 
     // === PREVIEW MODE ===
     if (mode === "preview") {
-      if (!video || !userId) {
-        throw new Error("Failed to generate video for preview");
+      if (video && userId) {
+        // Video preview path
+        const fileName = userId + "/preview-" + Date.now() + ".mp4";
+        const { error: uploadError } = await supabase.storage
+          .from("weather-videos")
+          .upload(fileName, video.data, {
+            contentType: "video/mp4",
+            upsert: true,
+          });
+
+        if (uploadError) {
+          console.error("Storage upload error:", uploadError);
+          throw new Error("Failed to store preview video");
+        }
+
+        const { data: signedUrlData, error: signedUrlError } = await supabase.storage
+          .from("weather-videos")
+          .createSignedUrl(fileName, 3600);
+
+        if (signedUrlError || !signedUrlData?.signedUrl) {
+          console.error("Signed URL error:", signedUrlError);
+          throw new Error("Failed to create signed URL for preview video");
+        }
+
+        console.log("Preview video stored with signed URL");
+        return new Response(
+          JSON.stringify({
+            success: true,
+            mode: "preview",
+            content_type: "video",
+            video_url: signedUrlData.signedUrl,
+            storage_path: fileName,
+            weather,
+            caption,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
-      const fileName = userId + "/preview-" + Date.now() + ".mp4";
-      const { error: uploadError } = await supabase.storage
-        .from("weather-videos")
-        .upload(fileName, video.data, {
-          contentType: "video/mp4",
+
+      // Image preview fallback
+      console.log("Video generation failed for preview, trying enhanced image fallback...");
+      const fallbackImage = await generateFallbackImage(weather);
+      if (!fallbackImage || !userId) {
+        throw new Error("Failed to generate both video and image for preview");
+      }
+
+      const ext = fallbackImage.mimeType.includes("png") ? "png" : "jpg";
+      const imgFileName = userId + "/preview-" + Date.now() + "." + ext;
+      const { error: imgUploadError } = await supabase.storage
+        .from("generated-images")
+        .upload(imgFileName, fallbackImage.data, {
+          contentType: fallbackImage.mimeType,
           upsert: true,
         });
 
-      if (uploadError) {
-        console.error("Storage upload error:", uploadError);
-        throw new Error("Failed to store preview video");
+      if (imgUploadError) {
+        console.error("Image storage upload error:", imgUploadError);
+        throw new Error("Failed to store preview image");
       }
 
-      const { data: signedUrlData, error: signedUrlError } = await supabase.storage
-        .from("weather-videos")
-        .createSignedUrl(fileName, 3600); // 1 hour TTL
+      const { data: imgSignedData, error: imgSignedError } = await supabase.storage
+        .from("generated-images")
+        .createSignedUrl(imgFileName, 3600);
 
-      if (signedUrlError || !signedUrlData?.signedUrl) {
-        console.error("Signed URL error:", signedUrlError);
-        throw new Error("Failed to create signed URL for preview video");
+      if (imgSignedError || !imgSignedData?.signedUrl) {
+        throw new Error("Failed to create signed URL for preview image");
       }
 
-      console.log("Preview video stored with signed URL");
-
+      console.log("Preview image stored with signed URL");
       return new Response(
         JSON.stringify({
           success: true,
           mode: "preview",
-          video_url: signedUrlData.signedUrl,
-          storage_path: fileName,
+          content_type: "image",
+          image_url: imgSignedData.signedUrl,
+          storage_path: imgFileName,
           weather,
           caption,
         }),

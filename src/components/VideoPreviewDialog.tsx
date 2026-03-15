@@ -34,7 +34,7 @@ export function VideoPreviewDialog({ open, onOpenChange, onUploaded }: VideoPrev
     setIsEditingCaption(false);
     try {
       const result = await generatePreview();
-      if (result.success && result.video_url) {
+      if (result.success && (result.video_url || result.image_url)) {
         setPreview(result);
         toast.success("Preview video generated!");
       } else {
@@ -72,22 +72,24 @@ export function VideoPreviewDialog({ open, onOpenChange, onUploaded }: VideoPrev
   };
 
   const handleDownload = async () => {
-    if (!preview?.video_url) return;
+    const downloadUrl = preview?.video_url || preview?.image_url;
+    if (!downloadUrl) return;
     try {
-      const response = await fetch(preview.video_url);
+      const response = await fetch(downloadUrl);
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
       const city = preview.weather?.city?.replace(/\s+/g, "-").toLowerCase() || "preview";
-      a.download = `skybrief-preview-${city}-${Date.now()}.mp4`;
+      const ext = preview.content_type === "image" ? "png" : "mp4";
+      a.download = `skybrief-preview-${city}-${Date.now()}.${ext}`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      toast.success("Video downloaded!");
+      toast.success(preview.content_type === "image" ? "Image downloaded!" : "Video downloaded!");
     } catch {
-      toast.error("Failed to download video");
+      toast.error("Failed to download");
     }
   };
 
@@ -105,7 +107,7 @@ export function VideoPreviewDialog({ open, onOpenChange, onUploaded }: VideoPrev
         <DialogHeader>
           <DialogTitle className="text-foreground flex items-center gap-2">
             <Play size={18} className="text-primary" />
-            Video Preview
+            {preview?.content_type === "image" ? "Image Preview" : "Video Preview"}
           </DialogTitle>
         </DialogHeader>
 
@@ -130,18 +132,26 @@ export function VideoPreviewDialog({ open, onOpenChange, onUploaded }: VideoPrev
             </div>
           )}
 
-          {/* Video player */}
-          {preview?.video_url && (
+          {/* Media display - video or image */}
+          {(preview?.video_url || preview?.image_url) && (
             <>
               <div className="rounded-xl overflow-hidden bg-secondary/30 border border-border/20">
-                <video
-                  src={preview.video_url}
-                  controls
-                  autoPlay
-                  loop
-                  muted
-                  className="w-full max-h-[40vh] object-contain"
-                />
+                {preview.content_type === "image" && preview.image_url ? (
+                  <img
+                    src={preview.image_url}
+                    alt="Weather infographic preview"
+                    className="w-full max-h-[50vh] object-contain"
+                  />
+                ) : preview.video_url ? (
+                  <video
+                    src={preview.video_url}
+                    controls
+                    autoPlay
+                    loop
+                    muted
+                    className="w-full max-h-[40vh] object-contain"
+                  />
+                ) : null}
               </div>
 
               {/* Weather info badges */}
@@ -196,7 +206,7 @@ export function VideoPreviewDialog({ open, onOpenChange, onUploaded }: VideoPrev
           )}
         </div>
 
-        {preview?.video_url && (
+        {(preview?.video_url || preview?.image_url) && (
           <DialogFooter className="flex-row gap-2 sm:gap-2">
             <Button
               variant="outline"
@@ -225,18 +235,20 @@ export function VideoPreviewDialog({ open, onOpenChange, onUploaded }: VideoPrev
             >
               <X size={14} /> Discard
             </Button>
-            <Button
-              size="sm"
-              onClick={handleUpload}
-              disabled={uploading}
-              className="gap-1.5 text-xs"
-            >
-              {uploading ? (
-                <><Loader2 size={14} className="animate-spin" /> Uploading…</>
-              ) : (
-                <><Upload size={14} /> Upload to YouTube</>
-              )}
-            </Button>
+            {preview?.content_type !== "image" && (
+              <Button
+                size="sm"
+                onClick={handleUpload}
+                disabled={uploading}
+                className="gap-1.5 text-xs"
+              >
+                {uploading ? (
+                  <><Loader2 size={14} className="animate-spin" /> Uploading…</>
+                ) : (
+                  <><Upload size={14} /> Upload to YouTube</>
+                )}
+              </Button>
+            )}
           </DialogFooter>
         )}
       </DialogContent>
