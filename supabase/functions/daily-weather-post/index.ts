@@ -1192,12 +1192,11 @@ Deno.serve(async (req) => {
               errorMessage = `${adapter.name} image post failed`;
             }
           } else if (videoOnlyPlatforms.includes(adapter.name)) {
-            console.log(`Skipping ${adapter.name} — requires video (fallback image only)`);
-            // Record that this platform was skipped
+            console.log("Skipping " + adapter.name + " — requires video (image fallback only)");
             if (!errorMessage) errorMessage = "";
-            errorMessage += `${adapter.name} skipped (requires video); `;
-            if (status !== "failed") status = "failed";
+            errorMessage += adapter.name + " skipped (video required, Creatomate credits depleted); ";
             platform = adapter.name;
+            status = "failed";
           }
         }
         
