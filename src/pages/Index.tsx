@@ -117,6 +117,7 @@ const Index = () => {
   const [debouncedLocation, setDebouncedLocation] = useState<string | undefined>(undefined);
   const [debouncedState, setDebouncedState] = useState<string | undefined>(undefined);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [postFlowPlatforms, setPostFlowPlatforms] = useState<string[]>([]);
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
   const [platformPickerOpen, setPlatformPickerOpen] = useState(false);
 
