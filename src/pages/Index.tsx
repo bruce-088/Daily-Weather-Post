@@ -512,8 +512,13 @@ const Index = () => {
 
       <VideoPreviewDialog
         open={previewOpen}
-        onOpenChange={setPreviewOpen}
+        onOpenChange={(open) => {
+          setPreviewOpen(open);
+          if (!open) setPostFlowPlatforms([]);
+        }}
         onUploaded={loadHistory}
+        postPlatforms={postFlowPlatforms.length > 0 ? postFlowPlatforms : undefined}
+        onPosted={loadHistory}
       />
 
       <footer className="border-t border-border/50 py-4 px-6 flex items-center justify-center gap-4 text-xs text-muted-foreground">
