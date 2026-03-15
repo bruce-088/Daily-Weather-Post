@@ -132,18 +132,26 @@ export function VideoPreviewDialog({ open, onOpenChange, onUploaded }: VideoPrev
             </div>
           )}
 
-          {/* Video player */}
-          {preview?.video_url && (
+          {/* Media display - video or image */}
+          {(preview?.video_url || preview?.image_url) && (
             <>
               <div className="rounded-xl overflow-hidden bg-secondary/30 border border-border/20">
-                <video
-                  src={preview.video_url}
-                  controls
-                  autoPlay
-                  loop
-                  muted
-                  className="w-full max-h-[40vh] object-contain"
-                />
+                {preview.content_type === "image" && preview.image_url ? (
+                  <img
+                    src={preview.image_url}
+                    alt="Weather infographic preview"
+                    className="w-full max-h-[50vh] object-contain"
+                  />
+                ) : preview.video_url ? (
+                  <video
+                    src={preview.video_url}
+                    controls
+                    autoPlay
+                    loop
+                    muted
+                    className="w-full max-h-[40vh] object-contain"
+                  />
+                ) : null}
               </div>
 
               {/* Weather info badges */}
