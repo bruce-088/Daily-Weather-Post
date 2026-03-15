@@ -212,21 +212,12 @@ const Index = () => {
   }, [settings]);
 
   const handlePostNow = useCallback(async () => {
-    setPosting(true);
     const platformNames = selectedPlatforms.length > 0
       ? selectedPlatforms
       : availablePlatforms.map((p) => p.id);
-    const label = platformNames.join(", ");
-    toast.info(`Posting to ${label}...`);
-    const result = await triggerDailyPost(undefined, platformNames);
-    setPosting(false);
-    if (result.success) {
-      toast.success(result.message);
-    } else {
-      toast.error(result.message);
-    }
-    loadHistory();
-  }, [loadHistory, selectedPlatforms, availablePlatforms]);
+    setPostFlowPlatforms(platformNames);
+    setPreviewOpen(true);
+  }, [selectedPlatforms, availablePlatforms]);
 
   const handleExport = useCallback(async () => {
     if (!cardRef.current) return;
