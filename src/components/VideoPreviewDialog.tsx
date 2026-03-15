@@ -107,7 +107,7 @@ export function VideoPreviewDialog({ open, onOpenChange, onUploaded }: VideoPrev
         <DialogHeader>
           <DialogTitle className="text-foreground flex items-center gap-2">
             <Play size={18} className="text-primary" />
-            Video Preview
+            {preview?.content_type === "image" ? "Image Preview" : "Video Preview"}
           </DialogTitle>
         </DialogHeader>
 
