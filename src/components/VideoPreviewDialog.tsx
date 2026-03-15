@@ -5,28 +5,42 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Play, Upload, RefreshCw, X, Loader2, Pencil, Eye, Download } from "lucide-react";
-import { generatePreview, uploadPreviewVideo } from "@/lib/api";
+import { Play, Upload, RefreshCw, X, Loader2, Pencil, Eye, Download, Send } from "lucide-react";
+import { generatePreview, uploadPreviewVideo, triggerDailyPost } from "@/lib/api";
 import type { PreviewResult } from "@/lib/api";
 
 interface VideoPreviewDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onUploaded?: () => void;
+  /** When set, auto-generate on open and show "Post" button for these platforms */
+  postPlatforms?: string[];
+  /** Called after posting completes */
+  onPosted?: () => void;
 }
 
-export function VideoPreviewDialog({ open, onOpenChange, onUploaded }: VideoPreviewDialogProps) {
+export function VideoPreviewDialog({ open, onOpenChange, onUploaded, postPlatforms, onPosted }: VideoPreviewDialogProps) {
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [generating, setGenerating] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [posting, setPosting] = useState(false);
   const [editedCaption, setEditedCaption] = useState("");
   const [isEditingCaption, setIsEditingCaption] = useState(false);
+  const [autoGenerateTriggered, setAutoGenerateTriggered] = useState(false);
 
   useEffect(() => {
     if (preview?.caption) {
       setEditedCaption(preview.caption);
     }
   }, [preview?.caption]);
+
+  // Auto-generate when opened via "Post Now" flow
+  useEffect(() => {
+    if (open && postPlatforms && postPlatforms.length > 0 && !preview && !generating && !autoGenerateTriggered) {
+      setAutoGenerateTriggered(true);
+      handleGenerate();
+    }
+  }, [open, postPlatforms]);
 
   const handleGenerate = async () => {
     setGenerating(true);
@@ -36,7 +50,7 @@ export function VideoPreviewDialog({ open, onOpenChange, onUploaded }: VideoPrev
       const result = await generatePreview();
       if (result.success && (result.video_url || result.image_url)) {
         setPreview(result);
-        toast.success("Preview video generated!");
+        toast.success(result.content_type === "image" ? "Preview image generated!" : "Preview video generated!");
       } else {
         toast.error(result.error || "Failed to generate preview");
       }
@@ -71,6 +85,28 @@ export function VideoPreviewDialog({ open, onOpenChange, onUploaded }: VideoPrev
     }
   };
 
+  const handlePostToPlatforms = async () => {
+    if (!postPlatforms || postPlatforms.length === 0) return;
+    setPosting(true);
+    const label = postPlatforms.join(", ");
+    toast.info(`Posting to ${label}...`);
+    try {
+      const result = await triggerDailyPost(undefined, postPlatforms);
+      if (result.success) {
+        toast.success(result.message);
+      } else {
+        toast.error(result.message);
+      }
+      setPreview(null);
+      onOpenChange(false);
+      onPosted?.();
+    } catch (err: any) {
+      toast.error(err.message || "Post failed");
+    } finally {
+      setPosting(false);
+    }
+  };
+
   const handleDownload = async () => {
     const downloadUrl = preview?.video_url || preview?.image_url;
     if (!downloadUrl) return;
@@ -94,12 +130,16 @@ export function VideoPreviewDialog({ open, onOpenChange, onUploaded }: VideoPrev
   };
 
   const handleClose = () => {
-    if (!generating && !uploading) {
+    if (!generating && !uploading && !posting) {
       setPreview(null);
       setIsEditingCaption(false);
+      setAutoGenerateTriggered(false);
       onOpenChange(false);
     }
   };
+
+  const isPostFlow = postPlatforms && postPlatforms.length > 0;
+  const isBusy = generating || uploading || posting;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -107,7 +147,7 @@ export function VideoPreviewDialog({ open, onOpenChange, onUploaded }: VideoPrev
         <DialogHeader>
           <DialogTitle className="text-foreground flex items-center gap-2">
             <Play size={18} className="text-primary" />
-            {preview?.content_type === "image" ? "Image Preview" : "Video Preview"}
+            {isPostFlow ? "Review Before Posting" : preview?.content_type === "image" ? "Image Preview" : "Video Preview"}
           </DialogTitle>
         </DialogHeader>
 
@@ -116,7 +156,9 @@ export function VideoPreviewDialog({ open, onOpenChange, onUploaded }: VideoPrev
           {!preview && !generating && (
             <div className="flex flex-col items-center gap-4 py-8">
               <p className="text-sm text-muted-foreground text-center">
-                Generate a preview video to review before uploading to YouTube.
+                {isPostFlow
+                  ? "Generate a preview to review before posting."
+                  : "Generate a preview video to review before uploading to YouTube."}
               </p>
               <Button onClick={handleGenerate} className="gap-2">
                 <Play size={16} /> Generate Preview
@@ -128,7 +170,7 @@ export function VideoPreviewDialog({ open, onOpenChange, onUploaded }: VideoPrev
           {generating && (
             <div className="flex flex-col items-center gap-3 py-12">
               <Loader2 size={32} className="animate-spin text-primary" />
-              <p className="text-sm text-muted-foreground">Rendering video… this may take 30-60 seconds</p>
+              <p className="text-sm text-muted-foreground">Generating preview… this may take 30-60 seconds</p>
             </div>
           )}
 
@@ -166,6 +208,11 @@ export function VideoPreviewDialog({ open, onOpenChange, onUploaded }: VideoPrev
                   <Badge variant="secondary" className="text-xs">
                     {preview.weather.condition}
                   </Badge>
+                  {isPostFlow && (
+                    <Badge variant="outline" className="text-xs">
+                      → {postPlatforms.join(", ")}
+                    </Badge>
+                  )}
                 </div>
               )}
 
@@ -212,7 +259,7 @@ export function VideoPreviewDialog({ open, onOpenChange, onUploaded }: VideoPrev
               variant="outline"
               size="sm"
               onClick={handleGenerate}
-              disabled={generating || uploading}
+              disabled={isBusy}
               className="gap-1.5 text-xs"
             >
               <RefreshCw size={14} /> Re-render
@@ -221,7 +268,7 @@ export function VideoPreviewDialog({ open, onOpenChange, onUploaded }: VideoPrev
               variant="outline"
               size="sm"
               onClick={handleDownload}
-              disabled={generating || uploading}
+              disabled={isBusy}
               className="gap-1.5 text-xs"
             >
               <Download size={14} /> Download
@@ -230,12 +277,25 @@ export function VideoPreviewDialog({ open, onOpenChange, onUploaded }: VideoPrev
               variant="ghost"
               size="sm"
               onClick={handleClose}
-              disabled={generating || uploading}
+              disabled={isBusy}
               className="gap-1.5 text-xs"
             >
               <X size={14} /> Discard
             </Button>
-            {preview?.content_type !== "image" && (
+            {isPostFlow ? (
+              <Button
+                size="sm"
+                onClick={handlePostToPlatforms}
+                disabled={isBusy}
+                className="gap-1.5 text-xs"
+              >
+                {posting ? (
+                  <><Loader2 size={14} className="animate-spin" /> Posting…</>
+                ) : (
+                  <><Send size={14} /> Post to {postPlatforms.join(", ")}</>
+                )}
+              </Button>
+            ) : preview?.content_type !== "image" ? (
               <Button
                 size="sm"
                 onClick={handleUpload}
@@ -248,7 +308,7 @@ export function VideoPreviewDialog({ open, onOpenChange, onUploaded }: VideoPrev
                   <><Upload size={14} /> Upload to YouTube</>
                 )}
               </Button>
-            )}
+            ) : null}
           </DialogFooter>
         )}
       </DialogContent>
