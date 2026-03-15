@@ -206,7 +206,7 @@ export function VideoPreviewDialog({ open, onOpenChange, onUploaded }: VideoPrev
           )}
         </div>
 
-        {preview?.video_url && (
+        {(preview?.video_url || preview?.image_url) && (
           <DialogFooter className="flex-row gap-2 sm:gap-2">
             <Button
               variant="outline"
