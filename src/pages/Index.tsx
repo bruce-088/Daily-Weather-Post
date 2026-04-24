@@ -30,7 +30,6 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { WeatherCard } from "@/components/WeatherCard";
-import { MobilePreview } from "@/components/MobilePreview";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { PostHistoryList } from "@/components/PostHistoryList";
 import { VideoPreviewDialog } from "@/components/VideoPreviewDialog";
