@@ -471,13 +471,21 @@ const Index = () => {
                           "radial-gradient(circle at 50% 50%, hsl(250 85% 60% / 0.35), transparent 70%)",
                       }}
                     />
-                    <div className="relative">
+                    <div
+                      className={`relative weather-glow rounded-2xl ${
+                        /clear|sun/i.test(weather.condition)
+                          ? "weather-glow-clear"
+                          : /rain|storm|drizzle|thunder/i.test(weather.condition)
+                          ? "weather-glow-rain"
+                          : "weather-glow-clouds"
+                      }`}
+                    >
                       <WeatherCard ref={cardRef} weather={weather} aspectRatio={aspectRatio} />
                       <Button
                         onClick={handleExport}
                         size="icon"
                         variant="secondary"
-                        className="absolute top-2 right-2 h-8 w-8 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur border border-white/10 text-white"
+                        className="absolute top-2 right-2 h-8 w-8 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur border border-white/10 text-white z-10"
                         title="Export PNG"
                       >
                         <Download size={14} />
