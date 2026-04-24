@@ -75,6 +75,7 @@ Deno.serve(async (req) => {
     const results: string[] = [];
 
     for (const settings of allSettings) {
+      const userTz: string = settings.timezone || "UTC";
       const periods: { enabled: boolean; time: string; name: string }[] = [
         { enabled: settings.auto_post_morning, time: settings.morning_post_time, name: "morning" },
         { enabled: settings.auto_post_afternoon, time: settings.afternoon_post_time, name: "afternoon" },
@@ -83,9 +84,9 @@ Deno.serve(async (req) => {
 
       for (const period of periods) {
         if (!period.enabled || !period.time) continue;
-        if (!isTimeToPost(period.time)) continue;
+        if (!isTimeToPost(period.time, userTz)) continue;
 
-        console.log("Triggering " + period.name + " post for user " + (settings.user_id || "default") + " at " + period.time);
+        console.log("Triggering " + period.name + " post for user " + (settings.user_id || "default") + " at local " + period.time + " (" + userTz + ")");
 
         try {
           const postUrl = supabaseUrl + "/functions/v1/daily-weather-post";
