@@ -5,7 +5,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Download,
-  Smartphone,
   Square,
   RectangleVertical,
   Settings,
@@ -21,7 +20,11 @@ import {
   RefreshCw,
   Eye,
   ChevronDown,
-  Check,
+  MapPin,
+  Youtube,
+  Twitter,
+  Linkedin,
+  Video,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
