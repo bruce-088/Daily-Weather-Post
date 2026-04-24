@@ -44,6 +44,12 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
+      {/* Ambient atmospheric orbs (fixed, behind everything) */}
+      <div className="ambient-orbs" aria-hidden="true">
+        <div className="orb orb-violet" />
+        <div className="orb orb-indigo" />
+        <div className="orb orb-amber" />
+      </div>
       <BrowserRouter>
         <Routes>
           <Route path="/auth" element={<PublicRoute><Auth /></PublicRoute>} />
