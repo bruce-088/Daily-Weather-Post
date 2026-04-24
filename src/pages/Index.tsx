@@ -247,7 +247,7 @@ const Index = () => {
   }, [weather]);
 
   return (
-    <div className="dark min-h-screen bg-background">
+    <div className="dark min-h-screen bg-transparent">
       {/* Top bar */}
       <header className="border-b border-border/40 bg-card/50 backdrop-blur-xl sticky top-0 z-50">
         <div className="container flex items-center justify-between h-14 px-4">
