@@ -5,7 +5,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Download,
-  Smartphone,
   Square,
   RectangleVertical,
   Settings,
@@ -21,7 +20,11 @@ import {
   RefreshCw,
   Eye,
   ChevronDown,
-  Check,
+  MapPin,
+  Youtube,
+  Twitter,
+  Linkedin,
+  Video,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
@@ -121,13 +124,13 @@ const Index = () => {
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
   const [platformPickerOpen, setPlatformPickerOpen] = useState(false);
 
-  // Build available platforms list from connection status
+  // Build available platforms list from connection status with brand metadata
   const availablePlatforms = useMemo(() => {
-    const platforms: { id: string; label: string }[] = [];
-    if (youtubeConnected) platforms.push({ id: "youtube", label: "YouTube" });
-    if (twitterConnected) platforms.push({ id: "twitter", label: "Twitter / X" });
-    if (linkedinConnected) platforms.push({ id: "linkedin", label: "LinkedIn" });
-    if (tiktokConnected) platforms.push({ id: "tiktok", label: "TikTok" });
+    const platforms: { id: string; label: string; color: string; icon: typeof Youtube }[] = [];
+    if (youtubeConnected) platforms.push({ id: "youtube", label: "YouTube", color: "#FF0000", icon: Youtube });
+    if (twitterConnected) platforms.push({ id: "twitter", label: "Twitter / X", color: "#1DA1F2", icon: Twitter });
+    if (linkedinConnected) platforms.push({ id: "linkedin", label: "LinkedIn", color: "#0A66C2", icon: Linkedin });
+    if (tiktokConnected) platforms.push({ id: "tiktok", label: "TikTok", color: "#EE1D52", icon: Video });
     return platforms;
   }, [youtubeConnected, twitterConnected, linkedinConnected, tiktokConnected]);
   useEffect(() => {
@@ -359,166 +362,237 @@ const Index = () => {
 
           {/* CREATE TAB */}
           <TabsContent value="create">
-            <div className="grid gap-6 lg:grid-cols-[320px_1fr_320px]">
-              {/* LEFT: Inputs + caption */}
-              <aside className="space-y-4 order-2 lg:order-1">
-                <SettingsPanel
-                  settings={settings}
-                  onUpdate={setSettings}
-                  onFetch={handleFetch}
-                  onSave={handleSave}
-                  loading={loading}
-                  saving={saving}
-                  tiktokConnected={tiktokConnected}
-                  youtubeConnected={youtubeConnected}
-                  twitterConnected={twitterConnected}
-                  linkedinConnected={linkedinConnected}
-                  onDisconnect={handleDisconnect}
-                />
-
-                <div className="space-y-2 rounded-xl border border-border/30 bg-card/40 p-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-foreground">Caption</h3>
-                    {caption && (
+            <div className="mx-auto max-w-[1400px]">
+              <div className="grid gap-6 lg:grid-cols-[340px_minmax(0,1fr)_340px]">
+                {/* LEFT: Inputs + caption */}
+                <aside className="space-y-4 order-2 lg:order-1">
+                  {/* Compact Location card */}
+                  <div className="rounded-xl border border-white/10 bg-white/5 backdrop-blur-xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                        <MapPin size={14} className="text-primary" /> Location
+                      </h3>
                       <Button
-                        size="sm"
+                        onClick={handleFetch}
+                        disabled={loading}
+                        size="icon"
                         variant="ghost"
-                        onClick={handleGenerateCaption}
-                        disabled={captionLoading}
-                        className="gap-1 text-xs text-muted-foreground h-7"
+                        className="h-7 w-7"
                       >
-                        <RefreshCw size={12} />
+                        <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
                       </Button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        value={settings.location}
+                        onChange={(e) => setSettings({ ...settings, location: e.target.value })}
+                        placeholder="City"
+                        className="h-9 px-3 text-sm rounded-md bg-secondary/40 border border-border/30 focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                      <input
+                        value={settings.state}
+                        onChange={(e) => setSettings({ ...settings, state: e.target.value })}
+                        placeholder="State"
+                        className="h-9 px-3 text-sm rounded-md bg-secondary/40 border border-border/30 focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    </div>
+                    {lastUpdated && (
+                      <p className="text-[10px] text-muted-foreground">Last updated: {timeAgo}</p>
                     )}
                   </div>
-                  <Button
-                    size="sm"
-                    onClick={handleGenerateCaption}
-                    disabled={captionLoading}
-                    className="gap-1.5 text-xs w-full"
-                  >
-                    <MessageSquare size={14} />
-                    {captionLoading ? "Generating..." : caption ? "Regenerate Caption" : "Generate Caption"}
-                  </Button>
-                  {caption && (
-                    <Textarea
-                      value={caption}
-                      onChange={(e) => setCaption(e.target.value)}
-                      className="text-sm bg-secondary/30 border-border/30 resize-none whitespace-pre-wrap"
-                      rows={8}
+
+                  {/* Caption card */}
+                  <div className="rounded-xl border border-white/10 bg-white/5 backdrop-blur-xl p-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                        <MessageSquare size={14} className="text-primary" /> AI Caption
+                      </h3>
+                      {caption && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={handleGenerateCaption}
+                          disabled={captionLoading}
+                          className="h-7 w-7 text-muted-foreground"
+                        >
+                          <RefreshCw size={12} className={captionLoading ? "animate-spin" : ""} />
+                        </Button>
+                      )}
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={handleGenerateCaption}
+                      disabled={captionLoading || !weather}
+                      className="gap-1.5 text-xs w-full"
+                    >
+                      <MessageSquare size={14} />
+                      {captionLoading ? "Generating..." : caption ? "Regenerate" : "Generate Caption"}
+                    </Button>
+                    {caption && (
+                      <Textarea
+                        value={caption}
+                        onChange={(e) => setCaption(e.target.value)}
+                        className="text-sm bg-secondary/30 border-border/30 resize-none whitespace-pre-wrap"
+                        rows={9}
+                      />
+                    )}
+                  </div>
+                </aside>
+
+                {/* CENTER: WeatherCard stage */}
+                <div className="flex flex-col items-center gap-4 order-1 lg:order-2">
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant={aspectRatio === "1:1" ? "default" : "outline"}
+                      onClick={() => setAspectRatio("1:1")}
+                      className="gap-1.5 text-xs"
+                    >
+                      <Square size={14} /> 1:1 Feed
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={aspectRatio === "9:16" ? "default" : "outline"}
+                      onClick={() => setAspectRatio("9:16")}
+                      className="gap-1.5 text-xs"
+                    >
+                      <RectangleVertical size={14} /> 9:16 Story
+                    </Button>
+                  </div>
+
+                  {error && <p className="text-sm text-destructive">{error}</p>}
+
+                  {/* Glass pedestal */}
+                  <div className="relative rounded-3xl p-8 border border-white/10 bg-white/5 backdrop-blur-xl shadow-[0_20px_60px_-20px_hsl(250_85%_60%/0.4)]">
+                    <div
+                      className="absolute -inset-4 -z-10 rounded-[2rem] opacity-60 blur-3xl"
+                      style={{
+                        background:
+                          "radial-gradient(circle at 50% 50%, hsl(250 85% 60% / 0.35), transparent 70%)",
+                      }}
                     />
-                  )}
-                </div>
-              </aside>
-
-              {/* CENTER: WeatherCard */}
-              <div className="flex flex-col items-center gap-4 order-1 lg:order-2">
-                <div className="flex items-center gap-2 w-full justify-center">
-                  <Button
-                    size="sm"
-                    variant={aspectRatio === "1:1" ? "default" : "outline"}
-                    onClick={() => setAspectRatio("1:1")}
-                    className="gap-1.5 text-xs"
-                  >
-                    <Square size={14} /> 1:1 Feed
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant={aspectRatio === "9:16" ? "default" : "outline"}
-                    onClick={() => setAspectRatio("9:16")}
-                    className="gap-1.5 text-xs"
-                  >
-                    <RectangleVertical size={14} /> 9:16 Story
-                  </Button>
-                </div>
-
-                {error && <p className="text-sm text-destructive">{error}</p>}
-                {lastUpdated && (
-                  <p className="text-xs text-muted-foreground">
-                    Last updated: {timeAgo} · auto-refreshes every 30 min
-                  </p>
-                )}
-
-                <div className="flex items-center justify-center p-6 rounded-2xl bg-secondary/20 border border-border/20 w-full">
-                  <WeatherCard ref={cardRef} weather={weather} aspectRatio={aspectRatio} />
-                </div>
-
-                <Button
-                  onClick={handleExport}
-                  size="sm"
-                  variant="ghost"
-                  className="gap-1.5 text-xs text-muted-foreground"
-                >
-                  <Download size={14} /> Export PNG
-                </Button>
-              </div>
-
-              {/* RIGHT: Posting controls */}
-              <aside className="space-y-4 order-3">
-                <div className="rounded-xl border border-border/30 bg-card/40 p-4 space-y-3">
-                  <h3 className="text-sm font-semibold text-foreground">Post now</h3>
-                  <p className="text-xs text-muted-foreground">
-                    Select platforms and publish your weather post immediately.
-                  </p>
-                  <div className="space-y-1.5">
-                    {availablePlatforms.length === 0 && (
-                      <p className="text-xs text-muted-foreground">No platforms connected. Connect accounts in Settings.</p>
-                    )}
-                    {availablePlatforms.map((p) => (
-                      <label
-                        key={p.id}
-                        className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-secondary/40 cursor-pointer text-sm"
+                    <div className="relative">
+                      <WeatherCard ref={cardRef} weather={weather} aspectRatio={aspectRatio} />
+                      <Button
+                        onClick={handleExport}
+                        size="icon"
+                        variant="secondary"
+                        className="absolute top-2 right-2 h-8 w-8 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur border border-white/10 text-white"
+                        title="Export PNG"
                       >
-                        <Checkbox
-                          checked={selectedPlatforms.includes(p.id)}
-                          onCheckedChange={(checked) => {
-                            setSelectedPlatforms((prev) =>
-                              checked ? [...prev, p.id] : prev.filter((x) => x !== p.id)
-                            );
-                          }}
-                        />
-                        {p.label}
-                      </label>
-                    ))}
+                        <Download size={14} />
+                      </Button>
+                    </div>
                   </div>
-                  <Button
-                    size="sm"
-                    onClick={handlePostNow}
-                    disabled={posting || availablePlatforms.length === 0}
-                    className="gap-1.5 text-xs w-full"
-                  >
-                    <Send size={14} />
-                    {posting ? "Posting..." : selectedPlatforms.length > 0 ? `Post (${selectedPlatforms.length})` : "Post All"}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setPreviewOpen(true)}
-                    className="gap-1.5 text-xs w-full"
-                  >
-                    <Eye size={14} /> Preview before posting
-                  </Button>
                 </div>
 
-                <div className="rounded-xl border border-border/30 bg-card/40 p-4 space-y-2">
-                  <h3 className="text-sm font-semibold text-foreground">Automation</h3>
-                  {(settings.autoPostMorning || settings.autoPostAfternoon || settings.autoPostEvening) ? (
-                    <Badge className="bg-accent/20 text-accent border-accent/30 text-[10px] gap-1">
-                      <Zap size={10} /> Auto 3x/day enabled
-                    </Badge>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">Auto-posting disabled. Configure in Settings.</p>
+                {/* RIGHT: Publish */}
+                <aside className="space-y-4 order-3">
+                  <div className="rounded-xl border border-white/10 bg-white/5 backdrop-blur-xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                        <Send size={14} className="text-primary" /> Publish
+                      </h3>
+                      {availablePlatforms.length > 0 && (
+                        <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer">
+                          <Checkbox
+                            checked={
+                              selectedPlatforms.length === availablePlatforms.length &&
+                              availablePlatforms.length > 0
+                            }
+                            onCheckedChange={(checked) => {
+                              setSelectedPlatforms(
+                                checked ? availablePlatforms.map((p) => p.id) : []
+                              );
+                            }}
+                          />
+                          Select all
+                        </label>
+                      )}
+                    </div>
+
+                    <div className="space-y-1">
+                      {availablePlatforms.length === 0 && (
+                        <div className="rounded-lg border border-dashed border-border/40 p-3 text-center">
+                          <p className="text-xs text-muted-foreground">
+                            No platforms connected.
+                          </p>
+                          <Button
+                            size="sm"
+                            variant="link"
+                            className="text-xs h-auto p-0 mt-1"
+                            onClick={() => setActiveTab("settings")}
+                          >
+                            Connect in Settings →
+                          </Button>
+                        </div>
+                      )}
+                      {availablePlatforms.map((p) => {
+                        const isSelected = selectedPlatforms.includes(p.id);
+                        return (
+                          <label
+                            key={p.id}
+                            className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg border cursor-pointer transition-colors ${
+                              isSelected
+                                ? "border-white/15 bg-white/5"
+                                : "border-transparent hover:bg-white/5"
+                            }`}
+                          >
+                            <Checkbox
+                              checked={isSelected}
+                              onCheckedChange={(checked) => {
+                                setSelectedPlatforms((prev) =>
+                                  checked ? [...prev, p.id] : prev.filter((x) => x !== p.id)
+                                );
+                              }}
+                            />
+                            <span
+                              className="h-7 w-7 rounded-md flex items-center justify-center"
+                              style={{ backgroundColor: `${p.color}22`, color: p.color }}
+                            >
+                              <p.icon size={14} />
+                            </span>
+                            <span className="text-sm text-foreground">{p.label}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+
+                    <Button
+                      size="sm"
+                      onClick={handlePostNow}
+                      disabled={posting || availablePlatforms.length === 0}
+                      className="gap-1.5 text-xs w-full"
+                    >
+                      <Send size={14} />
+                      {posting
+                        ? "Posting..."
+                        : selectedPlatforms.length > 0
+                        ? `Post to ${selectedPlatforms.length}`
+                        : "Post to All"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setActiveTab("schedule")}
+                      className="gap-1.5 text-xs w-full"
+                    >
+                      <CalendarClock size={14} /> Add to Schedule
+                    </Button>
+                  </div>
+
+                  {(settings.autoPostMorning ||
+                    settings.autoPostAfternoon ||
+                    settings.autoPostEvening) && (
+                    <div className="rounded-xl border border-white/10 bg-white/5 backdrop-blur-xl p-3 flex items-center gap-2">
+                      <Zap size={14} className="text-accent" />
+                      <p className="text-xs text-muted-foreground">
+                        Auto-posting active 3x/day
+                      </p>
+                    </div>
                   )}
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="gap-1.5 text-xs w-full justify-start"
-                    onClick={() => setActiveTab("schedule")}
-                  >
-                    <CalendarClock size={14} /> Schedule a post
-                  </Button>
-                </div>
-              </aside>
+                </aside>
+              </div>
             </div>
           </TabsContent>
 
