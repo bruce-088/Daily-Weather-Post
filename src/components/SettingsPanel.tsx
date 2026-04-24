@@ -326,7 +326,9 @@ export function SettingsPanel({
           </div>
         </CardContent>
       </Card>
+      )}
 
+      {showAutomation && (
       <Card className="border-border/50 bg-card/80 backdrop-blur">
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
