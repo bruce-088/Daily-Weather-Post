@@ -3,8 +3,20 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Clock, MapPin, Instagram, Video, RefreshCw, Save, CheckCircle, ExternalLink, Youtube, Sun, Sunset, Moon, Twitter, Linkedin, Unlink } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Clock, MapPin, Instagram, Video, RefreshCw, Save, CheckCircle, ExternalLink, Youtube, Sun, Sunset, Moon, Twitter, Linkedin, Unlink, Globe } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+
+const TIMEZONE_OPTIONS = [
+  { value: "America/New_York", label: "Eastern (New York)" },
+  { value: "America/Chicago", label: "Central (Chicago)" },
+  { value: "America/Denver", label: "Mountain (Denver)" },
+  { value: "America/Phoenix", label: "Mountain - No DST (Phoenix)" },
+  { value: "America/Los_Angeles", label: "Pacific (Los Angeles)" },
+  { value: "America/Anchorage", label: "Alaska (Anchorage)" },
+  { value: "Pacific/Honolulu", label: "Hawaii (Honolulu)" },
+  { value: "UTC", label: "UTC" },
+];
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { AutomationSettings } from "@/types/weather";
@@ -124,6 +136,33 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
             <Button onClick={onFetch} disabled={loading} size="icon" variant="outline" className="self-start">
               <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
             </Button>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+              <Globe size={12} /> Timezone
+            </Label>
+            <Select
+              value={settings.timezone || "UTC"}
+              onValueChange={(v) => update("timezone", v)}
+            >
+              <SelectTrigger className="bg-secondary/50 border-border/30">
+                <SelectValue placeholder="Select timezone" />
+              </SelectTrigger>
+              <SelectContent>
+                {TIMEZONE_OPTIONS.map((tz) => (
+                  <SelectItem key={tz.value} value={tz.value}>
+                    {tz.label}
+                  </SelectItem>
+                ))}
+                {settings.timezone &&
+                  !TIMEZONE_OPTIONS.find((t) => t.value === settings.timezone) && (
+                    <SelectItem value={settings.timezone}>{settings.timezone}</SelectItem>
+                  )}
+              </SelectContent>
+            </Select>
+            <p className="text-[10px] text-muted-foreground">
+              Auto-detected from your browser. All scheduled post times are local to this timezone.
+            </p>
           </div>
         </CardContent>
       </Card>
@@ -297,6 +336,7 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
               className="bg-secondary/50 border-border/30"
               disabled={!settings.autoPostMorning}
             />
+            <p className="text-[10px] text-muted-foreground">Times are in your local timezone</p>
           </div>
 
           {/* Afternoon */}
@@ -317,6 +357,7 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
               className="bg-secondary/50 border-border/30"
               disabled={!settings.autoPostAfternoon}
             />
+            <p className="text-[10px] text-muted-foreground">Times are in your local timezone</p>
           </div>
 
           {/* Evening */}
@@ -337,6 +378,7 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
               className="bg-secondary/50 border-border/30"
               disabled={!settings.autoPostEvening}
             />
+            <p className="text-[10px] text-muted-foreground">Times are in your local timezone</p>
           </div>
         </CardContent>
       </Card>
