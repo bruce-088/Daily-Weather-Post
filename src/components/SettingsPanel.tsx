@@ -405,11 +405,14 @@ export function SettingsPanel({
           </div>
         </CardContent>
       </Card>
+      )}
 
-      <Button onClick={onSave} disabled={saving} className="w-full gap-2">
-        <Save size={16} />
-        {saving ? "Saving..." : "Save Settings"}
-      </Button>
+      {(showLocation || showConnections || showAutomation) && (
+        <Button onClick={onSave} disabled={saving} className="w-full gap-2">
+          <Save size={16} />
+          {saving ? "Saving..." : "Save Settings"}
+        </Button>
+      )}
     </div>
   );
 }
