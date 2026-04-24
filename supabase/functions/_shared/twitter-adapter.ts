@@ -141,7 +141,7 @@ export class TwitterAdapter implements PlatformAdapter {
     formData.append("command", "APPEND");
     formData.append("media_id", mediaId);
     formData.append("segment_index", "0");
-    formData.append("media", new Blob([imageData], { type: "application/octet-stream" }), "image.png");
+    formData.append("media", new Blob([imageData as BlobPart], { type: "application/octet-stream" }), "image.png");
 
     const appendRes = await fetch(mediaUploadUrl, {
       method: "POST",
