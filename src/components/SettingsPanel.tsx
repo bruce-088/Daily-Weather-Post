@@ -33,9 +33,27 @@ interface SettingsPanelProps {
   twitterConnected?: boolean;
   linkedinConnected?: boolean;
   onDisconnect?: (platform: string) => void;
+  showLocation?: boolean;
+  showConnections?: boolean;
+  showAutomation?: boolean;
 }
 
-export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, saving, tiktokConnected, youtubeConnected, twitterConnected, linkedinConnected, onDisconnect }: SettingsPanelProps) {
+export function SettingsPanel({
+  settings,
+  onUpdate,
+  onFetch,
+  onSave,
+  loading,
+  saving,
+  tiktokConnected,
+  youtubeConnected,
+  twitterConnected,
+  linkedinConnected,
+  onDisconnect,
+  showLocation = true,
+  showConnections = true,
+  showAutomation = true,
+}: SettingsPanelProps) {
   const update = (key: keyof AutomationSettings, value: string | boolean) => {
     onUpdate({ ...settings, [key]: value });
   };
