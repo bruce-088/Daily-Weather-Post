@@ -176,7 +176,7 @@ Deno.serve(async (req) => {
   } catch (err) {
     console.error("TikTok auth error:", err);
     return new Response(
-      JSON.stringify({ error: err.message || "Internal error" }),
+      JSON.stringify({ error: err instanceof Error ? err.message : "Internal error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
