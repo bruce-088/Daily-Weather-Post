@@ -85,9 +85,51 @@
   * {
     @apply border-border;
   }
+  html, body, #root {
+    min-height: 100%;
+  }
   body {
-    @apply bg-background text-foreground font-sans;
+    @apply text-foreground font-sans;
     font-family: 'Space Grotesk', system-ui, sans-serif;
+    color: hsl(var(--foreground));
+    background-color: #121212;
+    background-image:
+      radial-gradient(ellipse at top left, #1A1C2E 0%, transparent 55%),
+      radial-gradient(ellipse at center, #2D1B4E 0%, transparent 60%),
+      radial-gradient(ellipse at bottom right, #121212 0%, #0a0a0f 80%);
+    background-attachment: fixed;
+    background-repeat: no-repeat;
+    background-size: cover;
+  }
+
+  /* Atmospheric glow orbs fixed behind content */
+  body::before,
+  body::after {
+    content: "";
+    position: fixed;
+    pointer-events: none;
+    z-index: 0;
+    border-radius: 9999px;
+    filter: blur(120px);
+  }
+  body::before {
+    width: 520px;
+    height: 520px;
+    top: -120px;
+    left: -120px;
+    background: radial-gradient(circle, hsla(250, 85%, 60%, 0.35), transparent 70%);
+  }
+  body::after {
+    width: 600px;
+    height: 600px;
+    bottom: -160px;
+    right: -160px;
+    background: radial-gradient(circle, hsla(180, 65%, 50%, 0.22), transparent 70%);
+  }
+
+  #root {
+    position: relative;
+    z-index: 1;
   }
 }
 
@@ -98,6 +140,13 @@
     box-shadow: var(--glass-shadow);
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
+  }
+  .glass-surface {
+    background: hsla(228, 22%, 11%, 0.55);
+    border: 1px solid hsla(0, 0%, 100%, 0.08);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    box-shadow: 0 8px 32px hsla(0, 0%, 0%, 0.35);
   }
   .font-mono-display {
     font-family: 'JetBrains Mono', monospace;
