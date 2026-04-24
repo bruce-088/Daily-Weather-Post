@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
 
     // Check if the user's local wall-clock time is within 15 minutes after the target.
     // Cron runs every 15 min, so window = [target, target + 15min).
-    function isTimeToPost(timeStr: string, timeZone: string): boolean {
+    function evaluateTime(timeStr: string, timeZone: string) {
       const target = parseTime(timeStr);
       const zoned = getZonedHourMinute(now, timeZone);
       const targetMinutes = target.hour * 60 + target.minute;
@@ -68,14 +68,28 @@ Deno.serve(async (req) => {
       let diff = currentMinutes - targetMinutes;
       // Handle day wrap (e.g., target 23:55, current 00:05)
       if (diff < -12 * 60) diff += 24 * 60;
-      return diff >= 0 && diff < 15;
+      const shouldPost = diff >= 0 && diff < 15;
+      return {
+        shouldPost,
+        diff,
+        targetLocal: `${String(target.hour).padStart(2, "0")}:${String(target.minute).padStart(2, "0")}`,
+        currentLocal: `${String(zoned.hour).padStart(2, "0")}:${String(zoned.minute).padStart(2, "0")}`,
+      };
     }
+
+    const nowUtcIso = now.toISOString();
+    const nowUtcHm = `${String(now.getUTCHours()).padStart(2, "0")}:${String(now.getUTCMinutes()).padStart(2, "0")}`;
+    console.log(`[scheduler] Tick — now UTC: ${nowUtcIso} (${nowUtcHm}), users: ${allSettings.length}`);
 
     let triggered = 0;
     const results: string[] = [];
 
     for (const settings of allSettings) {
       const userTz: string = settings.timezone || "UTC";
+      const userLocal = getZonedHourMinute(now, userTz);
+      const userLocalHm = `${String(userLocal.hour).padStart(2, "0")}:${String(userLocal.minute).padStart(2, "0")}`;
+      console.log(`[scheduler] User ${settings.user_id || "default"} — tz: ${userTz}, local now: ${userLocalHm}`);
+
       const periods: { enabled: boolean; time: string; name: string }[] = [
         { enabled: settings.auto_post_morning, time: settings.morning_post_time, name: "morning" },
         { enabled: settings.auto_post_afternoon, time: settings.afternoon_post_time, name: "afternoon" },
@@ -83,10 +97,17 @@ Deno.serve(async (req) => {
       ];
 
       for (const period of periods) {
-        if (!period.enabled || !period.time) continue;
-        if (!isTimeToPost(period.time, userTz)) continue;
+        if (!period.enabled || !period.time) {
+          console.log(`[scheduler]   ${period.name}: skipped (enabled=${period.enabled}, time=${period.time})`);
+          continue;
+        }
+        const ev = evaluateTime(period.time, userTz);
+        console.log(
+          `[scheduler]   ${period.name}: target_local=${ev.targetLocal} ${userTz}, current_local=${ev.currentLocal}, diff=${ev.diff}min, shouldPost=${ev.shouldPost}`
+        );
+        if (!ev.shouldPost) continue;
 
-        console.log("Triggering " + period.name + " post for user " + (settings.user_id || "default") + " at local " + period.time + " (" + userTz + ")");
+        console.log(`[scheduler]   → Triggering ${period.name} post for user ${settings.user_id || "default"}`);
 
         try {
           const postUrl = supabaseUrl + "/functions/v1/daily-weather-post";
