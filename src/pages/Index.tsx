@@ -124,13 +124,13 @@ const Index = () => {
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
   const [platformPickerOpen, setPlatformPickerOpen] = useState(false);
 
-  // Build available platforms list from connection status
+  // Build available platforms list from connection status with brand metadata
   const availablePlatforms = useMemo(() => {
-    const platforms: { id: string; label: string }[] = [];
-    if (youtubeConnected) platforms.push({ id: "youtube", label: "YouTube" });
-    if (twitterConnected) platforms.push({ id: "twitter", label: "Twitter / X" });
-    if (linkedinConnected) platforms.push({ id: "linkedin", label: "LinkedIn" });
-    if (tiktokConnected) platforms.push({ id: "tiktok", label: "TikTok" });
+    const platforms: { id: string; label: string; color: string; icon: typeof Youtube }[] = [];
+    if (youtubeConnected) platforms.push({ id: "youtube", label: "YouTube", color: "#FF0000", icon: Youtube });
+    if (twitterConnected) platforms.push({ id: "twitter", label: "Twitter / X", color: "#1DA1F2", icon: Twitter });
+    if (linkedinConnected) platforms.push({ id: "linkedin", label: "LinkedIn", color: "#0A66C2", icon: Linkedin });
+    if (tiktokConnected) platforms.push({ id: "tiktok", label: "TikTok", color: "#EE1D52", icon: Video });
     return platforms;
   }, [youtubeConnected, twitterConnected, linkedinConnected, tiktokConnected]);
   useEffect(() => {
