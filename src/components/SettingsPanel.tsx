@@ -137,6 +137,33 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
               <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
             </Button>
           </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+              <Globe size={12} /> Timezone
+            </Label>
+            <Select
+              value={settings.timezone || "UTC"}
+              onValueChange={(v) => update("timezone", v)}
+            >
+              <SelectTrigger className="bg-secondary/50 border-border/30">
+                <SelectValue placeholder="Select timezone" />
+              </SelectTrigger>
+              <SelectContent>
+                {TIMEZONE_OPTIONS.map((tz) => (
+                  <SelectItem key={tz.value} value={tz.value}>
+                    {tz.label}
+                  </SelectItem>
+                ))}
+                {settings.timezone &&
+                  !TIMEZONE_OPTIONS.find((t) => t.value === settings.timezone) && (
+                    <SelectItem value={settings.timezone}>{settings.timezone}</SelectItem>
+                  )}
+              </SelectContent>
+            </Select>
+            <p className="text-[10px] text-muted-foreground">
+              Auto-detected from your browser. All scheduled post times are local to this timezone.
+            </p>
+          </div>
         </CardContent>
       </Card>
 
