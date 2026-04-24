@@ -63,7 +63,7 @@ const Index = () => {
   const navigate = useNavigate();
   const cardRef = useRef<HTMLDivElement>(null);
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("9:16");
-  const [activeTab, setActiveTab] = useState("designer");
+  const [activeTab, setActiveTab] = useState("create");
   const [settings, setSettings] = useState<AutomationSettings>(DEFAULT_SETTINGS);
   const [tiktokConnected, setTiktokConnected] = useState(false);
   const [youtubeConnected, setYoutubeConnected] = useState(false);
