@@ -57,6 +57,7 @@ export async function saveSettings(settings: AutomationSettings): Promise<boolea
     auto_post_morning: settings.autoPostMorning,
     auto_post_afternoon: settings.autoPostAfternoon,
     auto_post_evening: settings.autoPostEvening,
+    timezone: settings.timezone || "UTC",
     user_id: user.id,
   };
 
