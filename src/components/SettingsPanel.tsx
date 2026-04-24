@@ -336,6 +336,7 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
               className="bg-secondary/50 border-border/30"
               disabled={!settings.autoPostMorning}
             />
+            <p className="text-[10px] text-muted-foreground">Times are in your local timezone</p>
           </div>
 
           {/* Afternoon */}
@@ -356,6 +357,7 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
               className="bg-secondary/50 border-border/30"
               disabled={!settings.autoPostAfternoon}
             />
+            <p className="text-[10px] text-muted-foreground">Times are in your local timezone</p>
           </div>
 
           {/* Evening */}
@@ -376,6 +378,7 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
               className="bg-secondary/50 border-border/30"
               disabled={!settings.autoPostEvening}
             />
+            <p className="text-[10px] text-muted-foreground">Times are in your local timezone</p>
           </div>
         </CardContent>
       </Card>
