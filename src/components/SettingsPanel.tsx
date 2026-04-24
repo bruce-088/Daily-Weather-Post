@@ -273,7 +273,10 @@ export function SettingsPanel({ settings, onUpdate, onFetch, onSave, loading, sa
             <Clock size={16} className="text-primary" />
             Automation
           </CardTitle>
-          <CardDescription className="text-xs">Schedule 3 daily posts — morning, afternoon, evening</CardDescription>
+          <CardDescription className="text-xs">
+            Schedule 3 daily posts — morning, afternoon, evening. Times are in your local timezone:{" "}
+            <span className="font-medium text-foreground">{settings.timezone || "UTC"}</span>
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Morning */}

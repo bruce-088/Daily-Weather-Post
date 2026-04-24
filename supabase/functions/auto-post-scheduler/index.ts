@@ -31,21 +31,43 @@ Deno.serve(async (req) => {
     }
 
     const now = new Date();
-    const currentHour = now.getUTCHours();
-    const currentMinute = now.getUTCMinutes();
 
-    // Convert HH:MM:SS time string to { hour, minute }
+    // Get the current wall-clock hour/minute in a given IANA timezone.
+    function getZonedHourMinute(date: Date, timeZone: string): { hour: number; minute: number } {
+      try {
+        const fmt = new Intl.DateTimeFormat("en-US", {
+          timeZone,
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        });
+        const parts = fmt.formatToParts(date);
+        const hour = parseInt(parts.find((p) => p.type === "hour")?.value || "0");
+        const minute = parseInt(parts.find((p) => p.type === "minute")?.value || "0");
+        // Intl can return "24" for midnight in some runtimes — normalize.
+        return { hour: hour === 24 ? 0 : hour, minute };
+      } catch {
+        // Fallback to UTC if timezone is invalid
+        return { hour: date.getUTCHours(), minute: date.getUTCMinutes() };
+      }
+    }
+
+    // Parse "HH:MM[:SS]" → { hour, minute }
     function parseTime(timeStr: string): { hour: number; minute: number } {
       const parts = timeStr.split(":");
       return { hour: parseInt(parts[0]), minute: parseInt(parts[1]) };
     }
 
-    // Check if current time is within 15 minutes of the target time
-    function isTimeToPost(timeStr: string): boolean {
+    // Check if the user's local wall-clock time is within 15 minutes after the target.
+    // Cron runs every 15 min, so window = [target, target + 15min).
+    function isTimeToPost(timeStr: string, timeZone: string): boolean {
       const target = parseTime(timeStr);
+      const zoned = getZonedHourMinute(now, timeZone);
       const targetMinutes = target.hour * 60 + target.minute;
-      const currentMinutes = currentHour * 60 + currentMinute;
-      const diff = currentMinutes - targetMinutes;
+      const currentMinutes = zoned.hour * 60 + zoned.minute;
+      let diff = currentMinutes - targetMinutes;
+      // Handle day wrap (e.g., target 23:55, current 00:05)
+      if (diff < -12 * 60) diff += 24 * 60;
       return diff >= 0 && diff < 15;
     }
 
@@ -53,6 +75,7 @@ Deno.serve(async (req) => {
     const results: string[] = [];
 
     for (const settings of allSettings) {
+      const userTz: string = settings.timezone || "UTC";
       const periods: { enabled: boolean; time: string; name: string }[] = [
         { enabled: settings.auto_post_morning, time: settings.morning_post_time, name: "morning" },
         { enabled: settings.auto_post_afternoon, time: settings.afternoon_post_time, name: "afternoon" },
@@ -61,9 +84,9 @@ Deno.serve(async (req) => {
 
       for (const period of periods) {
         if (!period.enabled || !period.time) continue;
-        if (!isTimeToPost(period.time)) continue;
+        if (!isTimeToPost(period.time, userTz)) continue;
 
-        console.log("Triggering " + period.name + " post for user " + (settings.user_id || "default") + " at " + period.time);
+        console.log("Triggering " + period.name + " post for user " + (settings.user_id || "default") + " at local " + period.time + " (" + userTz + ")");
 
         try {
           const postUrl = supabaseUrl + "/functions/v1/daily-weather-post";

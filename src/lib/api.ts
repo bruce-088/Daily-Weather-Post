@@ -24,6 +24,7 @@ export async function loadSettings(): Promise<{ settings: AutomationSettings; ti
       autoPostMorning: (data as any).auto_post_morning ?? true,
       autoPostAfternoon: (data as any).auto_post_afternoon ?? true,
       autoPostEvening: (data as any).auto_post_evening ?? true,
+      timezone: (data as any).timezone || (typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC" : "UTC"),
     },
     tiktokConnected: !!(data as any).tiktok_access_token,
     youtubeConnected: !!(data as any).youtube_access_token,
@@ -56,6 +57,7 @@ export async function saveSettings(settings: AutomationSettings): Promise<boolea
     auto_post_morning: settings.autoPostMorning,
     auto_post_afternoon: settings.autoPostAfternoon,
     auto_post_evening: settings.autoPostEvening,
+    timezone: settings.timezone || "UTC",
     user_id: user.id,
   };
 
