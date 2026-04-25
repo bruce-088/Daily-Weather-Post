@@ -114,7 +114,7 @@ export const WeatherCard = forwardRef<HTMLDivElement, WeatherCardProps>(
           {/* Branding */}
           <div className="text-center">
             <span className="text-[10px] text-primary-foreground/20 tracking-widest uppercase">
-              WeatherPost · Daily Updates
+              SkyBrief · Daily Updates
             </span>
           </div>
         </div>

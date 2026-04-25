@@ -1,8 +1,8 @@
-export const MASTER_PROMPT = `# WeatherPost — Full App Specification
+export const MASTER_PROMPT = `# SkyBrief — Full App Specification
 
 ## Overview
 
-WeatherPost is a social media automation tool that generates weather-based content (images and videos) and posts them to connected platforms (YouTube, Twitter/X, LinkedIn, TikTok). It features automated scheduling, AI-powered caption generation, and a visual weather card designer.
+SkyBrief is a social media automation tool that generates weather-based content (images and videos) and posts them to connected platforms (YouTube, Twitter/X, LinkedIn, TikTok). It features automated scheduling, AI-powered caption generation, and a visual weather card designer.
 
 ---
 
