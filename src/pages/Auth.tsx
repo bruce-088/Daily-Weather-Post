@@ -60,7 +60,7 @@ const Auth = () => {
               <CloudSun size={28} className="text-primary" />
             </div>
           </div>
-          <CardTitle className="text-xl">WeatherPost</CardTitle>
+          <CardTitle className="text-xl">SkyBrief</CardTitle>
           <CardDescription>
             {isSignUp ? "Create an account to get started" : "Sign in to your account"}
           </CardDescription>
