@@ -441,6 +441,9 @@ export function SettingsPanel({
             />
             <p className="text-[10px] text-muted-foreground">Times are in your local timezone</p>
             {renderPlatformPicker("morningPlatforms", settings.autoPostMorning)}
+          </div>
+
+          {/* Afternoon */}
           <div className="p-3 rounded-lg bg-secondary/30 border border-border/30 space-y-2">
             <div className="flex items-center justify-between">
               <Label className="text-sm flex items-center gap-2">
@@ -459,6 +462,7 @@ export function SettingsPanel({
               disabled={!settings.autoPostAfternoon}
             />
             <p className="text-[10px] text-muted-foreground">Times are in your local timezone</p>
+            {renderPlatformPicker("afternoonPlatforms", settings.autoPostAfternoon)}
           </div>
 
           {/* Evening */}
