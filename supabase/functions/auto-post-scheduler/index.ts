@@ -90,10 +90,25 @@ Deno.serve(async (req) => {
       const userLocalHm = `${String(userLocal.hour).padStart(2, "0")}:${String(userLocal.minute).padStart(2, "0")}`;
       console.log(`[scheduler] User ${settings.user_id || "default"} — tz: ${userTz}, local now: ${userLocalHm}`);
 
-      const periods: { enabled: boolean; time: string; name: string }[] = [
-        { enabled: settings.auto_post_morning, time: settings.morning_post_time, name: "morning" },
-        { enabled: settings.auto_post_afternoon, time: settings.afternoon_post_time, name: "afternoon" },
-        { enabled: settings.auto_post_evening, time: settings.evening_post_time, name: "evening" },
+      const periods: { enabled: boolean; time: string; name: string; platforms: string[] }[] = [
+        {
+          enabled: settings.auto_post_morning,
+          time: settings.morning_post_time,
+          name: "morning",
+          platforms: Array.isArray(settings.morning_platforms) ? settings.morning_platforms : [],
+        },
+        {
+          enabled: settings.auto_post_afternoon,
+          time: settings.afternoon_post_time,
+          name: "afternoon",
+          platforms: Array.isArray(settings.afternoon_platforms) ? settings.afternoon_platforms : [],
+        },
+        {
+          enabled: settings.auto_post_evening,
+          time: settings.evening_post_time,
+          name: "evening",
+          platforms: Array.isArray(settings.evening_platforms) ? settings.evening_platforms : [],
+        },
       ];
 
       for (const period of periods) {
@@ -101,13 +116,17 @@ Deno.serve(async (req) => {
           console.log(`[scheduler]   ${period.name}: skipped (enabled=${period.enabled}, time=${period.time})`);
           continue;
         }
+        if (!period.platforms.length) {
+          console.log(`[scheduler]   ${period.name}: skipped (no platforms selected for this slot)`);
+          continue;
+        }
         const ev = evaluateTime(period.time, userTz);
         console.log(
-          `[scheduler]   ${period.name}: target_local=${ev.targetLocal} ${userTz}, current_local=${ev.currentLocal}, diff=${ev.diff}min, shouldPost=${ev.shouldPost}`
+          `[scheduler]   ${period.name}: target_local=${ev.targetLocal} ${userTz}, current_local=${ev.currentLocal}, diff=${ev.diff}min, shouldPost=${ev.shouldPost}, platforms=${period.platforms.join(",")}`
         );
         if (!ev.shouldPost) continue;
 
-        console.log(`[scheduler]   → Triggering ${period.name} post for user ${settings.user_id || "default"}`);
+        console.log(`[scheduler]   → Triggering ${period.name} post for user ${settings.user_id || "default"} on ${period.platforms.join(",")}`);
 
         try {
           const postUrl = supabaseUrl + "/functions/v1/daily-weather-post";
@@ -119,7 +138,7 @@ Deno.serve(async (req) => {
           const res = await fetch(postUrl, {
             method: "POST",
             headers,
-            body: JSON.stringify({ time_period: period.name }),
+            body: JSON.stringify({ time_period: period.name, platforms: period.platforms }),
           });
 
           const resText = await res.text();
