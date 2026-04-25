@@ -124,6 +124,7 @@ export type Database = {
       }
       weather_settings: {
         Row: {
+          afternoon_platforms: Json
           afternoon_post_time: string
           auto_post: boolean
           auto_post_afternoon: boolean
@@ -131,6 +132,7 @@ export type Database = {
           auto_post_morning: boolean
           city: string
           created_at: string
+          evening_platforms: Json
           evening_post_time: string
           id: string
           instagram_api_key: string | null
@@ -139,6 +141,7 @@ export type Database = {
           linkedin_person_urn: string | null
           linkedin_refresh_token: string | null
           linkedin_token_expires_at: string | null
+          morning_platforms: Json
           morning_post_time: string
           post_time: string
           state: string | null
@@ -159,6 +162,7 @@ export type Database = {
           youtube_token_expires_at: string | null
         }
         Insert: {
+          afternoon_platforms?: Json
           afternoon_post_time?: string
           auto_post?: boolean
           auto_post_afternoon?: boolean
@@ -166,6 +170,7 @@ export type Database = {
           auto_post_morning?: boolean
           city?: string
           created_at?: string
+          evening_platforms?: Json
           evening_post_time?: string
           id?: string
           instagram_api_key?: string | null
@@ -174,6 +179,7 @@ export type Database = {
           linkedin_person_urn?: string | null
           linkedin_refresh_token?: string | null
           linkedin_token_expires_at?: string | null
+          morning_platforms?: Json
           morning_post_time?: string
           post_time?: string
           state?: string | null
@@ -194,6 +200,7 @@ export type Database = {
           youtube_token_expires_at?: string | null
         }
         Update: {
+          afternoon_platforms?: Json
           afternoon_post_time?: string
           auto_post?: boolean
           auto_post_afternoon?: boolean
@@ -201,6 +208,7 @@ export type Database = {
           auto_post_morning?: boolean
           city?: string
           created_at?: string
+          evening_platforms?: Json
           evening_post_time?: string
           id?: string
           instagram_api_key?: string | null
@@ -209,6 +217,7 @@ export type Database = {
           linkedin_person_urn?: string | null
           linkedin_refresh_token?: string | null
           linkedin_token_expires_at?: string | null
+          morning_platforms?: Json
           morning_post_time?: string
           post_time?: string
           state?: string | null
