@@ -122,9 +122,9 @@ const ExportSpec = () => {
           <TabsContent value="app-spec">
             <SpecSection
               title="Export App Specification"
-              description="Download or copy the full WeatherPost app spec for use with external LLMs or documentation."
+              description="Download or copy the full SkyBrief app spec for use with external LLMs or documentation."
               content={MASTER_PROMPT}
-              filenamePrefix="weatherpost-spec"
+              filenamePrefix="skybrief-spec"
               showPdf
             />
           </TabsContent>

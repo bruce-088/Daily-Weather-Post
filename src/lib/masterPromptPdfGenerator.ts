@@ -23,7 +23,7 @@ export function generateMasterPromptPdf(content: string): jsPDF {
     doc.rect(0, pageHeight - 12, pageWidth, 12, "F");
     doc.setFontSize(7);
     doc.setTextColor(...colors.muted);
-    doc.text("WeatherPost App Specification", margin, pageHeight - 5);
+    doc.text("SkyBrief App Specification", margin, pageHeight - 5);
     doc.text(`Page ${pageNum} of ${totalPages}`, pageWidth - margin, pageHeight - 5, { align: "right" });
   };
 
@@ -40,7 +40,7 @@ export function generateMasterPromptPdf(content: string): jsPDF {
   doc.setFontSize(16);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(...colors.headerText);
-  doc.text("WeatherPost — App Specification", margin, 14);
+  doc.text("SkyBrief — App Specification", margin, 14);
   doc.setFontSize(8);
   doc.setFont("helvetica", "normal");
   doc.setTextColor(...colors.muted);
