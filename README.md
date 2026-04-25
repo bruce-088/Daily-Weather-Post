@@ -2,9 +2,11 @@
 
 Automated weather posts for social media — generate, schedule, and publish weather content to TikTok, YouTube, Instagram, X, and LinkedIn.
 
+**Live App**: https://skybriefweatherpost.lovable.app
+
 ## Project info
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+**Lovable Project**: https://lovable.dev/projects/f81dce50-925f-420f-9022-0fb85c4a9a2f
 
 ## How can I edit this code?
 
