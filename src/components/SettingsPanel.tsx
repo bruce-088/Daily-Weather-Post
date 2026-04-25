@@ -484,6 +484,7 @@ export function SettingsPanel({
               disabled={!settings.autoPostEvening}
             />
             <p className="text-[10px] text-muted-foreground">Times are in your local timezone</p>
+            {renderPlatformPicker("eveningPlatforms", settings.autoPostEvening)}
           </div>
         </CardContent>
       </Card>
