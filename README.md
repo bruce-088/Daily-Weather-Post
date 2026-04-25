@@ -1,4 +1,6 @@
-# Welcome to your Lovable project
+# SkyBrief
+
+Automated weather posts for social media — generate, schedule, and publish weather content to TikTok, YouTube, Instagram, X, and LinkedIn.
 
 ## Project info
 
