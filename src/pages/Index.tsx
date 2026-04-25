@@ -261,7 +261,7 @@ const Index = () => {
             <div className="h-8 w-8 rounded-lg bg-primary/20 flex items-center justify-center">
               <CloudSun size={18} className="text-primary" />
             </div>
-            <h1 className="text-sm font-semibold tracking-tight text-foreground">WeatherPost</h1>
+            <h1 className="text-sm font-semibold tracking-tight text-foreground">SkyBrief</h1>
             <Badge variant="secondary" className="text-[10px] font-mono-display">
               v1.0
             </Badge>
