@@ -54,8 +54,88 @@ export function SettingsPanel({
   showConnections = true,
   showAutomation = true,
 }: SettingsPanelProps) {
-  const update = (key: keyof AutomationSettings, value: string | boolean) => {
-    onUpdate({ ...settings, [key]: value });
+  const update = (key: keyof AutomationSettings, value: string | boolean | string[]) => {
+    onUpdate({ ...settings, [key]: value } as AutomationSettings);
+  };
+
+  const availablePlatforms = [
+    { id: "youtube", label: "YouTube", Icon: Youtube, color: "#FF0000", connected: !!youtubeConnected },
+    { id: "twitter", label: "Twitter / X", Icon: Twitter, color: "#1DA1F2", connected: !!twitterConnected },
+    { id: "linkedin", label: "LinkedIn", Icon: Linkedin, color: "#0A66C2", connected: !!linkedinConnected },
+    { id: "tiktok", label: "TikTok", Icon: Video, color: "#FF0050", connected: !!tiktokConnected },
+  ];
+  const connectedPlatforms = availablePlatforms.filter((p) => p.connected);
+
+  const togglePlatform = (slotKey: "morningPlatforms" | "afternoonPlatforms" | "eveningPlatforms", platform: string) => {
+    const current = settings[slotKey] || [];
+    const next = current.includes(platform)
+      ? current.filter((p) => p !== platform)
+      : [...current, platform];
+    update(slotKey, next);
+  };
+
+  const selectAllForSlot = (slotKey: "morningPlatforms" | "afternoonPlatforms" | "eveningPlatforms") => {
+    const all = connectedPlatforms.map((p) => p.id);
+    const current = settings[slotKey] || [];
+    const allSelected = all.length > 0 && all.every((p) => current.includes(p));
+    update(slotKey, allSelected ? [] : all);
+  };
+
+  const renderPlatformPicker = (slotKey: "morningPlatforms" | "afternoonPlatforms" | "eveningPlatforms", enabled: boolean) => {
+    const selected = settings[slotKey] || [];
+    if (connectedPlatforms.length === 0) {
+      return (
+        <p className="text-[10px] text-muted-foreground italic">
+          Connect a social account above to enable platform selection.
+        </p>
+      );
+    }
+    const allSelected = connectedPlatforms.every((p) => selected.includes(p.id));
+    return (
+      <div className={`space-y-2 ${enabled ? "" : "opacity-50 pointer-events-none"}`}>
+        <div className="flex items-center justify-between">
+          <Label className="text-[11px] text-muted-foreground">Post to</Label>
+          <button
+            type="button"
+            onClick={() => selectAllForSlot(slotKey)}
+            className="text-[10px] text-primary hover:underline"
+          >
+            {allSelected ? "Clear all" : "Select all"}
+          </button>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {connectedPlatforms.map(({ id, label, Icon, color }) => {
+            const active = selected.includes(id);
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => togglePlatform(slotKey, id)}
+                title={label}
+                aria-pressed={active}
+                className="h-8 w-8 rounded-md border flex items-center justify-center transition-all"
+                style={
+                  active
+                    ? {
+                        borderColor: color,
+                        backgroundColor: `${color}1F`,
+                        boxShadow: `0 0 12px ${color}66`,
+                        color,
+                      }
+                    : {
+                        borderColor: "hsl(var(--border) / 0.4)",
+                        backgroundColor: "hsl(var(--secondary) / 0.4)",
+                        color: "hsl(var(--muted-foreground))",
+                      }
+                }
+              >
+                <Icon size={14} />
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
   };
 
   const handleConnectTikTok = async () => {
