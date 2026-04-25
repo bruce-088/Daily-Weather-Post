@@ -52,4 +52,7 @@ export interface AutomationSettings {
   autoPostAfternoon: boolean;
   autoPostEvening: boolean;
   timezone: string;
+  morningPlatforms: string[];
+  afternoonPlatforms: string[];
+  eveningPlatforms: string[];
 }

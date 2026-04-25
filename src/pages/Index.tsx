@@ -59,6 +59,9 @@ const DEFAULT_SETTINGS: AutomationSettings = {
   autoPostAfternoon: true,
   autoPostEvening: true,
   timezone: typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC" : "UTC",
+  morningPlatforms: [],
+  afternoonPlatforms: [],
+  eveningPlatforms: [],
 };
 
 const Index = () => {
