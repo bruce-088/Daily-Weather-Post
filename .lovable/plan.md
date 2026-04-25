@@ -1,21 +1,12 @@
-## Rename app to "SkyBrief"
+## Update README live URL
 
-Update the user-facing app name from "WeatherPost" / "Lovable App" to **SkyBrief** across the project.
+Replace the placeholder Lovable project URLs in `README.md` with the actual published URL.
 
-### Changes
+### Changes to `README.md`
 
-1. **`index.html`**
-   - `<title>Lovable App` → `SkyBrief`
-   - `<meta name="description">` and `og:description` → "SkyBrief — Automated weather posts for social media"
-   - `og:title` and `twitter:title` → `SkyBrief`
+- Update **Project info → URL** from `https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID` to the live app: `https://skybriefweatherpost.lovable.app`
+- Update the **"Use Lovable"** section link from the placeholder to the Lovable project editor URL: `https://lovable.dev/projects/f81dce50-925f-420f-9022-0fb85c4a9a2f`
+- Update the **"How can I deploy this project?"** link to the same Lovable project editor URL
+- Add a clear **Live URL** line near the top: `**Live App**: https://skybriefweatherpost.lovable.app`
 
-2. **`src/pages/Index.tsx`** (line 264)
-   - Header `<h1>WeatherPost</h1>` → `<h1>SkyBrief</h1>`
-
-3. **`README.md`**
-   - Update the project title/intro to SkyBrief.
-
-### Not changed
-- `TermsOfService.tsx` and `PrivacyPolicy.tsx` already reference SkyBrief — no edits needed.
-- No database, edge function, or routing changes required.
-- Favicon/logo assets are not being swapped (rename only).
+No other files are touched. No code, database, or edge function changes.

@@ -2,9 +2,11 @@
 
 Automated weather posts for social media — generate, schedule, and publish weather content to TikTok, YouTube, Instagram, X, and LinkedIn.
 
+**Live App**: https://skybriefweatherpost.lovable.app
+
 ## Project info
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+**Lovable Project**: https://lovable.dev/projects/f81dce50-925f-420f-9022-0fb85c4a9a2f
 
 ## How can I edit this code?
 
@@ -12,7 +14,7 @@ There are several ways of editing your application.
 
 **Use Lovable**
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+Simply visit the [Lovable Project](https://lovable.dev/projects/f81dce50-925f-420f-9022-0fb85c4a9a2f) and start prompting.
 
 Changes made via Lovable will be committed automatically to this repo.
 
@@ -64,7 +66,7 @@ This project is built with:
 
 ## How can I deploy this project?
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+Simply open [Lovable](https://lovable.dev/projects/f81dce50-925f-420f-9022-0fb85c4a9a2f) and click on Share -> Publish.
 
 ## Can I connect a custom domain to my Lovable project?
 
