@@ -270,9 +270,9 @@ export function PostHistoryList({ posts, loading, onReuse, onChanged }: PostHist
                             {isErrorOpen ? "Hide error" : "View error"}
                           </button>
                         )}
-                        {isErrorOpen && post.error_message && (
+                        {isErrorOpen && displayedErrorMessage && (
                           <p className="mt-1 text-[11px] text-destructive bg-destructive/10 border border-destructive/20 rounded-md px-2 py-1.5 whitespace-pre-wrap">
-                            {post.error_message}
+                            {displayedErrorMessage}
                           </p>
                         )}
 
