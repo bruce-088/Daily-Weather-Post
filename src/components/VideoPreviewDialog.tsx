@@ -114,9 +114,10 @@ export function VideoPreviewDialog({
     // The edge function tries video first via Creatomate; if that fails it
     // falls back to AI-generated image — we surface that visually.
     const stageTimer = setTimeout(() => setGenStage("image"), 25000);
+    const voiceTimer = voice?.enabled ? setTimeout(() => setGenStage("voice"), 8000) : null;
 
     try {
-      const result = await generatePreview({ style, variation });
+      const result = await generatePreview({ style, variation, voice });
       if (result.success && (result.video_url || result.image_url)) {
         setPreview(result);
         if (variation) {
@@ -133,6 +134,7 @@ export function VideoPreviewDialog({
       toast.error(err.message || "Failed to generate preview");
     } finally {
       clearTimeout(stageTimer);
+      if (voiceTimer) clearTimeout(voiceTimer);
       setGenerating(false);
       setGenStage("idle");
     }
@@ -169,7 +171,7 @@ export function VideoPreviewDialog({
   const postSinglePlatform = async (platformId: string) => {
     updatePlatform(platformId, { status: "posting", message: `Posting to ${platformId}…` });
     try {
-      const result = await triggerDailyPost(undefined, [platformId]);
+      const result = await triggerDailyPost(undefined, [platformId], voice);
       if (result.success) {
         updatePlatform(platformId, { status: "success", message: result.message || "Posted successfully" });
       } else {
