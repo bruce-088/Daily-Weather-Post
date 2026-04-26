@@ -36,8 +36,8 @@ export function NotificationBell() {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button size="sm" variant="ghost" className="relative">
-          <Bell size={16} />
+        <Button size="sm" variant="ghost" className="relative text-foreground/90 hover:text-foreground hover:bg-white/10">
+          <Bell size={16} className="opacity-100" />
           {unreadCount > 0 && (
             <Badge
               variant={notifications.some((n) => !n.read && n.type === "error") ? "destructive" : "default"}

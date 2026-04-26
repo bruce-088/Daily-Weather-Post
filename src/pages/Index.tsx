@@ -458,13 +458,13 @@ const Index = () => {
                         value={settings.location}
                         onChange={(e) => setSettings({ ...settings, location: e.target.value })}
                         placeholder="City"
-                        className="h-9 px-3 text-sm rounded-md bg-secondary/40 border border-border/30 focus:outline-none focus:ring-1 focus:ring-primary"
+                        className="h-9 px-3 text-sm rounded-md bg-secondary/40 border border-border/30 text-foreground placeholder:text-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary"
                       />
                       <input
                         value={settings.state}
                         onChange={(e) => setSettings({ ...settings, state: e.target.value })}
                         placeholder="State"
-                        className="h-9 px-3 text-sm rounded-md bg-secondary/40 border border-border/30 focus:outline-none focus:ring-1 focus:ring-primary"
+                        className="h-9 px-3 text-sm rounded-md bg-secondary/40 border border-border/30 text-foreground placeholder:text-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary"
                       />
                     </div>
                     {lastUpdated && (
