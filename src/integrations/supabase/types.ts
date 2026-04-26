@@ -190,6 +190,9 @@ export type Database = {
           twitter_user_id: string | null
           updated_at: string
           user_id: string | null
+          voiceover_similarity: number
+          voiceover_speed: number
+          voiceover_stability: number
           voiceover_voice_id: string
           youtube_access_token: string | null
           youtube_channel_id: string | null
@@ -233,6 +236,9 @@ export type Database = {
           twitter_user_id?: string | null
           updated_at?: string
           user_id?: string | null
+          voiceover_similarity?: number
+          voiceover_speed?: number
+          voiceover_stability?: number
           voiceover_voice_id?: string
           youtube_access_token?: string | null
           youtube_channel_id?: string | null
@@ -276,6 +282,9 @@ export type Database = {
           twitter_user_id?: string | null
           updated_at?: string
           user_id?: string | null
+          voiceover_similarity?: number
+          voiceover_speed?: number
+          voiceover_stability?: number
           voiceover_voice_id?: string
           youtube_access_token?: string | null
           youtube_channel_id?: string | null
