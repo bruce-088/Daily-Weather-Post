@@ -203,6 +203,75 @@ export function SettingsPanel({
 
   const anyAutoPost = settings.autoPostMorning || settings.autoPostAfternoon || settings.autoPostEvening;
 
+  // Today's date in user's local timezone — used for "Skip Today"
+  const todayLocal = (() => {
+    try {
+      return new Intl.DateTimeFormat("en-CA", {
+        timeZone: settings.timezone || "UTC",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(new Date());
+    } catch {
+      return new Date().toISOString().slice(0, 10);
+    }
+  })();
+
+  const slotConfig = [
+    {
+      key: "morning" as const,
+      label: "Morning",
+      time: settings.morningPostTime,
+      enabled: settings.autoPostMorning,
+      platforms: settings.morningPlatforms || [],
+      skipDate: settings.morningSkipDate || null,
+      suggestion: "8:00 AM for peak morning engagement",
+    },
+    {
+      key: "afternoon" as const,
+      label: "Afternoon",
+      time: settings.afternoonPostTime,
+      enabled: settings.autoPostAfternoon,
+      platforms: settings.afternoonPlatforms || [],
+      skipDate: settings.afternoonSkipDate || null,
+      suggestion: "12:30 PM to catch the lunch-break scroll",
+    },
+    {
+      key: "evening" as const,
+      label: "Evening",
+      time: settings.eveningPostTime,
+      enabled: settings.autoPostEvening,
+      platforms: settings.eveningPlatforms || [],
+      skipDate: settings.eveningSkipDate || null,
+      suggestion: "6:00 PM when after-work scrolling spikes",
+    },
+  ];
+
+  const handleSkipToday = async (slot: "morning" | "afternoon" | "evening", currentlySkipped: boolean) => {
+    const target = currentlySkipped ? null : todayLocal;
+    const ok = await setSkipToday(slot, target);
+    if (!ok) {
+      toast.error("Could not update skip status");
+      return;
+    }
+    const skipKey =
+      slot === "morning" ? "morningSkipDate" : slot === "afternoon" ? "afternoonSkipDate" : "eveningSkipDate";
+    update(skipKey as keyof AutomationSettings, target as any);
+    toast.success(currentlySkipped ? `${slot[0].toUpperCase() + slot.slice(1)} restored for today` : `${slot[0].toUpperCase() + slot.slice(1)} skipped for today`);
+  };
+
+  // Tomorrow preview helpers
+  const platformLabel = (id: string) =>
+    availablePlatforms.find((p) => p.id === id)?.label || id;
+  const formatTime12h = (t: string) => {
+    const [hStr, m] = (t || "00:00").split(":");
+    const h = parseInt(hStr, 10);
+    const period = h >= 12 ? "PM" : "AM";
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    return `${h12}:${m} ${period}`;
+  };
+  const tomorrowSlots = slotConfig.filter((s) => s.enabled);
+
   return (
     <div className="space-y-4">
       {showLocation && (
