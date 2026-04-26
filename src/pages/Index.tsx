@@ -655,7 +655,7 @@ const Index = () => {
                       disabled={posting || availablePlatforms.length === 0}
                       className="gap-1.5 text-xs w-full"
                     >
-                      <Send size={14} />
+                      {posting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                       {posting
                         ? "Posting..."
                         : selectedPlatforms.length > 0
@@ -712,7 +712,12 @@ const Index = () => {
                   <History size={14} /> Refresh
                 </Button>
               </div>
-              <PostHistoryList posts={posts} loading={postsLoading} />
+              <PostHistoryList
+                posts={posts}
+                loading={postsLoading}
+                onReuse={handleReusePost}
+                onChanged={loadHistory}
+              />
             </div>
           </TabsContent>
 
