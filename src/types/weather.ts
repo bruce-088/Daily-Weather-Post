@@ -55,4 +55,7 @@ export interface AutomationSettings {
   morningPlatforms: string[];
   afternoonPlatforms: string[];
   eveningPlatforms: string[];
+  morningSkipDate?: string | null;
+  afternoonSkipDate?: string | null;
+  eveningSkipDate?: string | null;
 }

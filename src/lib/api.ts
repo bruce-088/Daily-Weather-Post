@@ -28,6 +28,9 @@ export async function loadSettings(): Promise<{ settings: AutomationSettings; ti
       morningPlatforms: Array.isArray((data as any).morning_platforms) ? (data as any).morning_platforms : [],
       afternoonPlatforms: Array.isArray((data as any).afternoon_platforms) ? (data as any).afternoon_platforms : [],
       eveningPlatforms: Array.isArray((data as any).evening_platforms) ? (data as any).evening_platforms : [],
+      morningSkipDate: (data as any).morning_skip_date || null,
+      afternoonSkipDate: (data as any).afternoon_skip_date || null,
+      eveningSkipDate: (data as any).evening_skip_date || null,
     },
     tiktokConnected: !!(data as any).tiktok_access_token,
     youtubeConnected: !!(data as any).youtube_access_token,
@@ -64,6 +67,9 @@ export async function saveSettings(settings: AutomationSettings): Promise<boolea
     morning_platforms: settings.morningPlatforms || [],
     afternoon_platforms: settings.afternoonPlatforms || [],
     evening_platforms: settings.eveningPlatforms || [],
+    morning_skip_date: settings.morningSkipDate ?? null,
+    afternoon_skip_date: settings.afternoonSkipDate ?? null,
+    evening_skip_date: settings.eveningSkipDate ?? null,
     user_id: user.id,
   };
 
