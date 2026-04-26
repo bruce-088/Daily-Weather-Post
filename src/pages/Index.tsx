@@ -128,6 +128,54 @@ const Index = () => {
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
   const [platformPickerOpen, setPlatformPickerOpen] = useState(false);
   const [cardStyle, setCardStyle] = useState<CardStyle>("standard");
+  const [successShimmer, setSuccessShimmer] = useState(false);
+
+  // === Caption draft autosave (10s interval to localStorage) ===
+  const CAPTION_DRAFT_KEY = "skybrief_caption_draft_v1";
+  // Restore on mount
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(CAPTION_DRAFT_KEY);
+      if (saved) setCaption(saved);
+    } catch { /* ignore */ }
+  }, []);
+  // Periodic save
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const id = window.setInterval(() => {
+      try {
+        if (caption && caption.trim()) {
+          window.localStorage.setItem(CAPTION_DRAFT_KEY, caption);
+        } else {
+          window.localStorage.removeItem(CAPTION_DRAFT_KEY);
+        }
+      } catch { /* ignore */ }
+    }, 10000);
+    return () => window.clearInterval(id);
+  }, [caption]);
+
+  // === Listen for global success → trigger top-bar shimmer ===
+  useEffect(() => {
+    const onSuccess = () => {
+      setSuccessShimmer(true);
+      window.setTimeout(() => setSuccessShimmer(false), 1700);
+    };
+    window.addEventListener("skybrief:post-success", onSuccess);
+    return () => window.removeEventListener("skybrief:post-success", onSuccess);
+  }, []);
+
+  // Reuse a previous post: load caption + city back into Create
+  const handleReusePost = useCallback(
+    (post: PostHistoryItem) => {
+      setCaption(post.caption || "");
+      setSettings((prev) => ({ ...prev, location: post.city || prev.location }));
+      setActiveTab("create");
+      toast.success(`Loaded "${post.city}" into Create`, {
+        description: "Caption and city restored. Edit and re-publish when ready.",
+      });
+    },
+    [],
+  );
 
   // Build available platforms list from connection status with brand metadata
   const availablePlatforms = useMemo(() => {
