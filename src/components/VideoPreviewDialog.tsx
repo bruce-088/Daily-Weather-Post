@@ -270,12 +270,16 @@ export function VideoPreviewDialog({
             <div className="flex flex-col items-center gap-3 py-12">
               <Loader2 size={32} className="animate-spin text-primary" />
               <p className="text-sm font-medium text-foreground">
-                {genStage === "image"
+                {genStage === "voice"
+                  ? "🎙️ Generating voice narration…"
+                  : genStage === "image"
                   ? "🖼️ Generating AI weather image via Gemini…"
                   : "🎥 Creating high-quality video via Creatomate…"}
               </p>
               <p className="text-xs text-muted-foreground">
-                {genStage === "image"
+                {genStage === "voice"
+                  ? "Synthesizing your AI voiceover with ElevenLabs."
+                  : genStage === "image"
                   ? "Video render didn't make it — falling back to a designed image."
                   : "This usually takes 30–60 seconds. We'll fall back to an AI image if needed."}
               </p>
