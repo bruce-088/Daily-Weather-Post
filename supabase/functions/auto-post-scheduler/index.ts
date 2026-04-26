@@ -90,30 +90,45 @@ Deno.serve(async (req) => {
       const userLocalHm = `${String(userLocal.hour).padStart(2, "0")}:${String(userLocal.minute).padStart(2, "0")}`;
       console.log(`[scheduler] User ${settings.user_id || "default"} — tz: ${userTz}, local now: ${userLocalHm}`);
 
-      const periods: { enabled: boolean; time: string; name: string; platforms: string[] }[] = [
+      const periods: { enabled: boolean; time: string; name: string; platforms: string[]; skipDate: string | null }[] = [
         {
           enabled: settings.auto_post_morning,
           time: settings.morning_post_time,
           name: "morning",
           platforms: Array.isArray(settings.morning_platforms) ? settings.morning_platforms : [],
+          skipDate: settings.morning_skip_date || null,
         },
         {
           enabled: settings.auto_post_afternoon,
           time: settings.afternoon_post_time,
           name: "afternoon",
           platforms: Array.isArray(settings.afternoon_platforms) ? settings.afternoon_platforms : [],
+          skipDate: settings.afternoon_skip_date || null,
         },
         {
           enabled: settings.auto_post_evening,
           time: settings.evening_post_time,
           name: "evening",
           platforms: Array.isArray(settings.evening_platforms) ? settings.evening_platforms : [],
+          skipDate: settings.evening_skip_date || null,
         },
       ];
+
+      // Today's date in user's local timezone (YYYY-MM-DD)
+      const todayLocal = new Intl.DateTimeFormat("en-CA", {
+        timeZone: userTz,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(now);
 
       for (const period of periods) {
         if (!period.enabled || !period.time) {
           console.log(`[scheduler]   ${period.name}: skipped (enabled=${period.enabled}, time=${period.time})`);
+          continue;
+        }
+        if (period.skipDate && period.skipDate === todayLocal) {
+          console.log(`[scheduler]   ${period.name}: skipped (skip_date=${period.skipDate} matches today ${todayLocal})`);
           continue;
         }
         if (!period.platforms.length) {
