@@ -1,13 +1,13 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Play, Upload, RefreshCw, X, Loader2, Pencil, Eye, Download, Send } from "lucide-react";
+import { Play, Upload, RefreshCw, X, Loader2, Pencil, Eye, Download, Send, Mic, Pause } from "lucide-react";
 import { generatePreview, uploadPreviewVideo, triggerDailyPost } from "@/lib/api";
-import type { PreviewResult } from "@/lib/api";
+import type { PreviewResult, VoiceOptions } from "@/lib/api";
 import {
   PostProgressPanel,
   buildInitialStates,
@@ -29,6 +29,8 @@ interface VideoPreviewDialogProps {
   onPosted?: () => void;
   /** Visual style preset for generation: standard | minimal | cinematic */
   style?: string;
+  /** AI voiceover options forwarded to preview + post */
+  voice?: VoiceOptions;
 }
 
 export function VideoPreviewDialog({
