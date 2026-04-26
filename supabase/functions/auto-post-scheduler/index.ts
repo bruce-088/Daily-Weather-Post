@@ -76,8 +76,9 @@ Deno.serve(async (req) => {
       return { hour: parseInt(parts[0]), minute: parseInt(parts[1]) };
     }
 
-    // Check if the user's local wall-clock time is within 15 minutes after the target.
-    // Cron runs every 15 min, so window = [target, target + 15min).
+    // Check if the user's local wall-clock time is within 5 minutes after the target.
+    // Window = [target, target + 5min] — ensures slots aren't missed when cron fires
+    // slightly off the exact minute (e.g., 16:03 still catches a 16:00 slot).
     function evaluateTime(timeStr: string, timeZone: string) {
       const target = parseTime(timeStr);
       const zoned = getZonedHourMinute(now, timeZone);
@@ -86,7 +87,7 @@ Deno.serve(async (req) => {
       let diff = currentMinutes - targetMinutes;
       // Handle day wrap (e.g., target 23:55, current 00:05)
       if (diff < -12 * 60) diff += 24 * 60;
-      const shouldPost = diff >= 0 && diff < 15;
+      const shouldPost = diff >= 0 && diff <= 5;
       return {
         shouldPost,
         diff,
