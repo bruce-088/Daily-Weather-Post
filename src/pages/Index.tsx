@@ -133,6 +133,15 @@ const Index = () => {
   const [cardStyle, setCardStyle] = useState<CardStyle>("standard");
   const [successShimmer, setSuccessShimmer] = useState(false);
 
+  // === AI Voiceover settings ===
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [voiceId, setVoiceId] = useState<"female" | "male">("female");
+  const [voiceTone, setVoiceTone] = useState<"conversational" | "energetic" | "news">("conversational");
+  const voiceOptions: VoiceOptions = useMemo(
+    () => ({ enabled: voiceEnabled, voiceId, tone: voiceTone }),
+    [voiceEnabled, voiceId, voiceTone],
+  );
+
   // === Caption draft autosave (10s interval to localStorage) ===
   const CAPTION_DRAFT_KEY = "skybrief_caption_draft_v1";
   // Restore on mount
