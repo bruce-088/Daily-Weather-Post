@@ -81,9 +81,14 @@ export function SystemHealthCard() {
             {new Date(lastRunIso).toLocaleString()}
           </p>
         )}
-        {!isActive && (
+        {hasError && (
+          <p className="text-[11px] text-destructive">
+            Last run reported an error: {message}
+          </p>
+        )}
+        {!isActive && !hasError && (
           <p className="text-[11px] text-amber-600 dark:text-amber-400">
-            No recent automation run detected. Scheduler runs every 5 minutes — only fires when a slot's local time matches.
+            No recent automation tick detected. Scheduler should run every 5 minutes.
           </p>
         )}
         <Button
