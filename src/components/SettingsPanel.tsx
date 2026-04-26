@@ -1,10 +1,12 @@
+import { useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Clock, MapPin, Instagram, Video, RefreshCw, Save, CheckCircle, ExternalLink, Youtube, Sun, Sunset, Moon, Twitter, Linkedin, Unlink, Globe, SkipForward, Lightbulb, CalendarClock } from "lucide-react";
+import { Slider } from "@/components/ui/slider";
+import { Clock, MapPin, Instagram, Video, RefreshCw, Save, CheckCircle, ExternalLink, Youtube, Sun, Sunset, Moon, Twitter, Linkedin, Unlink, Globe, SkipForward, Lightbulb, CalendarClock, Play, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { setSkipToday } from "@/lib/api";
 import { SystemHealthCard } from "@/components/SystemHealthCard";
@@ -56,8 +58,39 @@ export function SettingsPanel({
   showConnections = true,
   showAutomation = true,
 }: SettingsPanelProps) {
-  const update = (key: keyof AutomationSettings, value: string | boolean | string[]) => {
+  const update = (key: keyof AutomationSettings, value: string | boolean | string[] | number) => {
     onUpdate({ ...settings, [key]: value } as AutomationSettings);
+  };
+
+  // ---- Voice preview state (no persistence — this just plays a sample) ----
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const handleTestVoice = async () => {
+    if (previewLoading) return;
+    setPreviewLoading(true);
+    try {
+      audioRef.current?.pause();
+      const { data, error } = await supabase.functions.invoke("tts-preview", {
+        body: {
+          voiceId: settings.voiceoverVoiceId || "female",
+          speed: settings.voiceoverSpeed ?? 1.0,
+          stability: settings.voiceoverStability ?? 0.55,
+          similarity: settings.voiceoverSimilarity ?? 0.78,
+          text: `Good day. ${settings.location || "Your city"} forecast: partly cloudy skies with a high near 72 degrees and a light breeze.`,
+        },
+      });
+      if (error) throw new Error(error.message || "Voice preview failed");
+      if ((data as any)?.error) throw new Error((data as any).error);
+      const audioContent = (data as any)?.audioContent;
+      if (!audioContent) throw new Error("No audio returned");
+      const audio = new Audio(`data:audio/mpeg;base64,${audioContent}`);
+      audioRef.current = audio;
+      await audio.play();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Voice preview failed");
+    } finally {
+      setPreviewLoading(false);
+    }
   };
 
   const availablePlatforms = [
