@@ -27,6 +27,8 @@ interface VideoPreviewDialogProps {
   platformLabels?: Record<string, string>;
   /** Called after posting completes */
   onPosted?: () => void;
+  /** Visual style preset for generation: standard | minimal | cinematic */
+  style?: string;
 }
 
 export function VideoPreviewDialog({
@@ -37,9 +39,11 @@ export function VideoPreviewDialog({
   connections,
   platformLabels,
   onPosted,
+  style = "standard",
 }: VideoPreviewDialogProps) {
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [genStage, setGenStage] = useState<"idle" | "video" | "image">("idle");
   const [uploading, setUploading] = useState(false);
   const [editedCaption, setEditedCaption] = useState("");
   const [isEditingCaption, setIsEditingCaption] = useState(false);
@@ -95,22 +99,37 @@ export function VideoPreviewDialog({
     [platformStates],
   );
 
-  const handleGenerate = async () => {
+  const handleGenerate = async (variation = false) => {
     setGenerating(true);
+    setGenStage("video");
     setPreview(null);
     setIsEditingCaption(false);
+
+    // After ~25s, if still generating, switch label to image-fallback hint.
+    // The edge function tries video first via Creatomate; if that fails it
+    // falls back to AI-generated image — we surface that visually.
+    const stageTimer = setTimeout(() => setGenStage("image"), 25000);
+
     try {
-      const result = await generatePreview();
+      const result = await generatePreview({ style, variation });
       if (result.success && (result.video_url || result.image_url)) {
         setPreview(result);
-        toast.success(result.content_type === "image" ? "Preview image generated!" : "Preview video generated!");
+        if (variation) {
+          toast.success("✨ New variation ready!");
+        } else {
+          toast.success(
+            result.content_type === "image" ? "Preview image generated!" : "Preview video generated!"
+          );
+        }
       } else {
         toast.error(result.error || "Failed to generate preview");
       }
     } catch (err: any) {
       toast.error(err.message || "Failed to generate preview");
     } finally {
+      clearTimeout(stageTimer);
       setGenerating(false);
+      setGenStage("idle");
     }
   };
 
@@ -233,17 +252,26 @@ export function VideoPreviewDialog({
                   ? "Generate a preview to review before posting."
                   : "Generate a preview video to review before uploading to YouTube."}
               </p>
-              <Button onClick={handleGenerate} className="gap-2">
+              <Button onClick={() => handleGenerate(false)} className="gap-2">
                 <Play size={16} /> Generate Preview
               </Button>
             </div>
           )}
 
-          {/* Loading state */}
+          {/* Loading state with stage-aware status */}
           {generating && (
             <div className="flex flex-col items-center gap-3 py-12">
               <Loader2 size={32} className="animate-spin text-primary" />
-              <p className="text-sm text-muted-foreground">Generating preview… this may take 30-60 seconds</p>
+              <p className="text-sm font-medium text-foreground">
+                {genStage === "image"
+                  ? "🖼️ Generating AI weather image via Gemini…"
+                  : "🎥 Creating high-quality video via Creatomate…"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {genStage === "image"
+                  ? "Video render didn't make it — falling back to a designed image."
+                  : "This usually takes 30–60 seconds. We'll fall back to an AI image if needed."}
+              </p>
             </div>
           )}
 
@@ -350,11 +378,12 @@ export function VideoPreviewDialog({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={handleGenerate}
+                  onClick={() => handleGenerate(true)}
                   disabled={isBusy}
                   className="gap-1.5 text-xs"
+                  title="Generate a different creative angle"
                 >
-                  <RefreshCw size={14} /> Re-render
+                  <RefreshCw size={14} /> Try a Variation
                 </Button>
                 <Button
                   variant="outline"

@@ -945,12 +945,17 @@ Deno.serve(async (req) => {
     let mode = "post";
     let timePeriod: string | null = null;
     let selectedPlatforms: string[] | null = null;
+    let style = "standard";
+    let variation = false;
     try {
       const body = await req.clone().json();
       if (body?.mode === "preview") mode = "preview";
       if (body?.time_period) timePeriod = body.time_period; // "morning" | "afternoon" | "evening"
       if (body?.platforms && Array.isArray(body.platforms)) selectedPlatforms = body.platforms;
+      if (typeof body?.style === "string") style = body.style;
+      if (body?.variation === true) variation = true;
     } catch { /* no body is fine */ }
+    console.log(`[daily-weather-post] mode=${mode} style=${style} variation=${variation}`);
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -996,7 +1001,19 @@ Deno.serve(async (req) => {
             model: "google/gemini-3-flash-preview",
             messages: [
               { role: "system", content: SKYBRIEF_SYSTEM_PROMPT },
-              { role: "user", content: buildSkyBriefUserPrompt(weather, timePeriod) },
+              {
+                role: "user",
+                content:
+                  buildSkyBriefUserPrompt(weather, timePeriod) +
+                  (style === "minimal"
+                    ? "\n\nSTYLE: MINIMAL. Strip back. Shorter lines, no emojis."
+                    : style === "cinematic"
+                    ? "\n\nSTYLE: CINEMATIC. Slightly more dramatic, evocative opening line."
+                    : "") +
+                  (variation
+                    ? "\n\nVARIATION REQUEST: Pick a noticeably different creative angle (witty, dramatic, conversational, or poetic). Vary opening line and rhythm."
+                    : ""),
+              },
             ],
           }),
         });

@@ -32,7 +32,7 @@ import { NotificationBell } from "@/components/NotificationBell";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { WeatherCard } from "@/components/WeatherCard";
+import { WeatherCard, type CardStyle } from "@/components/WeatherCard";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { PostHistoryList } from "@/components/PostHistoryList";
 import { VideoPreviewDialog } from "@/components/VideoPreviewDialog";
@@ -126,6 +126,7 @@ const Index = () => {
   const [postFlowPlatforms, setPostFlowPlatforms] = useState<string[]>([]);
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
   const [platformPickerOpen, setPlatformPickerOpen] = useState(false);
+  const [cardStyle, setCardStyle] = useState<CardStyle>("standard");
 
   // Build available platforms list from connection status with brand metadata
   const availablePlatforms = useMemo(() => {
@@ -239,18 +240,18 @@ const Index = () => {
     }
   }, [aspectRatio]);
 
-  const handleGenerateCaption = useCallback(async () => {
+  const handleGenerateCaption = useCallback(async (variation = false) => {
     setCaptionLoading(true);
     try {
-      const result = await generateCaption(weather);
+      const result = await generateCaption(weather, { style: cardStyle, variation });
       setCaption(result);
-      toast.success("Caption generated!");
+      toast.success(variation ? "✨ New variation ready!" : "Caption generated!");
     } catch (err: any) {
       toast.error(err.message || "Failed to generate caption");
     } finally {
       setCaptionLoading(false);
     }
-  }, [weather]);
+  }, [weather, cardStyle]);
 
   return (
     <div className="dark min-h-screen bg-transparent">
@@ -414,9 +415,10 @@ const Index = () => {
                         <Button
                           size="icon"
                           variant="ghost"
-                          onClick={handleGenerateCaption}
+                          onClick={() => handleGenerateCaption(true)}
                           disabled={captionLoading}
                           className="h-7 w-7 text-muted-foreground"
+                          title="Try a different creative angle"
                         >
                           <RefreshCw size={12} className={captionLoading ? "animate-spin" : ""} />
                         </Button>
@@ -424,12 +426,16 @@ const Index = () => {
                     </div>
                     <Button
                       size="sm"
-                      onClick={handleGenerateCaption}
+                      onClick={() => handleGenerateCaption(!!caption)}
                       disabled={captionLoading || !weather}
                       className="gap-1.5 text-xs w-full"
                     >
                       <MessageSquare size={14} />
-                      {captionLoading ? "Generating..." : caption ? "Regenerate" : "Generate Caption"}
+                      {captionLoading
+                        ? (caption ? "Trying a variation..." : "Generating...")
+                        : caption
+                        ? "Try a Variation"
+                        : "Generate Caption"}
                     </Button>
                     {caption && (
                       <Textarea
@@ -444,7 +450,7 @@ const Index = () => {
 
                 {/* CENTER: WeatherCard stage */}
                 <div className="flex flex-col items-center gap-4 order-1 lg:order-2">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap justify-center">
                     <Button
                       size="sm"
                       variant={aspectRatio === "1:1" ? "default" : "outline"}
@@ -461,6 +467,24 @@ const Index = () => {
                     >
                       <RectangleVertical size={14} /> 9:16 Story
                     </Button>
+                  </div>
+
+                  {/* Style selector */}
+                  <div className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 backdrop-blur-xl p-1">
+                    {(["standard", "minimal", "cinematic"] as CardStyle[]).map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => setCardStyle(s)}
+                        className={`text-[11px] px-3 py-1 rounded-full capitalize transition-colors ${
+                          cardStyle === s
+                            ? "bg-primary text-primary-foreground"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {s}
+                      </button>
+                    ))}
                   </div>
 
                   {error && <p className="text-sm text-destructive">{error}</p>}
@@ -483,7 +507,13 @@ const Index = () => {
                           : "weather-glow-clouds"
                       }`}
                     >
-                      <WeatherCard ref={cardRef} weather={weather} aspectRatio={aspectRatio} />
+                      <WeatherCard
+                        ref={cardRef}
+                        weather={weather}
+                        aspectRatio={aspectRatio}
+                        style={cardStyle}
+                        generating={loading || captionLoading}
+                      />
                       <Button
                         onClick={handleExport}
                         size="icon"
@@ -678,6 +708,7 @@ const Index = () => {
           tiktok: "TikTok",
         }}
         onPosted={loadHistory}
+        style={cardStyle}
       />
 
       <footer className="border-t border-border/50 py-4 px-6 flex items-center justify-center gap-4 text-xs text-muted-foreground">
