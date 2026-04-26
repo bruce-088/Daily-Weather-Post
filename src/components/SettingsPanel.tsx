@@ -596,6 +596,8 @@ export function SettingsPanel({
         </Card>
       )}
 
+      {showAutomation && <SystemHealthCard />}
+
       {(showLocation || showConnections || showAutomation) && (
         <Button onClick={onSave} disabled={saving} className="w-full gap-2">
           <Save size={16} />
