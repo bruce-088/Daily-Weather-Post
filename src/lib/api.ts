@@ -31,6 +31,8 @@ export async function loadSettings(): Promise<{ settings: AutomationSettings; ti
       morningSkipDate: (data as any).morning_skip_date || null,
       afternoonSkipDate: (data as any).afternoon_skip_date || null,
       eveningSkipDate: (data as any).evening_skip_date || null,
+      enableVoiceover: (data as any).enable_voiceover ?? false,
+      voiceoverVoiceId: (data as any).voiceover_voice_id || "female",
     },
     tiktokConnected: !!(data as any).tiktok_access_token,
     youtubeConnected: !!(data as any).youtube_access_token,
@@ -70,6 +72,8 @@ export async function saveSettings(settings: AutomationSettings): Promise<boolea
     morning_skip_date: settings.morningSkipDate ?? null,
     afternoon_skip_date: settings.afternoonSkipDate ?? null,
     evening_skip_date: settings.eveningSkipDate ?? null,
+    enable_voiceover: settings.enableVoiceover ?? false,
+    voiceover_voice_id: settings.voiceoverVoiceId || "female",
     user_id: user.id,
   };
 

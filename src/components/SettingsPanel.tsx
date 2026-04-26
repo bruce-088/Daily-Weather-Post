@@ -596,6 +596,54 @@ export function SettingsPanel({
         </Card>
       )}
 
+      {showAutomation && (
+        <Card className="border-border/50 bg-card/80 backdrop-blur">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Lightbulb size={16} className="text-primary" />
+              AI Voiceover
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Add a short narrated weather brief to auto-posted videos. Applies to YouTube, TikTok, and Instagram only.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <Label htmlFor="enable-voiceover" className="text-sm cursor-pointer">
+                Enable voiceover for auto-posts
+              </Label>
+              <Switch
+                id="enable-voiceover"
+                checked={!!settings.enableVoiceover}
+                onCheckedChange={(v) => update("enableVoiceover", v)}
+              />
+            </div>
+            {settings.enableVoiceover && (
+              <div className="space-y-1.5">
+                <Label htmlFor="voiceover-voice" className="text-xs text-muted-foreground">
+                  Voice
+                </Label>
+                <Select
+                  value={settings.voiceoverVoiceId || "female"}
+                  onValueChange={(v) => update("voiceoverVoiceId", v)}
+                >
+                  <SelectTrigger id="voiceover-voice" className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="female">Sarah (warm, conversational)</SelectItem>
+                    <SelectItem value="male">George (confident, news-style)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-[10px] text-muted-foreground italic pt-0.5">
+                  If voice generation fails for any post, that video falls back to silent so the schedule is never blocked.
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {showAutomation && <SystemHealthCard />}
 
       {(showLocation || showConnections || showAutomation) && (

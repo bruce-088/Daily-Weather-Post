@@ -58,4 +58,7 @@ export interface AutomationSettings {
   morningSkipDate?: string | null;
   afternoonSkipDate?: string | null;
   eveningSkipDate?: string | null;
+  // AI voiceover preferences applied to auto-posts on video-capable platforms
+  enableVoiceover: boolean;
+  voiceoverVoiceId: string; // "female" | "male" | raw ElevenLabs id
 }

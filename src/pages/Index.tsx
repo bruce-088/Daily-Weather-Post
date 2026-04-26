@@ -66,6 +66,8 @@ const DEFAULT_SETTINGS: AutomationSettings = {
   morningPlatforms: [],
   afternoonPlatforms: [],
   eveningPlatforms: [],
+  enableVoiceover: false,
+  voiceoverVoiceId: "female",
 };
 
 const Index = () => {

@@ -424,7 +424,7 @@ async function fetchPexelsVideoUrl(keyword: string, city?: string, region?: stri
   } catch { return null; }
 }
 
-function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | null, timePeriod?: string | null): object {
+function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | null, timePeriod?: string | null, voiceUrl?: string | null): object {
   const now = new Date();
   const dateStr = now.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
   const theme = getWeatherTheme(weather.condition);
@@ -539,23 +539,128 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
       x: "50%", y: ctaTextY, x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.6 } },
   );
 
+  // === AI VOICEOVER (optional) ===
+  // Plays from t=0.5s on its own track. If TTS step failed upstream, voiceUrl is null and we render silently.
+  if (voiceUrl) {
+    elements.push({
+      type: "audio",
+      track: nt(),
+      time: 0.5,
+      duration: 9.5,
+      source: voiceUrl,
+      volume: "100%",
+    });
+  }
+
   return {
     width: 1080, height: 1920, duration: 10, frame_rate: 30, fill_color: theme.bg1,
     elements,
   };
 }
 
-async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: string | null): Promise<{ data: Uint8Array; mimeType: string } | null> {
+// =============================================================
+// === AI VOICE NARRATION (Voice Script + ElevenLabs TTS) ====
+// Mirrors the helpers in daily-weather-post so auto-posts get
+// the same voiceover quality as manual "Post Now" actions.
+// =============================================================
+
+const ELEVENLABS_VOICES: Record<string, string> = {
+  female: "EXAVITQu4vr4xnSDxMaL", // Sarah
+  male:   "JBFqnCBsd6RMkjVDRZzb", // George
+};
+
+function resolveVoiceId(input?: string | null): string {
+  if (!input) return ELEVENLABS_VOICES.female;
+  if (input === "female" || input === "male") return ELEVENLABS_VOICES[input];
+  return input;
+}
+
+async function generateVoiceScript(weather: WeatherResponse): Promise<string> {
+  const fallback = `Good day, ${weather.city}. Expect ${weather.description.toLowerCase()} with a high near ${weather.temperature} degrees today.`;
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) return fallback;
+  const userPrompt = [
+    `City: ${weather.city}`,
+    `Condition: ${weather.description}`,
+    `Current temp: ${weather.temperature}°F`,
+    `Rain chance: ${weather.rainChance}%`,
+    "",
+    "Write a SPOKEN weather script. Strict rules:",
+    "- Maximum 2 sentences, ~25 words total.",
+    "- Sound natural when read aloud (no emojis, no hashtags, no special chars).",
+    "- Mention the city, the dominant condition, and the temperature.",
+    "- Return ONLY the script text. No labels, no quotes.",
+  ].join("\n");
+  try {
+    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "google/gemini-3-flash-preview",
+        messages: [
+          { role: "system", content: "You are a concise broadcast weather scriptwriter. Output spoken-style scripts only." },
+          { role: "user", content: userPrompt },
+        ],
+      }),
+    });
+    if (!res.ok) { console.error("[voice] script AI failed:", res.status); return fallback; }
+    const data = await res.json();
+    return data?.choices?.[0]?.message?.content?.trim() || fallback;
+  } catch (e) {
+    console.error("[voice] script error:", e);
+    return fallback;
+  }
+}
+
+async function generateVoiceAudio(script: string, voiceId: string): Promise<Uint8Array | null> {
+  const apiKey = Deno.env.get("ELEVENLABS_API_KEY");
+  if (!apiKey) { console.error("[voice] ELEVENLABS_API_KEY not configured"); return null; }
+  const url = `https://api.elevenlabs.io/v1/text-to-speech/${resolveVoiceId(voiceId)}?output_format=mp3_44100_128`;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "xi-api-key": apiKey, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text: script,
+        model_id: "eleven_turbo_v2_5",
+        voice_settings: { stability: 0.55, similarity_boost: 0.78, style: 0.35, use_speaker_boost: true, speed: 1.0 },
+      }),
+    });
+    if (!res.ok) {
+      console.error("[voice] ElevenLabs TTS failed:", res.status, (await res.text()).slice(0, 200));
+      return null;
+    }
+    return new Uint8Array(await res.arrayBuffer());
+  } catch (e) {
+    console.error("[voice] ElevenLabs TTS error:", e);
+    return null;
+  }
+}
+
+async function storeVoiceAudio(supabase: any, userId: string, audio: Uint8Array): Promise<string | null> {
+  const path = `${userId}/voice-${Date.now()}.mp3`;
+  const { error: upErr } = await supabase.storage
+    .from("weather-videos")
+    .upload(path, audio, { contentType: "audio/mpeg", upsert: true });
+  if (upErr) { console.error("[voice] upload error:", upErr); return null; }
+  const { data: signed, error: signErr } = await supabase.storage
+    .from("weather-videos")
+    .createSignedUrl(path, 3600);
+  if (signErr || !signed?.signedUrl) { console.error("[voice] sign url error:", signErr); return null; }
+  return signed.signedUrl;
+}
+
+async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: string | null, voiceUrl?: string | null): Promise<{ data: Uint8Array; mimeType: string } | null> {
   const apiKey = Deno.env.get("CREATOMATE_API_KEY");
   if (!apiKey) {
     console.error("CREATOMATE_API_KEY not configured");
     return null;
   }
 
-  console.log("Starting Creatomate render for", weather.city);
+  console.log("Starting Creatomate render for", weather.city, voiceUrl ? "(with voiceover)" : "(no voice)");
   const theme = getWeatherTheme(weather.condition);
   const videoUrl = await fetchPexelsVideoUrl(theme.videoKeyword, weather.city, weather.stateOrRegion);
-  const source = buildCreatomateSource(weather, videoUrl, timePeriod);
+  const source = buildCreatomateSource(weather, videoUrl, timePeriod, voiceUrl);
 
   const requestBody = JSON.stringify({ output_format: "mp4", ...source });
   console.log("Creatomate request body (first 300 chars):", requestBody.substring(0, 300));
@@ -941,8 +1046,52 @@ Deno.serve(async (req) => {
         const title = generateSkyBriefTitle(weather.city, weather.temperature, weather.condition, weather.rainChance);
         const desc = caption || "Weather update for " + weather.city + ": " + weather.temperature + "°F, " + weather.description;
 
-        // Try video generation once
-        const video = await generateWeatherVideo(weather);
+        // Extract slot (morning/afternoon/evening) from auto-post marker if present, so the
+        // video header shows the correct period badge for auto-posts.
+        const slotMatch = rawCaption ? /\[auto:([a-z]+)\]/i.exec(rawCaption) : null;
+        const timePeriod = slotMatch ? slotMatch[1].toLowerCase() : null;
+
+        // === AI VOICEOVER (auto-posts) ===
+        // include_voiceover is set by auto-post-scheduler ONLY for video-capable platforms
+        // and only when the user enabled the preference. Manual scheduled posts default to false.
+        // If TTS fails, we render silently — never break the schedule.
+        let voiceUrl: string | null = post.voiceover_url || null;
+        if (!voiceUrl && post.include_voiceover && post.user_id) {
+          console.log(`[process] post ${post.id}: voiceover requested, generating script + TTS`);
+          try {
+            // Look up the user's preferred voice
+            const { data: vSettings } = await supabase
+              .from("weather_settings")
+              .select("voiceover_voice_id")
+              .eq("user_id", post.user_id)
+              .limit(1)
+              .maybeSingle();
+            const voiceId = (vSettings as any)?.voiceover_voice_id || "female";
+
+            const script = await generateVoiceScript(weather);
+            console.log(`[process] post ${post.id}: voice script: ${script}`);
+            const audioBytes = await generateVoiceAudio(script, voiceId);
+            if (audioBytes) {
+              const url = await storeVoiceAudio(supabase, post.user_id, audioBytes);
+              if (url) {
+                voiceUrl = url;
+                console.log(`[process] post ${post.id}: ✅ voiceover ready`);
+                // Persist on the row so re-runs don't regenerate the same audio
+                await supabase.from("scheduled_posts").update({ voiceover_url: url }).eq("id", post.id);
+              } else {
+                console.warn(`[process] post ${post.id}: voice upload failed — falling back to silent video`);
+              }
+            } else {
+              console.warn(`[process] post ${post.id}: TTS failed — falling back to silent video`);
+            }
+          } catch (vErr) {
+            console.error(`[process] post ${post.id}: voiceover pipeline error — falling back to silent video:`, vErr);
+            voiceUrl = null;
+          }
+        }
+
+        // Try video generation once (with voiceover baked in if available)
+        const video = await generateWeatherVideo(weather, timePeriod, voiceUrl);
 
         if (video) {
           // Video succeeded — post to all platforms
