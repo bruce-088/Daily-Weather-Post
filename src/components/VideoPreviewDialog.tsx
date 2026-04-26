@@ -323,6 +323,45 @@ export function VideoPreviewDialog({
                 </div>
               )}
 
+              {/* AI Voice preview */}
+              {preview.audio_url && (
+                <div className="rounded-lg border border-white/10 bg-secondary/30 p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-xs font-medium text-foreground">
+                      <Mic size={12} className="text-primary" /> AI Voiceover
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5 text-xs h-7"
+                      onClick={() => {
+                        if (!audioRef.current) return;
+                        if (audioPlaying) {
+                          audioRef.current.pause();
+                        } else {
+                          audioRef.current.play().catch(() => {});
+                        }
+                      }}
+                    >
+                      {audioPlaying ? <><Pause size={12} /> Pause</> : <><Play size={12} /> Preview Audio</>}
+                    </Button>
+                  </div>
+                  {preview.voice_script && (
+                    <p className="text-[11px] text-muted-foreground italic leading-snug">
+                      "{preview.voice_script}"
+                    </p>
+                  )}
+                  <audio
+                    ref={audioRef}
+                    src={preview.audio_url}
+                    onPlay={() => setAudioPlaying(true)}
+                    onPause={() => setAudioPlaying(false)}
+                    onEnded={() => setAudioPlaying(false)}
+                    className="hidden"
+                  />
+                </div>
+              )}
+
               {/* Per-platform validation / progress / results */}
               {isPostFlow && platformStates.length > 0 && (
                 <PostProgressPanel
