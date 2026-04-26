@@ -736,23 +736,38 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
       x: "50%", y: ctaTextY, x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.6 } },
   );
 
+  // === AI VOICE NARRATION TRACK ===
+  // Voice plays from t=0.5s. If existing background music is added later, it should
+  // be added on its own track at a reduced volume (e.g. 25%) to duck under the voice.
+  if (voiceUrl) {
+    elements.push({
+      type: "audio",
+      track: nt(),
+      time: 0.5,
+      duration: 9.5,
+      source: voiceUrl,
+      volume: "100%",
+    });
+  }
+
   return {
     width: 1440, height: 2560, duration: 10, frame_rate: 30, fill_color: theme.bg1,
     elements,
   };
 }
 
-async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: string | null): Promise<{ data: Uint8Array; mimeType: string } | null> {
+async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: string | null, voiceUrl?: string | null): Promise<{ data: Uint8Array; mimeType: string } | null> {
   const apiKey = Deno.env.get("CREATOMATE_API_KEY");
   if (!apiKey) {
     console.error("CREATOMATE_API_KEY not configured");
     return null;
   }
 
-  console.log("Starting Creatomate render for", weather.city);
+  console.log("Starting Creatomate render for", weather.city, voiceUrl ? "(with voiceover)" : "(no voice)");
   const theme = getWeatherTheme(weather.condition);
   const videoUrl = await fetchPexelsVideoUrl(theme.videoKeyword, weather.city, weather.stateOrRegion);
-  const source = buildCreatomateSource(weather, videoUrl, timePeriod);
+  const source = buildCreatomateSource(weather, videoUrl, timePeriod, voiceUrl);
+
 
   const requestBody = JSON.stringify({ output_format: "mp4", ...source });
   console.log("Creatomate request body (first 300 chars):", requestBody.substring(0, 300));
