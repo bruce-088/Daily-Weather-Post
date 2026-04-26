@@ -186,7 +186,27 @@ Deno.serve(async (req) => {
     docParts.push(KNOWN_ISSUES);
     docParts.push("");
 
-    docParts.push(`## 8. Recent Changes Log`);
+    docParts.push(`## 8. Deployment`);
+    const reqUrl = new URL(req.url);
+    const liveAppUrl = reqUrl.searchParams.get("origin") || "https://skybriefweatherpost.lovable.app";
+    const supabaseUrl = SUPABASE_URL;
+    const projectRef = (() => {
+      try { return new URL(supabaseUrl).hostname.split(".")[0]; } catch { return "unknown"; }
+    })();
+    const edgeBase = `${supabaseUrl}/functions/v1`;
+    const lovableProjectId = Deno.env.get("LOVABLE_PROJECT_ID") || "f81dce50-925f-420f-9022-0fb85c4a9a2f";
+    docParts.push(md([
+      `- **Hosting provider**: Lovable Cloud (Supabase-backed)`,
+      `- **Live app URL**: ${liveAppUrl}`,
+      `- **Supabase project URL**: ${supabaseUrl}`,
+      `- **Supabase project ref**: \`${projectRef}\``,
+      `- **Edge function base URL**: ${edgeBase}`,
+      `- **Lovable project ID**: \`${lovableProjectId}\``,
+      `- **Edge runtime region**: ${Deno.env.get("DENO_REGION") || "auto"}`,
+    ]));
+    docParts.push("");
+
+    docParts.push(`## 9. Recent Changes Log`);
     docParts.push(`Pulled live from \`post_history\` (last 10 events).`);
     docParts.push("");
     if (recentRows.length === 0) {
