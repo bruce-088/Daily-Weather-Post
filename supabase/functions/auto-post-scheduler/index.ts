@@ -49,6 +49,8 @@ Deno.serve(async (req) => {
     }
 
     const now = new Date();
+    const POST_WINDOW_MINUTES = 10;
+    const DUPLICATE_GUARD_MINUTES = 30;
 
     // Get the current wall-clock hour/minute in a given IANA timezone.
     function getZonedHourMinute(date: Date, timeZone: string): { hour: number; minute: number } {
@@ -76,9 +78,9 @@ Deno.serve(async (req) => {
       return { hour: parseInt(parts[0]), minute: parseInt(parts[1]) };
     }
 
-    // Check if the user's local wall-clock time is within 5 minutes after the target.
-    // Window = [target, target + 5min] — ensures slots aren't missed when cron fires
-    // slightly off the exact minute (e.g., 16:03 still catches a 16:00 slot).
+    // Check if the user's local wall-clock time is within the extended window after the target.
+    // Window = [target, target + 10min] — ensures slots aren't missed when cron fires
+    // late due to minor cron drift or function execution timing.
     function evaluateTime(timeStr: string, timeZone: string) {
       const target = parseTime(timeStr);
       const zoned = getZonedHourMinute(now, timeZone);
@@ -87,7 +89,7 @@ Deno.serve(async (req) => {
       let diff = currentMinutes - targetMinutes;
       // Handle day wrap (e.g., target 23:55, current 00:05)
       if (diff < -12 * 60) diff += 24 * 60;
-      const shouldPost = diff >= 0 && diff <= 5;
+      const shouldPost = diff >= 0 && diff <= POST_WINDOW_MINUTES;
       return {
         shouldPost,
         diff,
@@ -162,10 +164,10 @@ Deno.serve(async (req) => {
           `[scheduler]   ${period.name}: target_local=${ev.targetLocal} ${userTz}, current_local=${ev.currentLocal}, diff=${ev.diff}min, shouldPost=${ev.shouldPost}`
         );
         if (!ev.shouldPost) {
-          console.log(`[scheduler]   ⏭️  SKIP ${period.name} — reason: outside post window (diff=${ev.diff}min, need 0..5)`);
+          console.log(`[scheduler]   ⏭️  SKIP ${period.name} — reason: outside post window (diff=${ev.diff}min, need 0..${POST_WINDOW_MINUTES})`);
           continue;
         }
-        console.log(`[scheduler]   🎯 Slot matched within window — triggering post (${period.name}, diff=${ev.diff}min)`);
+        console.log(`[scheduler]   🎯 Matched slot within extended window (${period.name}, diff=${ev.diff}min)`);
         console.log(`[scheduler]   ✅ ${period.name.toUpperCase()} slot triggered for user ${settings.user_id || "default"}`);
         console.log(`[scheduler]   Creating scheduled posts for platforms: [${period.platforms.join(", ")}]`);
 
@@ -176,7 +178,7 @@ Deno.serve(async (req) => {
 
         // Duplicate guard: has any scheduled_posts row been created in the last 30 min
         // for this user + slot (any platform)? Slot is encoded in caption marker [auto:<slot>].
-        const dupSince = new Date(now.getTime() - 30 * 60 * 1000).toISOString();
+        const dupSince = new Date(now.getTime() - DUPLICATE_GUARD_MINUTES * 60 * 1000).toISOString();
         const slotMarker = `[auto:${period.name}]`;
         const { data: recentDupes, error: dupErr } = await supabase
           .from("scheduled_posts")
@@ -189,7 +191,7 @@ Deno.serve(async (req) => {
         if (dupErr) {
           console.error(`[scheduler]   duplicate check failed for ${period.name}:`, dupErr);
         } else if (recentDupes && recentDupes.length > 0) {
-          console.log(`[scheduler]   ⏭️  SKIP ${period.name} — reason: duplicate (already created ${recentDupes[0].created_at})`);
+          console.log(`[scheduler]   ⏭️  Skipped due to duplicate guard (${period.name}, already created ${recentDupes[0].created_at})`);
           continue;
         }
 
