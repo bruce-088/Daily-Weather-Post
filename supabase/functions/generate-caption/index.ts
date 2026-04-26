@@ -115,6 +115,19 @@ Deno.serve(async (req) => {
     const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
     const handle = getDynamicHandle(city);
 
+    // Detect extreme weather and append urgent tone instruction
+    const condStr = String(body.condition ?? body.morning_condition ?? body.afternoon_condition ?? "").toLowerCase();
+    const tempVal = Number(body.temperature ?? body.afternoonTemp ?? body.afternoon_temp ?? 0);
+    const isExtreme =
+      tempVal > 100 ||
+      condStr.includes("storm") ||
+      condStr.includes("hurricane") ||
+      condStr.includes("tornado") ||
+      condStr.includes("blizzard");
+    const extremeNote = isExtreme
+      ? "\n\nIMPORTANT: Extreme weather detected. Use ALERT MODE. Lead with the urgent condition. Prioritize safety guidance (stay indoors / avoid travel / hydrate / take shelter as appropriate). Stay calm and direct — never panic-inducing or sensational. Keep the brand voice intact."
+      : "";
+
     const userPrompt = `NOW USE THESE INPUTS TO WRITE TODAY'S CAPTION:
 
 city: ${city}
@@ -134,7 +147,7 @@ tomorrow_preview: ${body.tomorrow_preview ?? body.tomorrowPreview ?? "N/A"}
 sunrise_time: ${body.sunrise_time ?? body.sunrise ?? "N/A"}
 sunset_time: ${body.sunset_time ?? body.sunset ?? "N/A"}
 dynamic_handle: ${handle}
-extra_note: ${body.extra_note ?? body.extraNote ?? ""}`;
+extra_note: ${body.extra_note ?? body.extraNote ?? ""}${extremeNote}`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
