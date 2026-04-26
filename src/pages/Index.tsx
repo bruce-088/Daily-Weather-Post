@@ -26,6 +26,7 @@ import {
   Linkedin,
   Video,
   Loader2,
+  Mic,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
@@ -35,6 +36,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { WeatherCard, type CardStyle } from "@/components/WeatherCard";
 import { SettingsPanel } from "@/components/SettingsPanel";
+import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PostHistoryList } from "@/components/PostHistoryList";
 import { VideoPreviewDialog } from "@/components/VideoPreviewDialog";
 import { SchedulePostForm } from "@/components/SchedulePostForm";
@@ -42,7 +45,7 @@ import { ScheduledPostsList } from "@/components/ScheduledPostsList";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useWeather } from "@/hooks/useWeather";
-import { loadSettings, saveSettings, triggerDailyPost, fetchPostHistory, fetchScheduledPosts, generateCaption } from "@/lib/api";
+import { loadSettings, saveSettings, triggerDailyPost, fetchPostHistory, fetchScheduledPosts, generateCaption, type VoiceOptions } from "@/lib/api";
 import type { AspectRatio, AutomationSettings } from "@/types/weather";
 import type { PostHistoryItem, ScheduledPostItem } from "@/lib/api";
 
