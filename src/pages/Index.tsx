@@ -708,6 +708,7 @@ const Index = () => {
           tiktok: "TikTok",
         }}
         onPosted={loadHistory}
+        style={cardStyle}
       />
 
       <footer className="border-t border-border/50 py-4 px-6 flex items-center justify-center gap-4 text-xs text-muted-foreground">
