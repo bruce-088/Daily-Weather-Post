@@ -334,7 +334,7 @@ const Index = () => {
                 disabled={posting || availablePlatforms.length === 0}
                 className="gap-1.5 text-xs rounded-r-none"
               >
-                <Send size={14} />
+                {posting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                 {posting ? "Posting..." : selectedPlatforms.length > 0 ? `Post (${selectedPlatforms.length})` : "Post All"}
               </Button>
               <Popover open={platformPickerOpen} onOpenChange={setPlatformPickerOpen}>
