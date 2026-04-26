@@ -55,13 +55,13 @@ function NextCronCheckIndicator() {
         : `${minutesRemaining} minutes`;
 
   return (
-    <div className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-2 py-0.5 text-[10px] font-medium text-primary">
-      <span className="relative flex h-1.5 w-1.5">
+    <span className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-2 py-0.5 text-[10px] font-medium text-primary align-middle">
+      <span className="relative inline-flex h-1.5 w-1.5">
         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60" />
         <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary" />
       </span>
       Next auto-post check in: {label}
-    </div>
+    </span>
   );
 }
 
