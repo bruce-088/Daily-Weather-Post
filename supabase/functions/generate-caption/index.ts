@@ -128,6 +128,20 @@ Deno.serve(async (req) => {
       ? "\n\nIMPORTANT: Extreme weather detected. Use ALERT MODE. Lead with the urgent condition. Prioritize safety guidance (stay indoors / avoid travel / hydrate / take shelter as appropriate). Stay calm and direct — never panic-inducing or sensational. Keep the brand voice intact."
       : "";
 
+    // Style + variation tone steering (UI-driven creative direction)
+    const styleStr = String(body.style ?? "standard").toLowerCase();
+    const styleNote =
+      styleStr === "minimal"
+        ? "\n\nSTYLE: MINIMAL. Strip back. Shorter lines, fewer words, no emojis, no decorative phrasing. Prioritize ruthless clarity."
+        : styleStr === "cinematic"
+        ? "\n\nSTYLE: CINEMATIC. Slightly more dramatic and evocative language. Use one strong opening line that paints the sky. Still concise; up to 2 weather emojis allowed."
+        : "";
+
+    const variation = !!body.variation;
+    const variationNote = variation
+      ? "\n\nVARIATION REQUEST: Generate a NOTICEABLY different creative angle than a typical informational caption — pick one of: witty, dramatic, conversational, or poetic. Keep all factual data the same. Vary opening line, sentence rhythm, and word choice. Do NOT repeat the previous caption's structure verbatim."
+      : "";
+
     const userPrompt = `NOW USE THESE INPUTS TO WRITE TODAY'S CAPTION:
 
 city: ${city}
