@@ -562,6 +562,7 @@ export function SettingsPanel({
           <CardDescription className="text-xs">
             Schedule 3 daily posts — morning, afternoon, evening. Times are in your local timezone:{" "}
             <span className="font-medium text-foreground">{settings.timezone || "UTC"}</span>
+            <NextCronCheckIndicator />
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
