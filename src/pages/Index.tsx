@@ -147,13 +147,19 @@ const Index = () => {
     [voiceEnabled, voiceId, voiceTone],
   );
 
-  // === Caption draft autosave (10s interval to localStorage) ===
+  // === Create-page draft autosave (caption + city → localStorage every 10s) ===
   const CAPTION_DRAFT_KEY = "skybrief_caption_draft_v1";
+  const CITY_DRAFT_KEY = "skybrief_city_draft_v1";
+  const [draftSavedAt, setDraftSavedAt] = useState<number | null>(null);
   // Restore on mount
   useEffect(() => {
     try {
-      const saved = window.localStorage.getItem(CAPTION_DRAFT_KEY);
-      if (saved) setCaption(saved);
+      const savedCaption = window.localStorage.getItem(CAPTION_DRAFT_KEY);
+      if (savedCaption) setCaption(savedCaption);
+      const savedCity = window.localStorage.getItem(CITY_DRAFT_KEY);
+      if (savedCity) {
+        setSettings((prev) => ({ ...prev, location: savedCity }));
+      }
     } catch { /* ignore */ }
   }, []);
   // Periodic save
@@ -161,21 +167,33 @@ const Index = () => {
     if (typeof window === "undefined") return;
     const id = window.setInterval(() => {
       try {
+        let touched = false;
         if (caption && caption.trim()) {
           window.localStorage.setItem(CAPTION_DRAFT_KEY, caption);
+          touched = true;
         } else {
           window.localStorage.removeItem(CAPTION_DRAFT_KEY);
         }
+        if (settings.location && settings.location.trim()) {
+          window.localStorage.setItem(CITY_DRAFT_KEY, settings.location);
+          touched = true;
+        }
+        if (touched) setDraftSavedAt(Date.now());
       } catch { /* ignore */ }
     }, 10000);
     return () => window.clearInterval(id);
-  }, [caption]);
+  }, [caption, settings.location]);
 
-  // === Listen for global success → trigger top-bar shimmer ===
+  // === Listen for global success → trigger top-bar shimmer + clear draft ===
   useEffect(() => {
     const onSuccess = () => {
       setSuccessShimmer(true);
       window.setTimeout(() => setSuccessShimmer(false), 1700);
+      try {
+        window.localStorage.removeItem(CAPTION_DRAFT_KEY);
+        window.localStorage.removeItem(CITY_DRAFT_KEY);
+      } catch { /* ignore */ }
+      setDraftSavedAt(null);
     };
     window.addEventListener("skybrief:post-success", onSuccess);
     return () => window.removeEventListener("skybrief:post-success", onSuccess);
