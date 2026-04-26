@@ -565,14 +565,24 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
 // =============================================================
 
 const ELEVENLABS_VOICES: Record<string, string> = {
-  female: "EXAVITQu4vr4xnSDxMaL", // Sarah
-  male:   "JBFqnCBsd6RMkjVDRZzb", // George
+  female: "EXAVITQu4vr4xnSDxMaL",   // Sarah — warm, conversational
+  male:   "JBFqnCBsd6RMkjVDRZzb",   // George — confident, news-style
+  anchor: "onwK4e9ZLuTAKqWW03F9",   // Daniel — authoritative news anchor
+  cheerful: "Xb7hH8MSUJpSbSDYk0k2", // Alice — bright, cheerful
+  calm:   "cgSgspJ2msm6clMCkdW9",   // Jessica — calm, soothing
+  deep:   "nPczCjzI2devNBz1zQrb",   // Brian — deep, resonant
 };
 
 function resolveVoiceId(input?: string | null): string {
   if (!input) return ELEVENLABS_VOICES.female;
-  if (input === "female" || input === "male") return ELEVENLABS_VOICES[input];
-  return input;
+  if (ELEVENLABS_VOICES[input]) return ELEVENLABS_VOICES[input];
+  return input; // assume raw ElevenLabs id
+}
+
+function clampVoiceParam(n: any, min: number, max: number, fallback: number): number {
+  const v = typeof n === "number" ? n : Number(n);
+  if (!isFinite(v)) return fallback;
+  return Math.min(max, Math.max(min, v));
 }
 
 async function generateVoiceScript(weather: WeatherResponse): Promise<string> {
@@ -612,9 +622,16 @@ async function generateVoiceScript(weather: WeatherResponse): Promise<string> {
   }
 }
 
-async function generateVoiceAudio(script: string, voiceId: string): Promise<Uint8Array | null> {
+async function generateVoiceAudio(
+  script: string,
+  voiceId: string,
+  opts?: { speed?: number; stability?: number; similarity?: number },
+): Promise<Uint8Array | null> {
   const apiKey = Deno.env.get("ELEVENLABS_API_KEY");
   if (!apiKey) { console.error("[voice] ELEVENLABS_API_KEY not configured"); return null; }
+  const speed = clampVoiceParam(opts?.speed, 0.7, 1.2, 1.0);
+  const stability = clampVoiceParam(opts?.stability, 0, 1, 0.55);
+  const similarity = clampVoiceParam(opts?.similarity, 0, 1, 0.78);
   const url = `https://api.elevenlabs.io/v1/text-to-speech/${resolveVoiceId(voiceId)}?output_format=mp3_44100_128`;
   try {
     const res = await fetch(url, {
@@ -623,7 +640,7 @@ async function generateVoiceAudio(script: string, voiceId: string): Promise<Uint
       body: JSON.stringify({
         text: script,
         model_id: "eleven_turbo_v2_5",
-        voice_settings: { stability: 0.55, similarity_boost: 0.78, style: 0.35, use_speaker_boost: true, speed: 1.0 },
+        voice_settings: { stability, similarity_boost: similarity, style: 0.35, use_speaker_boost: true, speed },
       }),
     });
     if (!res.ok) {
@@ -1059,18 +1076,26 @@ Deno.serve(async (req) => {
         if (!voiceUrl && post.include_voiceover && post.user_id) {
           console.log(`[process] post ${post.id}: voiceover requested, generating script + TTS`);
           try {
-            // Look up the user's preferred voice
+            // Look up the user's preferred voice + tuning
             const { data: vSettings } = await supabase
               .from("weather_settings")
-              .select("voiceover_voice_id")
+              .select("voiceover_voice_id, voiceover_speed, voiceover_stability, voiceover_similarity")
               .eq("user_id", post.user_id)
               .limit(1)
               .maybeSingle();
             const voiceId = (vSettings as any)?.voiceover_voice_id || "female";
+            const voiceSpeed = (vSettings as any)?.voiceover_speed;
+            const voiceStability = (vSettings as any)?.voiceover_stability;
+            const voiceSimilarity = (vSettings as any)?.voiceover_similarity;
+            console.log(`[process] post ${post.id}: voice=${voiceId} speed=${voiceSpeed} stability=${voiceStability} similarity=${voiceSimilarity}`);
 
             const script = await generateVoiceScript(weather);
             console.log(`[process] post ${post.id}: voice script: ${script}`);
-            const audioBytes = await generateVoiceAudio(script, voiceId);
+            const audioBytes = await generateVoiceAudio(script, voiceId, {
+              speed: voiceSpeed,
+              stability: voiceStability,
+              similarity: voiceSimilarity,
+            });
             if (audioBytes) {
               const url = await storeVoiceAudio(supabase, post.user_id, audioBytes);
               if (url) {

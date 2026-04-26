@@ -68,6 +68,9 @@ const DEFAULT_SETTINGS: AutomationSettings = {
   eveningPlatforms: [],
   enableVoiceover: false,
   voiceoverVoiceId: "female",
+  voiceoverSpeed: 1.0,
+  voiceoverStability: 0.55,
+  voiceoverSimilarity: 0.78,
 };
 
 const Index = () => {
