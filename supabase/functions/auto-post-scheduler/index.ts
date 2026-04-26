@@ -148,7 +148,6 @@ Deno.serve(async (req) => {
         }
         console.log(`[scheduler]   ✅ POST ${period.name} — platforms=[${period.platforms.join(", ")}]`);
 
-        console.log(`[scheduler]   → Triggering ${period.name} post for user ${settings.user_id || "default"} on ${period.platforms.join(",")}`);
 
         try {
           const postUrl = supabaseUrl + "/functions/v1/daily-weather-post";
