@@ -179,6 +179,10 @@ export function PostHistoryList({ posts, loading, onReuse, onChanged }: PostHist
               const StatusIcon = status.icon;
               const isErrorOpen = expandedError === post.id;
               const isFailed = post.status === "failed";
+              const isAutomated = !!post.error_message && /^\[AUTO\]\s*/i.test(post.error_message);
+              const displayedErrorMessage = isAutomated
+                ? post.error_message!.replace(/^\[AUTO\]\s*/i, "")
+                : post.error_message;
 
               return (
                 <Card
