@@ -324,9 +324,13 @@ function getAlertLine(weather: WeatherResponse): string | null {
   const temp = weather.temperature;
   const rain = weather.rainChance;
   const windNum = parseInt(weather.windInfo);
+  if (c.includes("hurricane")) return "ALERT: Hurricane conditions — take shelter and follow local guidance";
+  if (c.includes("tornado")) return "ALERT: Tornado warning — seek shelter immediately";
+  if (c.includes("blizzard")) return "ALERT: Blizzard conditions — avoid travel if possible";
   if (c.includes("thunder") || c.includes("storm")) return "ALERT: Storms possible this afternoon";
   if (rain > 50 && (c.includes("rain") || c.includes("drizzle"))) return "ALERT: Heavy rain expected";
   if (windNum > 20) return "ALERT: Strong winds this afternoon";
+  if (temp > 100) return "ALERT: Dangerous heat — stay hydrated and limit outdoor exposure";
   if (temp > 95) return "ALERT: Extreme heat today";
   if (temp < 35) return "ALERT: Near-freezing temperatures";
   return null;

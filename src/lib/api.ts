@@ -28,6 +28,9 @@ export async function loadSettings(): Promise<{ settings: AutomationSettings; ti
       morningPlatforms: Array.isArray((data as any).morning_platforms) ? (data as any).morning_platforms : [],
       afternoonPlatforms: Array.isArray((data as any).afternoon_platforms) ? (data as any).afternoon_platforms : [],
       eveningPlatforms: Array.isArray((data as any).evening_platforms) ? (data as any).evening_platforms : [],
+      morningSkipDate: (data as any).morning_skip_date || null,
+      afternoonSkipDate: (data as any).afternoon_skip_date || null,
+      eveningSkipDate: (data as any).evening_skip_date || null,
     },
     tiktokConnected: !!(data as any).tiktok_access_token,
     youtubeConnected: !!(data as any).youtube_access_token,
@@ -64,6 +67,9 @@ export async function saveSettings(settings: AutomationSettings): Promise<boolea
     morning_platforms: settings.morningPlatforms || [],
     afternoon_platforms: settings.afternoonPlatforms || [],
     evening_platforms: settings.eveningPlatforms || [],
+    morning_skip_date: settings.morningSkipDate ?? null,
+    afternoon_skip_date: settings.afternoonSkipDate ?? null,
+    evening_skip_date: settings.eveningSkipDate ?? null,
     user_id: user.id,
   };
 
@@ -79,6 +85,25 @@ export async function saveSettings(settings: AutomationSettings): Promise<boolea
       .insert(payload);
     return !error;
   }
+}
+
+/**
+ * Toggle a "skip today" flag for one automation slot.
+ * Writes the user's local YYYY-MM-DD into <slot>_skip_date — the scheduler
+ * compares this to today and skips that slot. Pass null to clear the flag.
+ */
+export async function setSkipToday(
+  slot: "morning" | "afternoon" | "evening",
+  date: string | null
+): Promise<boolean> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return false;
+  const column = `${slot}_skip_date`;
+  const { error } = await supabase
+    .from("weather_settings")
+    .update({ [column]: date } as any)
+    .eq("user_id", user.id);
+  return !error;
 }
 
 export async function triggerDailyPost(timePeriod?: string, platforms?: string[]): Promise<{ success: boolean; message: string }> {

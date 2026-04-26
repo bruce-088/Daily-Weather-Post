@@ -4,8 +4,9 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Clock, MapPin, Instagram, Video, RefreshCw, Save, CheckCircle, ExternalLink, Youtube, Sun, Sunset, Moon, Twitter, Linkedin, Unlink, Globe } from "lucide-react";
+import { Clock, MapPin, Instagram, Video, RefreshCw, Save, CheckCircle, ExternalLink, Youtube, Sun, Sunset, Moon, Twitter, Linkedin, Unlink, Globe, SkipForward, Lightbulb, CalendarClock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { setSkipToday } from "@/lib/api";
 
 const TIMEZONE_OPTIONS = [
   { value: "America/New_York", label: "Eastern (New York)" },
@@ -201,6 +202,75 @@ export function SettingsPanel({
   };
 
   const anyAutoPost = settings.autoPostMorning || settings.autoPostAfternoon || settings.autoPostEvening;
+
+  // Today's date in user's local timezone — used for "Skip Today"
+  const todayLocal = (() => {
+    try {
+      return new Intl.DateTimeFormat("en-CA", {
+        timeZone: settings.timezone || "UTC",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(new Date());
+    } catch {
+      return new Date().toISOString().slice(0, 10);
+    }
+  })();
+
+  const slotConfig = [
+    {
+      key: "morning" as const,
+      label: "Morning",
+      time: settings.morningPostTime,
+      enabled: settings.autoPostMorning,
+      platforms: settings.morningPlatforms || [],
+      skipDate: settings.morningSkipDate || null,
+      suggestion: "8:00 AM for peak morning engagement",
+    },
+    {
+      key: "afternoon" as const,
+      label: "Afternoon",
+      time: settings.afternoonPostTime,
+      enabled: settings.autoPostAfternoon,
+      platforms: settings.afternoonPlatforms || [],
+      skipDate: settings.afternoonSkipDate || null,
+      suggestion: "12:30 PM to catch the lunch-break scroll",
+    },
+    {
+      key: "evening" as const,
+      label: "Evening",
+      time: settings.eveningPostTime,
+      enabled: settings.autoPostEvening,
+      platforms: settings.eveningPlatforms || [],
+      skipDate: settings.eveningSkipDate || null,
+      suggestion: "6:00 PM when after-work scrolling spikes",
+    },
+  ];
+
+  const handleSkipToday = async (slot: "morning" | "afternoon" | "evening", currentlySkipped: boolean) => {
+    const target = currentlySkipped ? null : todayLocal;
+    const ok = await setSkipToday(slot, target);
+    if (!ok) {
+      toast.error("Could not update skip status");
+      return;
+    }
+    const skipKey =
+      slot === "morning" ? "morningSkipDate" : slot === "afternoon" ? "afternoonSkipDate" : "eveningSkipDate";
+    update(skipKey as keyof AutomationSettings, target as any);
+    toast.success(currentlySkipped ? `${slot[0].toUpperCase() + slot.slice(1)} restored for today` : `${slot[0].toUpperCase() + slot.slice(1)} skipped for today`);
+  };
+
+  // Tomorrow preview helpers
+  const platformLabel = (id: string) =>
+    availablePlatforms.find((p) => p.id === id)?.label || id;
+  const formatTime12h = (t: string) => {
+    const [hStr, m] = (t || "00:00").split(":");
+    const h = parseInt(hStr, 10);
+    const period = h >= 12 ? "PM" : "AM";
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    return `${h12}:${m} ${period}`;
+  };
+  const tomorrowSlots = slotConfig.filter((s) => s.enabled);
 
   return (
     <div className="space-y-4">
@@ -421,73 +491,108 @@ export function SettingsPanel({
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Morning */}
-          <div className="p-3 rounded-lg bg-secondary/30 border border-border/30 space-y-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-sm flex items-center gap-2">
-                <Sun size={14} className="text-amber-400" /> Morning
-              </Label>
-              <Switch
-                checked={settings.autoPostMorning}
-                onCheckedChange={(v) => update("autoPostMorning", v)}
-              />
-            </div>
-            <Input
-              type="time"
-              value={settings.morningPostTime}
-              onChange={(e) => update("morningPostTime", e.target.value)}
-              className="bg-secondary/50 border-border/30"
-              disabled={!settings.autoPostMorning}
-            />
-            <p className="text-[10px] text-muted-foreground">Times are in your local timezone</p>
-            {renderPlatformPicker("morningPlatforms", settings.autoPostMorning)}
-          </div>
+          {slotConfig.map((slot) => {
+            const Icon = slot.key === "morning" ? Sun : slot.key === "afternoon" ? Sunset : Moon;
+            const iconColor =
+              slot.key === "morning" ? "text-amber-400" : slot.key === "afternoon" ? "text-orange-400" : "text-blue-400";
+            const timeKey =
+              slot.key === "morning" ? "morningPostTime" : slot.key === "afternoon" ? "afternoonPostTime" : "eveningPostTime";
+            const enabledKey =
+              slot.key === "morning" ? "autoPostMorning" : slot.key === "afternoon" ? "autoPostAfternoon" : "autoPostEvening";
+            const platformsKey =
+              slot.key === "morning" ? "morningPlatforms" : slot.key === "afternoon" ? "afternoonPlatforms" : "eveningPlatforms";
+            const isSkippedToday = slot.skipDate === todayLocal;
 
-          {/* Afternoon */}
-          <div className="p-3 rounded-lg bg-secondary/30 border border-border/30 space-y-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-sm flex items-center gap-2">
-                <Sunset size={14} className="text-orange-400" /> Afternoon
-              </Label>
-              <Switch
-                checked={settings.autoPostAfternoon}
-                onCheckedChange={(v) => update("autoPostAfternoon", v)}
-              />
-            </div>
-            <Input
-              type="time"
-              value={settings.afternoonPostTime}
-              onChange={(e) => update("afternoonPostTime", e.target.value)}
-              className="bg-secondary/50 border-border/30"
-              disabled={!settings.autoPostAfternoon}
-            />
-            <p className="text-[10px] text-muted-foreground">Times are in your local timezone</p>
-            {renderPlatformPicker("afternoonPlatforms", settings.autoPostAfternoon)}
-          </div>
-
-          {/* Evening */}
-          <div className="p-3 rounded-lg bg-secondary/30 border border-border/30 space-y-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-sm flex items-center gap-2">
-                <Moon size={14} className="text-blue-400" /> Evening
-              </Label>
-              <Switch
-                checked={settings.autoPostEvening}
-                onCheckedChange={(v) => update("autoPostEvening", v)}
-              />
-            </div>
-            <Input
-              type="time"
-              value={settings.eveningPostTime}
-              onChange={(e) => update("eveningPostTime", e.target.value)}
-              className="bg-secondary/50 border-border/30"
-              disabled={!settings.autoPostEvening}
-            />
-            <p className="text-[10px] text-muted-foreground">Times are in your local timezone</p>
-            {renderPlatformPicker("eveningPlatforms", settings.autoPostEvening)}
-          </div>
+            return (
+              <div key={slot.key} className="p-3 rounded-lg bg-secondary/30 border border-border/30 space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm flex items-center gap-2">
+                    <Icon size={14} className={iconColor} /> {slot.label}
+                    {isSkippedToday && (
+                      <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-400 px-1.5 py-0 h-4">
+                        Skipped today
+                      </Badge>
+                    )}
+                  </Label>
+                  <Switch
+                    checked={slot.enabled}
+                    onCheckedChange={(v) => update(enabledKey as keyof AutomationSettings, v)}
+                  />
+                </div>
+                <Input
+                  type="time"
+                  value={slot.time}
+                  onChange={(e) => update(timeKey as keyof AutomationSettings, e.target.value)}
+                  className="bg-secondary/50 border-border/30"
+                  disabled={!slot.enabled}
+                />
+                <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                  <Lightbulb size={10} className="text-amber-400" />
+                  Suggested: {slot.suggestion}
+                </p>
+                {renderPlatformPicker(platformsKey as any, slot.enabled)}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={isSkippedToday ? "secondary" : "outline"}
+                  onClick={() => handleSkipToday(slot.key, isSkippedToday)}
+                  disabled={!slot.enabled}
+                  className="w-full gap-1.5 h-7 text-xs"
+                >
+                  <SkipForward size={12} />
+                  {isSkippedToday ? "Restore today's post" : "Skip today"}
+                </Button>
+              </div>
+            );
+          })}
         </CardContent>
       </Card>
+      )}
+
+      {showAutomation && tomorrowSlots.length > 0 && (
+        <Card className="border-border/50 bg-card/80 backdrop-blur">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <CalendarClock size={16} className="text-primary" />
+              Tomorrow's Preview
+            </CardTitle>
+            <CardDescription className="text-xs">
+              What will be auto-posted tomorrow based on your current schedule.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {tomorrowSlots.map((slot) => {
+              const Icon = slot.key === "morning" ? Sun : slot.key === "afternoon" ? Sunset : Moon;
+              const iconColor =
+                slot.key === "morning" ? "text-amber-400" : slot.key === "afternoon" ? "text-orange-400" : "text-blue-400";
+              const platformText =
+                slot.platforms.length > 0
+                  ? slot.platforms.map(platformLabel).join(", ")
+                  : "no platforms selected";
+              return (
+                <div
+                  key={slot.key}
+                  className="flex items-start gap-3 p-2.5 rounded-md bg-secondary/20 border border-border/20"
+                >
+                  <Icon size={14} className={`${iconColor} mt-0.5 shrink-0`} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs">
+                      <span className="font-medium">{slot.label}</span> · {formatTime12h(slot.time)}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground truncate">
+                      {slot.platforms.length > 0
+                        ? `Post scheduled for ${formatTime12h(slot.time)} to ${platformText}`
+                        : `No platforms selected — this slot will be skipped`}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+            <p className="text-[10px] text-muted-foreground italic pt-1">
+              Captions are generated fresh at post time using tomorrow's live weather.
+            </p>
+          </CardContent>
+        </Card>
       )}
 
       {(showLocation || showConnections || showAutomation) && (
