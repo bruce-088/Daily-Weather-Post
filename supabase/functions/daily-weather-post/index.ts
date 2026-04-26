@@ -1102,6 +1102,7 @@ Deno.serve(async (req) => {
     let selectedPlatforms: string[] | null = null;
     let style = "standard";
     let variation = false;
+    let voiceOpts: VoiceOptions = { enabled: false };
     try {
       const body = await req.clone().json();
       if (body?.mode === "preview") mode = "preview";
@@ -1109,8 +1110,16 @@ Deno.serve(async (req) => {
       if (body?.platforms && Array.isArray(body.platforms)) selectedPlatforms = body.platforms;
       if (typeof body?.style === "string") style = body.style;
       if (body?.variation === true) variation = true;
+      if (body?.voice && typeof body.voice === "object") {
+        voiceOpts = {
+          enabled: !!body.voice.enabled,
+          voiceId: typeof body.voice.voiceId === "string" ? body.voice.voiceId : undefined,
+          tone: typeof body.voice.tone === "string" ? body.voice.tone : undefined,
+        };
+      }
     } catch { /* no body is fine */ }
-    console.log(`[daily-weather-post] mode=${mode} style=${style} variation=${variation}`);
+    console.log(`[daily-weather-post] mode=${mode} style=${style} variation=${variation} voice=${voiceOpts.enabled}`);
+
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
