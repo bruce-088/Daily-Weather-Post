@@ -1021,12 +1021,21 @@ Deno.serve(async (req) => {
           errorMessage = "Weather data fetched and caption generated successfully";
         }
 
-        await supabase.from("post_history").insert({
-          status: postStatus, platform: post.platform, city: weather.city,
+        // post_history.status CHECK constraint only allows: success | failed | pending
+        // Map our internal "posted" → "success" so the insert isn't silently rejected.
+        const historyStatus = postStatus === "posted" ? "success" : postStatus;
+
+        const { error: historyErr } = await supabase.from("post_history").insert({
+          status: historyStatus, platform: post.platform, city: weather.city,
           temperature: weather.temperature, condition: weather.condition,
           image_url: storedImageUrl, error_message: errorMessage, caption,
           user_id: post.user_id,
         });
+        if (historyErr) {
+          console.error(`[process] post_history insert failed for ${post.id}:`, historyErr);
+        } else {
+          console.log(`[process] post_history row created for ${post.id} (${post.platform}, ${historyStatus})`);
+        }
 
         await supabase.from("scheduled_posts").update({ status: postStatus, error_message: errorMessage }).eq("id", post.id);
 
