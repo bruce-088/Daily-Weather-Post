@@ -1,13 +1,19 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Play, Upload, RefreshCw, X, Loader2, Pencil, Eye, Download, Send, AlertTriangle } from "lucide-react";
+import { Play, Upload, RefreshCw, X, Loader2, Pencil, Eye, Download, Send } from "lucide-react";
 import { generatePreview, uploadPreviewVideo, triggerDailyPost } from "@/lib/api";
 import type { PreviewResult } from "@/lib/api";
+import {
+  PostProgressPanel,
+  buildInitialStates,
+  hasBlockingError,
+  type PlatformPostState,
+} from "@/components/PostProgressPanel";
 
 interface VideoPreviewDialogProps {
   open: boolean;
@@ -15,18 +21,55 @@ interface VideoPreviewDialogProps {
   onUploaded?: () => void;
   /** When set, auto-generate on open and show "Post" button for these platforms */
   postPlatforms?: string[];
+  /** Connection status map per platform id (youtube, twitter, linkedin, tiktok) */
+  connections?: Record<string, boolean>;
+  /** Display labels per platform id */
+  platformLabels?: Record<string, string>;
   /** Called after posting completes */
   onPosted?: () => void;
 }
 
-export function VideoPreviewDialog({ open, onOpenChange, onUploaded, postPlatforms, onPosted }: VideoPreviewDialogProps) {
+export function VideoPreviewDialog({
+  open,
+  onOpenChange,
+  onUploaded,
+  postPlatforms,
+  connections,
+  platformLabels,
+  onPosted,
+}: VideoPreviewDialogProps) {
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [generating, setGenerating] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [posting, setPosting] = useState(false);
   const [editedCaption, setEditedCaption] = useState("");
   const [isEditingCaption, setIsEditingCaption] = useState(false);
   const [autoGenerateTriggered, setAutoGenerateTriggered] = useState(false);
+
+  // Per-platform posting state
+  const [platformStates, setPlatformStates] = useState<PlatformPostState[]>([]);
+  const [phase, setPhase] = useState<"validating" | "ready" | "posting" | "complete">("validating");
+  const [posting, setPosting] = useState(false);
+
+  const isPostFlow = !!(postPlatforms && postPlatforms.length > 0);
+
+  // Build / refresh validation states whenever preview content type or selected platforms change
+  useEffect(() => {
+    if (!isPostFlow || !postPlatforms) {
+      setPlatformStates([]);
+      setPhase("validating");
+      return;
+    }
+    const labels = platformLabels || {};
+    const conns = connections || {};
+    const hasVideo = preview?.content_type === "video" && !!preview?.video_url;
+
+    // Don't downgrade states from posting/success/failed during an active run
+    if (phase === "posting" || phase === "complete") return;
+
+    const states = buildInitialStates(postPlatforms, labels, conns, hasVideo);
+    setPlatformStates(states);
+    setPhase(preview ? "ready" : "validating");
+  }, [isPostFlow, postPlatforms, connections, platformLabels, preview?.content_type, preview?.video_url, preview, phase]);
 
   useEffect(() => {
     if (preview?.caption) {
@@ -36,11 +79,21 @@ export function VideoPreviewDialog({ open, onOpenChange, onUploaded, postPlatfor
 
   // Auto-generate when opened via "Post Now" flow
   useEffect(() => {
-    if (open && postPlatforms && postPlatforms.length > 0 && !preview && !generating && !autoGenerateTriggered) {
+    if (open && isPostFlow && !preview && !generating && !autoGenerateTriggered) {
       setAutoGenerateTriggered(true);
       handleGenerate();
     }
-  }, [open, postPlatforms]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, isPostFlow]);
+
+  const blockingError = useMemo(() => hasBlockingError(platformStates), [platformStates]);
+  const postablePlatforms = useMemo(
+    () =>
+      platformStates
+        .filter((p) => p.status === "ready" || p.status === "requires-video")
+        .map((p) => p.id),
+    [platformStates],
+  );
 
   const handleGenerate = async () => {
     setGenerating(true);
@@ -85,26 +138,45 @@ export function VideoPreviewDialog({ open, onOpenChange, onUploaded, postPlatfor
     }
   };
 
-  const handlePostToPlatforms = async () => {
-    if (!postPlatforms || postPlatforms.length === 0) return;
-    setPosting(true);
-    const label = postPlatforms.join(", ");
-    toast.info(`Posting to ${label}...`);
+  const updatePlatform = (id: string, patch: Partial<PlatformPostState>) => {
+    setPlatformStates((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+  };
+
+  const postSinglePlatform = async (platformId: string) => {
+    updatePlatform(platformId, { status: "posting", message: `Posting to ${platformId}…` });
     try {
-      const result = await triggerDailyPost(undefined, postPlatforms);
+      const result = await triggerDailyPost(undefined, [platformId]);
       if (result.success) {
-        toast.success(result.message);
+        updatePlatform(platformId, { status: "success", message: result.message || "Posted successfully" });
       } else {
-        toast.error(result.message);
+        updatePlatform(platformId, { status: "failed", message: result.message || "Post failed" });
       }
-      setPreview(null);
-      onOpenChange(false);
-      onPosted?.();
     } catch (err: any) {
-      toast.error(err.message || "Post failed");
-    } finally {
-      setPosting(false);
+      updatePlatform(platformId, { status: "failed", message: err?.message || "Post failed" });
     }
+  };
+
+  const handlePostToPlatforms = async () => {
+    if (postablePlatforms.length === 0) return;
+    setPosting(true);
+    setPhase("posting");
+    // Run sequentially so users see clear per-platform progress
+    for (const id of postablePlatforms) {
+      await postSinglePlatform(id);
+    }
+    setPhase("complete");
+    setPosting(false);
+    onPosted?.();
+  };
+
+  const handleRetry = async (platformId: string) => {
+    setPosting(true);
+    if (phase === "complete") setPhase("posting");
+    await postSinglePlatform(platformId);
+    // After retry, return to complete phase if no other rows are still posting
+    setPhase("complete");
+    setPosting(false);
+    onPosted?.();
   };
 
   const handleDownload = async () => {
@@ -134,11 +206,12 @@ export function VideoPreviewDialog({ open, onOpenChange, onUploaded, postPlatfor
       setPreview(null);
       setIsEditingCaption(false);
       setAutoGenerateTriggered(false);
+      setPlatformStates([]);
+      setPhase("validating");
       onOpenChange(false);
     }
   };
 
-  const isPostFlow = postPlatforms && postPlatforms.length > 0;
   const isBusy = generating || uploading || posting;
 
   return (
@@ -208,120 +281,125 @@ export function VideoPreviewDialog({ open, onOpenChange, onUploaded, postPlatfor
                   <Badge variant="secondary" className="text-xs">
                     {preview.weather.condition}
                   </Badge>
-                  {isPostFlow && (
-                    <Badge variant="outline" className="text-xs">
-                      → {postPlatforms.join(", ")}
-                    </Badge>
+                </div>
+              )}
+
+              {/* Per-platform validation / progress / results */}
+              {isPostFlow && platformStates.length > 0 && (
+                <PostProgressPanel
+                  platforms={platformStates}
+                  phase={phase}
+                  onRetry={phase === "complete" || phase === "posting" ? handleRetry : undefined}
+                />
+              )}
+
+              {/* Caption section - hidden during post run/results to keep focus on status */}
+              {!(isPostFlow && (phase === "posting" || phase === "complete")) && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-medium text-foreground">Caption</Label>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsEditingCaption(!isEditingCaption)}
+                      className="gap-1.5 text-xs h-7 px-2"
+                    >
+                      {isEditingCaption ? (
+                        <><Eye size={12} /> Preview</>
+                      ) : (
+                        <><Pencil size={12} /> Edit</>
+                      )}
+                    </Button>
+                  </div>
+
+                  {isEditingCaption ? (
+                    <Textarea
+                      value={editedCaption}
+                      onChange={(e) => setEditedCaption(e.target.value)}
+                      className="min-h-[120px] text-sm bg-secondary/30 border-border/30 resize-y"
+                      placeholder="Enter caption for your post..."
+                    />
+                  ) : (
+                    <div className="rounded-lg bg-secondary/30 border border-border/20 p-3 max-h-[150px] overflow-y-auto">
+                      <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
+                        {editedCaption || "No caption generated"}
+                      </p>
+                    </div>
                   )}
                 </div>
               )}
-
-              {/* YouTube warning when only image is available */}
-              {isPostFlow && preview.content_type === "image" && postPlatforms.some(p => p === "youtube") && (
-                <div className="flex items-start gap-2 rounded-lg bg-destructive/10 border border-destructive/20 p-3">
-                  <AlertTriangle size={16} className="text-destructive shrink-0 mt-0.5" />
-                  <div className="text-xs text-destructive">
-                    <p className="font-medium">YouTube requires video content</p>
-                    <p className="mt-0.5 text-destructive/80">
-                      Video generation is unavailable (credits depleted). YouTube will be skipped — other platforms will receive the image post.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Caption section */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm font-medium text-foreground">Caption</Label>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setIsEditingCaption(!isEditingCaption)}
-                    className="gap-1.5 text-xs h-7 px-2"
-                  >
-                    {isEditingCaption ? (
-                      <><Eye size={12} /> Preview</>
-                    ) : (
-                      <><Pencil size={12} /> Edit</>
-                    )}
-                  </Button>
-                </div>
-
-                {isEditingCaption ? (
-                  <Textarea
-                    value={editedCaption}
-                    onChange={(e) => setEditedCaption(e.target.value)}
-                    className="min-h-[120px] text-sm bg-secondary/30 border-border/30 resize-y"
-                    placeholder="Enter caption for your post..."
-                  />
-                ) : (
-                  <div className="rounded-lg bg-secondary/30 border border-border/20 p-3 max-h-[150px] overflow-y-auto">
-                    <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
-                      {editedCaption || "No caption generated"}
-                    </p>
-                  </div>
-                )}
-              </div>
             </>
           )}
         </div>
 
         {(preview?.video_url || preview?.image_url) && (
-          <DialogFooter className="flex-row gap-2 sm:gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleGenerate}
-              disabled={isBusy}
-              className="gap-1.5 text-xs"
-            >
-              <RefreshCw size={14} /> Re-render
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleDownload}
-              disabled={isBusy}
-              className="gap-1.5 text-xs"
-            >
-              <Download size={14} /> Download
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleClose}
-              disabled={isBusy}
-              className="gap-1.5 text-xs"
-            >
-              <X size={14} /> Discard
-            </Button>
-            {isPostFlow ? (
+          <DialogFooter className="flex-row gap-2 sm:gap-2 flex-wrap">
+            {/* During posting/complete in post flow, show only Close (and Retry is per-row) */}
+            {isPostFlow && (phase === "posting" || phase === "complete") ? (
               <Button
+                variant="outline"
                 size="sm"
-                onClick={handlePostToPlatforms}
-                disabled={isBusy}
-                className="gap-1.5 text-xs"
+                onClick={handleClose}
+                disabled={posting}
+                className="gap-1.5 text-xs ml-auto"
               >
-                {posting ? (
-                  <><Loader2 size={14} className="animate-spin" /> Posting…</>
-                ) : (
-                  <><Send size={14} /> Post to {postPlatforms.join(", ")}</>
-                )}
+                <X size={14} /> Close
               </Button>
-            ) : preview?.content_type !== "image" ? (
-              <Button
-                size="sm"
-                onClick={handleUpload}
-                disabled={uploading}
-                className="gap-1.5 text-xs"
-              >
-                {uploading ? (
-                  <><Loader2 size={14} className="animate-spin" /> Uploading…</>
-                ) : (
-                  <><Upload size={14} /> Upload to YouTube</>
-                )}
-              </Button>
-            ) : null}
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGenerate}
+                  disabled={isBusy}
+                  className="gap-1.5 text-xs"
+                >
+                  <RefreshCw size={14} /> Re-render
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDownload}
+                  disabled={isBusy}
+                  className="gap-1.5 text-xs"
+                >
+                  <Download size={14} /> Download
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleClose}
+                  disabled={isBusy}
+                  className="gap-1.5 text-xs"
+                >
+                  <X size={14} /> Discard
+                </Button>
+                {isPostFlow ? (
+                  <Button
+                    size="sm"
+                    onClick={handlePostToPlatforms}
+                    disabled={isBusy || blockingError || postablePlatforms.length === 0}
+                    title={blockingError ? "Resolve connection errors before posting" : undefined}
+                    className="gap-1.5 text-xs"
+                  >
+                    <Send size={14} /> Post ({postablePlatforms.length})
+                  </Button>
+                ) : preview?.content_type !== "image" ? (
+                  <Button
+                    size="sm"
+                    onClick={handleUpload}
+                    disabled={uploading}
+                    className="gap-1.5 text-xs"
+                  >
+                    {uploading ? (
+                      <><Loader2 size={14} className="animate-spin" /> Uploading…</>
+                    ) : (
+                      <><Upload size={14} /> Upload to YouTube</>
+                    )}
+                  </Button>
+                ) : null}
+              </>
+            )}
           </DialogFooter>
         )}
       </DialogContent>
