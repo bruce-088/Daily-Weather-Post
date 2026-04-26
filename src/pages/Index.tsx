@@ -274,23 +274,28 @@ const Index = () => {
   }, [fetchWeather, settings.location, settings.state]);
 
   const handleSave = useCallback(async () => {
+    if (saving) return; // double-click guard
     setSaving(true);
     const ok = await saveSettings(settings);
     setSaving(false);
     if (ok) {
-      toast.success("Settings saved", { description: "Your automation preferences are live." });
+      toast.success("✅ Settings saved", { description: "Your automation preferences are live." });
     } else {
-      toast.error("Couldn't save settings", { description: "Check your connection and try again." });
+      toast.error("❌ Couldn't save settings", {
+        description: "Check your connection and try again.",
+        action: { label: "Retry", onClick: () => handleSave() },
+      });
     }
-  }, [settings]);
+  }, [settings, saving]);
 
   const handlePostNow = useCallback(async () => {
+    if (posting) return; // duplicate-request guard
     const platformNames = selectedPlatforms.length > 0
       ? selectedPlatforms
       : availablePlatforms.map((p) => p.id);
     setPostFlowPlatforms(platformNames);
     setPreviewOpen(true);
-  }, [selectedPlatforms, availablePlatforms]);
+  }, [selectedPlatforms, availablePlatforms, posting]);
 
   const handleExport = useCallback(async () => {
     if (!cardRef.current) return;
@@ -300,24 +305,31 @@ const Index = () => {
       link.download = `weather-${aspectRatio === "1:1" ? "square" : "story"}-${Date.now()}.png`;
       link.href = dataUrl;
       link.click();
-      toast.success("Image exported successfully!");
+      toast.success("✅ Image exported successfully");
     } catch {
-      toast.error("Export failed. Please try again.");
+      toast.error("❌ Export failed", {
+        description: "Couldn't render the card to PNG. Try again.",
+        action: { label: "Retry", onClick: () => handleExport() },
+      });
     }
   }, [aspectRatio]);
 
   const handleGenerateCaption = useCallback(async (variation = false) => {
+    if (captionLoading) return; // duplicate-request guard
     setCaptionLoading(true);
     try {
       const result = await generateCaption(weather, { style: cardStyle, variation });
       setCaption(result);
-      toast.success(variation ? "✨ New variation ready!" : "Caption generated!");
+      toast.success(variation ? "✨ New variation ready" : "✅ Caption generated");
     } catch (err: any) {
-      toast.error(err.message || "Failed to generate caption");
+      toast.error("❌ Caption generation failed", {
+        description: err?.message || "The AI couldn't generate a caption right now.",
+        action: { label: "Retry", onClick: () => handleGenerateCaption(variation) },
+      });
     } finally {
       setCaptionLoading(false);
     }
-  }, [weather, cardStyle]);
+  }, [weather, cardStyle, captionLoading]);
 
   return (
     <div className="dark min-h-screen bg-transparent">
