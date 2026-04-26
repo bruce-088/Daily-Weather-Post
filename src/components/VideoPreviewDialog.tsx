@@ -42,10 +42,13 @@ export function VideoPreviewDialog({
   platformLabels,
   onPosted,
   style = "standard",
+  voice,
 }: VideoPreviewDialogProps) {
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [generating, setGenerating] = useState(false);
-  const [genStage, setGenStage] = useState<"idle" | "video" | "image">("idle");
+  const [genStage, setGenStage] = useState<"idle" | "video" | "image" | "voice">("idle");
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [audioPlaying, setAudioPlaying] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [editedCaption, setEditedCaption] = useState("");
   const [isEditingCaption, setIsEditingCaption] = useState(false);
