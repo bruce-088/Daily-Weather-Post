@@ -252,17 +252,26 @@ export function VideoPreviewDialog({
                   ? "Generate a preview to review before posting."
                   : "Generate a preview video to review before uploading to YouTube."}
               </p>
-              <Button onClick={handleGenerate} className="gap-2">
+              <Button onClick={() => handleGenerate(false)} className="gap-2">
                 <Play size={16} /> Generate Preview
               </Button>
             </div>
           )}
 
-          {/* Loading state */}
+          {/* Loading state with stage-aware status */}
           {generating && (
             <div className="flex flex-col items-center gap-3 py-12">
               <Loader2 size={32} className="animate-spin text-primary" />
-              <p className="text-sm text-muted-foreground">Generating preview… this may take 30-60 seconds</p>
+              <p className="text-sm font-medium text-foreground">
+                {genStage === "image"
+                  ? "🖼️ Generating AI weather image via Gemini…"
+                  : "🎥 Creating high-quality video via Creatomate…"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {genStage === "image"
+                  ? "Video render didn't make it — falling back to a designed image."
+                  : "This usually takes 30–60 seconds. We'll fall back to an AI image if needed."}
+              </p>
             </div>
           )}
 
