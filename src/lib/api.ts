@@ -106,10 +106,21 @@ export async function setSkipToday(
   return !error;
 }
 
-export async function triggerDailyPost(timePeriod?: string, platforms?: string[]): Promise<{ success: boolean; message: string }> {
+export interface VoiceOptions {
+  enabled: boolean;
+  voiceId?: string;             // "female" | "male" | raw ElevenLabs id
+  tone?: "conversational" | "energetic" | "news";
+}
+
+export async function triggerDailyPost(
+  timePeriod?: string,
+  platforms?: string[],
+  voice?: VoiceOptions,
+): Promise<{ success: boolean; message: string }> {
   const body: Record<string, any> = {};
   if (timePeriod) body.time_period = timePeriod;
   if (platforms && platforms.length > 0) body.platforms = platforms;
+  if (voice?.enabled) body.voice = voice;
 
   const { data, error } = await supabase.functions.invoke("daily-weather-post", {
     body: Object.keys(body).length > 0 ? body : undefined,
@@ -130,15 +141,28 @@ export interface PreviewResult {
   content_type?: "video" | "image";
   video_url?: string;
   image_url?: string;
+  audio_url?: string;
+  voice_script?: string | null;
   storage_path?: string;
   weather?: any;
   caption?: string | null;
   error?: string;
 }
 
-export async function generatePreview(opts?: { style?: string; variation?: boolean }): Promise<PreviewResult> {
+export async function generatePreview(opts?: {
+  style?: string;
+  variation?: boolean;
+  voice?: VoiceOptions;
+}): Promise<PreviewResult> {
+  const body: Record<string, any> = {
+    mode: "preview",
+    style: opts?.style ?? "standard",
+    variation: !!opts?.variation,
+  };
+  if (opts?.voice?.enabled) body.voice = opts.voice;
+
   const { data, error } = await supabase.functions.invoke("daily-weather-post", {
-    body: { mode: "preview", style: opts?.style ?? "standard", variation: !!opts?.variation },
+    body,
   });
 
   if (error) {
