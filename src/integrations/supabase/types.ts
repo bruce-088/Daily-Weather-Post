@@ -122,6 +122,30 @@ export type Database = {
         }
         Relationships: []
       }
+      system_health: {
+        Row: {
+          id: string
+          last_message: string | null
+          last_run_at: string
+          last_status: string | null
+          updated_at: string
+        }
+        Insert: {
+          id: string
+          last_message?: string | null
+          last_run_at?: string
+          last_status?: string | null
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          last_message?: string | null
+          last_run_at?: string
+          last_status?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       weather_settings: {
         Row: {
           afternoon_platforms: Json
