@@ -404,7 +404,37 @@ const Index = () => {
                 <Zap size={10} /> Auto 3x/day
               </Badge>
             )}
-            <Button size="sm" variant="ghost" onClick={() => navigate("/export-spec")} className="gap-1.5 text-xs text-muted-foreground">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={async () => {
+                const t = toast.loading("Generating live spec…");
+                try {
+                  const url = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/generate-spec`;
+                  const { data: { session } } = await supabase.auth.getSession();
+                  const res = await fetch(url, {
+                    headers: {
+                      apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+                      Authorization: `Bearer ${session?.access_token ?? import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+                    },
+                  });
+                  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                  const blob = await res.blob();
+                  const a = document.createElement("a");
+                  const objectUrl = URL.createObjectURL(blob);
+                  a.href = objectUrl;
+                  a.download = `SkyBrief-Spec-${new Date().toISOString().slice(0, 10)}.md`;
+                  document.body.appendChild(a);
+                  a.click();
+                  a.remove();
+                  URL.revokeObjectURL(objectUrl);
+                  toast.success("Spec downloaded", { id: t });
+                } catch (err) {
+                  toast.error(`Failed: ${(err as Error).message}`, { id: t });
+                }
+              }}
+              className="gap-1.5 text-xs text-foreground/80 hover:text-foreground"
+            >
               <FileDown size={14} /> Export Spec
             </Button>
             <Button size="sm" variant="ghost" onClick={signOut} className="gap-1.5 text-xs text-muted-foreground">
