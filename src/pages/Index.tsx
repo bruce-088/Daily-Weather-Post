@@ -508,6 +508,57 @@ const Index = () => {
                       />
                     )}
                   </div>
+
+                  {/* AI Voiceover card */}
+                  <div className="rounded-xl border border-white/10 bg-white/5 backdrop-blur-xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                        <Mic size={14} className="text-primary" /> 🎙️ AI Voiceover
+                      </h3>
+                      <Switch
+                        checked={voiceEnabled}
+                        onCheckedChange={setVoiceEnabled}
+                        aria-label="Toggle AI voiceover"
+                      />
+                    </div>
+                    {voiceEnabled && (
+                      <div className="space-y-2 pt-1">
+                        <div>
+                          <label className="text-[11px] text-muted-foreground mb-1 block">Voice</label>
+                          <Select value={voiceId} onValueChange={(v) => setVoiceId(v as "female" | "male")}>
+                            <SelectTrigger className="h-8 text-xs bg-secondary/40 border-border/30">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="female">Female (default)</SelectItem>
+                              <SelectItem value="male">Male</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <label className="text-[11px] text-muted-foreground mb-1 block">Tone</label>
+                          <Select
+                            value={voiceTone}
+                            onValueChange={(v) =>
+                              setVoiceTone(v as "conversational" | "energetic" | "news")
+                            }
+                          >
+                            <SelectTrigger className="h-8 text-xs bg-secondary/40 border-border/30">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="conversational">Conversational</SelectItem>
+                              <SelectItem value="energetic">Energetic</SelectItem>
+                              <SelectItem value="news">News-style</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground leading-snug">
+                          Voice is generated from a fresh spoken script (not the caption) and mixed into the video.
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </aside>
 
                 {/* CENTER: WeatherCard stage */}
