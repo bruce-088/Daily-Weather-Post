@@ -230,13 +230,13 @@ export function PostHistoryList({ posts, loading, onReuse, onChanged }: PostHist
                           {post.condition && (
                             <span className="text-xs text-muted-foreground">· {post.condition}</span>
                           )}
-                          {brand && (
+                          {brand && PIcon && (
                             <span
                               className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium"
                               style={{ backgroundColor: brand.bg, color: brand.color }}
                               title={brand.label}
                             >
-                              <PIcon! size={10} />
+                              <PIcon size={10} />
                               {brand.label}
                             </span>
                           )}
