@@ -12,11 +12,29 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Initialize client + heartbeat OUTSIDE the main try so heartbeat always runs first.
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+  const supabase = createClient(supabaseUrl, supabaseKey);
+
+  // ── HEARTBEAT (very first thing): record that the scheduler is alive ──
+  // This runs even if downstream logic crashes, so System Health reflects
+  // actual cron invocations, not just slot-matching post creations.
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    await supabase.from("system_health").upsert({
+      id: "auto-post-scheduler",
+      last_run_at: new Date().toISOString(),
+      last_status: "running",
+      last_message: "tick started",
+      updated_at: new Date().toISOString(),
+    });
+    console.log("[scheduler] ❤️  heartbeat recorded");
+  } catch (hbErr) {
+    console.error("[scheduler] heartbeat write failed:", hbErr);
+  }
+
+  try {
 
     // Get all weather settings with auto-post enabled
     const { data: allSettings, error } = await supabase
