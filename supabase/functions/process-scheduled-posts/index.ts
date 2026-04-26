@@ -897,8 +897,13 @@ Deno.serve(async (req) => {
       try {
         const weather = await fetchWeatherData(post.city, openWeatherApiKey);
 
-        // Use pre-written caption if available, otherwise auto-generate
-        let caption: string | null = post.caption || null;
+        // Use pre-written caption if available, otherwise auto-generate.
+        // Auto-post rows from auto-post-scheduler use a marker like "[auto:morning]"
+        // as the caption (for duplicate detection). Treat those as empty so we
+        // generate a real AI caption here.
+        const rawCaption: string | null = post.caption || null;
+        const isAutoMarker = !!rawCaption && /^\s*\[auto:[a-z]+\]\s*$/i.test(rawCaption);
+        let caption: string | null = isAutoMarker ? null : rawCaption;
         if (!caption) {
           const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
           if (LOVABLE_API_KEY) {
