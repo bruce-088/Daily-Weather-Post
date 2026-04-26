@@ -491,71 +491,60 @@ export function SettingsPanel({
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Morning */}
-          <div className="p-3 rounded-lg bg-secondary/30 border border-border/30 space-y-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-sm flex items-center gap-2">
-                <Sun size={14} className="text-amber-400" /> Morning
-              </Label>
-              <Switch
-                checked={settings.autoPostMorning}
-                onCheckedChange={(v) => update("autoPostMorning", v)}
-              />
-            </div>
-            <Input
-              type="time"
-              value={settings.morningPostTime}
-              onChange={(e) => update("morningPostTime", e.target.value)}
-              className="bg-secondary/50 border-border/30"
-              disabled={!settings.autoPostMorning}
-            />
-            <p className="text-[10px] text-muted-foreground">Times are in your local timezone</p>
-            {renderPlatformPicker("morningPlatforms", settings.autoPostMorning)}
-          </div>
+          {slotConfig.map((slot) => {
+            const Icon = slot.key === "morning" ? Sun : slot.key === "afternoon" ? Sunset : Moon;
+            const iconColor =
+              slot.key === "morning" ? "text-amber-400" : slot.key === "afternoon" ? "text-orange-400" : "text-blue-400";
+            const timeKey =
+              slot.key === "morning" ? "morningPostTime" : slot.key === "afternoon" ? "afternoonPostTime" : "eveningPostTime";
+            const enabledKey =
+              slot.key === "morning" ? "autoPostMorning" : slot.key === "afternoon" ? "autoPostAfternoon" : "autoPostEvening";
+            const platformsKey =
+              slot.key === "morning" ? "morningPlatforms" : slot.key === "afternoon" ? "afternoonPlatforms" : "eveningPlatforms";
+            const isSkippedToday = slot.skipDate === todayLocal;
 
-          {/* Afternoon */}
-          <div className="p-3 rounded-lg bg-secondary/30 border border-border/30 space-y-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-sm flex items-center gap-2">
-                <Sunset size={14} className="text-orange-400" /> Afternoon
-              </Label>
-              <Switch
-                checked={settings.autoPostAfternoon}
-                onCheckedChange={(v) => update("autoPostAfternoon", v)}
-              />
-            </div>
-            <Input
-              type="time"
-              value={settings.afternoonPostTime}
-              onChange={(e) => update("afternoonPostTime", e.target.value)}
-              className="bg-secondary/50 border-border/30"
-              disabled={!settings.autoPostAfternoon}
-            />
-            <p className="text-[10px] text-muted-foreground">Times are in your local timezone</p>
-            {renderPlatformPicker("afternoonPlatforms", settings.autoPostAfternoon)}
-          </div>
-
-          {/* Evening */}
-          <div className="p-3 rounded-lg bg-secondary/30 border border-border/30 space-y-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-sm flex items-center gap-2">
-                <Moon size={14} className="text-blue-400" /> Evening
-              </Label>
-              <Switch
-                checked={settings.autoPostEvening}
-                onCheckedChange={(v) => update("autoPostEvening", v)}
-              />
-            </div>
-            <Input
-              type="time"
-              value={settings.eveningPostTime}
-              onChange={(e) => update("eveningPostTime", e.target.value)}
-              className="bg-secondary/50 border-border/30"
-              disabled={!settings.autoPostEvening}
-            />
-            <p className="text-[10px] text-muted-foreground">Times are in your local timezone</p>
-            {renderPlatformPicker("eveningPlatforms", settings.autoPostEvening)}
-          </div>
+            return (
+              <div key={slot.key} className="p-3 rounded-lg bg-secondary/30 border border-border/30 space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm flex items-center gap-2">
+                    <Icon size={14} className={iconColor} /> {slot.label}
+                    {isSkippedToday && (
+                      <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-400 px-1.5 py-0 h-4">
+                        Skipped today
+                      </Badge>
+                    )}
+                  </Label>
+                  <Switch
+                    checked={slot.enabled}
+                    onCheckedChange={(v) => update(enabledKey as keyof AutomationSettings, v)}
+                  />
+                </div>
+                <Input
+                  type="time"
+                  value={slot.time}
+                  onChange={(e) => update(timeKey as keyof AutomationSettings, e.target.value)}
+                  className="bg-secondary/50 border-border/30"
+                  disabled={!slot.enabled}
+                />
+                <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                  <Lightbulb size={10} className="text-amber-400" />
+                  Suggested: {slot.suggestion}
+                </p>
+                {renderPlatformPicker(platformsKey as any, slot.enabled)}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={isSkippedToday ? "secondary" : "outline"}
+                  onClick={() => handleSkipToday(slot.key, isSkippedToday)}
+                  disabled={!slot.enabled}
+                  className="w-full gap-1.5 h-7 text-xs"
+                >
+                  <SkipForward size={12} />
+                  {isSkippedToday ? "Restore today's post" : "Skip today"}
+                </Button>
+              </div>
+            );
+          })}
         </CardContent>
       </Card>
       )}
