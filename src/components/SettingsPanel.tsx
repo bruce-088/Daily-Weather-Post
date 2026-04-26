@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -24,6 +24,46 @@ const TIMEZONE_OPTIONS = [
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { AutomationSettings } from "@/types/weather";
+
+/**
+ * Live indicator that shows when the next auto-post cron tick will run.
+ * The auto-post-scheduler runs every 5 minutes (at :00, :05, :10, …),
+ * so we round up to the next multiple of 5 from the current minute.
+ */
+function NextCronCheckIndicator() {
+  const [now, setNow] = useState<Date>(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 15_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const minutes = now.getMinutes();
+  const seconds = now.getSeconds();
+  const minutesPastSlot = minutes % 5;
+  // Whole minutes remaining until the next 5-min cron mark
+  let minutesRemaining = 5 - minutesPastSlot;
+  // If we're more than halfway through the current minute, the "remaining"
+  // minute is essentially this one — keep the integer count honest.
+  if (seconds >= 30) minutesRemaining -= 1;
+  if (minutesRemaining < 0) minutesRemaining = 0;
+
+  const label =
+    minutesRemaining <= 0
+      ? "any moment now"
+      : minutesRemaining === 1
+        ? "1 minute"
+        : `${minutesRemaining} minutes`;
+
+  return (
+    <span className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-2 py-0.5 text-[10px] font-medium text-primary align-middle">
+      <span className="relative inline-flex h-1.5 w-1.5">
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60" />
+        <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary" />
+      </span>
+      Next auto-post check in: {label}
+    </span>
+  );
+}
 
 interface SettingsPanelProps {
   settings: AutomationSettings;
@@ -522,6 +562,8 @@ export function SettingsPanel({
           <CardDescription className="text-xs">
             Schedule 3 daily posts — morning, afternoon, evening. Times are in your local timezone:{" "}
             <span className="font-medium text-foreground">{settings.timezone || "UTC"}</span>
+            <br />
+            <NextCronCheckIndicator />
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

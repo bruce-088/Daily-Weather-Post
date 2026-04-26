@@ -20,6 +20,7 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronUp,
+  Bot,
 } from "lucide-react";
 import type { PostHistoryItem } from "@/lib/api";
 import { triggerDailyPost } from "@/lib/api";
@@ -178,6 +179,10 @@ export function PostHistoryList({ posts, loading, onReuse, onChanged }: PostHist
               const StatusIcon = status.icon;
               const isErrorOpen = expandedError === post.id;
               const isFailed = post.status === "failed";
+              const isAutomated = !!post.error_message && /^\[AUTO\]\s*/i.test(post.error_message);
+              const displayedErrorMessage = isAutomated
+                ? post.error_message!.replace(/^\[AUTO\]\s*/i, "")
+                : post.error_message;
 
               return (
                 <Card
@@ -240,6 +245,15 @@ export function PostHistoryList({ posts, loading, onReuse, onChanged }: PostHist
                               {brand.label}
                             </span>
                           )}
+                          {isAutomated && (
+                            <span
+                              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium bg-primary/15 text-primary border border-primary/30"
+                              title="Posted automatically by your scheduled automation"
+                            >
+                              <Bot size={10} />
+                              🤖 Automated
+                            </span>
+                          )}
                         </div>
                         {post.caption && (
                           <p className="text-xs text-muted-foreground line-clamp-2 mt-1 italic">
@@ -256,9 +270,9 @@ export function PostHistoryList({ posts, loading, onReuse, onChanged }: PostHist
                             {isErrorOpen ? "Hide error" : "View error"}
                           </button>
                         )}
-                        {isErrorOpen && post.error_message && (
+                        {isErrorOpen && displayedErrorMessage && (
                           <p className="mt-1 text-[11px] text-destructive bg-destructive/10 border border-destructive/20 rounded-md px-2 py-1.5 whitespace-pre-wrap">
-                            {post.error_message}
+                            {displayedErrorMessage}
                           </p>
                         )}
 

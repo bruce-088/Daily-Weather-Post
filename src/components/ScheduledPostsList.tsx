@@ -95,7 +95,12 @@ function PostRow({ post, onRefresh, onCancelRequest }: PostRowProps) {
   const stage = deriveStage(post.status, post.scheduled_at);
   const isPending = post.status === "pending";
   const isFailed = post.status === "failed";
-  const { label: countdownLabel, isPast } = useCountdown(post.scheduled_at);
+  const isProcessing = post.status === "processing";
+  const { label: countdownLabel, isPast, diffMs } = useCountdown(post.scheduled_at);
+  // Cron runs every 5 min and the scheduler matches within a 10-min window — anything
+  // overdue by less than 10 min is expected behaviour, not an error. Show subtle amber.
+  const overdueMinutes = isPast ? Math.floor(Math.abs(diffMs) / 60_000) : 0;
+  const isMildlyOverdue = isPast && overdueMinutes < 10;
 
   const togglePlatform = (value: string) => {
     setEditPlatforms((prev) =>
@@ -207,12 +212,34 @@ function PostRow({ post, onRefresh, onCancelRequest }: PostRowProps) {
                   variant="outline"
                   className={`text-[10px] tabular-nums leading-none px-2 py-0.5 ${
                     isPast
-                      ? "bg-amber-500/10 text-amber-500 border-amber-500/30"
+                      ? isMildlyOverdue
+                        ? "bg-amber-500/5 text-amber-500/80 border-amber-500/20"
+                        : "bg-destructive/10 text-destructive border-destructive/30"
                       : "bg-primary/10 text-primary border-primary/30"
                   }`}
+                  title={
+                    isMildlyOverdue
+                      ? "Within the 10-min cron window — will run on the next check"
+                      : undefined
+                  }
                 >
                   {countdownLabel}
                 </Badge>
+              )}
+              {isProcessing && (
+                <div className="flex items-center gap-2 min-w-[200px]">
+                  <span className="text-[10px] font-medium text-primary whitespace-nowrap">
+                    🎬 Rendering Video & Voiceover...
+                  </span>
+                  <div
+                    className="relative flex-1 h-1.5 rounded-full overflow-hidden bg-primary/10 animate-shimmer"
+                    style={{
+                      backgroundImage:
+                        "linear-gradient(90deg, hsl(var(--primary) / 0.1) 0%, hsl(var(--primary) / 0.7) 50%, hsl(var(--primary) / 0.1) 100%)",
+                      backgroundSize: "200% 100%",
+                    }}
+                  />
+                </div>
               )}
             </div>
             {post.error_message && !expanded && (

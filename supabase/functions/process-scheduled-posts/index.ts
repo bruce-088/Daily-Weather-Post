@@ -1195,6 +1195,12 @@ Deno.serve(async (req) => {
           errorMessage = "Weather data fetched and caption generated successfully";
         }
 
+        // Tag auto-posts so the History UI can show an "Automated" badge.
+        // Detected via the [auto:slot] marker the scheduler placed in scheduled_posts.caption.
+        if (isAutoMarker) {
+          errorMessage = `[AUTO] ${errorMessage}`;
+        }
+
         // post_history.status CHECK constraint only allows: success | failed | pending
         // Map our internal "posted" → "success" so the insert isn't silently rejected.
         const historyStatus = postStatus === "posted" ? "success" : postStatus;
