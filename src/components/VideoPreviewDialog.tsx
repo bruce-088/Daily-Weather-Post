@@ -99,22 +99,37 @@ export function VideoPreviewDialog({
     [platformStates],
   );
 
-  const handleGenerate = async () => {
+  const handleGenerate = async (variation = false) => {
     setGenerating(true);
+    setGenStage("video");
     setPreview(null);
     setIsEditingCaption(false);
+
+    // After ~25s, if still generating, switch label to image-fallback hint.
+    // The edge function tries video first via Creatomate; if that fails it
+    // falls back to AI-generated image — we surface that visually.
+    const stageTimer = setTimeout(() => setGenStage("image"), 25000);
+
     try {
-      const result = await generatePreview();
+      const result = await generatePreview({ style, variation });
       if (result.success && (result.video_url || result.image_url)) {
         setPreview(result);
-        toast.success(result.content_type === "image" ? "Preview image generated!" : "Preview video generated!");
+        if (variation) {
+          toast.success("✨ New variation ready!");
+        } else {
+          toast.success(
+            result.content_type === "image" ? "Preview image generated!" : "Preview video generated!"
+          );
+        }
       } else {
         toast.error(result.error || "Failed to generate preview");
       }
     } catch (err: any) {
       toast.error(err.message || "Failed to generate preview");
     } finally {
+      clearTimeout(stageTimer);
       setGenerating(false);
+      setGenStage("idle");
     }
   };
 
