@@ -1001,7 +1001,19 @@ Deno.serve(async (req) => {
             model: "google/gemini-3-flash-preview",
             messages: [
               { role: "system", content: SKYBRIEF_SYSTEM_PROMPT },
-              { role: "user", content: buildSkyBriefUserPrompt(weather, timePeriod) },
+              {
+                role: "user",
+                content:
+                  buildSkyBriefUserPrompt(weather, timePeriod) +
+                  (style === "minimal"
+                    ? "\n\nSTYLE: MINIMAL. Strip back. Shorter lines, no emojis."
+                    : style === "cinematic"
+                    ? "\n\nSTYLE: CINEMATIC. Slightly more dramatic, evocative opening line."
+                    : "") +
+                  (variation
+                    ? "\n\nVARIATION REQUEST: Pick a noticeably different creative angle (witty, dramatic, conversational, or poetic). Vary opening line and rhythm."
+                    : ""),
+              },
             ],
           }),
         });
