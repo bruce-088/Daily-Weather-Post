@@ -33,6 +33,9 @@ export async function loadSettings(): Promise<{ settings: AutomationSettings; ti
       eveningSkipDate: (data as any).evening_skip_date || null,
       enableVoiceover: (data as any).enable_voiceover ?? false,
       voiceoverVoiceId: (data as any).voiceover_voice_id || "female",
+      voiceoverSpeed: Number((data as any).voiceover_speed ?? 1.0),
+      voiceoverStability: Number((data as any).voiceover_stability ?? 0.55),
+      voiceoverSimilarity: Number((data as any).voiceover_similarity ?? 0.78),
     },
     tiktokConnected: !!(data as any).tiktok_access_token,
     youtubeConnected: !!(data as any).youtube_access_token,
@@ -74,6 +77,9 @@ export async function saveSettings(settings: AutomationSettings): Promise<boolea
     evening_skip_date: settings.eveningSkipDate ?? null,
     enable_voiceover: settings.enableVoiceover ?? false,
     voiceover_voice_id: settings.voiceoverVoiceId || "female",
+    voiceover_speed: typeof settings.voiceoverSpeed === "number" ? settings.voiceoverSpeed : 1.0,
+    voiceover_stability: typeof settings.voiceoverStability === "number" ? settings.voiceoverStability : 0.55,
+    voiceover_similarity: typeof settings.voiceoverSimilarity === "number" ? settings.voiceoverSimilarity : 0.78,
     user_id: user.id,
   };
 
