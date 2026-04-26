@@ -60,5 +60,8 @@ export interface AutomationSettings {
   eveningSkipDate?: string | null;
   // AI voiceover preferences applied to auto-posts on video-capable platforms
   enableVoiceover: boolean;
-  voiceoverVoiceId: string; // "female" | "male" | raw ElevenLabs id
+  voiceoverVoiceId: string; // "female" | "male" | "anchor" | "cheerful" | "calm" | "deep" | raw ElevenLabs id
+  voiceoverSpeed: number;       // 0.7–1.2 (default 1.0)
+  voiceoverStability: number;   // 0–1 (default 0.55) — lower = more expressive
+  voiceoverSimilarity: number;  // 0–1 (default 0.78) — higher = closer to original voice
 }
