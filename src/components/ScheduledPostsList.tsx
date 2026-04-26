@@ -366,10 +366,19 @@ function PostRow({ post, onRefresh, onCancelRequest }: PostRowProps) {
       {!editing && expanded && (post.error_message || post.caption) && (
         <div className="border-t border-border/30 bg-secondary/10 p-4 space-y-2 animate-fade-in">
           {post.error_message && (
-            <div>
-              <Label className="text-[11px] text-destructive uppercase tracking-wide">Error</Label>
-              <p className="text-xs text-destructive/90 mt-0.5">{post.error_message}</p>
-            </div>
+            isFailed ? (
+              <div>
+                <Label className="text-[11px] text-destructive uppercase tracking-wide">Error</Label>
+                <p className="text-xs text-destructive/90 mt-0.5">{post.error_message}</p>
+              </div>
+            ) : (
+              <div>
+                <Label className="text-[11px] text-green-500 uppercase tracking-wide">Status</Label>
+                <p className="text-xs text-green-500/90 mt-0.5 flex items-center gap-1">
+                  <CheckCircle2 size={12} /> {post.error_message}
+                </p>
+              </div>
+            )
           )}
           {post.caption && (
             <div>
