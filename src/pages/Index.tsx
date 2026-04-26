@@ -240,18 +240,18 @@ const Index = () => {
     }
   }, [aspectRatio]);
 
-  const handleGenerateCaption = useCallback(async () => {
+  const handleGenerateCaption = useCallback(async (variation = false) => {
     setCaptionLoading(true);
     try {
-      const result = await generateCaption(weather);
+      const result = await generateCaption(weather, { style: cardStyle, variation });
       setCaption(result);
-      toast.success("Caption generated!");
+      toast.success(variation ? "✨ New variation ready!" : "Caption generated!");
     } catch (err: any) {
       toast.error(err.message || "Failed to generate caption");
     } finally {
       setCaptionLoading(false);
     }
-  }, [weather]);
+  }, [weather, cardStyle]);
 
   return (
     <div className="dark min-h-screen bg-transparent">
