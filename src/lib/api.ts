@@ -136,9 +136,9 @@ export interface PreviewResult {
   error?: string;
 }
 
-export async function generatePreview(): Promise<PreviewResult> {
+export async function generatePreview(opts?: { style?: string; variation?: boolean }): Promise<PreviewResult> {
   const { data, error } = await supabase.functions.invoke("daily-weather-post", {
-    body: { mode: "preview" },
+    body: { mode: "preview", style: opts?.style ?? "standard", variation: !!opts?.variation },
   });
 
   if (error) {
