@@ -123,25 +123,31 @@ Deno.serve(async (req) => {
       }).format(now);
 
       for (const period of periods) {
+        console.log(
+          `[scheduler]   ── Checking slot: ${period.name.toUpperCase()} | utc_now=${nowUtcIso} | tz=${userTz} | local_now=${userLocalHm} | target_local=${period.time || "(unset)"} | platforms=[${period.platforms.join(", ") || "none"}]`
+        );
         if (!period.enabled || !period.time) {
-          console.log(`[scheduler]   ${period.name}: skipped (enabled=${period.enabled}, time=${period.time})`);
+          console.log(`[scheduler]   ⏭️  SKIP ${period.name} — reason: disabled or no time (enabled=${period.enabled}, time=${period.time})`);
           continue;
         }
         if (period.skipDate && period.skipDate === todayLocal) {
-          console.log(`[scheduler]   ${period.name}: skipped (skip_date=${period.skipDate} matches today ${todayLocal})`);
+          console.log(`[scheduler]   ⏭️  SKIP ${period.name} — reason: skip_date=${period.skipDate} matches today ${todayLocal}`);
           continue;
         }
         if (!period.platforms.length) {
-          console.log(`[scheduler]   ${period.name}: skipped (no platforms selected for this slot)`);
+          console.log(`[scheduler]   ⏭️  SKIP ${period.name} — reason: no platforms selected for this slot`);
           continue;
         }
         const ev = evaluateTime(period.time, userTz);
         console.log(
-          `[scheduler]   ${period.name}: target_local=${ev.targetLocal} ${userTz}, current_local=${ev.currentLocal}, diff=${ev.diff}min, shouldPost=${ev.shouldPost}, platforms=${period.platforms.join(",")}`
+          `[scheduler]   ${period.name}: target_local=${ev.targetLocal} ${userTz}, current_local=${ev.currentLocal}, diff=${ev.diff}min, shouldPost=${ev.shouldPost}`
         );
-        if (!ev.shouldPost) continue;
+        if (!ev.shouldPost) {
+          console.log(`[scheduler]   ⏭️  SKIP ${period.name} — reason: outside post window (diff=${ev.diff}min, need 0..14)`);
+          continue;
+        }
+        console.log(`[scheduler]   ✅ POST ${period.name} — platforms=[${period.platforms.join(", ")}]`);
 
-        console.log(`[scheduler]   → Triggering ${period.name} post for user ${settings.user_id || "default"} on ${period.platforms.join(",")}`);
 
         try {
           const postUrl = supabaseUrl + "/functions/v1/daily-weather-post";
