@@ -1253,6 +1253,9 @@ Deno.serve(async (req) => {
             storage_path: fileName,
             weather,
             caption,
+            audio_url: voiceUrl,
+            voice_script: voiceScript,
+
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
@@ -1297,6 +1300,9 @@ Deno.serve(async (req) => {
           storage_path: imgFileName,
           weather,
           caption,
+          audio_url: voiceUrl,
+          voice_script: voiceScript,
+
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
