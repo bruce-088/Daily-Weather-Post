@@ -555,11 +555,16 @@ const Index = () => {
                       size="sm"
                       onClick={() => handleGenerateCaption(!!caption)}
                       disabled={captionLoading || !weather}
-                      className="gap-1.5 text-xs w-full"
+                      className="gap-1.5 text-xs w-full transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_20px_-8px_hsl(var(--primary)/0.5)]"
+                      title={caption ? "Try a Variation (⌘/Ctrl + Shift + G)" : "Generate Caption (⌘/Ctrl + Shift + G)"}
                     >
-                      <MessageSquare size={14} />
+                      {captionLoading ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <MessageSquare size={14} />
+                      )}
                       {captionLoading
-                        ? (caption ? "Trying a variation..." : "Generating...")
+                        ? (caption ? "Generating variation…" : "Generating…")
                         : caption
                         ? "Try a Variation"
                         : "Generate Caption"}
@@ -571,6 +576,12 @@ const Index = () => {
                         className="text-sm bg-secondary/30 border-border/30 resize-none whitespace-pre-wrap"
                         rows={9}
                       />
+                    )}
+                    {draftSavedAt && (
+                      <p className="text-[10px] text-muted-foreground/70 italic flex items-center gap-1 pt-0.5">
+                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400/70" />
+                        Draft saved
+                      </p>
                     )}
                   </div>
 
