@@ -146,31 +146,63 @@ Deno.serve(async (req) => {
           console.log(`[scheduler]   ⏭️  SKIP ${period.name} — reason: outside post window (diff=${ev.diff}min, need 0..14)`);
           continue;
         }
-        console.log(`[scheduler]   ✅ POST ${period.name} — platforms=[${period.platforms.join(", ")}]`);
+        console.log(`[scheduler]   ✅ ${period.name.toUpperCase()} slot triggered for user ${settings.user_id || "default"}`);
+        console.log(`[scheduler]   Creating scheduled posts for platforms: [${period.platforms.join(", ")}]`);
 
+        if (!settings.user_id) {
+          console.log(`[scheduler]   ⏭️  SKIP ${period.name} — reason: settings row has no user_id (cannot create scheduled_posts)`);
+          continue;
+        }
 
-        try {
-          const postUrl = supabaseUrl + "/functions/v1/daily-weather-post";
-          const headers: Record<string, string> = {
-            "Content-Type": "application/json",
-            "Authorization": "Bearer " + anonKey,
-          };
+        // Duplicate guard: has any scheduled_posts row been created in the last 30 min
+        // for this user + slot (any platform)? Slot is encoded in caption marker [auto:<slot>].
+        const dupSince = new Date(now.getTime() - 30 * 60 * 1000).toISOString();
+        const slotMarker = `[auto:${period.name}]`;
+        const { data: recentDupes, error: dupErr } = await supabase
+          .from("scheduled_posts")
+          .select("id, created_at, caption")
+          .eq("user_id", settings.user_id)
+          .gte("created_at", dupSince)
+          .ilike("caption", `%${slotMarker}%`)
+          .limit(1);
 
-          const res = await fetch(postUrl, {
-            method: "POST",
-            headers,
-            body: JSON.stringify({ time_period: period.name, platforms: period.platforms }),
-          });
+        if (dupErr) {
+          console.error(`[scheduler]   duplicate check failed for ${period.name}:`, dupErr);
+        } else if (recentDupes && recentDupes.length > 0) {
+          console.log(`[scheduler]   ⏭️  SKIP ${period.name} — reason: duplicate (already created ${recentDupes[0].created_at})`);
+          continue;
+        }
 
-          const resText = await res.text();
-          console.log("Post result for " + period.name + ":", res.status, resText.substring(0, 200));
-          triggered++;
-          results.push(period.name + ": " + res.status);
-        } catch (e) {
-          console.error("Failed to trigger " + period.name + " post:", e);
-          results.push(period.name + ": error");
+        // Schedule slightly in the future to satisfy validate_scheduled_at trigger.
+        const scheduledAt = new Date(now.getTime() + 5_000).toISOString();
+
+        // Insert one scheduled_posts row per platform — process-scheduled-posts will execute them.
+        const rows = period.platforms.map((platform) => ({
+          user_id: settings.user_id,
+          city: settings.city,
+          platform,
+          scheduled_at: scheduledAt,
+          status: "pending",
+          // Marker lets us detect duplicates and trace origin; process-scheduled-posts
+          // will auto-generate the real caption since this is just a tag, not full copy.
+          caption: slotMarker,
+        }));
+
+        const { error: insErr, data: inserted } = await supabase
+          .from("scheduled_posts")
+          .insert(rows)
+          .select("id, platform");
+
+        if (insErr) {
+          console.error(`[scheduler]   ❌ Failed to create scheduled_posts for ${period.name}:`, insErr);
+          results.push(`${period.name}: insert_error`);
+        } else {
+          console.log(`[scheduler]   📝 Created ${inserted?.length ?? 0} scheduled_posts row(s) for ${period.name}: ${(inserted || []).map((r: any) => r.platform).join(", ")}`);
+          triggered += inserted?.length ?? 0;
+          results.push(`${period.name}: queued ${inserted?.length ?? 0}`);
         }
       }
+
 
       // === DAILY SUMMARY (fires once per user when local time is 23:30 - 23:59) ===
       try {
