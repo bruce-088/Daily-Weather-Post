@@ -194,6 +194,17 @@ Deno.serve(async (req) => {
         // Schedule slightly in the future to satisfy validate_scheduled_at trigger.
         const scheduledAt = new Date(now.getTime() + 5_000).toISOString();
 
+        // === AI VOICEOVER FLAG (per-user setting) ===
+        // Only attach voice to video-capable platforms (youtube, tiktok, instagram).
+        // Image-only platforms (twitter, linkedin) get include_voiceover=false even if the user enabled it.
+        // Actual TTS generation happens in process-scheduled-posts so the cron tick stays fast and
+        // a TTS failure cannot block the entire schedule.
+        const voiceoverEnabled = (settings as any).enable_voiceover === true;
+        const VIDEO_PLATFORMS = new Set(["youtube", "tiktok", "instagram"]);
+        if (voiceoverEnabled) {
+          console.log(`[scheduler]   🎙️  voiceover enabled for user ${settings.user_id}; will attach to video platforms only`);
+        }
+
         // Insert one scheduled_posts row per platform — process-scheduled-posts will execute them.
         const rows = period.platforms.map((platform) => ({
           user_id: settings.user_id,
@@ -204,6 +215,7 @@ Deno.serve(async (req) => {
           // Marker lets us detect duplicates and trace origin; process-scheduled-posts
           // will auto-generate the real caption since this is just a tag, not full copy.
           caption: slotMarker,
+          include_voiceover: voiceoverEnabled && VIDEO_PLATFORMS.has(platform),
         }));
 
         const { error: insErr, data: inserted } = await supabase
