@@ -27,6 +27,8 @@ interface VideoPreviewDialogProps {
   platformLabels?: Record<string, string>;
   /** Called after posting completes */
   onPosted?: () => void;
+  /** Visual style preset for generation: standard | minimal | cinematic */
+  style?: string;
 }
 
 export function VideoPreviewDialog({
