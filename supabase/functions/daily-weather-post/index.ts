@@ -1121,6 +1121,20 @@ Deno.serve(async (req) => {
     let youtubeVideoId: string | null = null;
     let storedImageUrl: string | null = null;
 
+    // Per-platform result tracking (used for grouped notification)
+    type PlatformResult = { name: string; ok: boolean; error?: string; postId?: string | null };
+    const platformResults: PlatformResult[] = [];
+    const recordResult = (name: string, ok: boolean, error?: string, postId?: string | null) => {
+      const existing = platformResults.find((r) => r.name === name);
+      if (existing) {
+        existing.ok = ok;
+        existing.error = error;
+        existing.postId = postId ?? existing.postId;
+      } else {
+        platformResults.push({ name, ok, error, postId: postId ?? null });
+      }
+    };
+
     let connectedAdapters = getConnectedAdapters(settings as Record<string, unknown>);
     // Filter to only selected platforms if specified
     if (selectedPlatforms && selectedPlatforms.length > 0) {
@@ -1134,76 +1148,58 @@ Deno.serve(async (req) => {
       // === FALLBACK: Generate static image when video fails ===
       console.log("Video generation failed, attempting fallback image...");
       const fallbackImage = await generateFallbackImage(weather);
-      
+
       if (!fallbackImage || !userId) {
         status = "pending";
         errorMessage = "Both video and fallback image generation failed";
         platform = connectedAdapters[0].name;
+        for (const a of connectedAdapters) recordResult(a.name, false, "Image generation failed");
       } else {
         console.log("Using fallback image for posting");
-        
-        // Store the generated image to Supabase Storage
+
         const stored = await storeGeneratedImage(supabase, userId, fallbackImage.data, fallbackImage.mimeType, weather.city);
         if (stored) {
           storedImageUrl = stored.signedUrl;
           console.log("Image stored at:", stored.storagePath);
         }
-        
+
         const title = generateSkyBriefTitle(weather.city, weather.temperature, weather.condition, weather.rainChance);
         const desc = caption || "Weather update for " + weather.city + ": " + weather.temperature + "\u00B0F, " + weather.description;
-        
-        // Image-capable platforms
+
         const imageCapablePlatforms = ["linkedin", "twitter", "tiktok"];
         const videoOnlyPlatforms = ["youtube", "instagram"];
-        
+
         for (const adapter of connectedAdapters) {
           if (imageCapablePlatforms.includes(adapter.name)) {
             try {
               const token = await adapter.getValidToken(supabase, userId);
               if (!token) {
                 console.error(`${adapter.name}: failed to get token for image post`);
+                recordResult(adapter.name, false, "Auth token missing");
                 continue;
               }
-              
+
               if (adapter.name === "linkedin") {
                 const postResult = await postLinkedInImage(token, fallbackImage.data, title, desc);
-                if (postResult) {
-                  platform = "linkedin";
-                  status = "success";
-                  console.log(`linkedin image post published! ID: ${postResult}`);
-                } else {
-                  platform = "linkedin";
-                  status = "failed";
-                  errorMessage = "LinkedIn image post failed";
-                }
+                platform = "linkedin";
+                if (postResult) { status = "success"; recordResult("linkedin", true, undefined, String(postResult)); }
+                else { status = "failed"; errorMessage = "LinkedIn image post failed"; recordResult("linkedin", false, "LinkedIn image post failed"); }
               } else if (adapter.name === "twitter") {
                 const postResult = await postTwitterImage(token, fallbackImage.data, desc);
-                if (postResult) {
-                  platform = "twitter";
-                  status = "success";
-                  console.log(`twitter image post published! ID: ${postResult}`);
-                } else {
-                  platform = "twitter";
-                  status = "failed";
-                  errorMessage = "Twitter image post failed";
-                }
+                platform = "twitter";
+                if (postResult) { status = "success"; recordResult("twitter", true, undefined, String(postResult)); }
+                else { status = "failed"; errorMessage = "Twitter image post failed"; recordResult("twitter", false, "Twitter image post failed"); }
               } else if (adapter.name === "tiktok") {
-                // TikTok photo post requires a publicly accessible URL
                 if (storedImageUrl) {
                   const { TikTokAdapter } = await import("../_shared/tiktok-adapter.ts");
                   const tiktokAdapter = new TikTokAdapter();
                   const postResult = await tiktokAdapter.uploadImage(token, storedImageUrl, title, desc);
-                  if (postResult) {
-                    platform = "tiktok";
-                    status = "success";
-                    console.log(`tiktok photo post published! publish_id: ${postResult}`);
-                  } else {
-                    platform = "tiktok";
-                    status = "failed";
-                    errorMessage = "TikTok photo post failed";
-                  }
+                  platform = "tiktok";
+                  if (postResult) { status = "success"; recordResult("tiktok", true, undefined, String(postResult)); }
+                  else { status = "failed"; errorMessage = "TikTok photo post failed"; recordResult("tiktok", false, "TikTok photo post failed"); }
                 } else {
                   console.log("Skipping TikTok — no stored image URL available for photo post");
+                  recordResult("tiktok", false, "No image URL available");
                 }
               }
             } catch (err) {
@@ -1211,6 +1207,7 @@ Deno.serve(async (req) => {
               platform = adapter.name;
               status = "failed";
               errorMessage = `${adapter.name} image post failed`;
+              recordResult(adapter.name, false, `${adapter.name} image post error`);
             }
           } else if (videoOnlyPlatforms.includes(adapter.name)) {
             console.log("Skipping " + adapter.name + " — requires video (image fallback only)");
@@ -1218,9 +1215,10 @@ Deno.serve(async (req) => {
             errorMessage += adapter.name + " skipped (video required, Creatomate credits depleted); ";
             platform = adapter.name;
             status = "failed";
+            recordResult(adapter.name, false, "Requires video (fallback was image only)");
           }
         }
-        
+
         if (status !== "success") {
           status = "pending";
           errorMessage = (errorMessage || "Video unavailable") + " — posted as image where possible";
@@ -1237,10 +1235,12 @@ Deno.serve(async (req) => {
           status = "success";
           if (adapter.name === "youtube") youtubeVideoId = result.id || null;
           console.log(`${adapter.name} post published! ID: ${result.id}`);
+          recordResult(adapter.name, true, undefined, result.id || null);
         } else {
           platform = adapter.name;
           status = "failed";
           errorMessage = result.error || `${adapter.name} upload failed`;
+          recordResult(adapter.name, false, result.error || `${adapter.name} upload failed`);
         }
       }
     }
@@ -1252,11 +1252,72 @@ Deno.serve(async (req) => {
     });
     if (historyError) console.error("Failed to log post history:", historyError);
 
+    // === GROUPED NOTIFICATION ===
+    // Schema is fixed (title/message/type) so we encode actionable metadata as a JSON
+    // suffix in `message` using a sentinel the frontend strips before display.
+    if (userId && platformResults.length > 0) {
+      const successes = platformResults.filter((r) => r.ok).map((r) => r.name);
+      const failures = platformResults.filter((r) => !r.ok).map((r) => r.name);
+      const slot = timePeriod ? timePeriod.charAt(0).toUpperCase() + timePeriod.slice(1) : null;
+      const isManual = !timePeriod;
+      const isGrouped = platformResults.length > 1;
+      const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+      const list = (arr: string[]) => {
+        const labels = arr.map(cap);
+        if (labels.length <= 1) return labels.join("");
+        if (labels.length === 2) return `${labels[0]} and ${labels[1]}`;
+        return `${labels.slice(0, -1).join(", ")}, and ${labels[labels.length - 1]}`;
+      };
+
+      let title: string;
+      let message: string;
+      let type: "success" | "error" | "info";
+
+      if (failures.length === 0) {
+        type = "success";
+        title = isGrouped ? `${slot ?? "Weather"} posts published` : `${cap(successes[0])} post published`;
+        message = isGrouped
+          ? `\u2705 ${slot ?? "Weather"} posts sent to ${list(successes)}.`
+          : `\u2705 ${cap(successes[0])} post published for ${weather.city}.`;
+      } else if (successes.length === 0) {
+        type = "error";
+        title = isGrouped ? `${slot ?? "Weather"} posts failed` : `${cap(failures[0])} post failed`;
+        message = isGrouped
+          ? `\u274C ${slot ?? "Weather"} posts failed: ${list(failures)}.`
+          : `\u274C ${cap(failures[0])} post failed for ${weather.city}.`;
+      } else {
+        type = "error"; // partial failure → amber/red priority
+        title = `${slot ?? "Weather"} posts: partial failure`;
+        message = `\u26A0\uFE0F ${slot ?? "Weather"} posts sent to ${list(successes)}, but ${list(failures)} failed.`;
+      }
+
+      const meta = {
+        v: 1,
+        slot: timePeriod || null,
+        manual: isManual,
+        city: weather.city,
+        successes,
+        failures,
+        results: platformResults,
+        youtube_video_id: youtubeVideoId,
+      };
+      const fullMessage = `${message}\n<<META>>${JSON.stringify(meta)}`;
+
+      const { error: notifyError } = await supabase.from("notifications").insert({
+        user_id: userId,
+        title,
+        message: fullMessage,
+        type,
+      });
+      if (notifyError) console.error("Failed to insert notification:", notifyError);
+    }
+
     return new Response(
       JSON.stringify({
         success: status === "success",
         weather, status, caption, platform,
         youtube_video_id: youtubeVideoId,
+        platform_results: platformResults,
         message: errorMessage || "Weather post " + status + " for " + weather.city,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
