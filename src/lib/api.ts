@@ -84,7 +84,26 @@ export async function saveSettings(settings: AutomationSettings): Promise<boolea
       .from("weather_settings")
       .insert(payload);
     return !error;
-  }
+}
+
+/**
+ * Toggle a "skip today" flag for one automation slot.
+ * Writes the user's local YYYY-MM-DD into <slot>_skip_date — the scheduler
+ * compares this to today and skips that slot. Pass null to clear the flag.
+ */
+export async function setSkipToday(
+  slot: "morning" | "afternoon" | "evening",
+  date: string | null
+): Promise<boolean> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return false;
+  const column = `${slot}_skip_date`;
+  const { error } = await supabase
+    .from("weather_settings")
+    .update({ [column]: date } as any)
+    .eq("user_id", user.id);
+  return !error;
+}
 }
 
 export async function triggerDailyPost(timePeriod?: string, platforms?: string[]): Promise<{ success: boolean; message: string }> {
