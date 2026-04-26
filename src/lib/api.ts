@@ -84,6 +84,7 @@ export async function saveSettings(settings: AutomationSettings): Promise<boolea
       .from("weather_settings")
       .insert(payload);
     return !error;
+  }
 }
 
 /**
@@ -103,7 +104,6 @@ export async function setSkipToday(
     .update({ [column]: date } as any)
     .eq("user_id", user.id);
   return !error;
-}
 }
 
 export async function triggerDailyPost(timePeriod?: string, platforms?: string[]): Promise<{ success: boolean; message: string }> {
