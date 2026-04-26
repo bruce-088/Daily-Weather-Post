@@ -565,14 +565,24 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
 // =============================================================
 
 const ELEVENLABS_VOICES: Record<string, string> = {
-  female: "EXAVITQu4vr4xnSDxMaL", // Sarah
-  male:   "JBFqnCBsd6RMkjVDRZzb", // George
+  female: "EXAVITQu4vr4xnSDxMaL",   // Sarah — warm, conversational
+  male:   "JBFqnCBsd6RMkjVDRZzb",   // George — confident, news-style
+  anchor: "onwK4e9ZLuTAKqWW03F9",   // Daniel — authoritative news anchor
+  cheerful: "Xb7hH8MSUJpSbSDYk0k2", // Alice — bright, cheerful
+  calm:   "cgSgspJ2msm6clMCkdW9",   // Jessica — calm, soothing
+  deep:   "nPczCjzI2devNBz1zQrb",   // Brian — deep, resonant
 };
 
 function resolveVoiceId(input?: string | null): string {
   if (!input) return ELEVENLABS_VOICES.female;
-  if (input === "female" || input === "male") return ELEVENLABS_VOICES[input];
-  return input;
+  if (ELEVENLABS_VOICES[input]) return ELEVENLABS_VOICES[input];
+  return input; // assume raw ElevenLabs id
+}
+
+function clampVoiceParam(n: any, min: number, max: number, fallback: number): number {
+  const v = typeof n === "number" ? n : Number(n);
+  if (!isFinite(v)) return fallback;
+  return Math.min(max, Math.max(min, v));
 }
 
 async function generateVoiceScript(weather: WeatherResponse): Promise<string> {
