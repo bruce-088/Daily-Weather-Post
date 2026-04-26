@@ -245,6 +245,15 @@ export function PostHistoryList({ posts, loading, onReuse, onChanged }: PostHist
                               {brand.label}
                             </span>
                           )}
+                          {isAutomated && (
+                            <span
+                              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium bg-primary/15 text-primary border border-primary/30"
+                              title="Posted automatically by your scheduled automation"
+                            >
+                              <Bot size={10} />
+                              🤖 Automated
+                            </span>
+                          )}
                         </div>
                         {post.caption && (
                           <p className="text-xs text-muted-foreground line-clamp-2 mt-1 italic">
