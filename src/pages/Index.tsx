@@ -126,6 +126,7 @@ const Index = () => {
   const [postFlowPlatforms, setPostFlowPlatforms] = useState<string[]>([]);
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
   const [platformPickerOpen, setPlatformPickerOpen] = useState(false);
+  const [cardStyle, setCardStyle] = useState<CardStyle>("standard");
 
   // Build available platforms list from connection status with brand metadata
   const availablePlatforms = useMemo(() => {
