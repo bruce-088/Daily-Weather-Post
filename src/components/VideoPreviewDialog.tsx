@@ -39,9 +39,11 @@ export function VideoPreviewDialog({
   connections,
   platformLabels,
   onPosted,
+  style = "standard",
 }: VideoPreviewDialogProps) {
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [genStage, setGenStage] = useState<"idle" | "video" | "image">("idle");
   const [uploading, setUploading] = useState(false);
   const [editedCaption, setEditedCaption] = useState("");
   const [isEditingCaption, setIsEditingCaption] = useState(false);
