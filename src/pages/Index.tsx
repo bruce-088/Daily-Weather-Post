@@ -147,13 +147,19 @@ const Index = () => {
     [voiceEnabled, voiceId, voiceTone],
   );
 
-  // === Caption draft autosave (10s interval to localStorage) ===
+  // === Create-page draft autosave (caption + city → localStorage every 10s) ===
   const CAPTION_DRAFT_KEY = "skybrief_caption_draft_v1";
+  const CITY_DRAFT_KEY = "skybrief_city_draft_v1";
+  const [draftSavedAt, setDraftSavedAt] = useState<number | null>(null);
   // Restore on mount
   useEffect(() => {
     try {
-      const saved = window.localStorage.getItem(CAPTION_DRAFT_KEY);
-      if (saved) setCaption(saved);
+      const savedCaption = window.localStorage.getItem(CAPTION_DRAFT_KEY);
+      if (savedCaption) setCaption(savedCaption);
+      const savedCity = window.localStorage.getItem(CITY_DRAFT_KEY);
+      if (savedCity) {
+        setSettings((prev) => ({ ...prev, location: savedCity }));
+      }
     } catch { /* ignore */ }
   }, []);
   // Periodic save
@@ -161,21 +167,33 @@ const Index = () => {
     if (typeof window === "undefined") return;
     const id = window.setInterval(() => {
       try {
+        let touched = false;
         if (caption && caption.trim()) {
           window.localStorage.setItem(CAPTION_DRAFT_KEY, caption);
+          touched = true;
         } else {
           window.localStorage.removeItem(CAPTION_DRAFT_KEY);
         }
+        if (settings.location && settings.location.trim()) {
+          window.localStorage.setItem(CITY_DRAFT_KEY, settings.location);
+          touched = true;
+        }
+        if (touched) setDraftSavedAt(Date.now());
       } catch { /* ignore */ }
     }, 10000);
     return () => window.clearInterval(id);
-  }, [caption]);
+  }, [caption, settings.location]);
 
-  // === Listen for global success → trigger top-bar shimmer ===
+  // === Listen for global success → trigger top-bar shimmer + clear draft ===
   useEffect(() => {
     const onSuccess = () => {
       setSuccessShimmer(true);
       window.setTimeout(() => setSuccessShimmer(false), 1700);
+      try {
+        window.localStorage.removeItem(CAPTION_DRAFT_KEY);
+        window.localStorage.removeItem(CITY_DRAFT_KEY);
+      } catch { /* ignore */ }
+      setDraftSavedAt(null);
     };
     window.addEventListener("skybrief:post-success", onSuccess);
     return () => window.removeEventListener("skybrief:post-success", onSuccess);
@@ -274,23 +292,28 @@ const Index = () => {
   }, [fetchWeather, settings.location, settings.state]);
 
   const handleSave = useCallback(async () => {
+    if (saving) return; // double-click guard
     setSaving(true);
     const ok = await saveSettings(settings);
     setSaving(false);
     if (ok) {
-      toast.success("Settings saved", { description: "Your automation preferences are live." });
+      toast.success("✅ Settings saved", { description: "Your automation preferences are live." });
     } else {
-      toast.error("Couldn't save settings", { description: "Check your connection and try again." });
+      toast.error("❌ Couldn't save settings", {
+        description: "Check your connection and try again.",
+        action: { label: "Retry", onClick: () => handleSave() },
+      });
     }
-  }, [settings]);
+  }, [settings, saving]);
 
   const handlePostNow = useCallback(async () => {
+    if (posting) return; // duplicate-request guard
     const platformNames = selectedPlatforms.length > 0
       ? selectedPlatforms
       : availablePlatforms.map((p) => p.id);
     setPostFlowPlatforms(platformNames);
     setPreviewOpen(true);
-  }, [selectedPlatforms, availablePlatforms]);
+  }, [selectedPlatforms, availablePlatforms, posting]);
 
   const handleExport = useCallback(async () => {
     if (!cardRef.current) return;
@@ -300,24 +323,31 @@ const Index = () => {
       link.download = `weather-${aspectRatio === "1:1" ? "square" : "story"}-${Date.now()}.png`;
       link.href = dataUrl;
       link.click();
-      toast.success("Image exported successfully!");
+      toast.success("✅ Image exported successfully");
     } catch {
-      toast.error("Export failed. Please try again.");
+      toast.error("❌ Export failed", {
+        description: "Couldn't render the card to PNG. Try again.",
+        action: { label: "Retry", onClick: () => handleExport() },
+      });
     }
   }, [aspectRatio]);
 
   const handleGenerateCaption = useCallback(async (variation = false) => {
+    if (captionLoading) return; // duplicate-request guard
     setCaptionLoading(true);
     try {
       const result = await generateCaption(weather, { style: cardStyle, variation });
       setCaption(result);
-      toast.success(variation ? "✨ New variation ready!" : "Caption generated!");
+      toast.success(variation ? "✨ New variation ready" : "✅ Caption generated");
     } catch (err: any) {
-      toast.error(err.message || "Failed to generate caption");
+      toast.error("❌ Caption generation failed", {
+        description: err?.message || "The AI couldn't generate a caption right now.",
+        action: { label: "Retry", onClick: () => handleGenerateCaption(variation) },
+      });
     } finally {
       setCaptionLoading(false);
     }
-  }, [weather, cardStyle]);
+  }, [weather, cardStyle, captionLoading]);
 
   return (
     <div className="dark min-h-screen bg-transparent">
@@ -350,10 +380,11 @@ const Index = () => {
                 size="sm"
                 onClick={handlePostNow}
                 disabled={posting || availablePlatforms.length === 0}
-                className="gap-1.5 text-xs rounded-r-none"
+                className="gap-1.5 text-xs rounded-r-none transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_20px_-8px_hsl(var(--primary)/0.5)]"
+                title="Post Now (⌘/Ctrl + Enter)"
               >
                 {posting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                {posting ? "Posting..." : selectedPlatforms.length > 0 ? `Post (${selectedPlatforms.length})` : "Post All"}
+                {posting ? "Posting…" : selectedPlatforms.length > 0 ? `Post (${selectedPlatforms.length})` : "Post All"}
               </Button>
               <Popover open={platformPickerOpen} onOpenChange={setPlatformPickerOpen}>
                 <PopoverTrigger asChild>
@@ -525,11 +556,16 @@ const Index = () => {
                       size="sm"
                       onClick={() => handleGenerateCaption(!!caption)}
                       disabled={captionLoading || !weather}
-                      className="gap-1.5 text-xs w-full"
+                      className="gap-1.5 text-xs w-full transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_20px_-8px_hsl(var(--primary)/0.5)]"
+                      title={caption ? "Try a Variation (⌘/Ctrl + Shift + G)" : "Generate Caption (⌘/Ctrl + Shift + G)"}
                     >
-                      <MessageSquare size={14} />
+                      {captionLoading ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <MessageSquare size={14} />
+                      )}
                       {captionLoading
-                        ? (caption ? "Trying a variation..." : "Generating...")
+                        ? (caption ? "Generating variation…" : "Generating…")
                         : caption
                         ? "Try a Variation"
                         : "Generate Caption"}
@@ -541,6 +577,12 @@ const Index = () => {
                         className="text-sm bg-secondary/30 border-border/30 resize-none whitespace-pre-wrap"
                         rows={9}
                       />
+                    )}
+                    {draftSavedAt && (
+                      <p className="text-[10px] text-muted-foreground/70 italic flex items-center gap-1 pt-0.5">
+                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400/70" />
+                        Draft saved
+                      </p>
                     )}
                   </div>
 

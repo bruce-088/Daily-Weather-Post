@@ -803,9 +803,14 @@ export function SettingsPanel({
       {showAutomation && <SystemHealthCard />}
 
       {(showLocation || showConnections || showAutomation) && (
-        <Button onClick={onSave} disabled={saving} className="w-full gap-2">
-          <Save size={16} />
-          {saving ? "Saving..." : "Save Settings"}
+        <Button
+          onClick={onSave}
+          disabled={saving}
+          className="w-full gap-2 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_24px_-8px_hsl(var(--primary)/0.5)]"
+          title="Save Settings (⌘/Ctrl + S)"
+        >
+          {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+          {saving ? "Saving…" : "Save Settings"}
         </Button>
       )}
     </div>
