@@ -162,9 +162,10 @@ Deno.serve(async (req) => {
           `[scheduler]   ${period.name}: target_local=${ev.targetLocal} ${userTz}, current_local=${ev.currentLocal}, diff=${ev.diff}min, shouldPost=${ev.shouldPost}`
         );
         if (!ev.shouldPost) {
-          console.log(`[scheduler]   ⏭️  SKIP ${period.name} — reason: outside post window (diff=${ev.diff}min, need 0..14)`);
+          console.log(`[scheduler]   ⏭️  SKIP ${period.name} — reason: outside post window (diff=${ev.diff}min, need 0..5)`);
           continue;
         }
+        console.log(`[scheduler]   🎯 Slot matched within window — triggering post (${period.name}, diff=${ev.diff}min)`);
         console.log(`[scheduler]   ✅ ${period.name.toUpperCase()} slot triggered for user ${settings.user_id || "default"}`);
         console.log(`[scheduler]   Creating scheduled posts for platforms: [${period.platforms.join(", ")}]`);
 
