@@ -415,9 +415,10 @@ const Index = () => {
                         <Button
                           size="icon"
                           variant="ghost"
-                          onClick={handleGenerateCaption}
+                          onClick={() => handleGenerateCaption(true)}
                           disabled={captionLoading}
                           className="h-7 w-7 text-muted-foreground"
+                          title="Try a different creative angle"
                         >
                           <RefreshCw size={12} className={captionLoading ? "animate-spin" : ""} />
                         </Button>
@@ -425,12 +426,16 @@ const Index = () => {
                     </div>
                     <Button
                       size="sm"
-                      onClick={handleGenerateCaption}
+                      onClick={() => handleGenerateCaption(!!caption)}
                       disabled={captionLoading || !weather}
                       className="gap-1.5 text-xs w-full"
                     >
                       <MessageSquare size={14} />
-                      {captionLoading ? "Generating..." : caption ? "Regenerate" : "Generate Caption"}
+                      {captionLoading
+                        ? (caption ? "Trying a variation..." : "Generating...")
+                        : caption
+                        ? "Try a Variation"
+                        : "Generate Caption"}
                     </Button>
                     {caption && (
                       <Textarea
