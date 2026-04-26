@@ -165,6 +165,72 @@ Deno.serve(async (req) => {
           results.push(period.name + ": error");
         }
       }
+
+      // === DAILY SUMMARY (fires once per user when local time is 23:30 - 23:59) ===
+      try {
+        if (settings.user_id && userLocal.hour === 23 && userLocal.minute >= 30) {
+          // Idempotency: skip if a summary notification already exists for today (user-local).
+          const lookback = new Date(now);
+          lookback.setUTCHours(lookback.getUTCHours() - 6);
+          const { data: existingSummary } = await supabase
+            .from("notifications")
+            .select("id, created_at")
+            .eq("user_id", settings.user_id)
+            .eq("title", "Daily summary")
+            .gte("created_at", lookback.toISOString())
+            .limit(1);
+
+          if (!existingSummary || existingSummary.length === 0) {
+            const sodLocal = new Date(`${todayLocal}T00:00:00`);
+            const { data: todays } = await supabase
+              .from("post_history")
+              .select("status, platform, error_message, created_at")
+              .eq("user_id", settings.user_id)
+              .gte("created_at", sodLocal.toISOString());
+
+            const total = todays?.length ?? 0;
+            const successCount = (todays ?? []).filter((p) => p.status === "success").length;
+            const failedCount = (todays ?? []).filter((p) => p.status === "failed").length;
+
+            let message: string;
+            let type: "success" | "error" | "info" = "info";
+
+            if (total === 0) {
+              message = "Today: no posts published. Check your automation slots in Settings.";
+              type = "info";
+            } else if (failedCount === 0) {
+              message = `Today: ${successCount}/${total} posts successful. Total engagement: coming soon.`;
+              type = "success";
+            } else {
+              message = `Today: ${successCount}/${total} posts successful, ${failedCount} failed. Total engagement: coming soon.`;
+              type = failedCount > successCount ? "error" : "info";
+            }
+
+            const meta = {
+              v: 1,
+              kind: "summary",
+              date: todayLocal,
+              total,
+              success: successCount,
+              failed: failedCount,
+            };
+            const fullMessage = `${message}\n<<META>>${JSON.stringify(meta)}`;
+
+            const { error: sumErr } = await supabase.from("notifications").insert({
+              user_id: settings.user_id,
+              title: "Daily summary",
+              message: fullMessage,
+              type,
+            });
+            if (sumErr) console.error("[scheduler] daily summary insert failed:", sumErr);
+            else console.log(`[scheduler] daily summary sent to user ${settings.user_id}`);
+          } else {
+            console.log(`[scheduler] daily summary already exists for user ${settings.user_id} today`);
+          }
+        }
+      } catch (sumE) {
+        console.error("[scheduler] daily summary error:", sumE);
+      }
     }
 
     return new Response(

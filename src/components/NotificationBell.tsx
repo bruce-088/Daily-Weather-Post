@@ -1,13 +1,37 @@
-import { Bell, CheckCheck } from "lucide-react";
+import { useState } from "react";
+import { Bell, CheckCheck, RotateCw, ExternalLink, Volume2, VolumeX, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { useNotifications } from "@/hooks/useNotifications";
+import { useNotifications, type Notification } from "@/hooks/useNotifications";
 import { formatDistanceToNow } from "date-fns";
+import {
+  retryFailedPlatforms,
+  getViewPostUrl,
+  isSoundEnabled,
+  setSoundEnabled,
+} from "@/lib/notificationUtils";
+import { toast } from "sonner";
 
 export function NotificationBell() {
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
+  const [soundOn, setSoundOnState] = useState<boolean>(isSoundEnabled());
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+
+  const toggleSound = () => {
+    const next = !soundOn;
+    setSoundEnabled(next);
+    setSoundOnState(next);
+  };
+
+  const handleRetry = async (n: Notification) => {
+    setRetryingId(n.id);
+    const res = await retryFailedPlatforms(n.meta);
+    setRetryingId(null);
+    if (res.ok) toast.success("Retry succeeded");
+    else toast.error(res.error || "Retry failed");
+  };
 
   return (
     <Popover>
@@ -15,53 +39,112 @@ export function NotificationBell() {
         <Button size="sm" variant="ghost" className="relative">
           <Bell size={16} />
           {unreadCount > 0 && (
-            <Badge className="absolute -top-1 -right-1 h-4 min-w-4 px-1 text-[10px] flex items-center justify-center">
+            <Badge
+              variant={notifications.some((n) => !n.read && n.type === "error") ? "destructive" : "default"}
+              className="absolute -top-1 -right-1 h-4 min-w-4 px-1 text-[10px] flex items-center justify-center"
+            >
               {unreadCount > 9 ? "9+" : unreadCount}
             </Badge>
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 p-0">
+      <PopoverContent align="end" className="w-96 p-0">
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <span className="text-sm font-semibold text-foreground">Notifications</span>
-          {unreadCount > 0 && (
-            <Button size="sm" variant="ghost" className="text-xs gap-1 h-7" onClick={markAllAsRead}>
-              <CheckCheck size={12} /> Mark all read
+          <div className="flex items-center gap-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-xs gap-1 h-7"
+              onClick={toggleSound}
+              title={soundOn ? "Mute success sound" : "Unmute success sound"}
+            >
+              {soundOn ? <Volume2 size={12} /> : <VolumeX size={12} />}
             </Button>
-          )}
+            {unreadCount > 0 && (
+              <Button size="sm" variant="ghost" className="text-xs gap-1 h-7" onClick={markAllAsRead}>
+                <CheckCheck size={12} /> Mark all read
+              </Button>
+            )}
+          </div>
         </div>
-        <ScrollArea className="max-h-72">
+        <ScrollArea className="max-h-80">
           {notifications.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-6">No notifications yet</p>
           ) : (
-            notifications.map((n) => (
-              <button
-                key={n.id}
-                onClick={() => !n.read && markAsRead(n.id)}
-                className={`w-full text-left px-4 py-3 border-b border-border/50 hover:bg-secondary/30 transition-colors ${
-                  !n.read ? "bg-primary/5" : ""
-                }`}
-              >
-                <div className="flex items-start gap-2">
-                  <div
-                    className={`mt-1 h-2 w-2 rounded-full shrink-0 ${
-                      n.type === "success"
-                        ? "bg-green-500"
-                        : n.type === "error"
-                        ? "bg-destructive"
-                        : "bg-primary"
-                    }`}
-                  />
-                  <div className="min-w-0">
-                    <p className="text-xs font-medium text-foreground">{n.title}</p>
-                    <p className="text-xs text-muted-foreground truncate">{n.message}</p>
-                    <p className="text-[10px] text-muted-foreground/60 mt-1">
-                      {formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}
-                    </p>
-                  </div>
+            notifications.map((n) => {
+              const failures = n.meta?.failures ?? [];
+              const successes = n.meta?.successes ?? [];
+              const isSummary = n.meta?.kind === "summary";
+              const viewUrl = !isSummary && failures.length === 0 ? getViewPostUrl(n.meta) : null;
+              const canRetry = !isSummary && failures.length > 0;
+
+              const dotColor =
+                n.type === "success"
+                  ? "bg-green-500"
+                  : n.type === "error"
+                  ? failures.length > 0 && successes.length > 0
+                    ? "bg-amber-500"
+                    : "bg-destructive"
+                  : "bg-primary";
+
+              return (
+                <div
+                  key={n.id}
+                  className={`w-full text-left px-4 py-3 border-b border-border/50 hover:bg-secondary/30 transition-colors ${
+                    !n.read ? "bg-primary/5" : ""
+                  }`}
+                >
+                  <button
+                    onClick={() => !n.read && markAsRead(n.id)}
+                    className="w-full text-left"
+                  >
+                    <div className="flex items-start gap-2">
+                      <div className={`mt-1 h-2 w-2 rounded-full shrink-0 ${dotColor}`} />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-medium text-foreground">{n.title}</p>
+                        <p className="text-xs text-muted-foreground whitespace-pre-line">
+                          {n.displayMessage}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground/60 mt-1">
+                          {formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                  {(canRetry || viewUrl) && (
+                    <div className="flex items-center gap-2 mt-2 pl-4">
+                      {canRetry && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs gap-1"
+                          disabled={retryingId === n.id}
+                          onClick={() => handleRetry(n)}
+                        >
+                          {retryingId === n.id ? (
+                            <Loader2 size={12} className="animate-spin" />
+                          ) : (
+                            <RotateCw size={12} />
+                          )}
+                          Retry {failures.map((f) => f.charAt(0).toUpperCase() + f.slice(1)).join(", ")}
+                        </Button>
+                      )}
+                      {viewUrl && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs gap-1"
+                          onClick={() => window.open(viewUrl, "_blank", "noopener,noreferrer")}
+                        >
+                          <ExternalLink size={12} /> View Post
+                        </Button>
+                      )}
+                    </div>
+                  )}
                 </div>
-              </button>
-            ))
+              );
+            })
           )}
         </ScrollArea>
       </PopoverContent>
