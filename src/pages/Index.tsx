@@ -305,7 +305,8 @@ const Index = () => {
   return (
     <div className="dark min-h-screen bg-transparent">
       {/* Top bar */}
-      <header className="border-b border-border/40 bg-card/50 backdrop-blur-xl sticky top-0 z-50">
+      <header className="relative border-b border-border/40 bg-card/50 backdrop-blur-xl sticky top-0 z-50">
+        {successShimmer && <span className="success-shimmer-bar" aria-hidden="true" />}
         <div className="container flex items-center justify-between h-14 px-4">
           <div className="flex items-center gap-2.5">
             <div className="h-8 w-8 rounded-lg bg-primary/20 flex items-center justify-center">
