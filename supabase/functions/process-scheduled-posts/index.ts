@@ -1046,8 +1046,52 @@ Deno.serve(async (req) => {
         const title = generateSkyBriefTitle(weather.city, weather.temperature, weather.condition, weather.rainChance);
         const desc = caption || "Weather update for " + weather.city + ": " + weather.temperature + "°F, " + weather.description;
 
-        // Try video generation once
-        const video = await generateWeatherVideo(weather);
+        // Extract slot (morning/afternoon/evening) from auto-post marker if present, so the
+        // video header shows the correct period badge for auto-posts.
+        const slotMatch = rawCaption ? /\[auto:([a-z]+)\]/i.exec(rawCaption) : null;
+        const timePeriod = slotMatch ? slotMatch[1].toLowerCase() : null;
+
+        // === AI VOICEOVER (auto-posts) ===
+        // include_voiceover is set by auto-post-scheduler ONLY for video-capable platforms
+        // and only when the user enabled the preference. Manual scheduled posts default to false.
+        // If TTS fails, we render silently — never break the schedule.
+        let voiceUrl: string | null = post.voiceover_url || null;
+        if (!voiceUrl && post.include_voiceover && post.user_id) {
+          console.log(`[process] post ${post.id}: voiceover requested, generating script + TTS`);
+          try {
+            // Look up the user's preferred voice
+            const { data: vSettings } = await supabase
+              .from("weather_settings")
+              .select("voiceover_voice_id")
+              .eq("user_id", post.user_id)
+              .limit(1)
+              .maybeSingle();
+            const voiceId = (vSettings as any)?.voiceover_voice_id || "female";
+
+            const script = await generateVoiceScript(weather);
+            console.log(`[process] post ${post.id}: voice script: ${script}`);
+            const audioBytes = await generateVoiceAudio(script, voiceId);
+            if (audioBytes) {
+              const url = await storeVoiceAudio(supabase, post.user_id, audioBytes);
+              if (url) {
+                voiceUrl = url;
+                console.log(`[process] post ${post.id}: ✅ voiceover ready`);
+                // Persist on the row so re-runs don't regenerate the same audio
+                await supabase.from("scheduled_posts").update({ voiceover_url: url }).eq("id", post.id);
+              } else {
+                console.warn(`[process] post ${post.id}: voice upload failed — falling back to silent video`);
+              }
+            } else {
+              console.warn(`[process] post ${post.id}: TTS failed — falling back to silent video`);
+            }
+          } catch (vErr) {
+            console.error(`[process] post ${post.id}: voiceover pipeline error — falling back to silent video:`, vErr);
+            voiceUrl = null;
+          }
+        }
+
+        // Try video generation once (with voiceover baked in if available)
+        const video = await generateWeatherVideo(weather, timePeriod, voiceUrl);
 
         if (video) {
           // Video succeeded — post to all platforms
