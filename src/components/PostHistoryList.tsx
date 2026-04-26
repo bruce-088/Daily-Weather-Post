@@ -113,7 +113,7 @@ export function PostHistoryList({ posts, loading, onReuse, onChanged }: PostHist
       return;
     }
     setRepostingId(post.id);
-    const res = await triggerDailyPost([post.platform]);
+    const res = await triggerDailyPost(undefined, [post.platform]);
     setRepostingId(null);
     if (res.success) {
       toast.success(`Reposting to ${PLATFORM_BRAND[post.platform]?.label || post.platform}…`);
