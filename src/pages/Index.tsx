@@ -380,10 +380,11 @@ const Index = () => {
                 size="sm"
                 onClick={handlePostNow}
                 disabled={posting || availablePlatforms.length === 0}
-                className="gap-1.5 text-xs rounded-r-none"
+                className="gap-1.5 text-xs rounded-r-none transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_20px_-8px_hsl(var(--primary)/0.5)]"
+                title="Post Now (⌘/Ctrl + Enter)"
               >
                 {posting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                {posting ? "Posting..." : selectedPlatforms.length > 0 ? `Post (${selectedPlatforms.length})` : "Post All"}
+                {posting ? "Posting…" : selectedPlatforms.length > 0 ? `Post (${selectedPlatforms.length})` : "Post All"}
               </Button>
               <Popover open={platformPickerOpen} onOpenChange={setPlatformPickerOpen}>
                 <PopoverTrigger asChild>
