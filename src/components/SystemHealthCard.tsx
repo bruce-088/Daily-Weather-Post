@@ -19,24 +19,23 @@ function timeAgo(iso: string | null): string {
 export function SystemHealthCard() {
   const [lastRun, setLastRun] = useState<string | null>(null);
   const [lastRunIso, setLastRunIso] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const fetchHealth = async () => {
     setLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      // Latest auto-marked scheduled post = proxy for last scheduler invocation
       const { data } = await supabase
-        .from("scheduled_posts")
-        .select("created_at, caption")
-        .eq("user_id", user.id)
-        .ilike("caption", "[auto:%")
-        .order("created_at", { ascending: false })
-        .limit(1);
-      const iso = data?.[0]?.created_at ?? null;
+        .from("system_health")
+        .select("last_run_at, last_status, last_message")
+        .eq("id", "auto-post-scheduler")
+        .maybeSingle();
+      const iso = data?.last_run_at ?? null;
       setLastRunIso(iso);
       setLastRun(timeAgo(iso));
+      setStatus(data?.last_status ?? null);
+      setMessage(data?.last_message ?? null);
     } finally {
       setLoading(false);
     }
@@ -48,10 +47,11 @@ export function SystemHealthCard() {
     return () => clearInterval(t);
   }, []);
 
-  // Active if a run happened within the last 20 minutes (cron runs every 5)
+  // Active if scheduler ticked within the last 12 minutes (cron = every 5)
   const isActive = lastRunIso
-    ? Date.now() - new Date(lastRunIso).getTime() < 20 * 60 * 1000
+    ? Date.now() - new Date(lastRunIso).getTime() < 12 * 60 * 1000
     : false;
+  const hasError = status === "error";
 
   return (
     <Card>
