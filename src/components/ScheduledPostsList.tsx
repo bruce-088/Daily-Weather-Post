@@ -95,7 +95,12 @@ function PostRow({ post, onRefresh, onCancelRequest }: PostRowProps) {
   const stage = deriveStage(post.status, post.scheduled_at);
   const isPending = post.status === "pending";
   const isFailed = post.status === "failed";
-  const { label: countdownLabel, isPast } = useCountdown(post.scheduled_at);
+  const isProcessing = post.status === "processing";
+  const { label: countdownLabel, isPast, diffMs } = useCountdown(post.scheduled_at);
+  // Cron runs every 5 min and the scheduler matches within a 10-min window — anything
+  // overdue by less than 10 min is expected behaviour, not an error. Show subtle amber.
+  const overdueMinutes = isPast ? Math.floor(Math.abs(diffMs) / 60_000) : 0;
+  const isMildlyOverdue = isPast && overdueMinutes < 10;
 
   const togglePlatform = (value: string) => {
     setEditPlatforms((prev) =>
