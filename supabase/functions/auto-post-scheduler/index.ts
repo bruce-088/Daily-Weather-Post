@@ -289,16 +289,37 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Mark heartbeat as success
+    try {
+      await supabase.from("system_health").upsert({
+        id: "auto-post-scheduler",
+        last_run_at: new Date().toISOString(),
+        last_status: "ok",
+        last_message: `triggered=${triggered}`,
+        updated_at: new Date().toISOString(),
+      });
+    } catch (_) { /* best-effort */ }
+
     return new Response(
       JSON.stringify({ message: "Auto-post check complete", triggered, results }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     console.error("Auto-post scheduler error:", message);
+    // Record failure but STILL return 200 so cron doesn't think function is down
+    try {
+      await supabase.from("system_health").upsert({
+        id: "auto-post-scheduler",
+        last_run_at: new Date().toISOString(),
+        last_status: "error",
+        last_message: message.slice(0, 500),
+        updated_at: new Date().toISOString(),
+      });
+    } catch (_) { /* best-effort */ }
     return new Response(
-      JSON.stringify({ error: message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({ message: "Scheduler completed with errors", error: message }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
