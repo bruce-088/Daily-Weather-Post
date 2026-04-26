@@ -424,7 +424,7 @@ async function fetchPexelsVideoUrl(keyword: string, city?: string, region?: stri
   } catch { return null; }
 }
 
-function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | null, timePeriod?: string | null): object {
+function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | null, timePeriod?: string | null, voiceUrl?: string | null): object {
   const now = new Date();
   const dateStr = now.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
   const theme = getWeatherTheme(weather.condition);
@@ -539,23 +539,36 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
       x: "50%", y: ctaTextY, x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.6 } },
   );
 
+  // === AI VOICEOVER (optional) ===
+  // Plays from t=0.5s on its own track. If TTS step failed upstream, voiceUrl is null and we render silently.
+  if (voiceUrl) {
+    elements.push({
+      type: "audio",
+      track: nt(),
+      time: 0.5,
+      duration: 9.5,
+      source: voiceUrl,
+      volume: "100%",
+    });
+  }
+
   return {
     width: 1080, height: 1920, duration: 10, frame_rate: 30, fill_color: theme.bg1,
     elements,
   };
 }
 
-async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: string | null): Promise<{ data: Uint8Array; mimeType: string } | null> {
+async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: string | null, voiceUrl?: string | null): Promise<{ data: Uint8Array; mimeType: string } | null> {
   const apiKey = Deno.env.get("CREATOMATE_API_KEY");
   if (!apiKey) {
     console.error("CREATOMATE_API_KEY not configured");
     return null;
   }
 
-  console.log("Starting Creatomate render for", weather.city);
+  console.log("Starting Creatomate render for", weather.city, voiceUrl ? "(with voiceover)" : "(no voice)");
   const theme = getWeatherTheme(weather.condition);
   const videoUrl = await fetchPexelsVideoUrl(theme.videoKeyword, weather.city, weather.stateOrRegion);
-  const source = buildCreatomateSource(weather, videoUrl, timePeriod);
+  const source = buildCreatomateSource(weather, videoUrl, timePeriod, voiceUrl);
 
   const requestBody = JSON.stringify({ output_format: "mp4", ...source });
   console.log("Creatomate request body (first 300 chars):", requestBody.substring(0, 300));
