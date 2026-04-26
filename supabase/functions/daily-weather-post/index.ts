@@ -442,7 +442,147 @@ async function fetchPexelsVideoUrl(keyword: string, city: string, region: string
   } catch (err) { console.error("Pexels fetch error:", err); return null; }
 }
 
-function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | null, timePeriod?: string | null): object {
+// =============================================================
+// === AI VOICE NARRATION (Voice Script + ElevenLabs TTS) ====
+// =============================================================
+
+interface VoiceOptions {
+  enabled: boolean;
+  voiceId?: string;       // ElevenLabs voice id
+  tone?: "conversational" | "energetic" | "news" | string;
+}
+
+// ElevenLabs preset voice IDs (verified from their public voice library)
+const ELEVENLABS_VOICES: Record<string, string> = {
+  female: "EXAVITQu4vr4xnSDxMaL",   // Sarah - warm, conversational female
+  male:   "JBFqnCBsd6RMkjVDRZzb",   // George - confident male
+};
+
+function resolveVoiceId(input?: string): string {
+  if (!input) return ELEVENLABS_VOICES.female;
+  if (input === "female" || input === "male") return ELEVENLABS_VOICES[input];
+  return input; // assume raw voice id
+}
+
+function voiceSettingsForTone(tone?: string) {
+  switch (tone) {
+    case "energetic":
+      return { stability: 0.35, similarity_boost: 0.8, style: 0.6, use_speaker_boost: true, speed: 1.05 };
+    case "news":
+      return { stability: 0.75, similarity_boost: 0.85, style: 0.2, use_speaker_boost: true, speed: 1.0 };
+    case "conversational":
+    default:
+      return { stability: 0.55, similarity_boost: 0.78, style: 0.35, use_speaker_boost: true, speed: 1.0 };
+  }
+}
+
+/** Generate a short, spoken-feeling voice script (1-2 sentences). */
+async function generateVoiceScript(weather: WeatherResponse, tone?: string): Promise<string> {
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  // Fallback if AI gateway is unavailable — still useful, deterministic
+  const fallback = `Good day, ${weather.city}. Expect ${weather.description.toLowerCase()} with a high near ${weather.temperature} degrees today.`;
+  if (!LOVABLE_API_KEY) return fallback;
+
+  const toneHint =
+    tone === "energetic" ? "Upbeat and lively, with energy."
+    : tone === "news" ? "Crisp, neutral, news-anchor style."
+    : "Friendly and conversational, like a local morning host.";
+
+  const userPrompt = [
+    `City: ${weather.city}`,
+    `Condition: ${weather.description}`,
+    `Current temp: ${weather.temperature}°F`,
+    `Morning: ${weather.morningTemp ?? "?"}°F ${weather.morningCondition ?? ""}`.trim(),
+    `Afternoon: ${weather.afternoonTemp ?? "?"}°F ${weather.afternoonCondition ?? ""}`.trim(),
+    `Evening: ${weather.eveningTemp ?? "?"}°F ${weather.eveningCondition ?? ""}`.trim(),
+    `Rain chance: ${weather.rainChance}%`,
+    "",
+    `Tone: ${toneHint}`,
+    "",
+    "Write a SPOKEN weather script. Strict rules:",
+    "- Maximum 2 sentences, ~25 words total.",
+    "- Sound natural when read aloud (no emojis, no hashtags, no special chars).",
+    "- Mention the city, the dominant condition, and at least one key temperature.",
+    "- No greetings like 'Hey everyone'. A short locale-anchored opener like 'Good morning {city}' is fine.",
+    "- Return ONLY the script text. No labels, no quotes.",
+  ].join("\n");
+
+  try {
+    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + LOVABLE_API_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "google/gemini-3-flash-preview",
+        messages: [
+          { role: "system", content: "You are a concise broadcast weather scriptwriter. Output spoken-style scripts only." },
+          { role: "user", content: userPrompt },
+        ],
+      }),
+    });
+    if (!res.ok) {
+      console.error("Voice script AI failed:", res.status);
+      return fallback;
+    }
+    const data = await res.json();
+    const txt = data?.choices?.[0]?.message?.content?.trim();
+    return txt || fallback;
+  } catch (e) {
+    console.error("Voice script error:", e);
+    return fallback;
+  }
+}
+
+/** Calls ElevenLabs TTS and returns MP3 bytes. */
+async function generateVoiceAudio(script: string, voice: VoiceOptions): Promise<Uint8Array | null> {
+  const apiKey = Deno.env.get("ELEVENLABS_API_KEY");
+  if (!apiKey) {
+    console.error("ELEVENLABS_API_KEY not configured — skipping voice generation");
+    return null;
+  }
+  const voiceId = resolveVoiceId(voice.voiceId);
+  const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "xi-api-key": apiKey, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text: script,
+        model_id: "eleven_turbo_v2_5",
+        voice_settings: voiceSettingsForTone(voice.tone),
+      }),
+    });
+    if (!res.ok) {
+      const errTxt = await res.text();
+      console.error("ElevenLabs TTS failed:", res.status, errTxt.slice(0, 200));
+      return null;
+    }
+    const buf = await res.arrayBuffer();
+    return new Uint8Array(buf);
+  } catch (e) {
+    console.error("ElevenLabs TTS error:", e);
+    return null;
+  }
+}
+
+/** Upload MP3 to weather-videos bucket and return signed URL + path. */
+async function storeVoiceAudio(
+  supabase: any,
+  userId: string,
+  audio: Uint8Array,
+): Promise<{ signedUrl: string; storagePath: string } | null> {
+  const path = `${userId}/voice-${Date.now()}.mp3`;
+  const { error: upErr } = await supabase.storage
+    .from("weather-videos")
+    .upload(path, audio, { contentType: "audio/mpeg", upsert: true });
+  if (upErr) { console.error("Voice upload error:", upErr); return null; }
+  const { data: signed, error: signErr } = await supabase.storage
+    .from("weather-videos")
+    .createSignedUrl(path, 3600);
+  if (signErr || !signed?.signedUrl) { console.error("Voice signed url error:", signErr); return null; }
+  return { signedUrl: signed.signedUrl, storagePath: path };
+}
+
+function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | null, timePeriod?: string | null, voiceUrl?: string | null): object {
   const now = new Date();
   const dateStr = now.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
   const theme = getWeatherTheme(weather.condition);
