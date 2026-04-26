@@ -177,6 +177,7 @@ export interface ScheduledPostItem {
   platform: string;
   status: string;
   error_message: string | null;
+  caption: string | null;
   created_at: string;
 }
 
@@ -206,7 +207,7 @@ export async function fetchScheduledPosts(): Promise<ScheduledPostItem[]> {
     .order("scheduled_at", { ascending: true });
 
   if (error) return [];
-  return data || [];
+  return (data as ScheduledPostItem[]) || [];
 }
 
 export async function cancelScheduledPost(id: string): Promise<boolean> {
@@ -226,6 +227,46 @@ export async function updateScheduledPost(
     .update(updates)
     .eq("id", id)
     .eq("status", "pending");
+  return !error;
+}
+
+/**
+ * Duplicate a scheduled post — clones the row with status=pending and
+ * scheduled_at bumped 1 hour into the future (or +1h from original, whichever is later).
+ */
+export async function duplicateScheduledPost(post: ScheduledPostItem): Promise<boolean> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return false;
+
+  const original = new Date(post.scheduled_at).getTime();
+  const oneHourFromNow = Date.now() + 60 * 60 * 1000;
+  const newScheduledAt = new Date(Math.max(original + 60 * 60 * 1000, oneHourFromNow)).toISOString();
+
+  const { error } = await supabase.from("scheduled_posts").insert({
+    city: post.city,
+    scheduled_at: newScheduledAt,
+    platform: post.platform,
+    user_id: user.id,
+    ...(post.caption ? { caption: post.caption } : {}),
+  });
+  return !error;
+}
+
+/**
+ * Retry a failed scheduled post by re-queuing it: clears the error and
+ * sets status back to "pending" with scheduled_at bumped to now + 2 minutes
+ * so the existing scheduler picks it up on its next tick.
+ */
+export async function retryScheduledPost(id: string): Promise<boolean> {
+  const newScheduledAt = new Date(Date.now() + 2 * 60 * 1000).toISOString();
+  const { error } = await supabase
+    .from("scheduled_posts")
+    .update({
+      status: "pending",
+      error_message: null,
+      scheduled_at: newScheduledAt,
+    })
+    .eq("id", id);
   return !error;
 }
 
