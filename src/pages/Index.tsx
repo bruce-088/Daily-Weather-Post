@@ -665,6 +665,18 @@ const Index = () => {
         }}
         onUploaded={loadHistory}
         postPlatforms={postFlowPlatforms.length > 0 ? postFlowPlatforms : undefined}
+        connections={{
+          youtube: youtubeConnected,
+          twitter: twitterConnected,
+          linkedin: linkedinConnected,
+          tiktok: tiktokConnected,
+        }}
+        platformLabels={{
+          youtube: "YouTube",
+          twitter: "Twitter / X",
+          linkedin: "LinkedIn",
+          tiktok: "TikTok",
+        }}
         onPosted={loadHistory}
       />
 
