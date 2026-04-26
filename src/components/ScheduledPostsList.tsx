@@ -227,13 +227,18 @@ function PostRow({ post, onRefresh, onCancelRequest }: PostRowProps) {
                 </Badge>
               )}
               {isProcessing && (
-                <div className="flex items-center gap-2 min-w-[180px]">
+                <div className="flex items-center gap-2 min-w-[200px]">
                   <span className="text-[10px] font-medium text-primary whitespace-nowrap">
                     🎬 Rendering Video & Voiceover...
                   </span>
-                  <div className="relative flex-1 h-1.5 rounded-full bg-primary/10 overflow-hidden">
-                    <div className="absolute inset-y-0 -left-1/3 w-1/3 bg-gradient-to-r from-transparent via-primary to-transparent animate-shimmer" />
-                  </div>
+                  <div
+                    className="relative flex-1 h-1.5 rounded-full overflow-hidden bg-primary/10 animate-shimmer"
+                    style={{
+                      backgroundImage:
+                        "linear-gradient(90deg, hsl(var(--primary) / 0.1) 0%, hsl(var(--primary) / 0.7) 50%, hsl(var(--primary) / 0.1) 100%)",
+                      backgroundSize: "200% 100%",
+                    }}
+                  />
                 </div>
               )}
             </div>
