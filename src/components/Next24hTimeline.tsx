@@ -49,12 +49,9 @@ export function Next24hTimeline({ posts }: Props) {
 
   if (entries.length === 0) {
     return (
-      <div className="rounded-lg border border-border/30 bg-card/40 p-3">
-        <div className="flex items-center gap-2 mb-1">
-          <CalendarClock size={13} className="text-muted-foreground" />
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Next 24 hours</p>
-        </div>
-        <p className="text-xs text-muted-foreground/70">No posts scheduled in the next 24 hours.</p>
+      <div className="flex items-center gap-2 px-3 py-2 text-[11px] text-muted-foreground/60">
+        <CalendarClock size={12} />
+        <span>No posts scheduled in the next 24 hours</span>
       </div>
     );
   }

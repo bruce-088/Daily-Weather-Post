@@ -6,12 +6,13 @@ import {
   Pencil,
   Search,
   XCircle,
-  Copy,
+  CopyPlus,
   RefreshCw,
   ChevronDown,
   ChevronUp,
   Save,
   X,
+  CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -181,22 +182,30 @@ function PostRow({ post, onRefresh, onCancelRequest }: PostRowProps) {
       <div className="p-4">
         <div className="flex items-center justify-between gap-3">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
               <MapPin size={12} className="text-muted-foreground shrink-0" />
               <span className="text-sm font-medium text-foreground truncate">{post.city}</span>
-              <Badge variant="outline" className="text-[10px]">{post.platform}</Badge>
+              <div className="flex items-center gap-1 flex-wrap">
+                {(post.platform === "both"
+                  ? ["instagram", "tiktok", "youtube", "twitter", "linkedin"]
+                  : post.platform.split(",").map((s) => s.trim()).filter(Boolean)
+                ).map((p) => (
+                  <Badge key={p} variant="outline" className="text-[10px] px-1.5 py-0 h-4 capitalize">
+                    {p === "twitter" ? "X" : p}
+                  </Badge>
+                ))}
+              </div>
             </div>
-            <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-x-3 gap-y-1.5 flex-wrap">
               <StatusPipeline stage={stage} />
-              <span className="text-[11px] text-muted-foreground/40">·</span>
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground tabular-nums">
                 <CalendarClock size={11} />
                 {format(new Date(post.scheduled_at), "PPP 'at' HH:mm")}
               </div>
               {isPending && (
                 <Badge
                   variant="outline"
-                  className={`text-[10px] ${
+                  className={`text-[10px] tabular-nums leading-none px-2 py-0.5 ${
                     isPast
                       ? "bg-amber-500/10 text-amber-500 border-amber-500/30"
                       : "bg-primary/10 text-primary border-primary/30"
@@ -207,7 +216,13 @@ function PostRow({ post, onRefresh, onCancelRequest }: PostRowProps) {
               )}
             </div>
             {post.error_message && !expanded && (
-              <p className="text-xs text-destructive mt-1.5 truncate">{post.error_message}</p>
+              isFailed ? (
+                <p className="text-xs text-destructive mt-1.5 truncate">{post.error_message}</p>
+              ) : (
+                <p className="text-xs text-green-500/90 mt-1.5 truncate flex items-center gap-1">
+                  <CheckCircle2 size={11} /> {post.error_message}
+                </p>
+              )
             )}
           </div>
 
@@ -230,10 +245,10 @@ function PostRow({ post, onRefresh, onCancelRequest }: PostRowProps) {
               variant="ghost"
               onClick={handleDuplicate}
               disabled={duplicating}
-              className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+              className="h-8 w-8 p-0 text-muted-foreground hover:text-primary"
               title="Duplicate post"
             >
-              <Copy size={14} />
+              <CopyPlus size={14} />
             </Button>
             {isPending && (
               <>
@@ -351,10 +366,19 @@ function PostRow({ post, onRefresh, onCancelRequest }: PostRowProps) {
       {!editing && expanded && (post.error_message || post.caption) && (
         <div className="border-t border-border/30 bg-secondary/10 p-4 space-y-2 animate-fade-in">
           {post.error_message && (
-            <div>
-              <Label className="text-[11px] text-destructive uppercase tracking-wide">Error</Label>
-              <p className="text-xs text-destructive/90 mt-0.5">{post.error_message}</p>
-            </div>
+            isFailed ? (
+              <div>
+                <Label className="text-[11px] text-destructive uppercase tracking-wide">Error</Label>
+                <p className="text-xs text-destructive/90 mt-0.5">{post.error_message}</p>
+              </div>
+            ) : (
+              <div>
+                <Label className="text-[11px] text-green-500 uppercase tracking-wide">Status</Label>
+                <p className="text-xs text-green-500/90 mt-0.5 flex items-center gap-1">
+                  <CheckCircle2 size={12} /> {post.error_message}
+                </p>
+              </div>
+            )
           )}
           {post.caption && (
             <div>
