@@ -549,6 +549,52 @@ export function SettingsPanel({
       </Card>
       )}
 
+      {showAutomation && tomorrowSlots.length > 0 && (
+        <Card className="border-border/50 bg-card/80 backdrop-blur">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <CalendarClock size={16} className="text-primary" />
+              Tomorrow's Preview
+            </CardTitle>
+            <CardDescription className="text-xs">
+              What will be auto-posted tomorrow based on your current schedule.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {tomorrowSlots.map((slot) => {
+              const Icon = slot.key === "morning" ? Sun : slot.key === "afternoon" ? Sunset : Moon;
+              const iconColor =
+                slot.key === "morning" ? "text-amber-400" : slot.key === "afternoon" ? "text-orange-400" : "text-blue-400";
+              const platformText =
+                slot.platforms.length > 0
+                  ? slot.platforms.map(platformLabel).join(", ")
+                  : "no platforms selected";
+              return (
+                <div
+                  key={slot.key}
+                  className="flex items-start gap-3 p-2.5 rounded-md bg-secondary/20 border border-border/20"
+                >
+                  <Icon size={14} className={`${iconColor} mt-0.5 shrink-0`} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs">
+                      <span className="font-medium">{slot.label}</span> · {formatTime12h(slot.time)}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground truncate">
+                      {slot.platforms.length > 0
+                        ? `Post scheduled for ${formatTime12h(slot.time)} to ${platformText}`
+                        : `No platforms selected — this slot will be skipped`}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+            <p className="text-[10px] text-muted-foreground italic pt-1">
+              Captions are generated fresh at post time using tomorrow's live weather.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {(showLocation || showConnections || showAutomation) && (
         <Button onClick={onSave} disabled={saving} className="w-full gap-2">
           <Save size={16} />
