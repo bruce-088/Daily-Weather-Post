@@ -25,6 +25,7 @@ import {
   Twitter,
   Linkedin,
   Video,
+  Loader2,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
@@ -127,6 +128,54 @@ const Index = () => {
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
   const [platformPickerOpen, setPlatformPickerOpen] = useState(false);
   const [cardStyle, setCardStyle] = useState<CardStyle>("standard");
+  const [successShimmer, setSuccessShimmer] = useState(false);
+
+  // === Caption draft autosave (10s interval to localStorage) ===
+  const CAPTION_DRAFT_KEY = "skybrief_caption_draft_v1";
+  // Restore on mount
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(CAPTION_DRAFT_KEY);
+      if (saved) setCaption(saved);
+    } catch { /* ignore */ }
+  }, []);
+  // Periodic save
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const id = window.setInterval(() => {
+      try {
+        if (caption && caption.trim()) {
+          window.localStorage.setItem(CAPTION_DRAFT_KEY, caption);
+        } else {
+          window.localStorage.removeItem(CAPTION_DRAFT_KEY);
+        }
+      } catch { /* ignore */ }
+    }, 10000);
+    return () => window.clearInterval(id);
+  }, [caption]);
+
+  // === Listen for global success → trigger top-bar shimmer ===
+  useEffect(() => {
+    const onSuccess = () => {
+      setSuccessShimmer(true);
+      window.setTimeout(() => setSuccessShimmer(false), 1700);
+    };
+    window.addEventListener("skybrief:post-success", onSuccess);
+    return () => window.removeEventListener("skybrief:post-success", onSuccess);
+  }, []);
+
+  // Reuse a previous post: load caption + city back into Create
+  const handleReusePost = useCallback(
+    (post: PostHistoryItem) => {
+      setCaption(post.caption || "");
+      setSettings((prev) => ({ ...prev, location: post.city || prev.location }));
+      setActiveTab("create");
+      toast.success(`Loaded "${post.city}" into Create`, {
+        description: "Caption and city restored. Edit and re-publish when ready.",
+      });
+    },
+    [],
+  );
 
   // Build available platforms list from connection status with brand metadata
   const availablePlatforms = useMemo(() => {
@@ -212,9 +261,9 @@ const Index = () => {
     const ok = await saveSettings(settings);
     setSaving(false);
     if (ok) {
-      toast.success("Settings saved to database!");
+      toast.success("Settings saved", { description: "Your automation preferences are live." });
     } else {
-      toast.error("Failed to save settings.");
+      toast.error("Couldn't save settings", { description: "Check your connection and try again." });
     }
   }, [settings]);
 
@@ -256,7 +305,8 @@ const Index = () => {
   return (
     <div className="dark min-h-screen bg-transparent">
       {/* Top bar */}
-      <header className="border-b border-border/40 bg-card/50 backdrop-blur-xl sticky top-0 z-50">
+      <header className="relative border-b border-border/40 bg-card/50 backdrop-blur-xl sticky top-0 z-50">
+        {successShimmer && <span className="success-shimmer-bar" aria-hidden="true" />}
         <div className="container flex items-center justify-between h-14 px-4">
           <div className="flex items-center gap-2.5">
             <div className="h-8 w-8 rounded-lg bg-primary/20 flex items-center justify-center">
@@ -285,7 +335,7 @@ const Index = () => {
                 disabled={posting || availablePlatforms.length === 0}
                 className="gap-1.5 text-xs rounded-r-none"
               >
-                <Send size={14} />
+                {posting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                 {posting ? "Posting..." : selectedPlatforms.length > 0 ? `Post (${selectedPlatforms.length})` : "Post All"}
               </Button>
               <Popover open={platformPickerOpen} onOpenChange={setPlatformPickerOpen}>
@@ -605,7 +655,7 @@ const Index = () => {
                       disabled={posting || availablePlatforms.length === 0}
                       className="gap-1.5 text-xs w-full"
                     >
-                      <Send size={14} />
+                      {posting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                       {posting
                         ? "Posting..."
                         : selectedPlatforms.length > 0
@@ -662,7 +712,12 @@ const Index = () => {
                   <History size={14} /> Refresh
                 </Button>
               </div>
-              <PostHistoryList posts={posts} loading={postsLoading} />
+              <PostHistoryList
+                posts={posts}
+                loading={postsLoading}
+                onReuse={handleReusePost}
+                onChanged={loadHistory}
+              />
             </div>
           </TabsContent>
 

@@ -196,4 +196,33 @@
   .font-mono-display {
     font-family: 'JetBrains Mono', monospace;
   }
+
+  /* Success shimmer — sweeps a green gradient across the top bar after a successful publish */
+  @keyframes success-sweep {
+    0%   { transform: translateX(-100%); opacity: 0; }
+    15%  { opacity: 1; }
+    85%  { opacity: 1; }
+    100% { transform: translateX(100%); opacity: 0; }
+  }
+  .success-shimmer-bar {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+    border-radius: inherit;
+  }
+  .success-shimmer-bar::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      hsla(142, 76%, 55%, 0.0) 20%,
+      hsla(142, 76%, 55%, 0.45) 50%,
+      hsla(142, 76%, 55%, 0.0) 80%,
+      transparent 100%
+    );
+    animation: success-sweep 1.6s ease-in-out forwards;
+  }
 }

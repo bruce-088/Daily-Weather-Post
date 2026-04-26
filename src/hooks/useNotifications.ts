@@ -95,6 +95,10 @@ export function useNotifications() {
 
           if (n.type === "success") {
             playSuccessPing();
+            // Fire global success-shimmer event
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(new CustomEvent("skybrief:post-success"));
+            }
             toast.success(n.title, { description: n.displayMessage, action });
           } else if (n.type === "error") {
             toast.error(n.title, { description: n.displayMessage, action });

@@ -1,35 +1,147 @@
-import { format } from "date-fns";
+import { format, isToday, isYesterday, startOfDay } from "date-fns";
+import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CheckCircle, XCircle, Clock, History, Image, Youtube, Twitter, Linkedin } from "lucide-react";
-
-const platformConfig: Record<string, { icon: React.ElementType; label: string; color: string }> = {
-  youtube: { icon: Youtube, label: "YouTube", color: "text-red-500" },
-  tiktok: { icon: () => <span className="text-[10px] font-bold">TT</span>, label: "TikTok", color: "text-foreground" },
-  twitter: { icon: Twitter, label: "Twitter/X", color: "text-sky-400" },
-  linkedin: { icon: Linkedin, label: "LinkedIn", color: "text-blue-500" },
-  instagram: { icon: Image, label: "Instagram", color: "text-pink-500" },
-};
+import { Button } from "@/components/ui/button";
+import {
+  CheckCircle2,
+  XCircle,
+  Clock,
+  History,
+  Image as ImageIcon,
+  Youtube,
+  Twitter,
+  Linkedin,
+  Video,
+  RotateCw,
+  Pencil,
+  Loader2,
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
 import type { PostHistoryItem } from "@/lib/api";
+import { triggerDailyPost } from "@/lib/api";
+import { toast } from "sonner";
+
+interface PlatformBrand {
+  icon: React.ElementType;
+  label: string;
+  color: string; // hex for branded look
+  bg: string;
+}
+
+const PLATFORM_BRAND: Record<string, PlatformBrand> = {
+  youtube: { icon: Youtube, label: "YouTube", color: "#FF0000", bg: "rgba(255,0,0,0.12)" },
+  twitter: { icon: Twitter, label: "Twitter / X", color: "#1DA1F2", bg: "rgba(29,161,242,0.12)" },
+  linkedin: { icon: Linkedin, label: "LinkedIn", color: "#0A66C2", bg: "rgba(10,102,194,0.15)" },
+  tiktok: { icon: Video, label: "TikTok", color: "#EE1D52", bg: "rgba(238,29,82,0.12)" },
+  instagram: { icon: ImageIcon, label: "Instagram", color: "#E1306C", bg: "rgba(225,48,108,0.12)" },
+};
+
+interface StatusBrand {
+  icon: React.ElementType;
+  label: string;
+  textClass: string;
+  dotClass: string;
+  badgeClass: string;
+}
+
+const STATUS_BRAND: Record<string, StatusBrand> = {
+  success: {
+    icon: CheckCircle2,
+    label: "Posted",
+    textClass: "text-green-500",
+    dotClass: "bg-green-500",
+    badgeClass: "bg-green-500/15 text-green-400 border-green-500/30",
+  },
+  failed: {
+    icon: XCircle,
+    label: "Failed",
+    textClass: "text-destructive",
+    dotClass: "bg-destructive",
+    badgeClass: "bg-destructive/15 text-destructive border-destructive/30",
+  },
+  pending: {
+    icon: Clock,
+    label: "Pending",
+    textClass: "text-muted-foreground",
+    dotClass: "bg-muted-foreground/60",
+    badgeClass: "bg-muted/40 text-muted-foreground border-border/40",
+  },
+  skipped: {
+    icon: AlertTriangle,
+    label: "Skipped",
+    textClass: "text-muted-foreground",
+    dotClass: "bg-muted-foreground/60",
+    badgeClass: "bg-muted/40 text-muted-foreground border-border/40",
+  },
+};
+
+function dayLabel(d: Date): string {
+  if (isToday(d)) return "Today";
+  if (isYesterday(d)) return "Yesterday";
+  return format(d, "EEEE, MMM d");
+}
 
 interface PostHistoryListProps {
   posts: PostHistoryItem[];
   loading: boolean;
+  onReuse?: (post: PostHistoryItem) => void;
+  onChanged?: () => void;
 }
 
-const statusConfig: Record<string, { icon: React.ElementType; color: string; label: string }> = {
-  success: { icon: CheckCircle, color: "text-accent", label: "Success" },
-  failed: { icon: XCircle, color: "text-destructive", label: "Failed" },
-  pending: { icon: Clock, color: "text-muted-foreground", label: "Pending" },
-};
+export function PostHistoryList({ posts, loading, onReuse, onChanged }: PostHistoryListProps) {
+  const [repostingId, setRepostingId] = useState<string | null>(null);
+  const [expandedError, setExpandedError] = useState<string | null>(null);
 
-export function PostHistoryList({ posts, loading }: PostHistoryListProps) {
+  const grouped = useMemo(() => {
+    const map = new Map<string, { date: Date; items: PostHistoryItem[] }>();
+    for (const p of posts) {
+      const d = startOfDay(new Date(p.created_at));
+      const key = d.toISOString();
+      if (!map.has(key)) map.set(key, { date: d, items: [] });
+      map.get(key)!.items.push(p);
+    }
+    return Array.from(map.values()).sort((a, b) => b.date.getTime() - a.date.getTime());
+  }, [posts]);
+
+  const handleRepost = async (post: PostHistoryItem) => {
+    if (!post.platform) {
+      toast.error("Cannot repost — original platform unknown");
+      return;
+    }
+    setRepostingId(post.id);
+    const res = await triggerDailyPost(undefined, [post.platform]);
+    setRepostingId(null);
+    if (res.success) {
+      toast.success(`Reposting to ${PLATFORM_BRAND[post.platform]?.label || post.platform}…`);
+      onChanged?.();
+    } else {
+      toast.error(res.message || "Repost failed");
+    }
+  };
+
   if (loading) {
     return (
-      <div className="space-y-3">
-        {[1, 2, 3].map((i) => (
-          <Skeleton key={i} className="h-20 w-full rounded-xl" />
+      <div className="space-y-5">
+        {[1, 2].map((g) => (
+          <div key={g} className="space-y-2">
+            <Skeleton className="h-4 w-24 rounded-md" />
+            <div className="space-y-2">
+              {[1, 2].map((i) => (
+                <div key={i} className="flex items-center gap-3 rounded-xl border border-border/30 bg-card/40 p-3">
+                  <Skeleton className="h-12 w-12 rounded-lg shrink-0" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-3 w-1/2" />
+                    <Skeleton className="h-3 w-3/4" />
+                  </div>
+                  <Skeleton className="h-6 w-16 rounded-full" />
+                </div>
+              ))}
+            </div>
+          </div>
         ))}
       </div>
     );
@@ -47,75 +159,160 @@ export function PostHistoryList({ posts, loading }: PostHistoryListProps) {
   }
 
   return (
-    <div className="space-y-3">
-      {posts.map((post) => {
-        const config = statusConfig[post.status] || statusConfig.pending;
-        const Icon = config.icon;
+    <div className="space-y-6">
+      {grouped.map((group) => (
+        <section key={group.date.toISOString()} className="space-y-2">
+          <div className="flex items-center gap-2 px-1">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              {dayLabel(group.date)}
+            </h3>
+            <span className="text-[10px] text-muted-foreground/60">· {group.items.length}</span>
+            <div className="flex-1 border-t border-border/20 ml-2" />
+          </div>
 
-        return (
-          <Card key={post.id} className="border-border/30 bg-card/60 backdrop-blur">
-            <CardContent className="py-3 px-4 flex items-center gap-3">
-              {post.image_url ? (
-                <div className="relative shrink-0">
-                  <img
-                    src={post.image_url}
-                    alt={`Weather post for ${post.city}`}
-                    className="w-12 h-12 rounded-lg object-cover border border-border/30"
-                  />
-                  <div className="absolute -bottom-1 -right-1 bg-background rounded-full p-0.5 border border-border/30">
-                    <Icon size={12} className={config.color} />
-                  </div>
-                </div>
-              ) : (
-                <Icon size={18} className={config.color} />
-              )}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-foreground">{post.city}</span>
-                  {post.temperature !== null && (
-                    <span className="text-xs text-muted-foreground font-mono-display">
-                      {post.temperature}°F
-                    </span>
-                  )}
-                  {post.condition && (
-                    <span className="text-xs text-muted-foreground">· {post.condition}</span>
-                  )}
-                   {post.platform && platformConfig[post.platform] && (() => {
-                     const pCfg = platformConfig[post.platform!];
-                     const PIcon = pCfg.icon;
-                     return (
-                       <span className={`inline-flex items-center gap-0.5 ${pCfg.color}`} title={pCfg.label}>
-                         <PIcon size={12} />
-                         <span className="text-[10px]">{pCfg.label}</span>
-                       </span>
-                     );
-                   })()}
-                   {post.image_url && (
-                     <Image size={12} className="text-muted-foreground" />
-                   )}
-                </div>
-                {post.caption && (
-                  <p className="text-xs text-muted-foreground truncate mt-0.5 italic">"{post.caption}"</p>
-                )}
-                {post.error_message && (
-                  <p className="text-xs text-muted-foreground truncate mt-0.5">{post.error_message}</p>
-                )}
-              </div>
-              <div className="flex flex-col items-end gap-1">
-                <Badge
-                  variant={post.status === "success" ? "default" : post.status === "failed" ? "destructive" : "secondary"}
-                  className="text-[10px]"
+          <div className="space-y-2">
+            {group.items.map((post) => {
+              const status = STATUS_BRAND[post.status] || STATUS_BRAND.pending;
+              const brand = post.platform ? PLATFORM_BRAND[post.platform] : null;
+              const PIcon = brand?.icon;
+              const StatusIcon = status.icon;
+              const isErrorOpen = expandedError === post.id;
+              const isFailed = post.status === "failed";
+
+              return (
+                <Card
+                  key={post.id}
+                  className="border-border/30 bg-card/60 backdrop-blur hover:bg-card/80 transition-colors"
                 >
-                  {config.label}
-                </Badge>
-                <span className="text-[10px] text-muted-foreground">
-                  {format(new Date(post.created_at), "MMM d, HH:mm")}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-        );
-      })}
+                  <CardContent className="py-3 px-4">
+                    <div className="flex items-start gap-3">
+                      {/* Thumbnail or platform tile */}
+                      <div className="relative shrink-0">
+                        {post.image_url ? (
+                          <img
+                            src={post.image_url}
+                            alt={`Weather post for ${post.city}`}
+                            className="w-14 h-14 rounded-lg object-cover border border-border/30"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <div
+                            className="w-14 h-14 rounded-lg flex items-center justify-center border border-border/30"
+                            style={brand ? { backgroundColor: brand.bg } : undefined}
+                          >
+                            {PIcon ? (
+                              <PIcon size={22} style={{ color: brand!.color }} />
+                            ) : (
+                              <ImageIcon size={20} className="text-muted-foreground/60" />
+                            )}
+                          </div>
+                        )}
+                        {post.image_url && PIcon && (
+                          <span
+                            className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full flex items-center justify-center border border-background"
+                            style={{ backgroundColor: brand!.color }}
+                            title={brand!.label}
+                          >
+                            <PIcon size={10} className="text-white" />
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Body */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-medium text-foreground">{post.city}</span>
+                          {post.temperature !== null && (
+                            <span className="text-xs text-muted-foreground font-mono-display">
+                              {post.temperature}°F
+                            </span>
+                          )}
+                          {post.condition && (
+                            <span className="text-xs text-muted-foreground">· {post.condition}</span>
+                          )}
+                          {brand && PIcon && (
+                            <span
+                              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium"
+                              style={{ backgroundColor: brand.bg, color: brand.color }}
+                              title={brand.label}
+                            >
+                              <PIcon size={10} />
+                              {brand.label}
+                            </span>
+                          )}
+                        </div>
+                        {post.caption && (
+                          <p className="text-xs text-muted-foreground line-clamp-2 mt-1 italic">
+                            "{post.caption}"
+                          </p>
+                        )}
+                        {post.error_message && isFailed && (
+                          <button
+                            type="button"
+                            onClick={() => setExpandedError(isErrorOpen ? null : post.id)}
+                            className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-destructive hover:underline"
+                          >
+                            {isErrorOpen ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+                            {isErrorOpen ? "Hide error" : "View error"}
+                          </button>
+                        )}
+                        {isErrorOpen && post.error_message && (
+                          <p className="mt-1 text-[11px] text-destructive bg-destructive/10 border border-destructive/20 rounded-md px-2 py-1.5 whitespace-pre-wrap">
+                            {post.error_message}
+                          </p>
+                        )}
+
+                        {/* Quick actions */}
+                        <div className="flex items-center gap-1.5 mt-2">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 text-[11px] gap-1 px-2"
+                            onClick={() => handleRepost(post)}
+                            disabled={repostingId === post.id || !post.platform}
+                            title="Re-run this exact post"
+                          >
+                            {repostingId === post.id ? (
+                              <Loader2 size={11} className="animate-spin" />
+                            ) : (
+                              <RotateCw size={11} />
+                            )}
+                            Repost
+                          </Button>
+                          {onReuse && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 text-[11px] gap-1 px-2"
+                              onClick={() => onReuse(post)}
+                              title="Load caption & city back into Create"
+                            >
+                              <Pencil size={11} /> Reuse
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Right column: status + time */}
+                      <div className="flex flex-col items-end gap-1.5 shrink-0">
+                        <Badge
+                          variant="outline"
+                          className={`text-[10px] gap-1 ${status.badgeClass}`}
+                        >
+                          <StatusIcon size={10} /> {status.label}
+                        </Badge>
+                        <span className="text-[10px] text-muted-foreground tabular-nums">
+                          {format(new Date(post.created_at), "HH:mm")}
+                        </span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </section>
+      ))}
     </div>
   );
 }
