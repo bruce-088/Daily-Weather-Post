@@ -378,11 +378,12 @@ export function VideoPreviewDialog({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={handleGenerate}
+                  onClick={() => handleGenerate(true)}
                   disabled={isBusy}
                   className="gap-1.5 text-xs"
+                  title="Generate a different creative angle"
                 >
-                  <RefreshCw size={14} /> Re-render
+                  <RefreshCw size={14} /> Try a Variation
                 </Button>
                 <Button
                   variant="outline"
