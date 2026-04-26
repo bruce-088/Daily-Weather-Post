@@ -126,6 +126,7 @@ export type Database = {
         Row: {
           afternoon_platforms: Json
           afternoon_post_time: string
+          afternoon_skip_date: string | null
           auto_post: boolean
           auto_post_afternoon: boolean
           auto_post_evening: boolean
@@ -134,6 +135,7 @@ export type Database = {
           created_at: string
           evening_platforms: Json
           evening_post_time: string
+          evening_skip_date: string | null
           id: string
           instagram_api_key: string | null
           linkedin_access_token: string | null
@@ -143,6 +145,7 @@ export type Database = {
           linkedin_token_expires_at: string | null
           morning_platforms: Json
           morning_post_time: string
+          morning_skip_date: string | null
           post_time: string
           state: string | null
           tiktok_access_token: string | null
@@ -164,6 +167,7 @@ export type Database = {
         Insert: {
           afternoon_platforms?: Json
           afternoon_post_time?: string
+          afternoon_skip_date?: string | null
           auto_post?: boolean
           auto_post_afternoon?: boolean
           auto_post_evening?: boolean
@@ -172,6 +176,7 @@ export type Database = {
           created_at?: string
           evening_platforms?: Json
           evening_post_time?: string
+          evening_skip_date?: string | null
           id?: string
           instagram_api_key?: string | null
           linkedin_access_token?: string | null
@@ -181,6 +186,7 @@ export type Database = {
           linkedin_token_expires_at?: string | null
           morning_platforms?: Json
           morning_post_time?: string
+          morning_skip_date?: string | null
           post_time?: string
           state?: string | null
           tiktok_access_token?: string | null
@@ -202,6 +208,7 @@ export type Database = {
         Update: {
           afternoon_platforms?: Json
           afternoon_post_time?: string
+          afternoon_skip_date?: string | null
           auto_post?: boolean
           auto_post_afternoon?: boolean
           auto_post_evening?: boolean
@@ -210,6 +217,7 @@ export type Database = {
           created_at?: string
           evening_platforms?: Json
           evening_post_time?: string
+          evening_skip_date?: string | null
           id?: string
           instagram_api_key?: string | null
           linkedin_access_token?: string | null
@@ -219,6 +227,7 @@ export type Database = {
           linkedin_token_expires_at?: string | null
           morning_platforms?: Json
           morning_post_time?: string
+          morning_skip_date?: string | null
           post_time?: string
           state?: string | null
           tiktok_access_token?: string | null
