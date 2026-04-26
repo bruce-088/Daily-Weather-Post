@@ -6,12 +6,13 @@ import {
   Pencil,
   Search,
   XCircle,
-  Copy,
+  CopyPlus,
   RefreshCw,
   ChevronDown,
   ChevronUp,
   Save,
   X,
+  CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
