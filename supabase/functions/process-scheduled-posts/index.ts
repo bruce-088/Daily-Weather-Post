@@ -1076,18 +1076,26 @@ Deno.serve(async (req) => {
         if (!voiceUrl && post.include_voiceover && post.user_id) {
           console.log(`[process] post ${post.id}: voiceover requested, generating script + TTS`);
           try {
-            // Look up the user's preferred voice
+            // Look up the user's preferred voice + tuning
             const { data: vSettings } = await supabase
               .from("weather_settings")
-              .select("voiceover_voice_id")
+              .select("voiceover_voice_id, voiceover_speed, voiceover_stability, voiceover_similarity")
               .eq("user_id", post.user_id)
               .limit(1)
               .maybeSingle();
             const voiceId = (vSettings as any)?.voiceover_voice_id || "female";
+            const voiceSpeed = (vSettings as any)?.voiceover_speed;
+            const voiceStability = (vSettings as any)?.voiceover_stability;
+            const voiceSimilarity = (vSettings as any)?.voiceover_similarity;
+            console.log(`[process] post ${post.id}: voice=${voiceId} speed=${voiceSpeed} stability=${voiceStability} similarity=${voiceSimilarity}`);
 
             const script = await generateVoiceScript(weather);
             console.log(`[process] post ${post.id}: voice script: ${script}`);
-            const audioBytes = await generateVoiceAudio(script, voiceId);
+            const audioBytes = await generateVoiceAudio(script, voiceId, {
+              speed: voiceSpeed,
+              stability: voiceStability,
+              similarity: voiceSimilarity,
+            });
             if (audioBytes) {
               const url = await storeVoiceAudio(supabase, post.user_id, audioBytes);
               if (url) {
