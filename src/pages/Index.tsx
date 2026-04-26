@@ -261,9 +261,9 @@ const Index = () => {
     const ok = await saveSettings(settings);
     setSaving(false);
     if (ok) {
-      toast.success("Settings saved to database!");
+      toast.success("Settings saved", { description: "Your automation preferences are live." });
     } else {
-      toast.error("Failed to save settings.");
+      toast.error("Couldn't save settings", { description: "Check your connection and try again." });
     }
   }, [settings]);
 
