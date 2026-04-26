@@ -93,10 +93,12 @@ export type Database = {
           created_at: string
           error_message: string | null
           id: string
+          include_voiceover: boolean
           platform: string
           scheduled_at: string
           status: string
           user_id: string
+          voiceover_url: string | null
         }
         Insert: {
           caption?: string | null
@@ -104,10 +106,12 @@ export type Database = {
           created_at?: string
           error_message?: string | null
           id?: string
+          include_voiceover?: boolean
           platform?: string
           scheduled_at: string
           status?: string
           user_id: string
+          voiceover_url?: string | null
         }
         Update: {
           caption?: string | null
@@ -115,10 +119,12 @@ export type Database = {
           created_at?: string
           error_message?: string | null
           id?: string
+          include_voiceover?: boolean
           platform?: string
           scheduled_at?: string
           status?: string
           user_id?: string
+          voiceover_url?: string | null
         }
         Relationships: []
       }
@@ -157,6 +163,7 @@ export type Database = {
           auto_post_morning: boolean
           city: string
           created_at: string
+          enable_voiceover: boolean
           evening_platforms: Json
           evening_post_time: string
           evening_skip_date: string | null
@@ -183,6 +190,7 @@ export type Database = {
           twitter_user_id: string | null
           updated_at: string
           user_id: string | null
+          voiceover_voice_id: string
           youtube_access_token: string | null
           youtube_channel_id: string | null
           youtube_refresh_token: string | null
@@ -198,6 +206,7 @@ export type Database = {
           auto_post_morning?: boolean
           city?: string
           created_at?: string
+          enable_voiceover?: boolean
           evening_platforms?: Json
           evening_post_time?: string
           evening_skip_date?: string | null
@@ -224,6 +233,7 @@ export type Database = {
           twitter_user_id?: string | null
           updated_at?: string
           user_id?: string | null
+          voiceover_voice_id?: string
           youtube_access_token?: string | null
           youtube_channel_id?: string | null
           youtube_refresh_token?: string | null
@@ -239,6 +249,7 @@ export type Database = {
           auto_post_morning?: boolean
           city?: string
           created_at?: string
+          enable_voiceover?: boolean
           evening_platforms?: Json
           evening_post_time?: string
           evening_skip_date?: string | null
@@ -265,6 +276,7 @@ export type Database = {
           twitter_user_id?: string | null
           updated_at?: string
           user_id?: string | null
+          voiceover_voice_id?: string
           youtube_access_token?: string | null
           youtube_channel_id?: string | null
           youtube_refresh_token?: string | null
