@@ -161,7 +161,7 @@ tomorrow_preview: ${body.tomorrow_preview ?? body.tomorrowPreview ?? "N/A"}
 sunrise_time: ${body.sunrise_time ?? body.sunrise ?? "N/A"}
 sunset_time: ${body.sunset_time ?? body.sunset ?? "N/A"}
 dynamic_handle: ${handle}
-extra_note: ${body.extra_note ?? body.extraNote ?? ""}${extremeNote}`;
+extra_note: ${body.extra_note ?? body.extraNote ?? ""}${extremeNote}${styleNote}${variationNote}`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
