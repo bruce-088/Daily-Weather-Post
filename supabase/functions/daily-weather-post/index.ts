@@ -1190,8 +1190,32 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Generate video
-    const video = await generateWeatherVideo(weather, timePeriod);
+    // === AI VOICE NARRATION (optional) ===
+    // Generated BEFORE the video so we can pass the audio URL into Creatomate.
+    // If TTS fails, we proceed silently without voice (does not break flow).
+    let voiceUrl: string | null = null;
+    let voiceStoragePath: string | null = null;
+    let voiceScript: string | null = null;
+    if (voiceOpts.enabled && userId) {
+      console.log("Voice enabled — generating script + TTS audio");
+      voiceScript = await generateVoiceScript(weather, voiceOpts.tone);
+      console.log("Voice script:", voiceScript);
+      const audioBytes = await generateVoiceAudio(voiceScript, voiceOpts);
+      if (audioBytes) {
+        const stored = await storeVoiceAudio(supabase, userId, audioBytes);
+        if (stored) {
+          voiceUrl = stored.signedUrl;
+          voiceStoragePath = stored.storagePath;
+          console.log("Voice audio stored at:", voiceStoragePath);
+        }
+      } else {
+        console.warn("Voice audio generation failed — continuing without voiceover");
+      }
+    }
+
+    // Generate video (with voice baked in if available)
+    const video = await generateWeatherVideo(weather, timePeriod, voiceUrl);
+
 
     // === PREVIEW MODE ===
     if (mode === "preview") {
