@@ -1,13 +1,13 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Play, Upload, RefreshCw, X, Loader2, Pencil, Eye, Download, Send } from "lucide-react";
+import { Play, Upload, RefreshCw, X, Loader2, Pencil, Eye, Download, Send, Mic, Pause } from "lucide-react";
 import { generatePreview, uploadPreviewVideo, triggerDailyPost } from "@/lib/api";
-import type { PreviewResult } from "@/lib/api";
+import type { PreviewResult, VoiceOptions } from "@/lib/api";
 import {
   PostProgressPanel,
   buildInitialStates,
@@ -29,6 +29,8 @@ interface VideoPreviewDialogProps {
   onPosted?: () => void;
   /** Visual style preset for generation: standard | minimal | cinematic */
   style?: string;
+  /** AI voiceover options forwarded to preview + post */
+  voice?: VoiceOptions;
 }
 
 export function VideoPreviewDialog({
@@ -40,10 +42,13 @@ export function VideoPreviewDialog({
   platformLabels,
   onPosted,
   style = "standard",
+  voice,
 }: VideoPreviewDialogProps) {
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [generating, setGenerating] = useState(false);
-  const [genStage, setGenStage] = useState<"idle" | "video" | "image">("idle");
+  const [genStage, setGenStage] = useState<"idle" | "video" | "image" | "voice">("idle");
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [audioPlaying, setAudioPlaying] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [editedCaption, setEditedCaption] = useState("");
   const [isEditingCaption, setIsEditingCaption] = useState(false);
@@ -109,9 +114,10 @@ export function VideoPreviewDialog({
     // The edge function tries video first via Creatomate; if that fails it
     // falls back to AI-generated image — we surface that visually.
     const stageTimer = setTimeout(() => setGenStage("image"), 25000);
+    const voiceTimer = voice?.enabled ? setTimeout(() => setGenStage("voice"), 8000) : null;
 
     try {
-      const result = await generatePreview({ style, variation });
+      const result = await generatePreview({ style, variation, voice });
       if (result.success && (result.video_url || result.image_url)) {
         setPreview(result);
         if (variation) {
@@ -128,6 +134,7 @@ export function VideoPreviewDialog({
       toast.error(err.message || "Failed to generate preview");
     } finally {
       clearTimeout(stageTimer);
+      if (voiceTimer) clearTimeout(voiceTimer);
       setGenerating(false);
       setGenStage("idle");
     }
@@ -164,7 +171,7 @@ export function VideoPreviewDialog({
   const postSinglePlatform = async (platformId: string) => {
     updatePlatform(platformId, { status: "posting", message: `Posting to ${platformId}…` });
     try {
-      const result = await triggerDailyPost(undefined, [platformId]);
+      const result = await triggerDailyPost(undefined, [platformId], voice);
       if (result.success) {
         updatePlatform(platformId, { status: "success", message: result.message || "Posted successfully" });
       } else {
@@ -263,12 +270,16 @@ export function VideoPreviewDialog({
             <div className="flex flex-col items-center gap-3 py-12">
               <Loader2 size={32} className="animate-spin text-primary" />
               <p className="text-sm font-medium text-foreground">
-                {genStage === "image"
+                {genStage === "voice"
+                  ? "🎙️ Generating voice narration…"
+                  : genStage === "image"
                   ? "🖼️ Generating AI weather image via Gemini…"
                   : "🎥 Creating high-quality video via Creatomate…"}
               </p>
               <p className="text-xs text-muted-foreground">
-                {genStage === "image"
+                {genStage === "voice"
+                  ? "Synthesizing your AI voiceover with ElevenLabs."
+                  : genStage === "image"
                   ? "Video render didn't make it — falling back to a designed image."
                   : "This usually takes 30–60 seconds. We'll fall back to an AI image if needed."}
               </p>
@@ -309,6 +320,45 @@ export function VideoPreviewDialog({
                   <Badge variant="secondary" className="text-xs">
                     {preview.weather.condition}
                   </Badge>
+                </div>
+              )}
+
+              {/* AI Voice preview */}
+              {preview.audio_url && (
+                <div className="rounded-lg border border-white/10 bg-secondary/30 p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-xs font-medium text-foreground">
+                      <Mic size={12} className="text-primary" /> AI Voiceover
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5 text-xs h-7"
+                      onClick={() => {
+                        if (!audioRef.current) return;
+                        if (audioPlaying) {
+                          audioRef.current.pause();
+                        } else {
+                          audioRef.current.play().catch(() => {});
+                        }
+                      }}
+                    >
+                      {audioPlaying ? <><Pause size={12} /> Pause</> : <><Play size={12} /> Preview Audio</>}
+                    </Button>
+                  </div>
+                  {preview.voice_script && (
+                    <p className="text-[11px] text-muted-foreground italic leading-snug">
+                      "{preview.voice_script}"
+                    </p>
+                  )}
+                  <audio
+                    ref={audioRef}
+                    src={preview.audio_url}
+                    onPlay={() => setAudioPlaying(true)}
+                    onPause={() => setAudioPlaying(false)}
+                    onEnded={() => setAudioPlaying(false)}
+                    className="hidden"
+                  />
                 </div>
               )}
 

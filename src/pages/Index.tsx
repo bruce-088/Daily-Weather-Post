@@ -26,6 +26,7 @@ import {
   Linkedin,
   Video,
   Loader2,
+  Mic,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
@@ -35,6 +36,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { WeatherCard, type CardStyle } from "@/components/WeatherCard";
 import { SettingsPanel } from "@/components/SettingsPanel";
+import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PostHistoryList } from "@/components/PostHistoryList";
 import { VideoPreviewDialog } from "@/components/VideoPreviewDialog";
 import { SchedulePostForm } from "@/components/SchedulePostForm";
@@ -42,7 +45,7 @@ import { ScheduledPostsList } from "@/components/ScheduledPostsList";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useWeather } from "@/hooks/useWeather";
-import { loadSettings, saveSettings, triggerDailyPost, fetchPostHistory, fetchScheduledPosts, generateCaption } from "@/lib/api";
+import { loadSettings, saveSettings, triggerDailyPost, fetchPostHistory, fetchScheduledPosts, generateCaption, type VoiceOptions } from "@/lib/api";
 import type { AspectRatio, AutomationSettings } from "@/types/weather";
 import type { PostHistoryItem, ScheduledPostItem } from "@/lib/api";
 
@@ -129,6 +132,15 @@ const Index = () => {
   const [platformPickerOpen, setPlatformPickerOpen] = useState(false);
   const [cardStyle, setCardStyle] = useState<CardStyle>("standard");
   const [successShimmer, setSuccessShimmer] = useState(false);
+
+  // === AI Voiceover settings ===
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [voiceId, setVoiceId] = useState<"female" | "male">("female");
+  const [voiceTone, setVoiceTone] = useState<"conversational" | "energetic" | "news">("conversational");
+  const voiceOptions: VoiceOptions = useMemo(
+    () => ({ enabled: voiceEnabled, voiceId, tone: voiceTone }),
+    [voiceEnabled, voiceId, voiceTone],
+  );
 
   // === Caption draft autosave (10s interval to localStorage) ===
   const CAPTION_DRAFT_KEY = "skybrief_caption_draft_v1";
@@ -496,6 +508,57 @@ const Index = () => {
                       />
                     )}
                   </div>
+
+                  {/* AI Voiceover card */}
+                  <div className="rounded-xl border border-white/10 bg-white/5 backdrop-blur-xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                        <Mic size={14} className="text-primary" /> 🎙️ AI Voiceover
+                      </h3>
+                      <Switch
+                        checked={voiceEnabled}
+                        onCheckedChange={setVoiceEnabled}
+                        aria-label="Toggle AI voiceover"
+                      />
+                    </div>
+                    {voiceEnabled && (
+                      <div className="space-y-2 pt-1">
+                        <div>
+                          <label className="text-[11px] text-muted-foreground mb-1 block">Voice</label>
+                          <Select value={voiceId} onValueChange={(v) => setVoiceId(v as "female" | "male")}>
+                            <SelectTrigger className="h-8 text-xs bg-secondary/40 border-border/30">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="female">Female (default)</SelectItem>
+                              <SelectItem value="male">Male</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <label className="text-[11px] text-muted-foreground mb-1 block">Tone</label>
+                          <Select
+                            value={voiceTone}
+                            onValueChange={(v) =>
+                              setVoiceTone(v as "conversational" | "energetic" | "news")
+                            }
+                          >
+                            <SelectTrigger className="h-8 text-xs bg-secondary/40 border-border/30">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="conversational">Conversational</SelectItem>
+                              <SelectItem value="energetic">Energetic</SelectItem>
+                              <SelectItem value="news">News-style</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground leading-snug">
+                          Voice is generated from a fresh spoken script (not the caption) and mixed into the video.
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </aside>
 
                 {/* CENTER: WeatherCard stage */}
@@ -764,6 +827,7 @@ const Index = () => {
         }}
         onPosted={loadHistory}
         style={cardStyle}
+        voice={voiceOptions}
       />
 
       <footer className="border-t border-border/50 py-4 px-6 flex items-center justify-center gap-4 text-xs text-muted-foreground">
