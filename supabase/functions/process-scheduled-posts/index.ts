@@ -622,9 +622,16 @@ async function generateVoiceScript(weather: WeatherResponse): Promise<string> {
   }
 }
 
-async function generateVoiceAudio(script: string, voiceId: string): Promise<Uint8Array | null> {
+async function generateVoiceAudio(
+  script: string,
+  voiceId: string,
+  opts?: { speed?: number; stability?: number; similarity?: number },
+): Promise<Uint8Array | null> {
   const apiKey = Deno.env.get("ELEVENLABS_API_KEY");
   if (!apiKey) { console.error("[voice] ELEVENLABS_API_KEY not configured"); return null; }
+  const speed = clampVoiceParam(opts?.speed, 0.7, 1.2, 1.0);
+  const stability = clampVoiceParam(opts?.stability, 0, 1, 0.55);
+  const similarity = clampVoiceParam(opts?.similarity, 0, 1, 0.78);
   const url = `https://api.elevenlabs.io/v1/text-to-speech/${resolveVoiceId(voiceId)}?output_format=mp3_44100_128`;
   try {
     const res = await fetch(url, {
@@ -633,7 +640,7 @@ async function generateVoiceAudio(script: string, voiceId: string): Promise<Uint
       body: JSON.stringify({
         text: script,
         model_id: "eleven_turbo_v2_5",
-        voice_settings: { stability: 0.55, similarity_boost: 0.78, style: 0.35, use_speaker_boost: true, speed: 1.0 },
+        voice_settings: { stability, similarity_boost: similarity, style: 0.35, use_speaker_boost: true, speed },
       }),
     });
     if (!res.ok) {
