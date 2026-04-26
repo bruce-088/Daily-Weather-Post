@@ -212,12 +212,29 @@ function PostRow({ post, onRefresh, onCancelRequest }: PostRowProps) {
                   variant="outline"
                   className={`text-[10px] tabular-nums leading-none px-2 py-0.5 ${
                     isPast
-                      ? "bg-amber-500/10 text-amber-500 border-amber-500/30"
+                      ? isMildlyOverdue
+                        ? "bg-amber-500/5 text-amber-500/80 border-amber-500/20"
+                        : "bg-destructive/10 text-destructive border-destructive/30"
                       : "bg-primary/10 text-primary border-primary/30"
                   }`}
+                  title={
+                    isMildlyOverdue
+                      ? "Within the 10-min cron window — will run on the next check"
+                      : undefined
+                  }
                 >
                   {countdownLabel}
                 </Badge>
+              )}
+              {isProcessing && (
+                <div className="flex items-center gap-2 min-w-[180px]">
+                  <span className="text-[10px] font-medium text-primary whitespace-nowrap">
+                    🎬 Rendering Video & Voiceover...
+                  </span>
+                  <div className="relative flex-1 h-1.5 rounded-full bg-primary/10 overflow-hidden">
+                    <div className="absolute inset-y-0 -left-1/3 w-1/3 bg-gradient-to-r from-transparent via-primary to-transparent animate-shimmer" />
+                  </div>
+                </div>
               )}
             </div>
             {post.error_message && !expanded && (
