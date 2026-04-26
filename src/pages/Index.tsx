@@ -450,7 +450,7 @@ const Index = () => {
 
                 {/* CENTER: WeatherCard stage */}
                 <div className="flex flex-col items-center gap-4 order-1 lg:order-2">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap justify-center">
                     <Button
                       size="sm"
                       variant={aspectRatio === "1:1" ? "default" : "outline"}
@@ -467,6 +467,24 @@ const Index = () => {
                     >
                       <RectangleVertical size={14} /> 9:16 Story
                     </Button>
+                  </div>
+
+                  {/* Style selector */}
+                  <div className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 backdrop-blur-xl p-1">
+                    {(["standard", "minimal", "cinematic"] as CardStyle[]).map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => setCardStyle(s)}
+                        className={`text-[11px] px-3 py-1 rounded-full capitalize transition-colors ${
+                          cardStyle === s
+                            ? "bg-primary text-primary-foreground"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {s}
+                      </button>
+                    ))}
                   </div>
 
                   {error && <p className="text-sm text-destructive">{error}</p>}
@@ -489,7 +507,13 @@ const Index = () => {
                           : "weather-glow-clouds"
                       }`}
                     >
-                      <WeatherCard ref={cardRef} weather={weather} aspectRatio={aspectRatio} />
+                      <WeatherCard
+                        ref={cardRef}
+                        weather={weather}
+                        aspectRatio={aspectRatio}
+                        style={cardStyle}
+                        generating={loading || captionLoading}
+                      />
                       <Button
                         onClick={handleExport}
                         size="icon"
