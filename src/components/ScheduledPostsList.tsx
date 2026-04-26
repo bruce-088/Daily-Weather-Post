@@ -245,10 +245,10 @@ function PostRow({ post, onRefresh, onCancelRequest }: PostRowProps) {
               variant="ghost"
               onClick={handleDuplicate}
               disabled={duplicating}
-              className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+              className="h-8 w-8 p-0 text-muted-foreground hover:text-primary"
               title="Duplicate post"
             >
-              <Copy size={14} />
+              <CopyPlus size={14} />
             </Button>
             {isPending && (
               <>
