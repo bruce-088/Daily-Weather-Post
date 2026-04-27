@@ -72,9 +72,16 @@ Deno.serve(async (req) => {
     if (!ttsRes.ok) {
       const errText = (await ttsRes.text()).slice(0, 300);
       console.error("[tts-preview] ElevenLabs error:", ttsRes.status, errText);
+      // Detect quota / auth issues so the client can gracefully fall back
+      // to the browser's built-in speech synthesis instead of crashing.
+      const isQuota = ttsRes.status === 401 || ttsRes.status === 402 || /quota/i.test(errText);
+      const isFallbackable = isQuota || ttsRes.status >= 500;
+      const message = isQuota
+        ? "Voice service quota exceeded — using browser voice as fallback."
+        : `Voice generation failed (${ttsRes.status})`;
       return new Response(
-        JSON.stringify({ error: `Voice generation failed (${ttsRes.status})` }),
-        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        JSON.stringify({ error: message, fallback: isFallbackable }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
