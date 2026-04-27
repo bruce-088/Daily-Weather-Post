@@ -1044,6 +1044,12 @@ Deno.serve(async (req) => {
           if ((toneSettings as any)?.caption_tone) captionTone = (toneSettings as any).caption_tone;
         } catch { /* ignore */ }
 
+        // Resolve the primary platform up-front so the caption can be platform-tuned
+        const earlyPlatformList = post.platform === "both"
+          ? ["youtube", "tiktok"]
+          : String(post.platform || "").split(",").map((p: string) => p.trim()).filter(Boolean);
+        const primaryPlatform = earlyPlatformList[0] || null;
+
         if (!caption) {
           const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
           if (LOVABLE_API_KEY) {
@@ -1072,6 +1078,7 @@ Deno.serve(async (req) => {
                           highTemp: weather.afternoonTemp ?? weather.temperature ?? 0,
                           lowTemp: weather.morningTemp ?? weather.temperature ?? 0,
                           conditions: weather.afternoonCondition || weather.condition || "",
+                          platform: primaryPlatform,
                         }),
                     },
                   ],
