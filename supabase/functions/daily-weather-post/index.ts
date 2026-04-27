@@ -1188,6 +1188,7 @@ Deno.serve(async (req) => {
                     highTemp: weather.afternoonTemp ?? weather.temperature ?? 0,
                     lowTemp: weather.morningTemp ?? weather.temperature ?? 0,
                     conditions: weather.afternoonCondition || weather.condition || "",
+                    platform: (selectedPlatforms && selectedPlatforms[0]) || null,
                   }),
               },
             ],
