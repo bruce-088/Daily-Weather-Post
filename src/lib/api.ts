@@ -36,6 +36,7 @@ export async function loadSettings(): Promise<{ settings: AutomationSettings; ti
       voiceoverSpeed: Number((data as any).voiceover_speed ?? 1.0),
       voiceoverStability: Number((data as any).voiceover_stability ?? 0.55),
       voiceoverSimilarity: Number((data as any).voiceover_similarity ?? 0.78),
+      captionTone: ((data as any).caption_tone as any) || "professional",
     },
     tiktokConnected: !!(data as any).tiktok_access_token,
     youtubeConnected: !!(data as any).youtube_access_token,
@@ -80,6 +81,7 @@ export async function saveSettings(settings: AutomationSettings): Promise<boolea
     voiceover_speed: typeof settings.voiceoverSpeed === "number" ? settings.voiceoverSpeed : 1.0,
     voiceover_stability: typeof settings.voiceoverStability === "number" ? settings.voiceoverStability : 0.55,
     voiceover_similarity: typeof settings.voiceoverSimilarity === "number" ? settings.voiceoverSimilarity : 0.78,
+    caption_tone: settings.captionTone || "professional",
     user_id: user.id,
   };
 
@@ -333,7 +335,7 @@ export async function retryScheduledPost(id: string): Promise<boolean> {
 
 export async function generateCaption(
   weather: WeatherData,
-  opts?: { style?: string; variation?: boolean }
+  opts?: { style?: string; variation?: boolean; tone?: string; timePeriod?: string | null }
 ): Promise<string> {
   const { data, error } = await supabase.functions.invoke("generate-caption", {
     body: {
@@ -354,6 +356,8 @@ export async function generateCaption(
       tomorrowCondition: weather.tomorrowCondition,
       style: opts?.style ?? "standard",
       variation: !!opts?.variation,
+      tone: opts?.tone,
+      time_period: opts?.timePeriod ?? null,
     },
   });
 

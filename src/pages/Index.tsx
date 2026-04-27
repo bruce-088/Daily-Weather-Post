@@ -71,6 +71,7 @@ const DEFAULT_SETTINGS: AutomationSettings = {
   voiceoverSpeed: 1.0,
   voiceoverStability: 0.55,
   voiceoverSimilarity: 0.78,
+  captionTone: "professional",
 };
 
 const Index = () => {
@@ -336,7 +337,14 @@ const Index = () => {
     if (captionLoading) return; // duplicate-request guard
     setCaptionLoading(true);
     try {
-      const result = await generateCaption(weather, { style: cardStyle, variation });
+      const hr = new Date().getHours();
+      const timePeriod = hr < 11 ? "morning" : hr < 17 ? "afternoon" : "evening";
+      const result = await generateCaption(weather, {
+        style: cardStyle,
+        variation,
+        tone: settings.captionTone,
+        timePeriod,
+      });
       setCaption(result);
       toast.success(variation ? "✨ New variation ready" : "✅ Caption generated");
     } catch (err: any) {
@@ -347,7 +355,7 @@ const Index = () => {
     } finally {
       setCaptionLoading(false);
     }
-  }, [weather, cardStyle, captionLoading]);
+  }, [weather, cardStyle, captionLoading, settings.captionTone]);
 
   return (
     <div className="dark min-h-screen bg-transparent">

@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { buildStyleAddendum, normalizeTone } from "../_shared/caption-style.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1176,7 +1177,18 @@ Deno.serve(async (req) => {
                     : "") +
                   (variation
                     ? "\n\nVARIATION REQUEST: Pick a noticeably different creative angle (witty, dramatic, conversational, or poetic). Vary opening line and rhythm."
-                    : ""),
+                    : "") +
+                  "\n\n" +
+                  buildStyleAddendum({
+                    tone: normalizeTone((settings as any).caption_tone),
+                    city: weather.city,
+                    state: weather.stateOrRegion,
+                    period: timePeriod,
+                    rainChance: weather.rainChance ?? 0,
+                    highTemp: weather.afternoonTemp ?? weather.temperature ?? 0,
+                    lowTemp: weather.morningTemp ?? weather.temperature ?? 0,
+                    conditions: weather.afternoonCondition || weather.condition || "",
+                  }),
               },
             ],
           }),

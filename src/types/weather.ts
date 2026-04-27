@@ -64,4 +64,6 @@ export interface AutomationSettings {
   voiceoverSpeed: number;       // 0.7–1.2 (default 1.0)
   voiceoverStability: number;   // 0–1 (default 0.55) — lower = more expressive
   voiceoverSimilarity: number;  // 0–1 (default 0.78) — higher = closer to original voice
+  // AI caption "Voice & Tone" preset
+  captionTone: "professional" | "hype" | "funny" | "local_legend";
 }

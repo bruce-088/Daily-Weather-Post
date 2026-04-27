@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { verifyUser } from "../_shared/auth-helpers.ts";
+import { buildStyleAddendum, normalizeTone } from "../_shared/caption-style.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -142,12 +143,32 @@ Deno.serve(async (req) => {
       ? "\n\nVARIATION REQUEST: Generate a NOTICEABLY different creative angle than a typical informational caption — pick one of: witty, dramatic, conversational, or poetic. Keep all factual data the same. Vary opening line, sentence rhythm, and word choice. Do NOT repeat the previous caption's structure verbatim."
       : "";
 
+    // Voice & Tone preset + life tips + greeting + hashtag stack
+    const tone = normalizeTone(body.tone ?? body.caption_tone);
+    const period = body.time_period ?? body.period ?? null;
+    const highTemp = Number(body.afternoon_temp ?? body.afternoonTemp ?? body.temperature ?? 0);
+    const lowTemp = Number(body.morning_temp ?? body.morningTemp ?? highTemp);
+    const conditions = String(
+      body.condition ?? body.afternoon_condition ?? body.afternoonCondition ?? body.morning_condition ?? body.morningCondition ?? "",
+    );
+    const styleAddendum = buildStyleAddendum({
+      tone,
+      city,
+      state: body.state_or_region || body.stateOrRegion,
+      period,
+      rainChance: Number(body.rain_chance ?? body.rainChance ?? 0),
+      highTemp,
+      lowTemp,
+      conditions,
+    });
+
     const userPrompt = `NOW USE THESE INPUTS TO WRITE TODAY'S CAPTION:
 
 city: ${city}
 state_or_region: ${body.state_or_region || body.stateOrRegion || ""}
 date: ${body.date || now.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
 day_of_week: ${body.day_of_week || dayNames[now.getDay()]}
+time_period: ${period || "Full Day"}
 morning_temp: ${body.morning_temp ?? body.morningTemp ?? "N/A"}
 morning_condition: ${body.morning_condition ?? body.morningCondition ?? "N/A"}
 afternoon_temp: ${body.afternoon_temp ?? body.afternoonTemp ?? "N/A"}
@@ -161,7 +182,9 @@ tomorrow_preview: ${body.tomorrow_preview ?? body.tomorrowPreview ?? "N/A"}
 sunrise_time: ${body.sunrise_time ?? body.sunrise ?? "N/A"}
 sunset_time: ${body.sunset_time ?? body.sunset ?? "N/A"}
 dynamic_handle: ${handle}
-extra_note: ${body.extra_note ?? body.extraNote ?? ""}${extremeNote}${styleNote}${variationNote}`;
+extra_note: ${body.extra_note ?? body.extraNote ?? ""}${extremeNote}${styleNote}${variationNote}
+
+${styleAddendum}`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
