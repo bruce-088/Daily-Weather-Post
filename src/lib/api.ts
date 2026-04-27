@@ -81,6 +81,7 @@ export async function saveSettings(settings: AutomationSettings): Promise<boolea
     voiceover_speed: typeof settings.voiceoverSpeed === "number" ? settings.voiceoverSpeed : 1.0,
     voiceover_stability: typeof settings.voiceoverStability === "number" ? settings.voiceoverStability : 0.55,
     voiceover_similarity: typeof settings.voiceoverSimilarity === "number" ? settings.voiceoverSimilarity : 0.78,
+    caption_tone: settings.captionTone || "professional",
     user_id: user.id,
   };
 
