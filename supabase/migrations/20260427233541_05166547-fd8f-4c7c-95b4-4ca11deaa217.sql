@@ -1,0 +1,1 @@
+ALTER TABLE public.weather_settings ADD COLUMN IF NOT EXISTS caption_tone text NOT NULL DEFAULT 'professional';

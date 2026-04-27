@@ -161,6 +161,7 @@ export type Database = {
           auto_post_afternoon: boolean
           auto_post_evening: boolean
           auto_post_morning: boolean
+          caption_tone: string
           city: string
           created_at: string
           enable_voiceover: boolean
@@ -207,6 +208,7 @@ export type Database = {
           auto_post_afternoon?: boolean
           auto_post_evening?: boolean
           auto_post_morning?: boolean
+          caption_tone?: string
           city?: string
           created_at?: string
           enable_voiceover?: boolean
@@ -253,6 +255,7 @@ export type Database = {
           auto_post_afternoon?: boolean
           auto_post_evening?: boolean
           auto_post_morning?: boolean
+          caption_tone?: string
           city?: string
           created_at?: string
           enable_voiceover?: boolean
