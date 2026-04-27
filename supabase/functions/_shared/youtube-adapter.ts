@@ -107,7 +107,7 @@ export class YouTubeAdapter implements PlatformAdapter {
         body: JSON.stringify({
           snippet: {
             title: shortTitle,
-            description,
+            description: safeDescription,
             categoryId: "22",
           },
           status: {
