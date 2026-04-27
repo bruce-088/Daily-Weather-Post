@@ -71,6 +71,7 @@ const DEFAULT_SETTINGS: AutomationSettings = {
   voiceoverSpeed: 1.0,
   voiceoverStability: 0.55,
   voiceoverSimilarity: 0.78,
+  captionTone: "professional",
 };
 
 const Index = () => {
