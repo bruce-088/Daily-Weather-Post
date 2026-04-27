@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { verifyUser } from "../_shared/auth-helpers.ts";
+import { buildStyleAddendum, normalizeTone } from "../_shared/caption-style.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
