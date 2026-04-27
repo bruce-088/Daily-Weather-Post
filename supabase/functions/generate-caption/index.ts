@@ -160,6 +160,7 @@ Deno.serve(async (req) => {
       highTemp,
       lowTemp,
       conditions,
+      platform: body.platform ?? null,
     });
 
     const userPrompt = `NOW USE THESE INPUTS TO WRITE TODAY'S CAPTION:
