@@ -75,6 +75,21 @@ export class YouTubeAdapter implements PlatformAdapter {
     mimeType = "video/mp4",
   ): Promise<UploadResult | null> {
     const shortTitle = title.length > 100 ? title.substring(0, 100) : title;
+
+    // Append permanent YouTube subscribe CTA to every Shorts description.
+    // Kept here so it applies uniformly to manual posts, scheduled posts,
+    // and the auto-post scheduler — they all funnel through uploadVideo().
+    const YT_CTA =
+      "👉 Subscribe for daily Gainesville weather updates: https://www.youtube.com/@SkyBriefGNV?sub_confirmation=1";
+    const baseDescription = (description || "").trimEnd();
+    const finalDescription = baseDescription.includes("@SkyBriefGNV?sub_confirmation=1")
+      ? baseDescription
+      : `${baseDescription}\n\n${YT_CTA}`;
+    // YouTube caps description at 5000 chars.
+    const safeDescription = finalDescription.length > 5000
+      ? finalDescription.substring(0, 5000)
+      : finalDescription;
+
     console.log(
       `Uploading to YouTube Shorts: ${shortTitle} (${videoData.byteLength} bytes)`,
     );
@@ -92,7 +107,7 @@ export class YouTubeAdapter implements PlatformAdapter {
         body: JSON.stringify({
           snippet: {
             title: shortTitle,
-            description,
+            description: safeDescription,
             categoryId: "22",
           },
           status: {
