@@ -335,7 +335,7 @@ export async function retryScheduledPost(id: string): Promise<boolean> {
 
 export async function generateCaption(
   weather: WeatherData,
-  opts?: { style?: string; variation?: boolean }
+  opts?: { style?: string; variation?: boolean; tone?: string; timePeriod?: string | null }
 ): Promise<string> {
   const { data, error } = await supabase.functions.invoke("generate-caption", {
     body: {
@@ -356,6 +356,8 @@ export async function generateCaption(
       tomorrowCondition: weather.tomorrowCondition,
       style: opts?.style ?? "standard",
       variation: !!opts?.variation,
+      tone: opts?.tone,
+      time_period: opts?.timePeriod ?? null,
     },
   });
 
