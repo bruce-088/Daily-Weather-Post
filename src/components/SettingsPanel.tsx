@@ -105,21 +105,42 @@ export function SettingsPanel({
   // ---- Voice preview state (no persistence — this just plays a sample) ----
   const [previewLoading, setPreviewLoading] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const speakWithBrowser = (text: string, speed: number) => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return false;
+    try {
+      window.speechSynthesis.cancel();
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang = "en-US";
+      utter.rate = Math.min(1.2, Math.max(0.7, speed || 1));
+      window.speechSynthesis.speak(utter);
+      return true;
+    } catch {
+      return false;
+    }
+  };
   const handleTestVoice = async () => {
     if (previewLoading) return;
     setPreviewLoading(true);
+    const sampleText = `Good day. ${settings.location || "Your city"} forecast: partly cloudy skies with a high near 72 degrees and a light breeze.`;
+    const speed = settings.voiceoverSpeed ?? 1.0;
     try {
       audioRef.current?.pause();
       const { data, error } = await supabase.functions.invoke("tts-preview", {
         body: {
           voiceId: settings.voiceoverVoiceId || "female",
-          speed: settings.voiceoverSpeed ?? 1.0,
+          speed,
           stability: settings.voiceoverStability ?? 0.55,
           similarity: settings.voiceoverSimilarity ?? 0.78,
-          text: `Good day. ${settings.location || "Your city"} forecast: partly cloudy skies with a high near 72 degrees and a light breeze.`,
+          text: sampleText,
         },
       });
       if (error) throw new Error(error.message || "Voice preview failed");
+      // Graceful fallback: server signals quota / outage → use browser voice
+      if ((data as any)?.fallback) {
+        const ok = speakWithBrowser(sampleText, speed);
+        toast[ok ? "info" : "error"]((data as any)?.error || "Using browser voice fallback");
+        return;
+      }
       if ((data as any)?.error) throw new Error((data as any).error);
       const audioContent = (data as any)?.audioContent;
       if (!audioContent) throw new Error("No audio returned");
@@ -127,7 +148,9 @@ export function SettingsPanel({
       audioRef.current = audio;
       await audio.play();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Voice preview failed");
+      // Last-resort browser fallback so the button never feels broken
+      const ok = speakWithBrowser(sampleText, speed);
+      if (!ok) toast.error(e instanceof Error ? e.message : "Voice preview failed");
     } finally {
       setPreviewLoading(false);
     }
