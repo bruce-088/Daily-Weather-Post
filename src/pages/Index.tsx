@@ -339,11 +339,13 @@ const Index = () => {
     try {
       const hr = new Date().getHours();
       const timePeriod = hr < 11 ? "morning" : hr < 17 ? "afternoon" : "evening";
+      const platform = selectedPlatforms[0] || availablePlatforms[0]?.id || null;
       const result = await generateCaption(weather, {
         style: cardStyle,
         variation,
         tone: settings.captionTone,
         timePeriod,
+        platform,
       });
       setCaption(result);
       toast.success(variation ? "✨ New variation ready" : "✅ Caption generated");
@@ -355,7 +357,7 @@ const Index = () => {
     } finally {
       setCaptionLoading(false);
     }
-  }, [weather, cardStyle, captionLoading, settings.captionTone]);
+  }, [weather, cardStyle, captionLoading, settings.captionTone, selectedPlatforms, availablePlatforms]);
 
   return (
     <div className="dark min-h-screen bg-transparent">
