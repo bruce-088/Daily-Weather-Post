@@ -1026,6 +1026,23 @@ Deno.serve(async (req) => {
         const rawCaption: string | null = post.caption || null;
         const isAutoMarker = !!rawCaption && /^\s*\[auto:[a-z]+\]\s*$/i.test(rawCaption);
         let caption: string | null = isAutoMarker ? null : rawCaption;
+
+        // Resolve time period early so it can feed both the caption AND the video
+        const earlySlotMatch = rawCaption ? /\[auto:([a-z]+)\]/i.exec(rawCaption) : null;
+        const earlyTimePeriod = earlySlotMatch ? earlySlotMatch[1].toLowerCase() : null;
+
+        // Look up the user's caption tone preference
+        let captionTone: string = "professional";
+        try {
+          const { data: toneSettings } = await supabase
+            .from("weather_settings")
+            .select("caption_tone")
+            .eq("user_id", post.user_id)
+            .limit(1)
+            .maybeSingle();
+          if ((toneSettings as any)?.caption_tone) captionTone = (toneSettings as any).caption_tone;
+        } catch { /* ignore */ }
+
         if (!caption) {
           const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
           if (LOVABLE_API_KEY) {
@@ -1040,7 +1057,22 @@ Deno.serve(async (req) => {
                   model: "google/gemini-3-flash-preview",
                   messages: [
                     { role: "system", content: SKYBRIEF_SYSTEM_PROMPT },
-                    { role: "user", content: buildSkyBriefUserPrompt(weather) },
+                    {
+                      role: "user",
+                      content:
+                        buildSkyBriefUserPrompt(weather) +
+                        "\n\n" +
+                        buildStyleAddendum({
+                          tone: normalizeTone(captionTone),
+                          city: weather.city,
+                          state: weather.stateOrRegion,
+                          period: earlyTimePeriod,
+                          rainChance: weather.rainChance ?? 0,
+                          highTemp: weather.afternoonTemp ?? weather.temperature ?? 0,
+                          lowTemp: weather.morningTemp ?? weather.temperature ?? 0,
+                          conditions: weather.afternoonCondition || weather.condition || "",
+                        }),
+                    },
                   ],
                 }),
               });
