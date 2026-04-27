@@ -800,6 +800,42 @@ export function SettingsPanel({
         </Card>
       )}
 
+      {showAutomation && (
+        <Card className="border-border/50 bg-card/80 backdrop-blur">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <MessageSquare size={16} className="text-primary" />
+              Caption Voice & Tone
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Choose the personality the AI uses when writing your captions. Applies to manual, scheduled, and auto-posts.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="caption-tone" className="text-xs text-muted-foreground">Tone preset</Label>
+              <Select
+                value={settings.captionTone || "professional"}
+                onValueChange={(v) => update("captionTone", v as any)}
+              >
+                <SelectTrigger id="caption-tone" className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="professional">Professional — clean, news-style</SelectItem>
+                  <SelectItem value="hype">Hype / Energetic — high energy, emojis</SelectItem>
+                  <SelectItem value="funny">Funny / Sarcastic — witty, dry humor</SelectItem>
+                  <SelectItem value="local_legend">Local Legend — slang & landmarks</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[10px] text-muted-foreground">
+                The AI also auto-adjusts the greeting by time of day, surfaces life tips (umbrella, jacket, hydration) when weather demands it, and appends 3–5 weather-aware hashtags.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {showAutomation && <SystemHealthCard />}
 
       {(showLocation || showConnections || showAutomation) && (
