@@ -1,9 +1,15 @@
-// Shared helpers for SkyBrief AI caption "Voice & Tone" presets, weather-triggered
-// life tips, time-of-day greetings, and dynamic hashtags. Used by both the
-// manual `generate-caption` flow and automated/scheduled posting flows so
-// every caption — manual, scheduled, or auto-posted — stays on-brand.
+// Shared helpers for SkyBrief AI caption generation. Provides:
+//   • Voice & Tone presets (Professional / Hype / Funny / Local Legend)
+//   • Platform-specific style guides (YouTube / Twitter / TikTok / LinkedIn / Instagram)
+//   • Scroll-stopping HOOK bank (weather-bucket aware, randomized)
+//   • Smart hashtag engine (location + condition + per-platform caps)
+//   • Weather-triggered "life tips" (umbrella, hydration, jacket, perfect-day)
+//   • Time-of-day greeting guidance
+// Used by `generate-caption` (manual), `daily-weather-post` (auto + preview), and
+// `process-scheduled-posts` (scheduled + auto-posted) so output stays unified.
 
 export type CaptionTone = "professional" | "hype" | "funny" | "local_legend";
+export type Platform = "youtube" | "twitter" | "tiktok" | "linkedin" | "instagram" | "generic";
 
 export function normalizeTone(input: unknown): CaptionTone {
   const v = String(input || "").toLowerCase().trim();
@@ -11,6 +17,16 @@ export function normalizeTone(input: unknown): CaptionTone {
   if (v === "funny" || v === "sarcastic") return "funny";
   if (v === "local_legend" || v === "local") return "local_legend";
   return "professional";
+}
+
+export function normalizePlatform(input: unknown): Platform {
+  const v = String(input || "").toLowerCase().trim();
+  if (v.startsWith("youtube") || v === "yt") return "youtube";
+  if (v === "twitter" || v === "x" || v === "twitter/x") return "twitter";
+  if (v === "tiktok") return "tiktok";
+  if (v === "linkedin") return "linkedin";
+  if (v === "instagram" || v === "ig") return "instagram";
+  return "generic";
 }
 
 export function toneInstruction(tone: CaptionTone, city?: string): string {
@@ -50,10 +66,92 @@ export function toneInstruction(tone: CaptionTone, city?: string): string {
   }
 }
 
-/**
- * Weather-triggered "life tips" the AI MUST work into the caption when
- * relevant data is present. Returns "" when no tips apply.
- */
+// ---------- WEATHER BUCKETS ----------
+export type WeatherBucket = "heat" | "cold" | "rain" | "storm" | "snow" | "fog" | "perfect" | "mild";
+
+export function classifyWeather(opts: {
+  conditions?: string;
+  highTemp?: number | null;
+  lowTemp?: number | null;
+  rainChance?: number | null;
+}): WeatherBucket {
+  const cond = String(opts.conditions || "").toLowerCase();
+  const high = Number(opts.highTemp ?? 0);
+  const low = Number(opts.lowTemp ?? high);
+  const rain = Number(opts.rainChance ?? 0);
+
+  if (/thunder|storm|tornado|hurricane/.test(cond)) return "storm";
+  if (/snow|flurr|blizzard/.test(cond)) return "snow";
+  if (/fog|mist|haze/.test(cond)) return "fog";
+  if (/rain|drizzle|shower/.test(cond) || rain >= 50) return "rain";
+  if (high >= 90) return "heat";
+  if (low <= 45 || high <= 50) return "cold";
+  if (high >= 70 && high <= 80 && rain < 20 && /clear|sun|fair/.test(cond)) return "perfect";
+  return "mild";
+}
+
+// ---------- HOOK BANK ----------
+// Each hook has {city} placeholder where natural. The AI is instructed to use
+// ONE of these as inspiration but rephrase so output never repeats verbatim.
+const HOOKS: Record<WeatherBucket, string[]> = {
+  heat: [
+    "Brutal heat hitting {city} today 🥵",
+    "This heat is no joke…",
+    "{city} is about to feel like a furnace 🔥",
+    "Hydration check, {city} — today's a scorcher.",
+    "The kind of day the AC earns its keep.",
+  ],
+  cold: [
+    "You'll want a jacket for this one 🥶",
+    "Bundle up, {city} — it's a cold one.",
+    "The chill is back in {city} today.",
+    "Coffee weather. Layers weather. {city} weather.",
+  ],
+  rain: [
+    "Don't leave the house without this 👇",
+    "Rain is about to change your plans…",
+    "Umbrella alert, {city}.",
+    "The skies have opinions today, {city}.",
+  ],
+  storm: [
+    "Storm rolling into {city} — heads up. ⛈",
+    "{city}, this one needs your attention.",
+    "Skies are getting loud today. Stay alert.",
+  ],
+  snow: [
+    "{city} is about to look different ❄️",
+    "Snow day vibes incoming.",
+    "Bundle up — the white stuff is here.",
+  ],
+  fog: [
+    "{city} woke up wrapped in fog this morning.",
+    "Slow it down out there — visibility is low.",
+  ],
+  perfect: [
+    "This is the kind of day you don't waste ☀️",
+    "{city}, today is a gift. Use it.",
+    "Patio weather. Park weather. Just-go-outside weather.",
+  ],
+  mild: [
+    "{city}, here's your weather brief.",
+    "A mellow one on tap for {city}.",
+    "Easy weather day — nothing dramatic.",
+  ],
+};
+
+export function pickHookExamples(bucket: WeatherBucket, city?: string, count = 3): string[] {
+  const pool = HOOKS[bucket] || HOOKS.mild;
+  // Shuffle deterministically per minute so back-to-back generations don't get the
+  // identical sample set, but a single request is stable.
+  const seed = Math.floor(Date.now() / 60_000);
+  const arr = [...pool]
+    .map((h, i) => ({ h, k: ((i + 1) * 9301 + seed * 49297) % 233280 }))
+    .sort((a, b) => a.k - b.k)
+    .map((x) => x.h.replace(/\{city\}/g, city || "your city"));
+  return arr.slice(0, Math.min(count, arr.length));
+}
+
+// ---------- LIFE TIPS ----------
 export function lifeTips(opts: {
   rainChance?: number | null;
   highTemp?: number | null;
@@ -77,63 +175,153 @@ export function lifeTips(opts: {
 
   if (tips.length === 0) return "";
   return [
-    "WEATHER-TRIGGERED LIFE TIPS (MUST include at least one when applicable):",
+    "WEATHER-TRIGGERED LIFE TIPS (MUST work at least one of these into the caption naturally):",
     ...tips.map((t) => "- " + t),
   ].join("\n");
 }
 
-/** Time-of-day opening line guidance. */
+// ---------- GREETING ----------
 export function greetingForPeriod(period?: string | null, city?: string): string {
   const p = String(period || "").toLowerCase();
   const c = city || "everyone";
-  if (p === "morning") return `OPENING LINE: Start with an energetic morning greeting like \"Rise and shine, ${c}…\" (vary the wording, but keep the morning energy).`;
-  if (p === "afternoon") return `OPENING LINE: Start with a midday check-in like \"Lunch break weather check…\" or \"Afternoon update for ${c}…\" (vary the wording).`;
-  if (p === "evening") return `OPENING LINE: Start with a wind-down line like \"Winding down your day, ${c}…\" or \"Evening forecast…\" (vary the wording).`;
+  if (p === "morning") return `OPENING ENERGY: Morning. Use a fresh-start energy ("Rise and shine, ${c}…", "Morning, ${c}…"). Vary the wording — don't reuse a previous template.`;
+  if (p === "afternoon") return `OPENING ENERGY: Midday. Frame it as a check-in ("Lunch break weather check…", "Afternoon update for ${c}…"). Vary the wording.`;
+  if (p === "evening") return `OPENING ENERGY: Wind-down. Calm, reflective tone ("Winding down your day, ${c}…", "Evening forecast…"). Vary the wording.`;
   return "";
 }
 
-/**
- * Build 3–5 dynamic hashtags based on weather + city. Always includes the
- * city tag and #Weather. Returned as a single space-separated string ready
- * to append to the caption (no leading/trailing whitespace).
- */
+// ---------- HASHTAGS ----------
+function hashtagCapForPlatform(p: Platform): number {
+  switch (p) {
+    case "twitter": return 2;
+    case "linkedin": return 2;
+    case "youtube": return 3;
+    case "tiktok": return 5;
+    case "instagram": return 5;
+    default: return 4;
+  }
+}
+
 export function buildHashtags(opts: {
   city?: string;
   state?: string;
   conditions?: string;
   highTemp?: number | null;
   rainChance?: number | null;
+  platform?: Platform;
 }): string {
-  const tags = new Set<string>();
-  const cityTag = (opts.city || "").replace(/[^a-zA-Z0-9]/g, "");
-  if (cityTag) tags.add("#" + cityTag);
-  tags.add("#Weather");
+  const tags: string[] = [];
+  const seen = new Set<string>();
+  const add = (t: string) => {
+    const key = t.toLowerCase();
+    if (!seen.has(key)) { seen.add(key); tags.push(t); }
+  };
 
+  // Location-based (always-on when present)
+  const cityTag = (opts.city || "").replace(/[^a-zA-Z0-9]/g, "");
+  if (cityTag) add("#" + cityTag + "Weather");
+  const state = (opts.state || "").trim();
+  if (/florida/i.test(state)) add("#FloridaWeather");
+  else if (state) add("#" + state.replace(/[^a-zA-Z0-9]/g, "") + "Weather");
+
+  // Condition-based
   const cond = String(opts.conditions || "").toLowerCase();
   const high = Number(opts.highTemp ?? 0);
   const rain = Number(opts.rainChance ?? 0);
 
-  if (/rain|drizzle|shower/.test(cond) || rain >= 50) tags.add("#RainyDay");
-  if (/storm|thunder/.test(cond)) tags.add("#StormWatch");
-  if (/snow|flurr/.test(cond)) tags.add("#SnowDay");
-  if (/fog|mist|haze/.test(cond)) tags.add("#FoggyMorning");
-  if (/clear|sun|sunny|fair/.test(cond) && rain < 30) tags.add("#SunLife");
-  if (high >= 90) {
-    tags.add("#HeatWave");
-    if ((opts.state || "").toLowerCase() === "florida") tags.add("#FloridaHeat");
+  if (high >= 90) { add("#HeatWave"); add("#StayCool"); }
+  if (/rain|drizzle|shower/.test(cond) || rain >= 50) { add("#RainyDay"); }
+  if (/storm|thunder/.test(cond)) { add("#StormWatch"); }
+  if (/clear|sun|sunny|fair/.test(cond) && rain < 30) {
+    if (high >= 70 && high <= 80) { add("#PerfectWeather"); add("#SunnyDay"); }
+    else { add("#SunnyDay"); }
   }
-  if (high <= 50 && high > 0) tags.add("#JacketWeather");
-  if (high >= 70 && high <= 80 && /clear|sun|fair/.test(cond)) tags.add("#PerfectDay");
+  if (/snow/.test(cond)) add("#SnowDay");
+  if (/fog|mist|haze/.test(cond)) add("#FoggyMorning");
+  if (high <= 50 && high > 0) add("#JacketWeather");
 
-  // Cap to 5 total
-  const out = Array.from(tags).slice(0, 5);
-  return out.join(" ");
+  // Always include #Weather as a safe fallback so we never return empty
+  add("#Weather");
+
+  const cap = hashtagCapForPlatform(opts.platform || "generic");
+  return tags.slice(0, cap).join(" ");
 }
 
-/**
- * One convenient block to append to ANY system or user prompt that wants the
- * full SkyBrief style stack: tone + greeting + life tips + hashtag rule.
- */
+// ---------- PLATFORM STYLE GUIDE ----------
+export function platformGuide(platform: Platform): string {
+  switch (platform) {
+    case "youtube":
+      return [
+        "PLATFORM: YOUTUBE SHORTS.",
+        "- Short, punchy, KEYWORD-RICH (city + 'weather' + condition early).",
+        "- Format: HOOK line, then 1–2 line summary, then optional weather tip, then HASHTAG line, then a CTA line on its own (e.g. 'Subscribe for daily {city} weather updates').",
+        "- Keep total under 90 words.",
+        "- Max 3 hashtags. Place them on a single dedicated line ABOVE the CTA.",
+      ].join("\n");
+    case "twitter":
+      return [
+        "PLATFORM: TWITTER / X.",
+        "- 1–2 lines MAX. Sharp, witty, high-impact.",
+        "- Hook + the single most useful weather fact. That's it.",
+        "- 1–2 hashtags MAX, appended at the very end.",
+        "- No CTA. No multi-line bullet lists. Total under 240 characters.",
+      ].join("\n");
+    case "tiktok":
+      return [
+        "PLATFORM: TIKTOK.",
+        "- HOOK-HEAVY and emotional. First line must stop the scroll.",
+        "- Casual voice. Emojis encouraged (4–6 ok). Trend-style phrasing welcome (e.g. 'POV:', 'tell me it's ___ without telling me…').",
+        "- Format: HOOK, then 1–2 line summary, then a tip if relevant, then HASHTAG line.",
+        "- 3–5 hashtags. No CTA line — TikTok captions don't need one.",
+      ].join("\n");
+    case "linkedin":
+      return [
+        "PLATFORM: LINKEDIN.",
+        "- Professional, informative, slight storytelling tone.",
+        "- Lead with a calm hook (no clickbait). Then a 2–3 sentence forecast framed in terms of how it affects the day/commute.",
+        "- 0–2 hashtags MAX, on the final line. NO emojis (or absolute minimum).",
+        "- No 'subscribe' CTA. Skip exclamation points.",
+      ].join("\n");
+    case "instagram":
+      return [
+        "PLATFORM: INSTAGRAM.",
+        "- Format: HOOK, then 2–4 line summary, then a tip, then HASHTAG line.",
+        "- Up to 5 hashtags on a dedicated final line. Emojis welcome (3–5).",
+      ].join("\n");
+    case "generic":
+    default:
+      return [
+        "PLATFORM: GENERIC SOCIAL.",
+        "- Format: HOOK, then 2–3 line summary, then an optional tip, then HASHTAG line.",
+        "- 3–4 hashtags on a dedicated final line.",
+      ].join("\n");
+  }
+}
+
+// ---------- STRUCTURE & OUTPUT RULES ----------
+function structureRules(platform: Platform): string {
+  const wantsCTA = platform === "youtube";
+  const lines = [
+    "OUTPUT STRUCTURE (in this exact order, each section separated by a single blank line):",
+    "1. HOOK — one scroll-stopping line. Emotion-driven.",
+    "2. MAIN SUMMARY — 1–3 short lines covering today's headline weather (temp range + condition).",
+    "3. TIP — only include when a weather-triggered life tip applies (rain/heat/cold/perfect).",
+    "4. HASHTAG LINE — the EXACT hashtag string provided below, on its own line, nothing else.",
+  ];
+  if (wantsCTA) lines.push("5. CTA — one short line on its own (subscribe / follow). Skip on every other platform.");
+  return lines.join("\n");
+}
+
+function antiRepetitionRule(): string {
+  return [
+    "ANTI-REPETITION:",
+    "- Treat the hook examples as INSPIRATION ONLY. Do not copy any of them verbatim.",
+    "- Vary phrasing, sentence rhythm, and word choice from one generation to the next.",
+    "- Do not start two consecutive captions with the same opening words.",
+  ].join("\n");
+}
+
+// ---------- MAIN ENTRY ----------
 export function buildStyleAddendum(opts: {
   tone: CaptionTone;
   city?: string;
@@ -143,11 +331,31 @@ export function buildStyleAddendum(opts: {
   highTemp?: number | null;
   lowTemp?: number | null;
   conditions?: string;
+  platform?: Platform | string | null;
 }): string {
+  const platform = normalizePlatform(opts.platform);
+  const bucket = classifyWeather({
+    conditions: opts.conditions,
+    highTemp: opts.highTemp,
+    lowTemp: opts.lowTemp,
+    rainChance: opts.rainChance,
+  });
+  const hookExamples = pickHookExamples(bucket, opts.city, 3);
+
   const sections: string[] = [];
+  sections.push(platformGuide(platform));
   sections.push(toneInstruction(opts.tone, opts.city));
+
   const greet = greetingForPeriod(opts.period, opts.city);
   if (greet) sections.push(greet);
+
+  sections.push(
+    [
+      `HOOK BANK (weather bucket: ${bucket}). Use ONE of these as inspiration for your hook line, but rephrase so it feels fresh:`,
+      ...hookExamples.map((h) => "- " + h),
+    ].join("\n"),
+  );
+
   const tips = lifeTips({
     rainChance: opts.rainChance,
     highTemp: opts.highTemp,
@@ -155,20 +363,26 @@ export function buildStyleAddendum(opts: {
     conditions: opts.conditions,
   });
   if (tips) sections.push(tips);
+
   const tags = buildHashtags({
     city: opts.city,
     state: opts.state,
     conditions: opts.conditions,
     highTemp: opts.highTemp,
     rainChance: opts.rainChance,
+    platform,
   });
   sections.push(
     [
       "HASHTAGS:",
-      "- End the caption with EXACTLY this hashtag line on its own final line, after the CTA:",
+      "- End the caption with EXACTLY this hashtag line on its own line:",
       tags,
       "- Do not add other hashtags. Do not modify or reorder these.",
     ].join("\n"),
   );
+
+  sections.push(structureRules(platform));
+  sections.push(antiRepetitionRule());
+
   return sections.join("\n\n");
 }
