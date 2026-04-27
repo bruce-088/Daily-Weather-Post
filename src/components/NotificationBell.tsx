@@ -48,105 +48,107 @@ export function NotificationBell() {
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-96 p-0">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-          <span className="text-sm font-semibold text-foreground">Notifications</span>
-          <div className="flex items-center gap-1">
-            <Button
-              size="sm"
-              variant="ghost"
-              className="text-xs gap-1 h-7"
-              onClick={toggleSound}
-              title={soundOn ? "Mute success sound" : "Unmute success sound"}
-            >
-              {soundOn ? <Volume2 size={12} /> : <VolumeX size={12} />}
-            </Button>
-            {unreadCount > 0 && (
-              <Button size="sm" variant="ghost" className="text-xs gap-1 h-7" onClick={markAllAsRead}>
-                <CheckCheck size={12} /> Mark all read
+      <PopoverContent align="end" className="w-96 p-0 overflow-hidden">
+        <div className="max-h-[400px] overflow-y-auto notif-scroll">
+          <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 border-b border-border bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70">
+            <span className="text-sm font-semibold text-foreground">Notifications</span>
+            <div className="flex items-center gap-1">
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-xs gap-1 h-7"
+                onClick={toggleSound}
+                title={soundOn ? "Mute success sound" : "Unmute success sound"}
+              >
+                {soundOn ? <Volume2 size={12} /> : <VolumeX size={12} />}
               </Button>
-            )}
+              {unreadCount > 0 && (
+                <Button size="sm" variant="ghost" className="text-xs gap-1 h-7" onClick={markAllAsRead}>
+                  <CheckCheck size={12} /> Mark all read
+                </Button>
+              )}
+            </div>
           </div>
-        </div>
-        <ScrollArea className="max-h-80">
           {notifications.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">No notifications yet</p>
+            <p className="text-sm text-muted-foreground text-center py-8">No notifications yet</p>
           ) : (
-            notifications.map((n) => {
-              const failures = n.meta?.failures ?? [];
-              const successes = n.meta?.successes ?? [];
-              const isSummary = n.meta?.kind === "summary";
-              const viewUrl = !isSummary && failures.length === 0 ? getViewPostUrl(n.meta) : null;
-              const canRetry = !isSummary && failures.length > 0;
+            <div className="pb-2">
+              {notifications.map((n) => {
+                const failures = n.meta?.failures ?? [];
+                const successes = n.meta?.successes ?? [];
+                const isSummary = n.meta?.kind === "summary";
+                const viewUrl = !isSummary && failures.length === 0 ? getViewPostUrl(n.meta) : null;
+                const canRetry = !isSummary && failures.length > 0;
 
-              const dotColor =
-                n.type === "success"
-                  ? "bg-green-500"
-                  : n.type === "error"
-                  ? failures.length > 0 && successes.length > 0
-                    ? "bg-amber-500"
-                    : "bg-destructive"
-                  : "bg-primary";
+                const dotColor =
+                  n.type === "success"
+                    ? "bg-green-500"
+                    : n.type === "error"
+                    ? failures.length > 0 && successes.length > 0
+                      ? "bg-amber-500"
+                      : "bg-destructive"
+                    : "bg-primary";
 
-              return (
-                <div
-                  key={n.id}
-                  className={`w-full text-left px-4 py-3 border-b border-border/50 hover:bg-secondary/30 transition-colors ${
-                    !n.read ? "bg-primary/5" : ""
-                  }`}
-                >
-                  <button
-                    onClick={() => !n.read && markAsRead(n.id)}
-                    className="w-full text-left"
+                return (
+                  <div
+                    key={n.id}
+                    className={`w-full text-left px-4 py-4 border-b border-border/50 hover:bg-primary/10 transition-colors ${
+                      !n.read ? "bg-primary/5" : ""
+                    }`}
                   >
-                    <div className="flex items-start gap-2">
-                      <div className={`mt-1 h-2 w-2 rounded-full shrink-0 ${dotColor}`} />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-medium text-foreground">{n.title}</p>
-                        <p className="text-xs text-muted-foreground whitespace-pre-line">
-                          {n.displayMessage}
-                        </p>
-                        <p className="text-[10px] text-muted-foreground/60 mt-1">
-                          {formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}
-                        </p>
+                    <button
+                      onClick={() => !n.read && markAsRead(n.id)}
+                      className="w-full text-left"
+                    >
+                      <div className="flex items-start gap-2">
+                        <div className={`mt-1 h-2 w-2 rounded-full shrink-0 ${dotColor}`} />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-medium text-foreground">{n.title}</p>
+                          <p className="text-xs text-muted-foreground whitespace-pre-line">
+                            {n.displayMessage}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground/60 mt-1">
+                            {formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  </button>
-                  {(canRetry || viewUrl) && (
-                    <div className="flex items-center gap-2 mt-2 pl-4">
-                      {canRetry && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-xs gap-1"
-                          disabled={retryingId === n.id}
-                          onClick={() => handleRetry(n)}
-                        >
-                          {retryingId === n.id ? (
-                            <Loader2 size={12} className="animate-spin" />
-                          ) : (
-                            <RotateCw size={12} />
-                          )}
-                          Retry {failures.map((f) => f.charAt(0).toUpperCase() + f.slice(1)).join(", ")}
-                        </Button>
-                      )}
-                      {viewUrl && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-xs gap-1"
-                          onClick={() => window.open(viewUrl, "_blank", "noopener,noreferrer")}
-                        >
-                          <ExternalLink size={12} /> View Post
-                        </Button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })
+                    </button>
+                    {(canRetry || viewUrl) && (
+                      <div className="flex items-center gap-2 mt-2 pl-4">
+                        {canRetry && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs gap-1"
+                            disabled={retryingId === n.id}
+                            onClick={() => handleRetry(n)}
+                          >
+                            {retryingId === n.id ? (
+                              <Loader2 size={12} className="animate-spin" />
+                            ) : (
+                              <RotateCw size={12} />
+                            )}
+                            Retry {failures.map((f) => f.charAt(0).toUpperCase() + f.slice(1)).join(", ")}
+                          </Button>
+                        )}
+                        {viewUrl && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs gap-1"
+                            onClick={() => window.open(viewUrl, "_blank", "noopener,noreferrer")}
+                          >
+                            <ExternalLink size={12} /> View Post
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           )}
-        </ScrollArea>
+        </div>
       </PopoverContent>
     </Popover>
   );
