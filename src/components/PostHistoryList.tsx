@@ -21,6 +21,7 @@ import {
   ChevronDown,
   ChevronUp,
   Bot,
+  MapPin,
 } from "lucide-react";
 import type { PostHistoryItem } from "@/lib/api";
 import { triggerDailyPost } from "@/lib/api";
@@ -250,7 +251,10 @@ export function PostHistoryList({ posts, loading, onReuse, onChanged }: PostHist
                       {/* Body */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-medium text-foreground">{post.city}</span>
+                          <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium bg-primary/10 text-primary border border-primary/20" title={`City: ${post.city}`}>
+                            <MapPin size={10} />
+                            {post.city}
+                          </span>
                           {post.temperature !== null && (
                             <span className="text-xs text-muted-foreground font-mono-display">
                               {post.temperature}°F
