@@ -253,15 +253,13 @@ ${styleAddendum}`;
         if (retryValidation.ok && retryCaption) {
           caption = retryCaption;
         } else if (retryCaption) {
-          // Strip any remaining offending substrings as a last resort.
-          let cleaned = retryCaption;
-          for (const hit of retryValidation.hits) {
-            cleaned = cleaned.replace(new RegExp(hit.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), city || "the area");
-          }
-          caption = cleaned;
+          caption = stripUnverifiedReferences(retryCaption, city);
         }
       }
     }
+
+    // Final safety net regardless of retry path
+    caption = stripUnverifiedReferences(caption, city);
 
     return new Response(
       JSON.stringify({ caption }),
