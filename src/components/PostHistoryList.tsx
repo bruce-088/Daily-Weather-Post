@@ -64,6 +64,13 @@ const STATUS_BRAND: Record<string, StatusBrand> = {
     dotClass: "bg-destructive",
     badgeClass: "bg-destructive/15 text-destructive border-destructive/30",
   },
+  retrying: {
+    icon: Loader2,
+    label: "Retrying",
+    textClass: "text-amber-500",
+    dotClass: "bg-amber-500",
+    badgeClass: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+  },
   pending: {
     icon: Clock,
     label: "Pending",
