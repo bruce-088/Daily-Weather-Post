@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildStyleAddendum, normalizeTone } from "../_shared/caption-style.ts";
-import { LOCATION_ACCURACY_RULES, validateCaptionLocation, buildVerifiedLandmarksBlock } from "../_shared/location-guard.ts";
+import { LOCATION_ACCURACY_RULES, validateCaptionLocation, buildVerifiedLandmarksBlock, stripUnverifiedReferences } from "../_shared/location-guard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -601,9 +601,10 @@ async function generateVoiceScript(weather: WeatherResponse): Promise<string> {
     "- Maximum 2 sentences, ~25 words total.",
     "- Sound natural when read aloud (no emojis, no hashtags, no special chars).",
     "- Mention the city, the dominant condition, and the temperature.",
-    "- Do NOT mention any landmarks, stadiums, universities, neighborhoods, parks, or businesses.",
-    "- Use only the city name as provided. Do not invent local references.",
+    "- You MAY include AT MOST ONE local reference, but ONLY from the verified list below, and ONLY if it fits the weather naturally. Otherwise omit it.",
     "- Return ONLY the script text. No labels, no quotes.",
+    "",
+    buildVerifiedLandmarksBlock(weather.city),
   ].join("\n");
   const systemPrompt = `You are a concise broadcast weather scriptwriter. Output spoken-style scripts only.\n\n${LOCATION_ACCURACY_RULES}`;
   try {
@@ -623,8 +624,8 @@ async function generateVoiceScript(weather: WeatherResponse): Promise<string> {
     const script = data?.choices?.[0]?.message?.content?.trim() || fallback;
     const validation = validateCaptionLocation(script, weather.city);
     if (!validation.ok) {
-      console.warn(`[voice] foreign landmarks in script for ${weather.city}:`, validation.hits, "— using safe fallback");
-      return fallback;
+      console.warn(`[voice] foreign landmarks in script for ${weather.city}:`, validation.hits, "— sanitizing");
+      return stripUnverifiedReferences(script, weather.city);
     }
     return script;
   } catch (e) {
@@ -1104,13 +1105,12 @@ Deno.serve(async (req) => {
                   const retry = await callCap(`\n\nREGENERATION REQUIRED: Your previous draft mentioned ${v.hits.join(", ")}, which is NOT in ${weather.city}. Rewrite without ANY specific landmark, stadium, university, neighborhood, or business name.`);
                   if (retry) {
                     const v2 = validateCaptionLocation(retry, weather.city);
-                    caption = v2.ok ? retry : retry.replace(
-                      new RegExp(v.hits.map((h) => h.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "gi"),
-                      weather.city,
-                    );
+                    caption = v2.ok ? retry : stripUnverifiedReferences(retry, weather.city);
                   }
                 }
               }
+              // Final safety net
+              if (caption) caption = stripUnverifiedReferences(caption, weather.city);
             } catch (e) {
               console.error("Caption generation failed:", e);
             }
