@@ -511,8 +511,10 @@ async function generateVoiceScript(weather: WeatherResponse, tone?: string): Pro
     "- Sound natural when read aloud (no emojis, no hashtags, no special chars).",
     "- Mention the city, the dominant condition, and at least one key temperature.",
     "- No greetings like 'Hey everyone'. A short locale-anchored opener like 'Good morning {city}' is fine.",
-    "- Do NOT mention any landmarks, stadiums, universities, neighborhoods, parks, or businesses. Use only the city name as provided.",
+    "- You MAY include AT MOST ONE local reference, but ONLY from the verified list below, and ONLY if it fits the weather naturally. Otherwise omit it.",
     "- Return ONLY the script text. No labels, no quotes.",
+    "",
+    buildVerifiedLandmarksBlock(weather.city),
   ].join("\n");
 
   try {
@@ -536,8 +538,8 @@ async function generateVoiceScript(weather: WeatherResponse, tone?: string): Pro
     const candidate = txt || fallback;
     const v = validateCaptionLocation(candidate, weather.city);
     if (!v.ok) {
-      console.warn(`[voice] foreign landmarks in script for ${weather.city}:`, v.hits, "— using safe fallback");
-      return fallback;
+      console.warn(`[voice] foreign landmarks in script for ${weather.city}:`, v.hits, "— sanitizing");
+      return stripUnverifiedReferences(candidate, weather.city);
     }
     return candidate;
   } catch (e) {
