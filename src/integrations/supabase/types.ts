@@ -136,6 +136,45 @@ export type Database = {
         }
         Relationships: []
       }
+      post_analytics: {
+        Row: {
+          comments: number
+          created_at: string
+          fetched_at: string
+          id: string
+          likes: number
+          platform: string
+          post_id: string | null
+          shares: number
+          user_id: string
+          views: number
+        }
+        Insert: {
+          comments?: number
+          created_at?: string
+          fetched_at?: string
+          id?: string
+          likes?: number
+          platform: string
+          post_id?: string | null
+          shares?: number
+          user_id: string
+          views?: number
+        }
+        Update: {
+          comments?: number
+          created_at?: string
+          fetched_at?: string
+          id?: string
+          likes?: number
+          platform?: string
+          post_id?: string | null
+          shares?: number
+          user_id?: string
+          views?: number
+        }
+        Relationships: []
+      }
       post_history: {
         Row: {
           caption: string | null
@@ -184,6 +223,39 @@ export type Database = {
           status?: string
           temperature?: number | null
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      post_hooks: {
+        Row: {
+          city: string | null
+          created_at: string
+          hook_text: string | null
+          id: string
+          platform: string | null
+          post_id: string | null
+          tone: string | null
+          user_id: string
+        }
+        Insert: {
+          city?: string | null
+          created_at?: string
+          hook_text?: string | null
+          id?: string
+          platform?: string | null
+          post_id?: string | null
+          tone?: string | null
+          user_id: string
+        }
+        Update: {
+          city?: string | null
+          created_at?: string
+          hook_text?: string | null
+          id?: string
+          platform?: string | null
+          post_id?: string | null
+          tone?: string | null
+          user_id?: string
         }
         Relationships: []
       }
