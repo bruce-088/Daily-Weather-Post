@@ -27,6 +27,7 @@ import {
   Video,
   Loader2,
   Mic,
+  BarChart3,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
@@ -39,6 +40,7 @@ import { SettingsPanel } from "@/components/SettingsPanel";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PostHistoryList } from "@/components/PostHistoryList";
+import { AnalyticsPanel } from "@/components/AnalyticsPanel";
 import { VideoPreviewDialog } from "@/components/VideoPreviewDialog";
 import { SchedulePostForm } from "@/components/SchedulePostForm";
 import { ScheduledPostsList } from "@/components/ScheduledPostsList";
@@ -497,6 +499,9 @@ const Index = () => {
             <TabsTrigger value="history" className="gap-1.5 text-xs">
               <History size={14} /> History
             </TabsTrigger>
+            <TabsTrigger value="analytics" className="gap-1.5 text-xs">
+              <BarChart3 size={14} /> Analytics
+            </TabsTrigger>
             <TabsTrigger value="settings" className="gap-1.5 text-xs">
               <Settings size={14} /> Settings
             </TabsTrigger>
@@ -868,6 +873,16 @@ const Index = () => {
                 onReuse={handleReusePost}
                 onChanged={loadHistory}
               />
+            </div>
+          </TabsContent>
+
+          {/* ANALYTICS TAB */}
+          <TabsContent value="analytics">
+            <div className="max-w-3xl mx-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-foreground">Performance & Insights</h2>
+              </div>
+              <AnalyticsPanel />
             </div>
           </TabsContent>
 
