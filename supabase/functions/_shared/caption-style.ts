@@ -386,3 +386,93 @@ export function buildStyleAddendum(opts: {
 
   return sections.join("\n\n");
 }
+
+// ---------- VOICE CTA (audio-first platforms only) ----------
+// Appends a short spoken call-to-action (~3 seconds) to the END of voice
+// scripts for YouTube and TikTok. NEVER added for Twitter/LinkedIn/Instagram
+// because those are not audio-first. Rotates daily so the same listener hears
+// variation, and adapts wording to the active CaptionTone preset.
+//
+// Used by both `daily-weather-post` (manual / preview) and
+// `process-scheduled-posts` (scheduled + auto-posts) so the spoken CTA stays
+// identical across paths.
+
+const VOICE_CTAS_BY_TONE: Record<CaptionTone, string[]> = {
+  professional: [
+    "Subscribe and turn on notifications to stay ahead of the weather.",
+    "Hit the bell to get your daily forecast as soon as it drops.",
+    "Stay updated by tapping the bell. See you in the next one.",
+    "Don't miss a day. Subscribe and turn on notifications.",
+  ],
+  hype: [
+    "Smash that bell so you never miss a daily update!",
+    "Hit subscribe and turn on notifications. Let's run it back tomorrow!",
+    "Tap the bell and lock in your daily forecast!",
+    "Bell on, notifications on. See you in the next one!",
+  ],
+  funny: [
+    "Hit the bell so the weather can't sneak up on you.",
+    "Subscribe and turn on notifications. Your umbrella will thank you.",
+    "Tap the bell. It's free, and the sky doesn't take days off.",
+    "Bell on so tomorrow's forecast slides into your notifications.",
+  ],
+  local_legend: [
+    "Hit the bell for your daily local forecast.",
+    "Subscribe and turn on notifications. We'll see you tomorrow.",
+    "Tap the bell so you never miss a local update.",
+    "Bell on for the daily local weather. Catch you tomorrow.",
+  ],
+};
+
+/**
+ * Returns true when the platform is audio-first and a spoken CTA makes sense.
+ * Twitter / LinkedIn / Instagram videos are typically scrolled muted, so we
+ * skip the CTA there.
+ */
+export function platformWantsVoiceCTA(platform: Platform | null | undefined): boolean {
+  return platform === "youtube" || platform === "tiktok";
+}
+
+/**
+ * Picks a tone-matched, rotating voice CTA. Selection is deterministic per
+ * day (UTC) so all platforms / re-runs in the same day stay consistent, but
+ * varies day-to-day so listeners don't hear the same line every time.
+ *
+ * Returns null when no CTA should be appended (non-audio platforms).
+ */
+export function buildVoiceCTA(opts: {
+  tone?: CaptionTone | string | null;
+  platforms?: Array<Platform | string> | null;
+}): string | null {
+  const platforms = (opts.platforms || []).map((p) => normalizePlatform(p));
+  const anyAudio = platforms.some(platformWantsVoiceCTA);
+  if (!anyAudio) return null;
+
+  const tone = normalizeTone(opts.tone);
+  const pool = VOICE_CTAS_BY_TONE[tone] || VOICE_CTAS_BY_TONE.professional;
+
+  // Rotate by day-of-year (UTC) so the same day yields the same CTA across
+  // calls within that day, but the next day picks the next variant.
+  const now = new Date();
+  const startOfYear = Date.UTC(now.getUTCFullYear(), 0, 0);
+  const dayOfYear = Math.floor((now.getTime() - startOfYear) / 86400000);
+  return pool[dayOfYear % pool.length];
+}
+
+/**
+ * Appends the spoken CTA to a finished voice script with a single space
+ * separator. Safe no-op when CTA isn't applicable or already present.
+ * Keep CTAs short (≤ ~12 words / ~3-4s spoken) so total runtime fits the clip.
+ */
+export function appendVoiceCTA(
+  script: string,
+  opts: { tone?: CaptionTone | string | null; platforms?: Array<Platform | string> | null },
+): string {
+  const cta = buildVoiceCTA(opts);
+  if (!cta) return script;
+  const trimmed = (script || "").trim();
+  if (trimmed.toLowerCase().includes(cta.toLowerCase())) return trimmed;
+  // Ensure the script ends with sentence punctuation before appending.
+  const sep = /[.!?]$/.test(trimmed) ? " " : ". ";
+  return `${trimmed}${sep}${cta}`;
+}
