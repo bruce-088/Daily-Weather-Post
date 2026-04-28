@@ -1,0 +1,325 @@
+import { useEffect, useState } from "react";
+import { MapPin, Plus, Star, Trash2, Loader2, Clock } from "lucide-react";
+import { toast } from "sonner";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
+import {
+  fetchUserCities,
+  addUserCity,
+  removeUserCity,
+  setPrimaryCity,
+  loadAutomation,
+  saveAutomation,
+  getActiveCityId,
+  setActiveCityId,
+  type UserCity,
+  type CityAutomation,
+} from "@/lib/citiesApi";
+
+interface CityManagerProps {
+  activeCityId: string | null;
+  onActiveCityChange: (id: string | null) => void;
+  onCitiesChange?: (cities: UserCity[]) => void;
+}
+
+export function CityManager({ activeCityId, onActiveCityChange, onCitiesChange }: CityManagerProps) {
+  const [cities, setCities] = useState<UserCity[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [adding, setAdding] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newState, setNewState] = useState("");
+  const [automation, setAutomation] = useState<CityAutomation | null>(null);
+  const [savingAuto, setSavingAuto] = useState(false);
+
+  const loadCities = async () => {
+    setLoading(true);
+    const list = await fetchUserCities();
+    setCities(list);
+    onCitiesChange?.(list);
+    if (!activeCityId && list.length > 0) {
+      const primary = list.find((c) => c.is_primary) || list[0];
+      onActiveCityChange(primary.id);
+      setActiveCityId(primary.id);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    loadCities();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Load automation for active city
+  useEffect(() => {
+    if (!activeCityId) {
+      setAutomation(null);
+      return;
+    }
+    loadAutomation(activeCityId).then((a) => {
+      setAutomation(
+        a ?? {
+          id: "",
+          city_id: activeCityId,
+          enabled: true,
+          morning_time: "07:00:00",
+          afternoon_time: "13:00:00",
+          evening_time: "18:00:00",
+          morning_platforms: [],
+          afternoon_platforms: [],
+          evening_platforms: [],
+          tone: "professional",
+          timezone: "UTC",
+        },
+      );
+    });
+  }, [activeCityId]);
+
+  const handleAdd = async () => {
+    if (!newName.trim() || !newState.trim()) {
+      toast.error("Both city and state are required");
+      return;
+    }
+    setAdding(true);
+    const added = await addUserCity(newName, newState);
+    setAdding(false);
+    if (!added) {
+      toast.error("Couldn't add city");
+      return;
+    }
+    toast.success(`Added ${added.name}, ${added.state ?? ""}`.trim());
+    setNewName("");
+    setNewState("");
+    setShowForm(false);
+    await loadCities();
+    onActiveCityChange(added.id);
+    setActiveCityId(added.id);
+  };
+
+  const handleRemove = async (c: UserCity) => {
+    if (!confirm(`Remove ${c.name}? This won't delete past posts.`)) return;
+    const ok = await removeUserCity(c.user_city_id);
+    if (!ok) {
+      toast.error("Couldn't remove city");
+      return;
+    }
+    toast.success(`Removed ${c.name}`);
+    if (activeCityId === c.id) {
+      const remaining = cities.filter((x) => x.id !== c.id);
+      const next = remaining[0]?.id ?? null;
+      onActiveCityChange(next);
+      setActiveCityId(next);
+    }
+    await loadCities();
+  };
+
+  const handleSetPrimary = async (c: UserCity) => {
+    const ok = await setPrimaryCity(c.user_city_id);
+    if (!ok) {
+      toast.error("Couldn't set primary");
+      return;
+    }
+    toast.success(`${c.name} is now your primary city`);
+    await loadCities();
+  };
+
+  const updateAuto = async (patch: Partial<CityAutomation>) => {
+    if (!automation || !activeCityId) return;
+    const next = { ...automation, ...patch };
+    setAutomation(next);
+    setSavingAuto(true);
+    const saved = await saveAutomation(activeCityId, patch);
+    setSavingAuto(false);
+    if (!saved) toast.error("Couldn't save automation");
+    else setAutomation(saved);
+  };
+
+  const activeCity = cities.find((c) => c.id === activeCityId);
+
+  return (
+    <Card className="border-border/50 bg-card/80 backdrop-blur">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <MapPin size={16} className="text-primary" />
+          Manage Cities
+        </CardTitle>
+        <CardDescription className="text-xs">
+          Add multiple cities and switch between them at the top of Create &amp; Schedule.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {loading ? (
+          <div className="flex items-center justify-center py-4">
+            <Loader2 size={16} className="animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {cities.length === 0 && (
+              <p className="text-xs text-muted-foreground italic">
+                No cities yet. Add your first city below.
+              </p>
+            )}
+            {cities.map((c) => {
+              const isActive = c.id === activeCityId;
+              return (
+                <div
+                  key={c.user_city_id}
+                  className={`flex items-center justify-between rounded-lg border p-2.5 transition-colors ${
+                    isActive ? "border-primary/40 bg-primary/5" : "border-border/30 bg-secondary/20"
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onActiveCityChange(c.id);
+                      setActiveCityId(c.id);
+                    }}
+                    className="flex items-center gap-2 text-left flex-1 min-w-0"
+                  >
+                    <MapPin size={14} className={isActive ? "text-primary" : "text-muted-foreground"} />
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-sm font-medium text-foreground truncate">
+                        {c.name}
+                        {c.state ? `, ${c.state}` : ""}
+                      </span>
+                      {isActive && (
+                        <span className="text-[10px] text-primary">Active</span>
+                      )}
+                    </div>
+                    {c.is_primary && (
+                      <Badge variant="outline" className="text-[9px] gap-0.5 border-amber-500/40 text-amber-400">
+                        <Star size={9} /> Primary
+                      </Badge>
+                    )}
+                  </button>
+                  <div className="flex items-center gap-1">
+                    {!c.is_primary && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7"
+                        title="Set as primary"
+                        onClick={() => handleSetPrimary(c)}
+                      >
+                        <Star size={13} />
+                      </Button>
+                    )}
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                      title="Remove city"
+                      onClick={() => handleRemove(c)}
+                    >
+                      <Trash2 size={13} />
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Add form */}
+        {showForm ? (
+          <div className="space-y-2 rounded-lg border border-border/30 bg-secondary/20 p-3">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-[11px] text-muted-foreground">City</Label>
+                <Input
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="Miami"
+                  className="h-9 text-sm"
+                />
+              </div>
+              <div>
+                <Label className="text-[11px] text-muted-foreground">State</Label>
+                <Input
+                  value={newState}
+                  onChange={(e) => setNewState(e.target.value)}
+                  placeholder="Florida"
+                  className="h-9 text-sm"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" className="flex-1 text-xs" onClick={handleAdd} disabled={adding}>
+                {adding ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
+                Add City
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-xs"
+                onClick={() => {
+                  setShowForm(false);
+                  setNewName("");
+                  setNewState("");
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Button
+            size="sm"
+            variant="outline"
+            className="w-full text-xs gap-1.5"
+            onClick={() => setShowForm(true)}
+          >
+            <Plus size={14} /> Add New City
+          </Button>
+        )}
+
+        {/* Per-city automation editor */}
+        {activeCity && automation && (
+          <div className="space-y-3 rounded-lg border border-border/30 bg-secondary/10 p-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Clock size={14} className="text-primary" />
+                <span className="text-sm font-medium text-foreground">
+                  Automation · {activeCity.name}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                {savingAuto && <Loader2 size={11} className="animate-spin text-muted-foreground" />}
+                <Switch
+                  checked={automation.enabled}
+                  onCheckedChange={(v) => updateAuto({ enabled: v })}
+                  aria-label="Enable automation for this city"
+                />
+              </div>
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              These times are unique to {activeCity.name}. Other cities keep their own schedule.
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {([
+                ["morning_time", "Morning"],
+                ["afternoon_time", "Afternoon"],
+                ["evening_time", "Evening"],
+              ] as const).map(([key, label]) => (
+                <div key={key}>
+                  <Label className="text-[10px] text-muted-foreground">{label}</Label>
+                  <Input
+                    type="time"
+                    value={(automation as any)[key]?.slice(0, 5) || ""}
+                    onChange={(e) => updateAuto({ [key]: `${e.target.value}:00` } as any)}
+                    className="h-8 text-xs"
+                    disabled={!automation.enabled}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
