@@ -64,6 +64,13 @@ const STATUS_BRAND: Record<string, StatusBrand> = {
     dotClass: "bg-destructive",
     badgeClass: "bg-destructive/15 text-destructive border-destructive/30",
   },
+  retrying: {
+    icon: Loader2,
+    label: "Retrying",
+    textClass: "text-amber-500",
+    dotClass: "bg-amber-500",
+    badgeClass: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+  },
   pending: {
     icon: Clock,
     label: "Pending",
@@ -95,6 +102,7 @@ interface PostHistoryListProps {
 
 export function PostHistoryList({ posts, loading, onReuse, onChanged }: PostHistoryListProps) {
   const [repostingId, setRepostingId] = useState<string | null>(null);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
   const [expandedError, setExpandedError] = useState<string | null>(null);
 
   const grouped = useMemo(() => {
@@ -121,6 +129,22 @@ export function PostHistoryList({ posts, loading, onReuse, onChanged }: PostHist
       onChanged?.();
     } else {
       toast.error(res.message || "Repost failed");
+    }
+  };
+
+  const handleRetry = async (post: PostHistoryItem) => {
+    if (!post.platform) {
+      toast.error("Cannot retry — original platform unknown");
+      return;
+    }
+    setRetryingId(post.id);
+    const res = await triggerDailyPost(undefined, [post.platform]);
+    setRetryingId(null);
+    if (res.success) {
+      toast.success(`Retrying ${PLATFORM_BRAND[post.platform]?.label || post.platform}…`);
+      onChanged?.();
+    } else {
+      toast.error(res.message || "Retry failed");
     }
   };
 
@@ -293,6 +317,23 @@ export function PostHistoryList({ posts, loading, onReuse, onChanged }: PostHist
                             )}
                             Repost
                           </Button>
+                          {isFailed && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-[11px] gap-1 px-2 border-destructive/40 text-destructive hover:bg-destructive/10"
+                              onClick={() => handleRetry(post)}
+                              disabled={retryingId === post.id || !post.platform}
+                              title="Retry this failed post"
+                            >
+                              {retryingId === post.id ? (
+                                <Loader2 size={11} className="animate-spin" />
+                              ) : (
+                                <RotateCw size={11} />
+                              )}
+                              Retry
+                            </Button>
+                          )}
                           {onReuse && (
                             <Button
                               size="sm"

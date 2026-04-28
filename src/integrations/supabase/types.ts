@@ -53,7 +53,10 @@ export type Database = {
           error_message: string | null
           id: string
           image_url: string | null
+          last_attempt_at: string | null
+          next_retry_at: string | null
           platform: string | null
+          retry_count: number
           status: string
           temperature: number | null
           user_id: string | null
@@ -66,7 +69,10 @@ export type Database = {
           error_message?: string | null
           id?: string
           image_url?: string | null
+          last_attempt_at?: string | null
+          next_retry_at?: string | null
           platform?: string | null
+          retry_count?: number
           status?: string
           temperature?: number | null
           user_id?: string | null
@@ -79,7 +85,10 @@ export type Database = {
           error_message?: string | null
           id?: string
           image_url?: string | null
+          last_attempt_at?: string | null
+          next_retry_at?: string | null
           platform?: string | null
+          retry_count?: number
           status?: string
           temperature?: number | null
           user_id?: string | null
@@ -94,7 +103,9 @@ export type Database = {
           error_message: string | null
           id: string
           include_voiceover: boolean
+          next_retry_at: string | null
           platform: string
+          retry_count: number
           scheduled_at: string
           status: string
           user_id: string
@@ -107,7 +118,9 @@ export type Database = {
           error_message?: string | null
           id?: string
           include_voiceover?: boolean
+          next_retry_at?: string | null
           platform?: string
+          retry_count?: number
           scheduled_at: string
           status?: string
           user_id: string
@@ -120,7 +133,9 @@ export type Database = {
           error_message?: string | null
           id?: string
           include_voiceover?: boolean
+          next_retry_at?: string | null
           platform?: string
+          retry_count?: number
           scheduled_at?: string
           status?: string
           user_id?: string
@@ -149,6 +164,36 @@ export type Database = {
           last_run_at?: string
           last_status?: string | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      system_logs: {
+        Row: {
+          context: Json | null
+          created_at: string
+          id: string
+          message: string
+          platform: string | null
+          type: string
+          user_id: string | null
+        }
+        Insert: {
+          context?: Json | null
+          created_at?: string
+          id?: string
+          message: string
+          platform?: string | null
+          type: string
+          user_id?: string | null
+        }
+        Update: {
+          context?: Json | null
+          created_at?: string
+          id?: string
+          message?: string
+          platform?: string | null
+          type?: string
+          user_id?: string | null
         }
         Relationships: []
       }

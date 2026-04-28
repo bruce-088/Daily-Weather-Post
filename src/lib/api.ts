@@ -216,6 +216,9 @@ export interface PostHistoryItem {
   error_message: string | null;
   caption: string | null;
   created_at: string;
+  retry_count?: number | null;
+  next_retry_at?: string | null;
+  last_attempt_at?: string | null;
 }
 
 export async function fetchPostHistory(limit = 10): Promise<PostHistoryItem[]> {
