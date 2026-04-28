@@ -77,13 +77,28 @@ export function SystemHealthCard() {
           <span className="text-sm font-medium">{lastRun ?? "—"}</span>
         </div>
         {lastRunIso && (
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs text-muted-foreground">Last result</span>
+            <Badge
+              variant="outline"
+              className={
+                hasError
+                  ? "bg-destructive/15 text-destructive border-destructive/30 text-[11px]"
+                  : "bg-green-500/15 text-green-500 border-green-500/30 text-[11px]"
+              }
+            >
+              {hasError ? "❌ Failed" : "✅ Success"}
+            </Badge>
+          </div>
+        )}
+        {lastRunIso && (
           <p className="text-[11px] text-muted-foreground">
             {new Date(lastRunIso).toLocaleString()}
           </p>
         )}
-        {hasError && (
+        {hasError && message && (
           <p className="text-[11px] text-destructive">
-            Last run reported an error: {message}
+            {message}
           </p>
         )}
         {!isActive && !hasError && (
