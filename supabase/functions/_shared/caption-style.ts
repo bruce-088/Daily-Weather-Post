@@ -51,8 +51,8 @@ export function toneInstruction(tone: CaptionTone, city?: string): string {
       return [
         "TONE: LOCAL LEGEND.",
         `- Write like a beloved local who knows ${city || "this city"} inside and out.`,
-        "- Reference real local landmarks and culture naturally when it fits the weather.",
-        `- For Gainesville specifically: feel free to mention places like \"The Swamp\", Midtown, Depot Park, the Hippodrome, UF campus, or Paynes Prairie when relevant.`,
+        "- You MAY ONLY reference specific places listed in the 'VERIFIED LOCAL LANDMARKS' section of this prompt. Never invent landmarks, stadiums, universities, neighborhoods, parks, or businesses.",
+        "- If no verified landmarks are provided, use generic local color only (\"around town\", \"across {city}\", \"throughout the area\").",
         "- Use 0–2 emojis. Keep it warm, neighborly, in-the-know.",
       ].join("\n");
     case "professional":

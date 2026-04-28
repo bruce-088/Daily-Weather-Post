@@ -1,6 +1,11 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { verifyUser } from "../_shared/auth-helpers.ts";
 import { buildStyleAddendum, normalizeTone } from "../_shared/caption-style.ts";
+import {
+  LOCATION_ACCURACY_RULES,
+  buildVerifiedLandmarksBlock,
+  validateCaptionLocation,
+} from "../_shared/location-guard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -185,22 +190,31 @@ sunset_time: ${body.sunset_time ?? body.sunset ?? "N/A"}
 dynamic_handle: ${handle}
 extra_note: ${body.extra_note ?? body.extraNote ?? ""}${extremeNote}${styleNote}${variationNote}
 
+${buildVerifiedLandmarksBlock(city)}
+
 ${styleAddendum}`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          { role: "system", content: SKYBRIEF_SYSTEM_PROMPT },
-          { role: "user", content: userPrompt },
-        ],
-      }),
-    });
+    const systemPrompt = `${SKYBRIEF_SYSTEM_PROMPT}\n\n${LOCATION_ACCURACY_RULES}`;
+
+    const callModel = async (extraUserSuffix = "") => {
+      const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-3-flash-preview",
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt + extraUserSuffix },
+          ],
+        }),
+      });
+      return res;
+    };
+
+    let response = await callModel();
 
     if (!response.ok) {
       if (response.status === 429) {
@@ -220,8 +234,33 @@ ${styleAddendum}`;
       throw new Error(`AI gateway error: ${response.status}`);
     }
 
-    const data = await response.json();
-    const caption = data.choices?.[0]?.message?.content?.trim() || "";
+    let data = await response.json();
+    let caption = data.choices?.[0]?.message?.content?.trim() || "";
+
+    // Post-generation safety: if a foreign landmark slipped through, regenerate
+    // ONCE with stricter instructions and no local-flavor allowance.
+    let validation = validateCaptionLocation(caption, city);
+    if (!validation.ok) {
+      console.warn(`[generate-caption] foreign landmarks detected for ${city}:`, validation.hits);
+      const retryRes = await callModel(
+        `\n\nREGENERATION REQUIRED: Your previous draft mentioned ${validation.hits.join(", ")}, which is NOT in ${city}. Rewrite without ANY specific landmark, stadium, university, neighborhood, or business name. Use only generic local phrasing.`,
+      );
+      if (retryRes.ok) {
+        data = await retryRes.json();
+        const retryCaption = data.choices?.[0]?.message?.content?.trim() || "";
+        const retryValidation = validateCaptionLocation(retryCaption, city);
+        if (retryValidation.ok && retryCaption) {
+          caption = retryCaption;
+        } else if (retryCaption) {
+          // Strip any remaining offending substrings as a last resort.
+          let cleaned = retryCaption;
+          for (const hit of retryValidation.hits) {
+            cleaned = cleaned.replace(new RegExp(hit.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), city || "the area");
+          }
+          caption = cleaned;
+        }
+      }
+    }
 
     return new Response(
       JSON.stringify({ caption }),
