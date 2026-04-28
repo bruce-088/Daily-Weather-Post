@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { buildStyleAddendum, normalizeTone } from "../_shared/caption-style.ts";
+import { buildStyleAddendum, normalizeTone, appendVoiceCTA } from "../_shared/caption-style.ts";
 import {
   LOCATION_ACCURACY_RULES,
   buildVerifiedLandmarksBlock,
@@ -484,7 +484,7 @@ function voiceSettingsForTone(tone?: string) {
 }
 
 /** Generate a short, spoken-feeling voice script (1-2 sentences). */
-async function generateVoiceScript(weather: WeatherResponse, tone?: string): Promise<string> {
+async function generateVoiceScript(weather: WeatherResponse, tone?: string, platforms?: string[]): Promise<string> {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   // Fallback if AI gateway is unavailable — still useful, deterministic
   const fallback = `Good day, ${weather.city}. Expect ${weather.description.toLowerCase()} with a high near ${weather.temperature} degrees today.`;
@@ -512,6 +512,7 @@ async function generateVoiceScript(weather: WeatherResponse, tone?: string): Pro
     "- Mention the city, the dominant condition, and at least one key temperature.",
     "- No greetings like 'Hey everyone'. A short locale-anchored opener like 'Good morning {city}' is fine.",
     "- You MAY include AT MOST ONE local reference, but ONLY from the verified list below, and ONLY if it fits the weather naturally. Otherwise omit it.",
+    "- Do NOT include any subscribe / follow / notification / bell call-to-action — that is appended automatically. End on the weather, not a CTA.",
     "- Return ONLY the script text. No labels, no quotes.",
     "",
     buildVerifiedLandmarksBlock(weather.city),
@@ -537,14 +538,16 @@ async function generateVoiceScript(weather: WeatherResponse, tone?: string): Pro
     const txt = data?.choices?.[0]?.message?.content?.trim();
     const candidate = txt || fallback;
     const v = validateCaptionLocation(candidate, weather.city);
+    let finalScript = candidate;
     if (!v.ok) {
       console.warn(`[voice] foreign landmarks in script for ${weather.city}:`, v.hits, "— sanitizing");
-      return stripUnverifiedReferences(candidate, weather.city);
+      finalScript = stripUnverifiedReferences(candidate, weather.city);
     }
-    return candidate;
+    // Append tone-matched, rotating spoken CTA for audio-first platforms (YouTube / TikTok).
+    return appendVoiceCTA(finalScript, { tone, platforms });
   } catch (e) {
     console.error("Voice script error:", e);
-    return fallback;
+    return appendVoiceCTA(fallback, { tone, platforms });
   }
 }
 
@@ -1243,7 +1246,7 @@ Deno.serve(async (req) => {
     let voiceScript: string | null = null;
     if (voiceOpts.enabled && userId) {
       console.log("Voice enabled — generating script + TTS audio");
-      voiceScript = await generateVoiceScript(weather, voiceOpts.tone);
+      voiceScript = await generateVoiceScript(weather, voiceOpts.tone, selectedPlatforms);
       console.log("Voice script:", voiceScript);
       const audioBytes = await generateVoiceAudio(voiceScript, voiceOpts);
       if (audioBytes) {
