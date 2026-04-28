@@ -5,6 +5,7 @@ import {
   LOCATION_ACCURACY_RULES,
   buildVerifiedLandmarksBlock,
   validateCaptionLocation,
+  stripUnverifiedReferences,
 } from "../_shared/location-guard.ts";
 
 const corsHeaders = {
