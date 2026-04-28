@@ -44,6 +44,9 @@ import { AnalyticsPanel } from "@/components/AnalyticsPanel";
 import { VideoPreviewDialog } from "@/components/VideoPreviewDialog";
 import { SchedulePostForm } from "@/components/SchedulePostForm";
 import { ScheduledPostsList } from "@/components/ScheduledPostsList";
+import { CityManager } from "@/components/CityManager";
+import { CitySwitcher } from "@/components/CitySwitcher";
+import { fetchUserCities, getActiveCityId, setActiveCityId, type UserCity } from "@/lib/citiesApi";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useWeather } from "@/hooks/useWeather";
@@ -141,7 +144,36 @@ const Index = () => {
   const [cardStyle, setCardStyle] = useState<CardStyle>("standard");
   const [successShimmer, setSuccessShimmer] = useState(false);
 
-  // === AI Voiceover settings ===
+  // === Multi-city ===
+  const [userCities, setUserCities] = useState<UserCity[]>([]);
+  const [activeCityId, setActiveCityIdState] = useState<string | null>(() => getActiveCityId());
+  const refreshCities = useCallback(async () => {
+    const list = await fetchUserCities();
+    setUserCities(list);
+    // If current active city was removed, fall back to primary or first
+    if (activeCityId && !list.find((c) => c.id === activeCityId)) {
+      const fallback = list.find((c) => c.is_primary) || list[0] || null;
+      setActiveCityIdState(fallback?.id ?? null);
+      setActiveCityId(fallback?.id ?? null);
+    } else if (!activeCityId && list.length > 0) {
+      const primary = list.find((c) => c.is_primary) || list[0];
+      setActiveCityIdState(primary.id);
+      setActiveCityId(primary.id);
+    }
+  }, [activeCityId]);
+  useEffect(() => { refreshCities(); }, []); // initial load only
+
+  // When active city changes, push its name+state into settings (drives weather + draft)
+  useEffect(() => {
+    if (!activeCityId) return;
+    const c = userCities.find((x) => x.id === activeCityId);
+    if (!c) return;
+    setSettings((prev) => {
+      if (prev.location === c.name && (prev.state || "") === (c.state || "")) return prev;
+      return { ...prev, location: c.name, state: c.state || "" };
+    });
+  }, [activeCityId, userCities]);
+
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [voiceId, setVoiceId] = useState<"female" | "male">("female");
   const [voiceTone, setVoiceTone] = useState<"conversational" | "energetic" | "news">("conversational");
@@ -510,7 +542,18 @@ const Index = () => {
           {/* CREATE TAB */}
           <TabsContent value="create">
             <div className="mx-auto max-w-[1400px]">
+              {userCities.length > 0 && (
+                <div className="mb-4 flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">City:</span>
+                  <CitySwitcher
+                    cities={userCities}
+                    activeCityId={activeCityId}
+                    onChange={(id) => { setActiveCityIdState(id); setActiveCityId(id); }}
+                  />
+                </div>
+              )}
               <div className="grid gap-6 lg:grid-cols-[340px_minmax(0,1fr)_340px]">
+
                 {/* LEFT: Inputs + caption */}
                 <aside className="space-y-4 order-2 lg:order-1">
                   {/* Compact Location card */}
@@ -844,19 +887,39 @@ const Index = () => {
 
           {/* SCHEDULE TAB */}
           <TabsContent value="schedule">
-            <div className="max-w-2xl mx-auto grid md:grid-cols-[320px_1fr] gap-6">
-              <SchedulePostForm defaultCity={settings.location} onScheduled={loadScheduled} />
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-semibold text-foreground">Scheduled Posts</h2>
-                  <Button size="sm" variant="outline" onClick={loadScheduled} className="text-xs gap-1.5">
-                    <CalendarClock size={14} /> Refresh
-                  </Button>
+            <div className="max-w-2xl mx-auto">
+              {userCities.length > 0 && (
+                <div className="mb-4 flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">City:</span>
+                  <CitySwitcher
+                    cities={userCities}
+                    activeCityId={activeCityId}
+                    onChange={(id) => { setActiveCityIdState(id); setActiveCityId(id); }}
+                  />
                 </div>
-                <ScheduledPostsList posts={scheduledPosts} loading={scheduledLoading} onRefresh={loadScheduled} />
+              )}
+              <div className="grid md:grid-cols-[320px_1fr] gap-6">
+                <SchedulePostForm key={activeCityId || "default"} defaultCity={settings.location} onScheduled={loadScheduled} />
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-semibold text-foreground">Scheduled Posts</h2>
+                    <Button size="sm" variant="outline" onClick={loadScheduled} className="text-xs gap-1.5">
+                      <CalendarClock size={14} /> Refresh
+                    </Button>
+                  </div>
+                  <ScheduledPostsList
+                    posts={activeCityId ? scheduledPosts.filter((p) => {
+                      const c = userCities.find((x) => x.id === activeCityId);
+                      return !c || (p.city || "").toLowerCase() === c.name.toLowerCase();
+                    }) : scheduledPosts}
+                    loading={scheduledLoading}
+                    onRefresh={loadScheduled}
+                  />
+                </div>
               </div>
             </div>
           </TabsContent>
+
 
           {/* HISTORY TAB */}
           <TabsContent value="history">
@@ -888,7 +951,12 @@ const Index = () => {
 
           {/* SETTINGS TAB */}
           <TabsContent value="settings">
-            <div className="max-w-lg mx-auto">
+            <div className="max-w-lg mx-auto space-y-4">
+              <CityManager
+                activeCityId={activeCityId}
+                onActiveCityChange={(id) => { setActiveCityIdState(id); setActiveCityId(id); }}
+                onCitiesChange={setUserCities}
+              />
               <SettingsPanel
                 settings={settings}
                 onUpdate={setSettings}
@@ -899,11 +967,12 @@ const Index = () => {
                 tiktokConnected={tiktokConnected}
                 youtubeConnected={youtubeConnected}
                 twitterConnected={twitterConnected}
-                  linkedinConnected={linkedinConnected}
-                  onDisconnect={handleDisconnect}
-                />
+                linkedinConnected={linkedinConnected}
+                onDisconnect={handleDisconnect}
+              />
             </div>
           </TabsContent>
+
         </Tabs>
       </main>
 
