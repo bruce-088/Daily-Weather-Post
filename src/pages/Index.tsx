@@ -542,7 +542,18 @@ const Index = () => {
           {/* CREATE TAB */}
           <TabsContent value="create">
             <div className="mx-auto max-w-[1400px]">
+              {userCities.length > 0 && (
+                <div className="mb-4 flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">City:</span>
+                  <CitySwitcher
+                    cities={userCities}
+                    activeCityId={activeCityId}
+                    onChange={(id) => { setActiveCityIdState(id); setActiveCityId(id); }}
+                  />
+                </div>
+              )}
               <div className="grid gap-6 lg:grid-cols-[340px_minmax(0,1fr)_340px]">
+
                 {/* LEFT: Inputs + caption */}
                 <aside className="space-y-4 order-2 lg:order-1">
                   {/* Compact Location card */}
