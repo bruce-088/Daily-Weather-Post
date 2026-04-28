@@ -144,8 +144,36 @@ const Index = () => {
   const [cardStyle, setCardStyle] = useState<CardStyle>("standard");
   const [successShimmer, setSuccessShimmer] = useState(false);
 
-  // === AI Voiceover settings ===
-  const [voiceEnabled, setVoiceEnabled] = useState(false);
+  // === Multi-city ===
+  const [userCities, setUserCities] = useState<UserCity[]>([]);
+  const [activeCityId, setActiveCityIdState] = useState<string | null>(() => getActiveCityId());
+  const refreshCities = useCallback(async () => {
+    const list = await fetchUserCities();
+    setUserCities(list);
+    // If current active city was removed, fall back to primary or first
+    if (activeCityId && !list.find((c) => c.id === activeCityId)) {
+      const fallback = list.find((c) => c.is_primary) || list[0] || null;
+      setActiveCityIdState(fallback?.id ?? null);
+      setActiveCityId(fallback?.id ?? null);
+    } else if (!activeCityId && list.length > 0) {
+      const primary = list.find((c) => c.is_primary) || list[0];
+      setActiveCityIdState(primary.id);
+      setActiveCityId(primary.id);
+    }
+  }, [activeCityId]);
+  useEffect(() => { refreshCities(); }, []); // initial load only
+
+  // When active city changes, push its name+state into settings (drives weather + draft)
+  useEffect(() => {
+    if (!activeCityId) return;
+    const c = userCities.find((x) => x.id === activeCityId);
+    if (!c) return;
+    setSettings((prev) => {
+      if (prev.location === c.name && (prev.state || "") === (c.state || "")) return prev;
+      return { ...prev, location: c.name, state: c.state || "" };
+    });
+  }, [activeCityId, userCities]);
+
   const [voiceId, setVoiceId] = useState<"female" | "male">("female");
   const [voiceTone, setVoiceTone] = useState<"conversational" | "energetic" | "news">("conversational");
   const voiceOptions: VoiceOptions = useMemo(
