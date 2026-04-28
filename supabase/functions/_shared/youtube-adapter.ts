@@ -76,15 +76,20 @@ export class YouTubeAdapter implements PlatformAdapter {
   ): Promise<UploadResult | null> {
     const shortTitle = title.length > 100 ? title.substring(0, 100) : title;
 
-    // Append permanent YouTube subscribe CTA to every Shorts description.
-    // Kept here so it applies uniformly to manual posts, scheduled posts,
-    // and the auto-post scheduler — they all funnel through uploadVideo().
-    const YT_CTA =
-      "👉 Subscribe for daily Gainesville weather updates: https://www.youtube.com/@SkyBriefGNV?sub_confirmation=1";
-    const baseDescription = (description || "").trimEnd();
-    const finalDescription = baseDescription.includes("@SkyBriefGNV?sub_confirmation=1")
-      ? baseDescription
-      : `${baseDescription}\n\n${YT_CTA}`;
+    // Append permanent YouTube subscribe + notifications CTA to every Shorts
+    // description. Centralized here so it applies uniformly to manual posts,
+    // scheduled posts, and the auto-post scheduler — they all funnel through
+    // uploadVideo(). YouTube-only by design (other platforms call their own
+    // adapters and never hit this code path).
+    const YT_CHANNEL_URL = "https://www.youtube.com/@SkyBriefGNV?sub_confirmation=1";
+    const YT_CTA = `👉 Subscribe and turn on notifications for daily Gainesville weather alerts: ${YT_CHANNEL_URL} 🔔`;
+    // Strip any previously-appended CTA variants so we always end with the
+    // current notifications-focused line (and never stack duplicates).
+    let baseDescription = (description || "").trimEnd();
+    baseDescription = baseDescription
+      .replace(/\n*👉[^\n]*@SkyBriefGNV\?sub_confirmation=1[^\n]*$/u, "")
+      .trimEnd();
+    const finalDescription = `${baseDescription}\n\n${YT_CTA}`;
     // YouTube caps description at 5000 chars.
     const safeDescription = finalDescription.length > 5000
       ? finalDescription.substring(0, 5000)
