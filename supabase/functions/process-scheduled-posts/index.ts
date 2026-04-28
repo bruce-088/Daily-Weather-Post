@@ -587,10 +587,10 @@ function clampVoiceParam(n: any, min: number, max: number, fallback: number): nu
   return Math.min(max, Math.max(min, v));
 }
 
-async function generateVoiceScript(weather: WeatherResponse): Promise<string> {
+async function generateVoiceScript(weather: WeatherResponse, tone?: string, platforms?: string[]): Promise<string> {
   const fallback = `Good day, ${weather.city}. Expect ${weather.description.toLowerCase()} with a high near ${weather.temperature} degrees today.`;
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) return fallback;
+  if (!LOVABLE_API_KEY) return appendVoiceCTA(fallback, { tone, platforms });
   const userPrompt = [
     `City: ${weather.city}`,
     `Condition: ${weather.description}`,
@@ -602,6 +602,7 @@ async function generateVoiceScript(weather: WeatherResponse): Promise<string> {
     "- Sound natural when read aloud (no emojis, no hashtags, no special chars).",
     "- Mention the city, the dominant condition, and the temperature.",
     "- You MAY include AT MOST ONE local reference, but ONLY from the verified list below, and ONLY if it fits the weather naturally. Otherwise omit it.",
+    "- Do NOT include any subscribe / follow / notification / bell call-to-action — that is appended automatically. End on the weather, not a CTA.",
     "- Return ONLY the script text. No labels, no quotes.",
     "",
     buildVerifiedLandmarksBlock(weather.city),
@@ -619,18 +620,19 @@ async function generateVoiceScript(weather: WeatherResponse): Promise<string> {
         ],
       }),
     });
-    if (!res.ok) { console.error("[voice] script AI failed:", res.status); return fallback; }
+    if (!res.ok) { console.error("[voice] script AI failed:", res.status); return appendVoiceCTA(fallback, { tone, platforms }); }
     const data = await res.json();
     const script = data?.choices?.[0]?.message?.content?.trim() || fallback;
     const validation = validateCaptionLocation(script, weather.city);
+    let finalScript = script;
     if (!validation.ok) {
       console.warn(`[voice] foreign landmarks in script for ${weather.city}:`, validation.hits, "— sanitizing");
-      return stripUnverifiedReferences(script, weather.city);
+      finalScript = stripUnverifiedReferences(script, weather.city);
     }
-    return script;
+    return appendVoiceCTA(finalScript, { tone, platforms });
   } catch (e) {
     console.error("[voice] script error:", e);
-    return fallback;
+    return appendVoiceCTA(fallback, { tone, platforms });
   }
 }
 
