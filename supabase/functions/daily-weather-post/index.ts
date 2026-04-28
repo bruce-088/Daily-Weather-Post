@@ -512,6 +512,7 @@ async function generateVoiceScript(weather: WeatherResponse, tone?: string, plat
     "- Mention the city, the dominant condition, and at least one key temperature.",
     "- No greetings like 'Hey everyone'. A short locale-anchored opener like 'Good morning {city}' is fine.",
     "- You MAY include AT MOST ONE local reference, but ONLY from the verified list below, and ONLY if it fits the weather naturally. Otherwise omit it.",
+    "- Do NOT include any subscribe / follow / notification / bell call-to-action — that is appended automatically. End on the weather, not a CTA.",
     "- Return ONLY the script text. No labels, no quotes.",
     "",
     buildVerifiedLandmarksBlock(weather.city),
