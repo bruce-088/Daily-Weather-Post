@@ -1,6 +1,11 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { verifyUser } from "../_shared/auth-helpers.ts";
 import { buildStyleAddendum, normalizeTone } from "../_shared/caption-style.ts";
+import {
+  LOCATION_ACCURACY_RULES,
+  buildVerifiedLandmarksBlock,
+  validateCaptionLocation,
+} from "../_shared/location-guard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
