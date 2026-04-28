@@ -1155,7 +1155,7 @@ Deno.serve(async (req) => {
             const voiceSimilarity = (vSettings as any)?.voiceover_similarity;
             console.log(`[process] post ${post.id}: voice=${voiceId} speed=${voiceSpeed} stability=${voiceStability} similarity=${voiceSimilarity}`);
 
-            const script = await generateVoiceScript(weather);
+            const script = await generateVoiceScript(weather, captionTone, platformsToPost);
             console.log(`[process] post ${post.id}: voice script: ${script}`);
             const audioBytes = await generateVoiceAudio(script, voiceId, {
               speed: voiceSpeed,
