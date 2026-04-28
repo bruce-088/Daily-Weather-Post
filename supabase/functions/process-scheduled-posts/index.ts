@@ -649,7 +649,10 @@ async function generateVoiceAudio(
 ): Promise<Uint8Array | null> {
   const apiKey = Deno.env.get("ELEVENLABS_API_KEY");
   if (!apiKey) { console.error("[voice] ELEVENLABS_API_KEY not configured"); return null; }
-  const speed = clampVoiceParam(opts?.speed, 0.7, 1.2, 1.0);
+  // Default to 1.05× — adds news-anchor energy and trims ~1s off runtime so
+  // the spoken CTA always lands before the video clip ends. User overrides
+  // (saved in weather_settings.voiceover_speed) still win when present.
+  const speed = clampVoiceParam(opts?.speed, 0.7, 1.2, 1.05);
   const stability = clampVoiceParam(opts?.stability, 0, 1, 0.55);
   const similarity = clampVoiceParam(opts?.similarity, 0, 1, 0.78);
   const url = `https://api.elevenlabs.io/v1/text-to-speech/${resolveVoiceId(voiceId)}?output_format=mp3_44100_128`;
