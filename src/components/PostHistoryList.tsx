@@ -102,6 +102,7 @@ interface PostHistoryListProps {
 
 export function PostHistoryList({ posts, loading, onReuse, onChanged }: PostHistoryListProps) {
   const [repostingId, setRepostingId] = useState<string | null>(null);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
   const [expandedError, setExpandedError] = useState<string | null>(null);
 
   const grouped = useMemo(() => {
@@ -128,6 +129,22 @@ export function PostHistoryList({ posts, loading, onReuse, onChanged }: PostHist
       onChanged?.();
     } else {
       toast.error(res.message || "Repost failed");
+    }
+  };
+
+  const handleRetry = async (post: PostHistoryItem) => {
+    if (!post.platform) {
+      toast.error("Cannot retry — original platform unknown");
+      return;
+    }
+    setRetryingId(post.id);
+    const res = await triggerDailyPost(undefined, [post.platform]);
+    setRetryingId(null);
+    if (res.success) {
+      toast.success(`Retrying ${PLATFORM_BRAND[post.platform]?.label || post.platform}…`);
+      onChanged?.();
+    } else {
+      toast.error(res.message || "Retry failed");
     }
   };
 
