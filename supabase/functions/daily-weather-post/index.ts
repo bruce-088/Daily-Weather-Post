@@ -510,6 +510,7 @@ async function generateVoiceScript(weather: WeatherResponse, tone?: string): Pro
     "- Sound natural when read aloud (no emojis, no hashtags, no special chars).",
     "- Mention the city, the dominant condition, and at least one key temperature.",
     "- No greetings like 'Hey everyone'. A short locale-anchored opener like 'Good morning {city}' is fine.",
+    "- Do NOT mention any landmarks, stadiums, universities, neighborhoods, parks, or businesses. Use only the city name as provided.",
     "- Return ONLY the script text. No labels, no quotes.",
   ].join("\n");
 
@@ -520,7 +521,7 @@ async function generateVoiceScript(weather: WeatherResponse, tone?: string): Pro
       body: JSON.stringify({
         model: "google/gemini-3-flash-preview",
         messages: [
-          { role: "system", content: "You are a concise broadcast weather scriptwriter. Output spoken-style scripts only." },
+          { role: "system", content: "You are a concise broadcast weather scriptwriter. Output spoken-style scripts only.\n\n" + LOCATION_ACCURACY_RULES },
           { role: "user", content: userPrompt },
         ],
       }),
@@ -531,7 +532,13 @@ async function generateVoiceScript(weather: WeatherResponse, tone?: string): Pro
     }
     const data = await res.json();
     const txt = data?.choices?.[0]?.message?.content?.trim();
-    return txt || fallback;
+    const candidate = txt || fallback;
+    const v = validateCaptionLocation(candidate, weather.city);
+    if (!v.ok) {
+      console.warn(`[voice] foreign landmarks in script for ${weather.city}:`, v.hits, "— using safe fallback");
+      return fallback;
+    }
+    return candidate;
   } catch (e) {
     console.error("Voice script error:", e);
     return fallback;
