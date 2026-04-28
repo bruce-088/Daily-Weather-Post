@@ -14,6 +14,98 @@ export type Database = {
   }
   public: {
     Tables: {
+      automations: {
+        Row: {
+          afternoon_platforms: Json
+          afternoon_time: string
+          city_id: string
+          created_at: string
+          enabled: boolean
+          evening_platforms: Json
+          evening_time: string
+          id: string
+          morning_platforms: Json
+          morning_time: string
+          platform_account_map: Json
+          timezone: string
+          tone: string
+          updated_at: string
+          user_id: string
+          voice_settings: Json
+        }
+        Insert: {
+          afternoon_platforms?: Json
+          afternoon_time?: string
+          city_id: string
+          created_at?: string
+          enabled?: boolean
+          evening_platforms?: Json
+          evening_time?: string
+          id?: string
+          morning_platforms?: Json
+          morning_time?: string
+          platform_account_map?: Json
+          timezone?: string
+          tone?: string
+          updated_at?: string
+          user_id: string
+          voice_settings?: Json
+        }
+        Update: {
+          afternoon_platforms?: Json
+          afternoon_time?: string
+          city_id?: string
+          created_at?: string
+          enabled?: boolean
+          evening_platforms?: Json
+          evening_time?: string
+          id?: string
+          morning_platforms?: Json
+          morning_time?: string
+          platform_account_map?: Json
+          timezone?: string
+          tone?: string
+          updated_at?: string
+          user_id?: string
+          voice_settings?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automations_city_id_fkey"
+            columns: ["city_id"]
+            isOneToOne: false
+            referencedRelation: "cities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cities: {
+        Row: {
+          country: string
+          created_at: string
+          id: string
+          name: string
+          state: string | null
+          timezone: string
+        }
+        Insert: {
+          country?: string
+          created_at?: string
+          id?: string
+          name: string
+          state?: string | null
+          timezone?: string
+        }
+        Update: {
+          country?: string
+          created_at?: string
+          id?: string
+          name?: string
+          state?: string | null
+          timezone?: string
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           created_at: string
@@ -97,8 +189,10 @@ export type Database = {
       }
       scheduled_posts: {
         Row: {
+          automation_id: string | null
           caption: string | null
           city: string
+          city_id: string | null
           created_at: string
           error_message: string | null
           id: string
@@ -112,8 +206,10 @@ export type Database = {
           voiceover_url: string | null
         }
         Insert: {
+          automation_id?: string | null
           caption?: string | null
           city: string
+          city_id?: string | null
           created_at?: string
           error_message?: string | null
           id?: string
@@ -127,8 +223,10 @@ export type Database = {
           voiceover_url?: string | null
         }
         Update: {
+          automation_id?: string | null
           caption?: string | null
           city?: string
+          city_id?: string | null
           created_at?: string
           error_message?: string | null
           id?: string
@@ -140,6 +238,48 @@ export type Database = {
           status?: string
           user_id?: string
           voiceover_url?: string | null
+        }
+        Relationships: []
+      }
+      social_accounts: {
+        Row: {
+          access_token: string | null
+          account_external_id: string | null
+          account_name: string | null
+          created_at: string
+          extra: Json
+          id: string
+          platform: string
+          refresh_token: string | null
+          token_expires_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          access_token?: string | null
+          account_external_id?: string | null
+          account_name?: string | null
+          created_at?: string
+          extra?: Json
+          id?: string
+          platform: string
+          refresh_token?: string | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          access_token?: string | null
+          account_external_id?: string | null
+          account_name?: string | null
+          created_at?: string
+          extra?: Json
+          id?: string
+          platform?: string
+          refresh_token?: string | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -196,6 +336,38 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: []
+      }
+      user_cities: {
+        Row: {
+          city_id: string
+          created_at: string
+          id: string
+          is_primary: boolean
+          user_id: string
+        }
+        Insert: {
+          city_id: string
+          created_at?: string
+          id?: string
+          is_primary?: boolean
+          user_id: string
+        }
+        Update: {
+          city_id?: string
+          created_at?: string
+          id?: string
+          is_primary?: boolean
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_cities_city_id_fkey"
+            columns: ["city_id"]
+            isOneToOne: false
+            referencedRelation: "cities"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       weather_settings: {
         Row: {
