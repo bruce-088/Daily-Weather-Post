@@ -24,16 +24,13 @@ export const LOCATION_ACCURACY_RULES = [
 // Keys are normalized lowercase city names.
 const VERIFIED_LANDMARKS: Record<string, string[]> = {
   gainesville: [
-    "The Swamp",
-    "Ben Hill Griffin Stadium",
     "University of Florida",
     "UF campus",
-    "Midtown",
+    "The Swamp",
+    "Downtown Gainesville",
     "Depot Park",
-    "the Hippodrome",
-    "Paynes Prairie",
-    "Lake Alice",
-    "Bo Diddley Plaza",
+    "Midtown",
+    "Archer Road",
   ],
   miami: ["South Beach", "Wynwood", "Brickell", "Bayside", "Little Havana"],
   orlando: ["Lake Eola", "Downtown Orlando", "Winter Park"],
@@ -45,6 +42,25 @@ export function verifiedLandmarksFor(city?: string | null): string[] {
   return VERIFIED_LANDMARKS[key] || [];
 }
 
+// In-memory rotation tracker — avoid picking the SAME landmark twice in a row
+// for the same city within a single edge-function instance lifetime.
+const lastPickByCity = new Map<string, string>();
+
+/**
+ * Pick one verified landmark for the given city, avoiding the most recent pick
+ * when possible. Returns null when the city has no allowlist.
+ */
+export function pickLocalReference(city?: string | null): string | null {
+  const list = verifiedLandmarksFor(city);
+  if (list.length === 0) return null;
+  const key = String(city || "").trim().toLowerCase();
+  const last = lastPickByCity.get(key);
+  const pool = list.length > 1 && last ? list.filter((l) => l !== last) : list;
+  const pick = pool[Math.floor(Math.random() * pool.length)];
+  lastPickByCity.set(key, pick);
+  return pick;
+}
+
 export function buildVerifiedLandmarksBlock(city?: string | null): string {
   const list = verifiedLandmarksFor(city);
   if (list.length === 0) {
@@ -54,11 +70,35 @@ export function buildVerifiedLandmarksBlock(city?: string | null): string {
       "- Use only generic phrasing like \"around town\" or \"across the area\".",
     ].join("\n");
   }
+  const suggested = pickLocalReference(city);
   return [
-    `VERIFIED LOCAL LANDMARKS for ${city}:`,
+    `VERIFIED LOCAL REFERENCES for ${city} (the ONLY local places you may name):`,
     ...list.map((l) => "- " + l),
-    "You MAY reference items from the list above when natural. You MUST NOT reference anything not on this list.",
-  ].join("\n");
+    "",
+    "LOCAL FLAVOR RULES:",
+    "- You MAY include AT MOST ONE local reference from the list above.",
+    "- Only include it if it fits NATURALLY with today's weather (e.g. heat → \"stay cool out near UF campus\"; rain → \"rain moving through Downtown Gainesville\"; perfect day → \"great day to be out at Depot Park\").",
+    "- If none fits naturally, omit the reference entirely — do NOT force one in.",
+    "- Do NOT invent, guess, or modify any location name. Use the listed wording exactly.",
+    "- Never name two different places in the same caption.",
+    suggested ? `- SUGGESTED REFERENCE for this generation (use ONLY if it fits the weather, otherwise skip): "${suggested}"` : "",
+  ].filter(Boolean).join("\n");
+}
+
+/**
+ * Sanitize text by replacing any landmark mentions that are NOT in the
+ * city's verified allowlist with safe generic phrasing. Used as a final
+ * safety net after AI output.
+ */
+export function stripUnverifiedReferences(text: string, city?: string | null): string {
+  const allow = verifiedLandmarksFor(city).map((s) => s.toLowerCase());
+  let out = String(text || "");
+  for (const kw of FOREIGN_LANDMARK_KEYWORDS) {
+    if (allow.includes(kw.toLowerCase())) continue;
+    const re = new RegExp(kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+    out = out.replace(re, city ? `around ${city}` : "across the area");
+  }
+  return out;
 }
 
 // ---------- Validation ----------
