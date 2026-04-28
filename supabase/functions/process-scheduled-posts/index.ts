@@ -601,8 +601,11 @@ async function generateVoiceScript(weather: WeatherResponse): Promise<string> {
     "- Maximum 2 sentences, ~25 words total.",
     "- Sound natural when read aloud (no emojis, no hashtags, no special chars).",
     "- Mention the city, the dominant condition, and the temperature.",
+    "- Do NOT mention any landmarks, stadiums, universities, neighborhoods, parks, or businesses.",
+    "- Use only the city name as provided. Do not invent local references.",
     "- Return ONLY the script text. No labels, no quotes.",
   ].join("\n");
+  const systemPrompt = `You are a concise broadcast weather scriptwriter. Output spoken-style scripts only.\n\n${LOCATION_ACCURACY_RULES}`;
   try {
     const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -610,14 +613,20 @@ async function generateVoiceScript(weather: WeatherResponse): Promise<string> {
       body: JSON.stringify({
         model: "google/gemini-3-flash-preview",
         messages: [
-          { role: "system", content: "You are a concise broadcast weather scriptwriter. Output spoken-style scripts only." },
+          { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
       }),
     });
     if (!res.ok) { console.error("[voice] script AI failed:", res.status); return fallback; }
     const data = await res.json();
-    return data?.choices?.[0]?.message?.content?.trim() || fallback;
+    const script = data?.choices?.[0]?.message?.content?.trim() || fallback;
+    const validation = validateCaptionLocation(script, weather.city);
+    if (!validation.ok) {
+      console.warn(`[voice] foreign landmarks in script for ${weather.city}:`, validation.hits, "— using safe fallback");
+      return fallback;
+    }
+    return script;
   } catch (e) {
     console.error("[voice] script error:", e);
     return fallback;
