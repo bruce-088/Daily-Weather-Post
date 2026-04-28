@@ -1144,28 +1144,41 @@ Deno.serve(async (req) => {
         const timePeriod = slotMatch ? slotMatch[1].toLowerCase() : null;
 
         // === AI VOICEOVER (auto-posts) ===
-        // include_voiceover is set by auto-post-scheduler ONLY for video-capable platforms
-        // and only when the user enabled the preference. Manual scheduled posts default to false.
+        // include_voiceover is set by auto-post-scheduler ONLY for video-capable platforms.
+        // As a safety net we ALSO re-check enable_voiceover on weather_settings here so a user
+        // who flipped voice on after rows were queued still gets audio. Image-only platforms
+        // (twitter, linkedin) are excluded since they can't carry audio anyway.
         // If TTS fails, we render silently — never break the schedule.
-        let voiceUrl: string | null = post.voiceover_url || null;
-        if (!voiceUrl && post.include_voiceover && post.user_id) {
-          console.log(`[process] post ${post.id}: voiceover requested, generating script + TTS`);
-          try {
-            // Look up the user's preferred voice + tuning
-            const { data: vSettings } = await supabase
-              .from("weather_settings")
-              .select("voiceover_voice_id, voiceover_speed, voiceover_stability, voiceover_similarity")
-              .eq("user_id", post.user_id)
-              .limit(1)
-              .maybeSingle();
-            const voiceId = (vSettings as any)?.voiceover_voice_id || "female";
-            const voiceSpeed = (vSettings as any)?.voiceover_speed;
-            const voiceStability = (vSettings as any)?.voiceover_stability;
-            const voiceSimilarity = (vSettings as any)?.voiceover_similarity;
-            console.log(`[process] post ${post.id}: voice=${voiceId} speed=${voiceSpeed} stability=${voiceStability} similarity=${voiceSimilarity}`);
+        const VIDEO_PLATFORMS = new Set(["youtube", "tiktok", "instagram"]);
+        const hasVideoPlatform = platformsToPost.some((p) => VIDEO_PLATFORMS.has(p));
 
+        let voiceUrl: string | null = post.voiceover_url || null;
+        let voiceSettingsRow: any = null;
+        if (!voiceUrl && post.user_id && hasVideoPlatform) {
+          const { data: vSettings } = await supabase
+            .from("weather_settings")
+            .select("enable_voiceover, voiceover_voice_id, voiceover_speed, voiceover_stability, voiceover_similarity")
+            .eq("user_id", post.user_id)
+            .limit(1)
+            .maybeSingle();
+          voiceSettingsRow = vSettings || null;
+        }
+        const settingsEnabled = voiceSettingsRow?.enable_voiceover === true;
+        const wantVoice = !voiceUrl && hasVideoPlatform && (post.include_voiceover === true || settingsEnabled);
+
+        if (wantVoice && post.user_id) {
+          console.log(`[process] post ${post.id}: VOICE: enabled (row.include_voiceover=${post.include_voiceover}, settings.enable_voiceover=${settingsEnabled})`);
+          try {
+            const voiceId = voiceSettingsRow?.voiceover_voice_id || "female";
+            const voiceSpeed = voiceSettingsRow?.voiceover_speed;
+            const voiceStability = voiceSettingsRow?.voiceover_stability;
+            const voiceSimilarity = voiceSettingsRow?.voiceover_similarity;
+            console.log(`[process] post ${post.id}: VOICE: config voice=${voiceId} speed=${voiceSpeed} stability=${voiceStability} similarity=${voiceSimilarity}`);
+
+            console.log(`[process] post ${post.id}: VOICE: generating script`);
             const script = await generateVoiceScript(weather, captionTone, platformsToPost);
-            console.log(`[process] post ${post.id}: voice script: ${script}`);
+            console.log(`[process] post ${post.id}: VOICE: script="${script}"`);
+
             const audioBytes = await generateVoiceAudio(script, voiceId, {
               speed: voiceSpeed,
               stability: voiceStability,
@@ -1175,19 +1188,21 @@ Deno.serve(async (req) => {
               const url = await storeVoiceAudio(supabase, post.user_id, audioBytes);
               if (url) {
                 voiceUrl = url;
-                console.log(`[process] post ${post.id}: ✅ voiceover ready`);
+                console.log(`[process] post ${post.id}: VOICE: audio attached (${url.split("?")[0]})`);
                 // Persist on the row so re-runs don't regenerate the same audio
                 await supabase.from("scheduled_posts").update({ voiceover_url: url }).eq("id", post.id);
               } else {
-                console.warn(`[process] post ${post.id}: voice upload failed — falling back to silent video`);
+                console.warn(`[process] post ${post.id}: VOICE: upload failed — falling back to silent video`);
               }
             } else {
-              console.warn(`[process] post ${post.id}: TTS failed — falling back to silent video`);
+              console.warn(`[process] post ${post.id}: VOICE: TTS failed — falling back to silent video`);
             }
           } catch (vErr) {
-            console.error(`[process] post ${post.id}: voiceover pipeline error — falling back to silent video:`, vErr);
+            console.error(`[process] post ${post.id}: VOICE: pipeline error — falling back to silent video:`, vErr);
             voiceUrl = null;
           }
+        } else if (!voiceUrl && hasVideoPlatform) {
+          console.log(`[process] post ${post.id}: VOICE: disabled (row.include_voiceover=${post.include_voiceover}, settings.enable_voiceover=${settingsEnabled})`);
         }
 
         // Try video generation once (with voiceover baked in if available)
