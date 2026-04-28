@@ -484,7 +484,7 @@ function voiceSettingsForTone(tone?: string) {
 }
 
 /** Generate a short, spoken-feeling voice script (1-2 sentences). */
-async function generateVoiceScript(weather: WeatherResponse, tone?: string): Promise<string> {
+async function generateVoiceScript(weather: WeatherResponse, tone?: string, platforms?: string[]): Promise<string> {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   // Fallback if AI gateway is unavailable — still useful, deterministic
   const fallback = `Good day, ${weather.city}. Expect ${weather.description.toLowerCase()} with a high near ${weather.temperature} degrees today.`;
