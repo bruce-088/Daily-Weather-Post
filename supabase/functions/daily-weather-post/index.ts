@@ -1168,47 +1168,65 @@ Deno.serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (LOVABLE_API_KEY) {
       try {
-        const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            Authorization: "Bearer " + LOVABLE_API_KEY,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "google/gemini-3-flash-preview",
-            messages: [
-              { role: "system", content: SKYBRIEF_SYSTEM_PROMPT },
-              {
-                role: "user",
-                content:
-                  buildSkyBriefUserPrompt(weather, timePeriod) +
-                  (style === "minimal"
-                    ? "\n\nSTYLE: MINIMAL. Strip back. Shorter lines, no emojis."
-                    : style === "cinematic"
-                    ? "\n\nSTYLE: CINEMATIC. Slightly more dramatic, evocative opening line."
-                    : "") +
-                  (variation
-                    ? "\n\nVARIATION REQUEST: Pick a noticeably different creative angle (witty, dramatic, conversational, or poetic). Vary opening line and rhythm."
-                    : "") +
-                  "\n\n" +
-                  buildStyleAddendum({
-                    tone: normalizeTone((settings as any).caption_tone),
-                    city: weather.city,
-                    state: weather.stateOrRegion,
-                    period: timePeriod,
-                    rainChance: weather.rainChance ?? 0,
-                    highTemp: weather.afternoonTemp ?? weather.temperature ?? 0,
-                    lowTemp: weather.morningTemp ?? weather.temperature ?? 0,
-                    conditions: weather.afternoonCondition || weather.condition || "",
-                    platform: (selectedPlatforms && selectedPlatforms[0]) || null,
-                  }),
-              },
-            ],
-          }),
-        });
-        if (aiRes.ok) {
-          const aiData = await aiRes.json();
-          caption = aiData.choices?.[0]?.message?.content?.trim() || null;
+        const baseUserContent =
+          buildSkyBriefUserPrompt(weather, timePeriod) +
+          (style === "minimal"
+            ? "\n\nSTYLE: MINIMAL. Strip back. Shorter lines, no emojis."
+            : style === "cinematic"
+            ? "\n\nSTYLE: CINEMATIC. Slightly more dramatic, evocative opening line."
+            : "") +
+          (variation
+            ? "\n\nVARIATION REQUEST: Pick a noticeably different creative angle (witty, dramatic, conversational, or poetic). Vary opening line and rhythm."
+            : "") +
+          "\n\n" + buildVerifiedLandmarksBlock(weather.city) +
+          "\n\n" +
+          buildStyleAddendum({
+            tone: normalizeTone((settings as any).caption_tone),
+            city: weather.city,
+            state: weather.stateOrRegion,
+            period: timePeriod,
+            rainChance: weather.rainChance ?? 0,
+            highTemp: weather.afternoonTemp ?? weather.temperature ?? 0,
+            lowTemp: weather.morningTemp ?? weather.temperature ?? 0,
+            conditions: weather.afternoonCondition || weather.condition || "",
+            platform: (selectedPlatforms && selectedPlatforms[0]) || null,
+          });
+
+        const systemPromptWithGuard = SKYBRIEF_SYSTEM_PROMPT + "\n\n" + LOCATION_ACCURACY_RULES;
+
+        const callCaption = async (extra = "") => {
+          const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+            method: "POST",
+            headers: { Authorization: "Bearer " + LOVABLE_API_KEY, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: "google/gemini-3-flash-preview",
+              messages: [
+                { role: "system", content: systemPromptWithGuard },
+                { role: "user", content: baseUserContent + extra },
+              ],
+            }),
+          });
+          if (!r.ok) return null;
+          const d = await r.json();
+          return d.choices?.[0]?.message?.content?.trim() || null;
+        };
+
+        caption = await callCaption();
+        if (caption) {
+          const v = validateCaptionLocation(caption, weather.city);
+          if (!v.ok) {
+            console.warn(`[daily-weather-post] foreign landmarks for ${weather.city}:`, v.hits);
+            const retry = await callCaption(
+              `\n\nREGENERATION REQUIRED: Your previous draft mentioned ${v.hits.join(", ")}, which is NOT in ${weather.city}. Rewrite without ANY specific landmark, stadium, university, neighborhood, or business name. Use only generic local phrasing.`,
+            );
+            if (retry) {
+              const v2 = validateCaptionLocation(retry, weather.city);
+              caption = v2.ok ? retry : retry.replace(
+                new RegExp(v.hits.map((h) => h.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "gi"),
+                weather.city,
+              );
+            }
+          }
         }
       } catch (e) {
         console.error("Caption generation failed:", e);
