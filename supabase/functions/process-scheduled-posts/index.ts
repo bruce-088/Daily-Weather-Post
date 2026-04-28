@@ -1010,11 +1010,12 @@ Deno.serve(async (req) => {
       throw new Error("OpenWeatherMap API key not configured");
     }
 
+    const nowIso = new Date().toISOString();
+    // Pick up pending posts that are due, OR retrying posts whose next_retry_at has passed.
     const { data: duePosts, error: fetchError } = await supabase
       .from("scheduled_posts")
       .select("*")
-      .eq("status", "pending")
-      .lte("scheduled_at", new Date().toISOString());
+      .or(`and(status.eq.pending,scheduled_at.lte.${nowIso}),and(status.eq.retrying,next_retry_at.lte.${nowIso})`);
 
     if (fetchError) throw new Error(`Failed to fetch scheduled posts: ${fetchError.message}`);
     if (!duePosts || duePosts.length === 0) {
