@@ -174,6 +174,7 @@ const Index = () => {
     });
   }, [activeCityId, userCities]);
 
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [voiceId, setVoiceId] = useState<"female" | "male">("female");
   const [voiceTone, setVoiceTone] = useState<"conversational" | "energetic" | "news">("conversational");
   const voiceOptions: VoiceOptions = useMemo(
