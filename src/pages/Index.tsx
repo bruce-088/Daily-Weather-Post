@@ -887,19 +887,39 @@ const Index = () => {
 
           {/* SCHEDULE TAB */}
           <TabsContent value="schedule">
-            <div className="max-w-2xl mx-auto grid md:grid-cols-[320px_1fr] gap-6">
-              <SchedulePostForm defaultCity={settings.location} onScheduled={loadScheduled} />
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-semibold text-foreground">Scheduled Posts</h2>
-                  <Button size="sm" variant="outline" onClick={loadScheduled} className="text-xs gap-1.5">
-                    <CalendarClock size={14} /> Refresh
-                  </Button>
+            <div className="max-w-2xl mx-auto">
+              {userCities.length > 0 && (
+                <div className="mb-4 flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">City:</span>
+                  <CitySwitcher
+                    cities={userCities}
+                    activeCityId={activeCityId}
+                    onChange={(id) => { setActiveCityIdState(id); setActiveCityId(id); }}
+                  />
                 </div>
-                <ScheduledPostsList posts={scheduledPosts} loading={scheduledLoading} onRefresh={loadScheduled} />
+              )}
+              <div className="grid md:grid-cols-[320px_1fr] gap-6">
+                <SchedulePostForm key={activeCityId || "default"} defaultCity={settings.location} onScheduled={loadScheduled} />
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-semibold text-foreground">Scheduled Posts</h2>
+                    <Button size="sm" variant="outline" onClick={loadScheduled} className="text-xs gap-1.5">
+                      <CalendarClock size={14} /> Refresh
+                    </Button>
+                  </div>
+                  <ScheduledPostsList
+                    posts={activeCityId ? scheduledPosts.filter((p) => {
+                      const c = userCities.find((x) => x.id === activeCityId);
+                      return !c || (p.city || "").toLowerCase() === c.name.toLowerCase();
+                    }) : scheduledPosts}
+                    loading={scheduledLoading}
+                    onRefresh={loadScheduled}
+                  />
+                </div>
               </div>
             </div>
           </TabsContent>
+
 
           {/* HISTORY TAB */}
           <TabsContent value="history">
