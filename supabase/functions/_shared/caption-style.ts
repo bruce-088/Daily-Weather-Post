@@ -397,32 +397,38 @@ export function buildStyleAddendum(opts: {
 // `process-scheduled-posts` (scheduled + auto-posts) so the spoken CTA stays
 // identical across paths.
 
+// CTA pools: every line MUST be ≤ 8 words so the spoken CTA fits in roughly
+// 2.5–3 seconds at 1.05–1.1× playback. Keep these tight on purpose.
 const VOICE_CTAS_BY_TONE: Record<CaptionTone, string[]> = {
   professional: [
-    "Subscribe and turn on notifications to stay ahead of the weather.",
-    "Hit the bell to get your daily forecast as soon as it drops.",
-    "Stay updated by tapping the bell. See you in the next one.",
-    "Don't miss a day. Subscribe and turn on notifications.",
+    "Subscribe and tap the bell for daily updates.",
+    "Hit the bell for your daily forecast.",
+    "Tap the bell. See you tomorrow.",
+    "Subscribe and turn on notifications.",
   ],
   hype: [
-    "Smash that bell so you never miss a daily update!",
-    "Hit subscribe and turn on notifications. Let's run it back tomorrow!",
-    "Tap the bell and lock in your daily forecast!",
-    "Bell on, notifications on. See you in the next one!",
+    "Smash that bell for daily updates!",
+    "Subscribe and turn on notifications!",
+    "Tap the bell. Lock in your forecast!",
+    "Bell on. See you tomorrow!",
   ],
   funny: [
-    "Hit the bell so the weather can't sneak up on you.",
-    "Subscribe and turn on notifications. Your umbrella will thank you.",
-    "Tap the bell. It's free, and the sky doesn't take days off.",
-    "Bell on so tomorrow's forecast slides into your notifications.",
+    "Hit the bell. Outsmart the sky.",
+    "Tap the bell. Your umbrella thanks you.",
+    "Bell on. The sky never sleeps.",
+    "Subscribe so the weather stops surprising you.",
   ],
   local_legend: [
-    "Hit the bell for your daily local forecast.",
-    "Subscribe and turn on notifications. We'll see you tomorrow.",
-    "Tap the bell so you never miss a local update.",
-    "Bell on for the daily local weather. Catch you tomorrow.",
+    "Hit the bell for daily local weather.",
+    "Tap the bell. Catch you tomorrow.",
+    "Subscribe for your daily local forecast.",
+    "Bell on. See you tomorrow.",
   ],
 };
+
+// When weather is severe / alert-driven, swap to a single ultra-short CTA so
+// the safety message gets the airtime, not the marketing line.
+const ALERT_CTA = "Hit the bell for updates!";
 
 /**
  * Returns true when the platform is audio-first and a spoken CTA makes sense.
@@ -439,14 +445,18 @@ export function platformWantsVoiceCTA(platform: Platform | null | undefined): bo
  * varies day-to-day so listeners don't hear the same line every time.
  *
  * Returns null when no CTA should be appended (non-audio platforms).
+ * In alert mode, always returns a single 6-word safety-first CTA.
  */
 export function buildVoiceCTA(opts: {
   tone?: CaptionTone | string | null;
   platforms?: Array<Platform | string> | null;
+  alertMode?: boolean;
 }): string | null {
   const platforms = (opts.platforms || []).map((p) => normalizePlatform(p));
   const anyAudio = platforms.some(platformWantsVoiceCTA);
   if (!anyAudio) return null;
+
+  if (opts.alertMode) return ALERT_CTA;
 
   const tone = normalizeTone(opts.tone);
   const pool = VOICE_CTAS_BY_TONE[tone] || VOICE_CTAS_BY_TONE.professional;
@@ -460,19 +470,78 @@ export function buildVoiceCTA(opts: {
 }
 
 /**
- * Appends the spoken CTA to a finished voice script with a single space
- * separator. Safe no-op when CTA isn't applicable or already present.
- * Keep CTAs short (≤ ~12 words / ~3-4s spoken) so total runtime fits the clip.
+ * Hard-clamps the spoken weather summary to a max word count (default 25).
+ * Strips any trailing partial sentence so the cut point still sounds natural.
+ * Also collapses excess whitespace and removes characters that don't read
+ * well aloud.
+ */
+export function clampSummaryWords(text: string, maxWords = 25): string {
+  const cleaned = (text || "")
+    .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, "") // strip emoji
+    .replace(/#[A-Za-z0-9_]+/g, "")                          // strip hashtags
+    .replace(/\s+/g, " ")
+    .trim();
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) return cleaned;
+  const clipped = words.slice(0, maxWords).join(" ");
+  // Trim back to the last sentence boundary if one exists in the kept range.
+  const lastStop = Math.max(clipped.lastIndexOf("."), clipped.lastIndexOf("!"), clipped.lastIndexOf("?"));
+  if (lastStop > clipped.length * 0.5) return clipped.slice(0, lastStop + 1);
+  return clipped.replace(/[,;:\-–—]+$/, "") + ".";
+}
+
+/**
+ * Appends the spoken CTA to a finished voice script. Also enforces the
+ * weather-summary word cap so the script + CTA together stay under ~35 words
+ * (~10–12 seconds of speech at 1.05–1.1× playback).
+ *
+ * Safe no-op when CTA isn't applicable (non-audio platforms).
  */
 export function appendVoiceCTA(
   script: string,
-  opts: { tone?: CaptionTone | string | null; platforms?: Array<Platform | string> | null },
+  opts: {
+    tone?: CaptionTone | string | null;
+    platforms?: Array<Platform | string> | null;
+    alertMode?: boolean;
+    /** Max words allowed in the weather-summary portion (before the CTA). Default 25. */
+    maxSummaryWords?: number;
+  },
 ): string {
+  // Always tighten the summary first so total runtime is bounded even when
+  // no CTA gets appended (e.g. Instagram, LinkedIn).
+  const summary = clampSummaryWords(script, opts.maxSummaryWords ?? 25);
+
   const cta = buildVoiceCTA(opts);
-  if (!cta) return script;
-  const trimmed = (script || "").trim();
-  if (trimmed.toLowerCase().includes(cta.toLowerCase())) return trimmed;
-  // Ensure the script ends with sentence punctuation before appending.
-  const sep = /[.!?]$/.test(trimmed) ? " " : ". ";
-  return `${trimmed}${sep}${cta}`;
+  if (!cta) return summary;
+
+  if (summary.toLowerCase().includes(cta.toLowerCase())) return summary;
+  const sep = /[.!?]$/.test(summary) ? " " : ". ";
+  return `${summary}${sep}${cta}`;
 }
+
+/**
+ * Lightweight check: does this weather payload qualify as a "weather alert"
+ * scenario where we should swap to the ultra-short CTA and prioritize the
+ * safety message? Inputs are loose so callers can pass partial weather data.
+ */
+export function isWeatherAlert(input: {
+  alertLine?: string | null;
+  condition?: string | null;
+  temperature?: number | null;
+  rainChance?: number | null;
+  windSpeed?: number | null;
+}): boolean {
+  if (input.alertLine && String(input.alertLine).trim() && String(input.alertLine).trim().toLowerCase() !== "none") {
+    return true;
+  }
+  const cond = String(input.condition || "").toLowerCase();
+  if (/storm|hurricane|tornado|blizzard|severe|warning|advisory|flood/.test(cond)) return true;
+  const t = Number(input.temperature ?? NaN);
+  if (Number.isFinite(t) && (t >= 100 || t <= 20)) return true;
+  const rc = Number(input.rainChance ?? NaN);
+  if (Number.isFinite(rc) && rc >= 90) return true;
+  const w = Number(input.windSpeed ?? NaN);
+  if (Number.isFinite(w) && w >= 35) return true;
+  return false;
+}
+

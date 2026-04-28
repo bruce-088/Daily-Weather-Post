@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { buildStyleAddendum, normalizeTone, appendVoiceCTA } from "../_shared/caption-style.ts";
+import { buildStyleAddendum, normalizeTone, appendVoiceCTA, isWeatherAlert } from "../_shared/caption-style.ts";
 import {
   LOCATION_ACCURACY_RULES,
   buildVerifiedLandmarksBlock,
@@ -472,14 +472,17 @@ function resolveVoiceId(input?: string): string {
 }
 
 function voiceSettingsForTone(tone?: string) {
+  // Speeds default to 1.05–1.10× across the board: adds "news anchor" energy
+  // and shaves 1–2s off total runtime so the spoken CTA always lands before
+  // the video clip ends. Speed is clamped server-side to [0.7, 1.2].
   switch (tone) {
     case "energetic":
-      return { stability: 0.35, similarity_boost: 0.8, style: 0.6, use_speaker_boost: true, speed: 1.05 };
+      return { stability: 0.35, similarity_boost: 0.8, style: 0.6, use_speaker_boost: true, speed: 1.10 };
     case "news":
-      return { stability: 0.75, similarity_boost: 0.85, style: 0.2, use_speaker_boost: true, speed: 1.0 };
+      return { stability: 0.75, similarity_boost: 0.85, style: 0.2, use_speaker_boost: true, speed: 1.10 };
     case "conversational":
     default:
-      return { stability: 0.55, similarity_boost: 0.78, style: 0.35, use_speaker_boost: true, speed: 1.0 };
+      return { stability: 0.55, similarity_boost: 0.78, style: 0.35, use_speaker_boost: true, speed: 1.05 };
   }
 }
 
@@ -507,12 +510,13 @@ async function generateVoiceScript(weather: WeatherResponse, tone?: string, plat
     `Tone: ${toneHint}`,
     "",
     "Write a SPOKEN weather script. Strict rules:",
-    "- Maximum 2 sentences, ~25 words total.",
-    "- Sound natural when read aloud (no emojis, no hashtags, no special chars).",
-    "- Mention the city, the dominant condition, and at least one key temperature.",
-    "- No greetings like 'Hey everyone'. A short locale-anchored opener like 'Good morning {city}' is fine.",
+    "- HARD CAP: 25 words MAX for the weather summary. Shorter is better.",
+    "- LEAD with the most important data first: high temp + rain chance. Other periods are optional.",
+    "- 1–2 sentences. Sound natural read aloud (no emojis, no hashtags, no special chars).",
+    "- Mention the city once, the dominant condition, and the key temperature.",
+    "- No greetings like 'Hey everyone'. A short locale opener like 'Good morning {city}' is fine but counts toward the 25-word cap.",
     "- You MAY include AT MOST ONE local reference, but ONLY from the verified list below, and ONLY if it fits the weather naturally. Otherwise omit it.",
-    "- Do NOT include any subscribe / follow / notification / bell call-to-action — that is appended automatically. End on the weather, not a CTA.",
+    "- Do NOT include any subscribe / follow / notification / bell call-to-action — that is appended automatically as a separate final paragraph. End on the weather, not a CTA.",
     "- Return ONLY the script text. No labels, no quotes.",
     "",
     buildVerifiedLandmarksBlock(weather.city),
@@ -544,10 +548,21 @@ async function generateVoiceScript(weather: WeatherResponse, tone?: string, plat
       finalScript = stripUnverifiedReferences(candidate, weather.city);
     }
     // Append tone-matched, rotating spoken CTA for audio-first platforms (YouTube / TikTok).
-    return appendVoiceCTA(finalScript, { tone, platforms });
+    // Switches to the ultra-short safety CTA when weather conditions qualify as an alert.
+    const alertMode = isWeatherAlert({
+      condition: weather.description,
+      temperature: weather.temperature,
+      rainChance: weather.rainChance,
+    });
+    return appendVoiceCTA(finalScript, { tone, platforms, alertMode });
   } catch (e) {
     console.error("Voice script error:", e);
-    return appendVoiceCTA(fallback, { tone, platforms });
+    const alertMode = isWeatherAlert({
+      condition: weather.description,
+      temperature: weather.temperature,
+      rainChance: weather.rainChance,
+    });
+    return appendVoiceCTA(fallback, { tone, platforms, alertMode });
   }
 }
 

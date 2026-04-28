@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { buildStyleAddendum, normalizeTone, appendVoiceCTA } from "../_shared/caption-style.ts";
+import { buildStyleAddendum, normalizeTone, appendVoiceCTA, isWeatherAlert } from "../_shared/caption-style.ts";
 import { LOCATION_ACCURACY_RULES, validateCaptionLocation, buildVerifiedLandmarksBlock, stripUnverifiedReferences } from "../_shared/location-guard.ts";
 
 const corsHeaders = {
@@ -598,16 +598,22 @@ async function generateVoiceScript(weather: WeatherResponse, tone?: string, plat
     `Rain chance: ${weather.rainChance}%`,
     "",
     "Write a SPOKEN weather script. Strict rules:",
-    "- Maximum 2 sentences, ~25 words total.",
-    "- Sound natural when read aloud (no emojis, no hashtags, no special chars).",
-    "- Mention the city, the dominant condition, and the temperature.",
+    "- HARD CAP: 25 words MAX for the weather summary. Shorter is better.",
+    "- LEAD with the most important data first: high temp + rain chance.",
+    "- 1–2 sentences. Sound natural read aloud (no emojis, no hashtags, no special chars).",
+    "- Mention the city once, the dominant condition, and the key temperature.",
     "- You MAY include AT MOST ONE local reference, but ONLY from the verified list below, and ONLY if it fits the weather naturally. Otherwise omit it.",
-    "- Do NOT include any subscribe / follow / notification / bell call-to-action — that is appended automatically. End on the weather, not a CTA.",
+    "- Do NOT include any subscribe / follow / notification / bell call-to-action — that is appended automatically as a separate final paragraph. End on the weather, not a CTA.",
     "- Return ONLY the script text. No labels, no quotes.",
     "",
     buildVerifiedLandmarksBlock(weather.city),
   ].join("\n");
   const systemPrompt = `You are a concise broadcast weather scriptwriter. Output spoken-style scripts only.\n\n${LOCATION_ACCURACY_RULES}`;
+  const alertMode = isWeatherAlert({
+    condition: weather.description,
+    temperature: weather.temperature,
+    rainChance: weather.rainChance,
+  });
   try {
     const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -620,7 +626,7 @@ async function generateVoiceScript(weather: WeatherResponse, tone?: string, plat
         ],
       }),
     });
-    if (!res.ok) { console.error("[voice] script AI failed:", res.status); return appendVoiceCTA(fallback, { tone, platforms }); }
+    if (!res.ok) { console.error("[voice] script AI failed:", res.status); return appendVoiceCTA(fallback, { tone, platforms, alertMode }); }
     const data = await res.json();
     const script = data?.choices?.[0]?.message?.content?.trim() || fallback;
     const validation = validateCaptionLocation(script, weather.city);
@@ -629,10 +635,10 @@ async function generateVoiceScript(weather: WeatherResponse, tone?: string, plat
       console.warn(`[voice] foreign landmarks in script for ${weather.city}:`, validation.hits, "— sanitizing");
       finalScript = stripUnverifiedReferences(script, weather.city);
     }
-    return appendVoiceCTA(finalScript, { tone, platforms });
+    return appendVoiceCTA(finalScript, { tone, platforms, alertMode });
   } catch (e) {
     console.error("[voice] script error:", e);
-    return appendVoiceCTA(fallback, { tone, platforms });
+    return appendVoiceCTA(fallback, { tone, platforms, alertMode });
   }
 }
 
@@ -643,7 +649,10 @@ async function generateVoiceAudio(
 ): Promise<Uint8Array | null> {
   const apiKey = Deno.env.get("ELEVENLABS_API_KEY");
   if (!apiKey) { console.error("[voice] ELEVENLABS_API_KEY not configured"); return null; }
-  const speed = clampVoiceParam(opts?.speed, 0.7, 1.2, 1.0);
+  // Default to 1.05× — adds news-anchor energy and trims ~1s off runtime so
+  // the spoken CTA always lands before the video clip ends. User overrides
+  // (saved in weather_settings.voiceover_speed) still win when present.
+  const speed = clampVoiceParam(opts?.speed, 0.7, 1.2, 1.05);
   const stability = clampVoiceParam(opts?.stability, 0, 1, 0.55);
   const similarity = clampVoiceParam(opts?.similarity, 0, 1, 0.78);
   const url = `https://api.elevenlabs.io/v1/text-to-speech/${resolveVoiceId(voiceId)}?output_format=mp3_44100_128`;
