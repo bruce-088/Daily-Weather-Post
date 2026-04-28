@@ -548,10 +548,21 @@ async function generateVoiceScript(weather: WeatherResponse, tone?: string, plat
       finalScript = stripUnverifiedReferences(candidate, weather.city);
     }
     // Append tone-matched, rotating spoken CTA for audio-first platforms (YouTube / TikTok).
-    return appendVoiceCTA(finalScript, { tone, platforms });
+    // Switches to the ultra-short safety CTA when weather conditions qualify as an alert.
+    const alertMode = isWeatherAlert({
+      condition: weather.description,
+      temperature: weather.temperature,
+      rainChance: weather.rainChance,
+    });
+    return appendVoiceCTA(finalScript, { tone, platforms, alertMode });
   } catch (e) {
     console.error("Voice script error:", e);
-    return appendVoiceCTA(fallback, { tone, platforms });
+    const alertMode = isWeatherAlert({
+      condition: weather.description,
+      temperature: weather.temperature,
+      rainChance: weather.rainChance,
+    });
+    return appendVoiceCTA(fallback, { tone, platforms, alertMode });
   }
 }
 
