@@ -317,6 +317,23 @@ export function PostHistoryList({ posts, loading, onReuse, onChanged }: PostHist
                             )}
                             Repost
                           </Button>
+                          {isFailed && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-[11px] gap-1 px-2 border-destructive/40 text-destructive hover:bg-destructive/10"
+                              onClick={() => handleRetry(post)}
+                              disabled={retryingId === post.id || !post.platform}
+                              title="Retry this failed post"
+                            >
+                              {retryingId === post.id ? (
+                                <Loader2 size={11} className="animate-spin" />
+                              ) : (
+                                <RotateCw size={11} />
+                              )}
+                              Retry
+                            </Button>
+                          )}
                           {onReuse && (
                             <Button
                               size="sm"
