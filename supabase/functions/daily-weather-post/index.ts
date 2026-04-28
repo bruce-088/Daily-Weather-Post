@@ -538,14 +538,16 @@ async function generateVoiceScript(weather: WeatherResponse, tone?: string, plat
     const txt = data?.choices?.[0]?.message?.content?.trim();
     const candidate = txt || fallback;
     const v = validateCaptionLocation(candidate, weather.city);
+    let finalScript = candidate;
     if (!v.ok) {
       console.warn(`[voice] foreign landmarks in script for ${weather.city}:`, v.hits, "— sanitizing");
-      return stripUnverifiedReferences(candidate, weather.city);
+      finalScript = stripUnverifiedReferences(candidate, weather.city);
     }
-    return candidate;
+    // Append tone-matched, rotating spoken CTA for audio-first platforms (YouTube / TikTok).
+    return appendVoiceCTA(finalScript, { tone, platforms });
   } catch (e) {
     console.error("Voice script error:", e);
-    return fallback;
+    return appendVoiceCTA(fallback, { tone, platforms });
   }
 }
 
