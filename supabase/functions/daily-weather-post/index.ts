@@ -472,14 +472,17 @@ function resolveVoiceId(input?: string): string {
 }
 
 function voiceSettingsForTone(tone?: string) {
+  // Speeds default to 1.05–1.10× across the board: adds "news anchor" energy
+  // and shaves 1–2s off total runtime so the spoken CTA always lands before
+  // the video clip ends. Speed is clamped server-side to [0.7, 1.2].
   switch (tone) {
     case "energetic":
-      return { stability: 0.35, similarity_boost: 0.8, style: 0.6, use_speaker_boost: true, speed: 1.05 };
+      return { stability: 0.35, similarity_boost: 0.8, style: 0.6, use_speaker_boost: true, speed: 1.10 };
     case "news":
-      return { stability: 0.75, similarity_boost: 0.85, style: 0.2, use_speaker_boost: true, speed: 1.0 };
+      return { stability: 0.75, similarity_boost: 0.85, style: 0.2, use_speaker_boost: true, speed: 1.10 };
     case "conversational":
     default:
-      return { stability: 0.55, similarity_boost: 0.78, style: 0.35, use_speaker_boost: true, speed: 1.0 };
+      return { stability: 0.55, similarity_boost: 0.78, style: 0.35, use_speaker_boost: true, speed: 1.05 };
   }
 }
 
