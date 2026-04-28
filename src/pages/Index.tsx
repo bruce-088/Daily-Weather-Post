@@ -951,7 +951,12 @@ const Index = () => {
 
           {/* SETTINGS TAB */}
           <TabsContent value="settings">
-            <div className="max-w-lg mx-auto">
+            <div className="max-w-lg mx-auto space-y-4">
+              <CityManager
+                activeCityId={activeCityId}
+                onActiveCityChange={(id) => { setActiveCityIdState(id); setActiveCityId(id); }}
+                onCitiesChange={setUserCities}
+              />
               <SettingsPanel
                 settings={settings}
                 onUpdate={setSettings}
@@ -962,11 +967,12 @@ const Index = () => {
                 tiktokConnected={tiktokConnected}
                 youtubeConnected={youtubeConnected}
                 twitterConnected={twitterConnected}
-                  linkedinConnected={linkedinConnected}
-                  onDisconnect={handleDisconnect}
-                />
+                linkedinConnected={linkedinConnected}
+                onDisconnect={handleDisconnect}
+              />
             </div>
           </TabsContent>
+
         </Tabs>
       </main>
 
