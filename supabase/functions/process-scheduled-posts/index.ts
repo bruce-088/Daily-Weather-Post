@@ -1104,13 +1104,12 @@ Deno.serve(async (req) => {
                   const retry = await callCap(`\n\nREGENERATION REQUIRED: Your previous draft mentioned ${v.hits.join(", ")}, which is NOT in ${weather.city}. Rewrite without ANY specific landmark, stadium, university, neighborhood, or business name.`);
                   if (retry) {
                     const v2 = validateCaptionLocation(retry, weather.city);
-                    caption = v2.ok ? retry : retry.replace(
-                      new RegExp(v.hits.map((h) => h.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "gi"),
-                      weather.city,
-                    );
+                    caption = v2.ok ? retry : stripUnverifiedReferences(retry, weather.city);
                   }
                 }
               }
+              // Final safety net
+              if (caption) caption = stripUnverifiedReferences(caption, weather.city);
             } catch (e) {
               console.error("Caption generation failed:", e);
             }
