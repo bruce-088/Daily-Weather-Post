@@ -1222,12 +1222,11 @@ Deno.serve(async (req) => {
             );
             if (retry) {
               const v2 = validateCaptionLocation(retry, weather.city);
-              caption = v2.ok ? retry : retry.replace(
-                new RegExp(v.hits.map((h) => h.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "gi"),
-                weather.city,
-              );
+              caption = v2.ok ? retry : stripUnverifiedReferences(retry, weather.city);
             }
           }
+          // Final safety net: scrub any remaining foreign references.
+          if (caption) caption = stripUnverifiedReferences(caption, weather.city);
         }
       } catch (e) {
         console.error("Caption generation failed:", e);
