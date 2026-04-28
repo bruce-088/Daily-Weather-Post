@@ -1246,7 +1246,7 @@ Deno.serve(async (req) => {
     let voiceScript: string | null = null;
     if (voiceOpts.enabled && userId) {
       console.log("Voice enabled — generating script + TTS audio");
-      voiceScript = await generateVoiceScript(weather, voiceOpts.tone);
+      voiceScript = await generateVoiceScript(weather, voiceOpts.tone, selectedPlatforms);
       console.log("Voice script:", voiceScript);
       const audioBytes = await generateVoiceAudio(voiceScript, voiceOpts);
       if (audioBytes) {
