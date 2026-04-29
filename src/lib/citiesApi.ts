@@ -65,69 +65,125 @@ export async function fetchUserCities(): Promise<UserCity[]> {
   }));
 }
 
+export type AddCityResult =
+  | { ok: true; city: UserCity; alreadyLinked?: boolean }
+  | { ok: false; reason: "not_authenticated" | "missing_fields" | "already_linked" | "permission" | "duplicate" | "unknown"; message: string };
+
 /** Look up an existing city by (name, state) or insert it; then link to user. */
-export async function addUserCity(name: string, state: string): Promise<UserCity | null> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
+export async function addUserCity(name: string, state: string): Promise<AddCityResult> {
+  const { data: { user }, error: userErr } = await supabase.auth.getUser();
+  if (userErr) console.error("[addUserCity] auth.getUser error:", userErr);
+  if (!user) return { ok: false, reason: "not_authenticated", message: "You're signed out — please refresh and sign in again." };
+
   const cleanName = name.trim();
   const cleanState = state.trim();
-  if (!cleanName) return null;
+  if (!cleanName || !cleanState) {
+    return { ok: false, reason: "missing_fields", message: "Both city and state are required." };
+  }
 
-  // Check existing city
+  // 1. Check existing city
   let cityRow: any = null;
-  const { data: existing } = await supabase
+  const { data: existing, error: lookupErr } = await supabase
     .from("cities")
     .select("*")
     .ilike("name", cleanName)
-    .ilike("state", cleanState || "")
+    .ilike("state", cleanState)
     .limit(1)
     .maybeSingle();
+  if (lookupErr) console.error("[addUserCity] city lookup error:", lookupErr);
+
   if (existing) {
     cityRow = existing;
   } else {
+    // 2. Insert new city
     const { data: inserted, error: insErr } = await supabase
       .from("cities")
-      .insert({ name: cleanName, state: cleanState || null, country: "US", timezone: "UTC" })
+      .insert({ name: cleanName, state: cleanState, country: "US", timezone: "UTC" })
       .select("*")
       .single();
-    if (insErr || !inserted) return null;
+    if (insErr || !inserted) {
+      console.error("[addUserCity] city insert failed:", insErr);
+      const code = (insErr as any)?.code;
+      if (code === "42501") return { ok: false, reason: "permission", message: "Permission denied creating city — please refresh." };
+      if (code === "23505") return { ok: false, reason: "duplicate", message: "That city already exists — try again." };
+      return { ok: false, reason: "unknown", message: insErr?.message || "Failed to create city." };
+    }
     cityRow = inserted;
   }
 
-  // Check if user already linked
-  const { data: existingLink } = await supabase
+  // 3. Check existing user_city link
+  const { data: existingLink, error: linkLookupErr } = await supabase
     .from("user_cities")
     .select("id, is_primary")
     .eq("user_id", user.id)
     .eq("city_id", cityRow.id)
     .maybeSingle();
+  if (linkLookupErr) console.error("[addUserCity] user_cities lookup error:", linkLookupErr);
 
   let userCityId = existingLink?.id;
   let isPrimary = !!existingLink?.is_primary;
+  let alreadyLinked = !!existingLink;
+
   if (!existingLink) {
     // First city becomes primary
-    const { count } = await supabase
+    const { count, error: countErr } = await supabase
       .from("user_cities")
       .select("id", { count: "exact", head: true })
       .eq("user_id", user.id);
+    if (countErr) console.error("[addUserCity] count error:", countErr);
     isPrimary = (count ?? 0) === 0;
+
     const { data: linked, error: linkErr } = await supabase
       .from("user_cities")
       .insert({ user_id: user.id, city_id: cityRow.id, is_primary: isPrimary })
       .select("id")
       .single();
-    if (linkErr || !linked) return null;
+    if (linkErr || !linked) {
+      console.error("[addUserCity] user_cities insert failed:", linkErr);
+      const code = (linkErr as any)?.code;
+      if (code === "42501") return { ok: false, reason: "permission", message: "Permission denied — please refresh." };
+      if (code === "23505") return { ok: false, reason: "already_linked", message: "City already added." };
+      return { ok: false, reason: "unknown", message: linkErr?.message || "Failed to link city to your account." };
+    }
     userCityId = linked.id;
   }
 
+  // 4. Ensure a default automation row exists for this user+city
+  const { data: existingAuto } = await supabase
+    .from("automations")
+    .select("id")
+    .eq("user_id", user.id)
+    .eq("city_id", cityRow.id)
+    .maybeSingle();
+  if (!existingAuto) {
+    const { error: autoErr } = await supabase.from("automations").insert({
+      user_id: user.id,
+      city_id: cityRow.id,
+      enabled: true,
+      morning_time: "07:00:00",
+      afternoon_time: "13:00:00",
+      evening_time: "18:00:00",
+      morning_platforms: [],
+      afternoon_platforms: [],
+      evening_platforms: [],
+      tone: "professional",
+      timezone: cityRow.timezone || "UTC",
+    });
+    if (autoErr) console.error("[addUserCity] automation insert failed (non-fatal):", autoErr);
+  }
+
   return {
-    user_city_id: userCityId!,
-    is_primary: isPrimary,
-    id: cityRow.id,
-    name: cityRow.name,
-    state: cityRow.state,
-    country: cityRow.country,
-    timezone: cityRow.timezone,
+    ok: true,
+    alreadyLinked,
+    city: {
+      user_city_id: userCityId!,
+      is_primary: isPrimary,
+      id: cityRow.id,
+      name: cityRow.name,
+      state: cityRow.state,
+      country: cityRow.country,
+      timezone: cityRow.timezone,
+    },
   };
 }
 
