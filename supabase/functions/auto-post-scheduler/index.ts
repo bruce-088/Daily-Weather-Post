@@ -237,7 +237,7 @@ Deno.serve(async (req) => {
         // for this user + slot (any platform)? Slot is encoded in caption marker [auto:<slot>].
         const dupSince = new Date(now.getTime() - DUPLICATE_GUARD_MINUTES * 60 * 1000).toISOString();
         const slotMarker = `[auto:${period.name}]`;
-        const { data: recentDupes, error: dupErr } = await supabase
+        let dupQuery = supabase
           .from("scheduled_posts")
           .select("id, created_at, caption")
           .eq("user_id", target.user_id)
@@ -245,6 +245,9 @@ Deno.serve(async (req) => {
           .gte("created_at", dupSince)
           .ilike("caption", `%${slotMarker}%`)
           .limit(1);
+        if (target.city_id) dupQuery = dupQuery.eq("city_id", target.city_id);
+        if (target.automation_id) dupQuery = dupQuery.eq("automation_id", target.automation_id);
+        const { data: recentDupes, error: dupErr } = await dupQuery;
 
         if (dupErr) {
           console.error(`[scheduler]   duplicate check failed for ${period.name}:`, dupErr);
