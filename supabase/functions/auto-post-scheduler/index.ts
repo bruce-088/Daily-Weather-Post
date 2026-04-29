@@ -55,8 +55,7 @@ Deno.serve(async (req) => {
 
     const { data: automations, error: automationError } = await supabase
       .from("automations")
-      .select("*")
-      .eq("enabled", true);
+      .select("*");
 
     if (error || automationError) {
       throw new Error(error?.message || automationError?.message || "Failed to load automation settings");
@@ -74,7 +73,8 @@ Deno.serve(async (req) => {
       if (row.user_id && !settingsByUser.has(row.user_id)) settingsByUser.set(row.user_id, row);
     }
 
-    const automationCityIds = [...new Set((automations || []).map((a: any) => a.city_id).filter(Boolean))];
+    const enabledAutomations = (automations || []).filter((a: any) => a.enabled === true);
+    const automationCityIds = [...new Set(enabledAutomations.map((a: any) => a.city_id).filter(Boolean))];
     const citiesById = new Map<string, any>();
     if (automationCityIds.length) {
       const { data: cityRows, error: cityError } = await supabase
@@ -87,7 +87,7 @@ Deno.serve(async (req) => {
 
     const usersWithAutomations = new Set((automations || []).map((a: any) => a.user_id).filter(Boolean));
     const scheduleTargets = [
-      ...(automations || []).map((automation: any) => {
+      ...enabledAutomations.map((automation: any) => {
         const city = citiesById.get(automation.city_id);
         const userSettings = settingsByUser.get(automation.user_id) || null;
         return {
@@ -181,7 +181,7 @@ Deno.serve(async (req) => {
 
     const nowUtcIso = now.toISOString();
     const nowUtcHm = `${String(now.getUTCHours()).padStart(2, "0")}:${String(now.getUTCMinutes()).padStart(2, "0")}`;
-    console.log(`[scheduler] Tick — now UTC: ${nowUtcIso} (${nowUtcHm}), targets: ${scheduleTargets.length}, automations: ${(automations || []).length}`);
+    console.log(`[scheduler] Tick — now UTC: ${nowUtcIso} (${nowUtcHm}), targets: ${scheduleTargets.length}, enabled automations: ${enabledAutomations.length}, total automations: ${(automations || []).length}`);
 
     let triggered = 0;
     const results: string[] = [];
