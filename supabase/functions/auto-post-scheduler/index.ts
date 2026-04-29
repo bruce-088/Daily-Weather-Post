@@ -300,14 +300,14 @@ Deno.serve(async (req) => {
 
       // === DAILY SUMMARY (fires once per user when local time is 23:30 - 23:59) ===
       try {
-        if (settings.user_id && userLocal.hour === 23 && userLocal.minute >= 30) {
+        if (target.user_id && userLocal.hour === 23 && userLocal.minute >= 30) {
           // Idempotency: skip if a summary notification already exists for today (user-local).
           const lookback = new Date(now);
           lookback.setUTCHours(lookback.getUTCHours() - 6);
           const { data: existingSummary } = await supabase
             .from("notifications")
             .select("id, created_at")
-            .eq("user_id", settings.user_id)
+            .eq("user_id", target.user_id)
             .eq("title", "Daily summary")
             .gte("created_at", lookback.toISOString())
             .limit(1);
@@ -317,7 +317,7 @@ Deno.serve(async (req) => {
             const { data: todays } = await supabase
               .from("post_history")
               .select("status, platform, error_message, created_at")
-              .eq("user_id", settings.user_id)
+              .eq("user_id", target.user_id)
               .gte("created_at", sodLocal.toISOString());
 
             const total = todays?.length ?? 0;
@@ -349,15 +349,15 @@ Deno.serve(async (req) => {
             const fullMessage = `${message}\n<<META>>${JSON.stringify(meta)}`;
 
             const { error: sumErr } = await supabase.from("notifications").insert({
-              user_id: settings.user_id,
+              user_id: target.user_id,
               title: "Daily summary",
               message: fullMessage,
               type,
             });
             if (sumErr) console.error("[scheduler] daily summary insert failed:", sumErr);
-            else console.log(`[scheduler] daily summary sent to user ${settings.user_id}`);
+            else console.log(`[scheduler] daily summary sent to user ${target.user_id}`);
           } else {
-            console.log(`[scheduler] daily summary already exists for user ${settings.user_id} today`);
+            console.log(`[scheduler] daily summary already exists for user ${target.user_id} today`);
           }
         }
       } catch (sumE) {
