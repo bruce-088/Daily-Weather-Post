@@ -1273,23 +1273,75 @@ Deno.serve(async (req) => {
             const script = await generateVoiceScript(weather, captionTone, platformsToPost);
             console.log(`[process] post ${post.id}: VOICE: script="${script}"`);
 
-            const audioBytes = await generateVoiceAudio(script, voiceId, {
-              speed: voiceSpeed,
-              stability: voiceStability,
-              similarity: voiceSimilarity,
-            });
-            if (audioBytes) {
-              const url = await storeVoiceAudio(supabase, post.user_id, audioBytes);
+            const ttsOpts = { speed: voiceSpeed, stability: voiceStability, similarity: voiceSimilarity };
+            // Attempt #1
+            let ttsResult = await generateVoiceAudio(script, voiceId, ttsOpts);
+
+            // === AUDIO VERIFICATION ===
+            // If TTS failed for a transient reason (timeout / network / 5xx), pause 2s
+            // and retry once before we give up and fall back to silent video.
+            const transientFailure = !ttsResult.ok && (ttsResult.reason === "timeout" || ttsResult.reason === "network_error" || (ttsResult.reason === "http_error" && (ttsResult.status ?? 0) >= 500));
+            if (transientFailure) {
+              console.warn(`[process] post ${post.id}: VOICE: transient failure (${(ttsResult as any).reason}) — waiting 2s and retrying once`);
+              await new Promise((r) => setTimeout(r, 2000));
+              ttsResult = await generateVoiceAudio(script, voiceId, ttsOpts);
+            }
+
+            if (ttsResult.ok) {
+              const url = await storeVoiceAudio(supabase, post.user_id, ttsResult.bytes);
               if (url) {
                 voiceUrl = url;
                 console.log(`[process] post ${post.id}: VOICE: audio attached (${url.split("?")[0]})`);
                 // Persist on the row so re-runs don't regenerate the same audio
                 await supabase.from("scheduled_posts").update({ voiceover_url: url }).eq("id", post.id);
               } else {
-                console.warn(`[process] post ${post.id}: VOICE: upload failed — falling back to silent video`);
+                console.warn(`[process] post ${post.id}: VOICE: upload failed — retrying once after 2s`);
+                await new Promise((r) => setTimeout(r, 2000));
+                const retryUrl = await storeVoiceAudio(supabase, post.user_id, ttsResult.bytes);
+                if (retryUrl) {
+                  voiceUrl = retryUrl;
+                  console.log(`[process] post ${post.id}: VOICE: audio attached on retry (${retryUrl.split("?")[0]})`);
+                  await supabase.from("scheduled_posts").update({ voiceover_url: retryUrl }).eq("id", post.id);
+                } else {
+                  console.warn(`[process] post ${post.id}: VOICE: upload failed twice — falling back to silent video`);
+                }
               }
             } else {
-              console.warn(`[process] post ${post.id}: VOICE: TTS failed — falling back to silent video`);
+              const reason = ttsResult.reason;
+              console.warn(`[process] post ${post.id}: VOICE: TTS failed (${reason}) — falling back to silent video`);
+
+              // === ERROR VISIBILITY ===
+              // Surface auth / timeout failures to the in-app notification bell so
+              // the user knows immediately why their post went out without audio.
+              if (reason === "missing_key" || reason === "unauthorized" || reason === "timeout") {
+                const titleMap: Record<string, string> = {
+                  missing_key: "Voiceover Disabled — Missing API Key",
+                  unauthorized: "Voiceover Failed — ElevenLabs 401",
+                  timeout: "Voiceover Failed — Timeout",
+                };
+                const messageMap: Record<string, string> = {
+                  missing_key: `Your post for ${weather.city} was published without voiceover because the ElevenLabs API key is not configured.`,
+                  unauthorized: `Your post for ${weather.city} was published without voiceover — ElevenLabs returned 401 Unauthorized. Please verify your API key.`,
+                  timeout: `Your post for ${weather.city} was published without voiceover — ElevenLabs took longer than 30 seconds to respond.`,
+                };
+                try {
+                  await supabase.from("notifications").insert({
+                    user_id: post.user_id,
+                    title: titleMap[reason],
+                    message: messageMap[reason],
+                    type: "error",
+                  });
+                  await supabase.from("system_logs").insert({
+                    user_id: post.user_id,
+                    type: "voiceover_failed",
+                    message: `ElevenLabs voice generation failed: ${reason}${ttsResult.detail ? ` — ${ttsResult.detail}` : ""}`,
+                    platform: platformsToPost.join(","),
+                    context: { scheduled_post_id: post.id, reason, status: (ttsResult as any).status },
+                  });
+                } catch (notifyErr) {
+                  console.error(`[process] post ${post.id}: VOICE: failed to write failure notification:`, notifyErr);
+                }
+              }
             }
           } catch (vErr) {
             console.error(`[process] post ${post.id}: VOICE: pipeline error — falling back to silent video:`, vErr);
@@ -1298,6 +1350,13 @@ Deno.serve(async (req) => {
         } else if (!voiceUrl && hasVideoPlatform) {
           console.log(`[process] post ${post.id}: VOICE: disabled (row.include_voiceover=${post.include_voiceover}, settings.enable_voiceover=${settingsEnabled})`);
         }
+
+        // Final pre-render verification: if voiceover was requested but no audio
+        // is attached, log a clear marker so the silent fallback is auditable.
+        if (wantVoice && !voiceUrl) {
+          console.warn(`[process] post ${post.id}: VOICE: no audio attached after all attempts — rendering silent`);
+        }
+
 
         // Try video generation once (with voiceover baked in if available)
         console.log(`RENDER START: City: ${weather.city}, VoiceEnabled: ${voiceUrl ? "True" : "False"}`);
