@@ -1548,20 +1548,48 @@ Deno.serve(async (req) => {
         trace("final_action", { action: postStatus === "posted" ? "POSTED" : `FAILED — ${errorMessage}`, voice_status: voiceStatus });
         const persistedTrace = debugTraceEnabled ? { steps: traceSteps, captured_at: new Date().toISOString() } : null;
 
-        const { error: historyErr } = await supabase.from("post_history").insert({
+        // Pick a representative external_id for the post_history row (prefer YouTube).
+        const primaryExternalId =
+          platformExternalIds["youtube"] ||
+          platformExternalIds["tiktok"] ||
+          Object.values(platformExternalIds)[0] ||
+          null;
+
+        const { data: historyRow, error: historyErr } = await supabase.from("post_history").insert({
           status: historyStatus, platform: post.platform, city: weather.city,
           temperature: weather.temperature, condition: weather.condition,
           image_url: storedImageUrl, error_message: errorMessage, caption,
           user_id: post.user_id, post_url: publishedPostUrl,
+          external_id: primaryExternalId,
           voice_status: voiceStatus,
           voice_error: voiceError,
           voice_attempts: voiceAttemptsCount,
           debug_trace: persistedTrace,
-        });
+        }).select("id").single();
         if (historyErr) {
           console.error(`[process] post_history insert failed for ${post.id}:`, historyErr);
         } else {
           console.log(`[process] post_history row created for ${post.id} (${post.platform}, ${historyStatus})`);
+
+          // Seed post_analytics rows so the Analytics tab shows the post immediately.
+          // One row per platform that successfully published.
+          if (postStatus === "posted" && historyRow?.id && Object.keys(platformExternalIds).length > 0) {
+            const analyticsRows = Object.keys(platformExternalIds).map((plat) => ({
+              user_id: post.user_id,
+              post_id: historyRow.id,
+              platform: plat,
+              views: 0,
+              likes: 0,
+              comments: 0,
+              shares: 0,
+            }));
+            const { error: analyticsErr } = await supabase.from("post_analytics").insert(analyticsRows);
+            if (analyticsErr) {
+              console.error(`[process] post_analytics seed failed for ${post.id}:`, analyticsErr);
+            } else {
+              console.log(`[process] seeded ${analyticsRows.length} post_analytics row(s) for ${historyRow.id}`);
+            }
+          }
         }
 
         const isFailureFlow = postStatus !== "posted";
