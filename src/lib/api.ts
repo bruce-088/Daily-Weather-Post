@@ -234,7 +234,7 @@ export async function fetchPostHistory(limit = 10): Promise<PostHistoryItem[]> {
     .limit(limit);
 
   if (error) return [];
-  return data || [];
+  return (data || []) as unknown as PostHistoryItem[];
 }
 
 // --- Scheduled Posts ---
