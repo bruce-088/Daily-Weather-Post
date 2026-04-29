@@ -532,10 +532,17 @@ async function generateVoiceScript(weather: WeatherResponse, tone?: string, plat
 }
 
 /** Calls ElevenLabs TTS and returns MP3 bytes. */
+function resolveElevenLabsKey(): string | null {
+  // Accept either the canonical name or the legacy ELEVEN_LABS_API_KEY name.
+  const v = Deno.env.get("ELEVENLABS_API_KEY") || Deno.env.get("ELEVEN_LABS_API_KEY") || Deno.env.get("ELEVENLABS_KEY");
+  return v && v.trim().length > 0 ? v.trim() : null;
+}
+
 async function generateVoiceAudio(script: string, voice: VoiceOptions): Promise<Uint8Array | null> {
-  const apiKey = Deno.env.get("ELEVENLABS_API_KEY");
+  const apiKey = resolveElevenLabsKey();
   if (!apiKey) {
-    console.error("ELEVENLABS_API_KEY not configured — skipping voice generation");
+    console.error("Error: ElevenLabs Key not found in environment");
+    console.error("ELEVENLABS_API_KEY not configured (also tried ELEVEN_LABS_API_KEY) — skipping voice generation");
     return null;
   }
   const voiceId = resolveVoiceId(voice.voiceId);

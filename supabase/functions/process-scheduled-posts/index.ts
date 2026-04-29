@@ -582,6 +582,21 @@ function resolveVoiceId(input?: string | null): string {
   return input; // assume raw ElevenLabs id
 }
 
+// === ELEVENLABS API KEY RESOLVER ===
+// Background workers run on the service_role side and only see the secrets the
+// project explicitly registered. Different docs/migrations have used two names
+// (ELEVENLABS_API_KEY and ELEVEN_LABS_API_KEY), so we accept either to make
+// the worker robust against accidental rename. We also expose the source name
+// in logs so misconfigurations are obvious without leaking the key value.
+function resolveElevenLabsKey(): { value: string; source: string } | null {
+  const candidates = ["ELEVENLABS_API_KEY", "ELEVEN_LABS_API_KEY", "ELEVENLABS_KEY"];
+  for (const name of candidates) {
+    const v = Deno.env.get(name);
+    if (v && v.trim().length > 0) return { value: v.trim(), source: name };
+  }
+  return null;
+}
+
 function clampVoiceParam(n: any, min: number, max: number, fallback: number): number {
   const v = typeof n === "number" ? n : Number(n);
   if (!isFinite(v)) return fallback;
@@ -662,14 +677,19 @@ async function generateVoiceAudio(
   opts?: { speed?: number; stability?: number; similarity?: number },
 ): Promise<VoiceAudioResult> {
   const attempts: VoiceAttemptLog[] = [];
-  // Re-read the env var on every call so a key rotation mid-run is picked up
-  // without needing to redeploy the worker.
-  let apiKey = Deno.env.get("ELEVENLABS_API_KEY");
-  if (!apiKey) {
-    console.error("CRITICAL: ElevenLabs API Key missing in worker");
-    attempts.push({ attempt: 1, status: "missing_key", ok: false, error: "ELEVENLABS_API_KEY env var not set" });
+  // Re-resolve the env var on every call so a key rotation mid-run is picked
+  // up without redeploying the worker. The resolver accepts both the canonical
+  // ELEVENLABS_API_KEY and the legacy ELEVEN_LABS_API_KEY name.
+  const initial = resolveElevenLabsKey();
+  if (!initial) {
+    console.error("Error: ElevenLabs Key not found in environment");
+    console.error("CRITICAL: ElevenLabs API Key missing in worker (checked: ELEVENLABS_API_KEY, ELEVEN_LABS_API_KEY)");
+    attempts.push({ attempt: 1, status: "missing_key", ok: false, error: "No ElevenLabs API key found in env (tried ELEVENLABS_API_KEY, ELEVEN_LABS_API_KEY)" });
     return { ok: false, reason: "missing_key", attempts };
   }
+  let apiKey: string = initial.value;
+  const keySource: string = initial.source;
+  console.log(`[voice] using ElevenLabs key from env var "${keySource}"`);
 
   const speed = clampVoiceParam(opts?.speed, 0.7, 1.2, 1.05);
   const stability = clampVoiceParam(opts?.stability, 0, 1, 0.55);
@@ -699,13 +719,13 @@ async function generateVoiceAudio(
         console.error(`[voice] ElevenLabs 401 Unauthorized (attempt ${attempt}/${MAX_ATTEMPTS}):`, detail);
         attempts.push({ attempt, status: 401, ok: false, error: detail || "Unauthorized" });
         if (attempt < MAX_ATTEMPTS) {
-          const refreshed = Deno.env.get("ELEVENLABS_API_KEY");
+          const refreshed = resolveElevenLabsKey();
           if (!refreshed) {
             console.error("CRITICAL: ElevenLabs API Key missing in worker (during 401 retry)");
             return { ok: false, reason: "missing_key", attempts };
           }
-          apiKey = refreshed;
-          console.warn(`[voice] backoff 2s before retry (after 401)`);
+          apiKey = refreshed.value;
+          console.warn(`[voice] backoff 2s before retry (after 401, key source="${refreshed.source}")`);
           await new Promise((r) => setTimeout(r, 2000));
           continue;
         }
@@ -1099,13 +1119,15 @@ Deno.serve(async (req) => {
 
     // Validate the ElevenLabs API key up front so missing-credential failures
     // are visible in the worker logs immediately (not deep inside a TTS call).
-    // We do NOT throw — voiceover is optional, and the worker must keep posting
-    // silent video for users who don't have voice enabled.
-    const elevenLabsApiKey = Deno.env.get("ELEVENLABS_API_KEY");
+    // Voiceover is optional, so we DO NOT throw — silent video is the fallback.
+    // We accept either ELEVENLABS_API_KEY (current) or ELEVEN_LABS_API_KEY (legacy),
+    // so a future rotation under either name keeps working without code changes.
+    const elevenLabsApiKey = resolveElevenLabsKey();
     if (!elevenLabsApiKey) {
-      console.error("CRITICAL: ElevenLabs API Key missing in worker");
+      console.error("Error: ElevenLabs Key not found in environment");
+      console.error("CRITICAL: ElevenLabs API Key missing in worker (checked: ELEVENLABS_API_KEY, ELEVEN_LABS_API_KEY)");
     } else {
-      console.log("[process] ElevenLabs API key present (worker can generate voiceovers)");
+      console.log(`[process] ElevenLabs API key present via ${elevenLabsApiKey.source} (worker can generate voiceovers)`);
     }
 
 

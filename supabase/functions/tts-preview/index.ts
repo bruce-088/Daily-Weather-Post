@@ -34,8 +34,11 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const apiKey = Deno.env.get("ELEVENLABS_API_KEY");
+    // Accept either ELEVENLABS_API_KEY or the legacy ELEVEN_LABS_API_KEY name
+    // so a future rotation under either spelling keeps the preview working.
+    const apiKey = (Deno.env.get("ELEVENLABS_API_KEY") || Deno.env.get("ELEVEN_LABS_API_KEY") || Deno.env.get("ELEVENLABS_KEY") || "").trim();
     if (!apiKey) {
+      console.error("Error: ElevenLabs Key not found in environment");
       return new Response(
         JSON.stringify({ error: "Voice service not configured" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
