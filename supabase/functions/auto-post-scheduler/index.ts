@@ -464,18 +464,21 @@ Deno.serve(async (req) => {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     console.error("Auto-post scheduler error:", message);
-    // Record failure but STILL return 200 so cron doesn't think function is down
-    try {
-      await supabase.from("system_health").upsert({
-        id: "auto-post-scheduler",
-        last_run_at: new Date().toISOString(),
-        last_status: "error",
-        last_message: message.slice(0, 500),
-        updated_at: new Date().toISOString(),
-      });
-    } catch (_) { /* best-effort */ }
+    // Record failure but STILL return 200 so cron doesn't think function is down.
+    // Skipped during dry-run so a debug click doesn't flip System Health to red.
+    if (!dryRun) {
+      try {
+        await supabase.from("system_health").upsert({
+          id: "auto-post-scheduler",
+          last_run_at: new Date().toISOString(),
+          last_status: "error",
+          last_message: message.slice(0, 500),
+          updated_at: new Date().toISOString(),
+        });
+      } catch (_) { /* best-effort */ }
+    }
     return new Response(
-      JSON.stringify({ message: "Scheduler completed with errors", error: message }),
+      JSON.stringify({ dry_run: dryRun, message: "Scheduler completed with errors", error: message }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
