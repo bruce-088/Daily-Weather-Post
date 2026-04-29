@@ -1099,13 +1099,15 @@ Deno.serve(async (req) => {
 
     // Validate the ElevenLabs API key up front so missing-credential failures
     // are visible in the worker logs immediately (not deep inside a TTS call).
-    // We do NOT throw — voiceover is optional, and the worker must keep posting
-    // silent video for users who don't have voice enabled.
-    const elevenLabsApiKey = Deno.env.get("ELEVENLABS_API_KEY");
+    // Voiceover is optional, so we DO NOT throw — silent video is the fallback.
+    // We accept either ELEVENLABS_API_KEY (current) or ELEVEN_LABS_API_KEY (legacy),
+    // so a future rotation under either name keeps working without code changes.
+    const elevenLabsApiKey = resolveElevenLabsKey();
     if (!elevenLabsApiKey) {
-      console.error("CRITICAL: ElevenLabs API Key missing in worker");
+      console.error("Error: ElevenLabs Key not found in environment");
+      console.error("CRITICAL: ElevenLabs API Key missing in worker (checked: ELEVENLABS_API_KEY, ELEVEN_LABS_API_KEY)");
     } else {
-      console.log("[process] ElevenLabs API key present (worker can generate voiceovers)");
+      console.log(`[process] ElevenLabs API key present via ${elevenLabsApiKey.source} (worker can generate voiceovers)`);
     }
 
 
