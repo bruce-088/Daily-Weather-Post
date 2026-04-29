@@ -1454,10 +1454,14 @@ Deno.serve(async (req) => {
             const result = await postToPlatform(platformName, supabase, post.user_id, video.data, title, desc, video.mimeType);
             if (result.success) {
               console.log(`Scheduled post ${post.id}: ${platformName} published, ID: ${result.id}`);
-              if (platformName === "youtube" && result.id && !publishedPostUrl) {
-                publishedPostUrl = `https://www.youtube.com/watch?v=${result.id}`;
-              } else if (platformName === "tiktok" && result.id && !publishedPostUrl) {
-                publishedPostUrl = `https://www.tiktok.com/video/${result.id}`;
+              if (platformName === "youtube" && result.id) {
+                platformExternalIds["youtube"] = result.id;
+                if (!publishedPostUrl) publishedPostUrl = `https://www.youtube.com/watch?v=${result.id}`;
+              } else if (platformName === "tiktok" && result.id) {
+                platformExternalIds["tiktok"] = result.id;
+                if (!publishedPostUrl) publishedPostUrl = `https://www.tiktok.com/video/${result.id}`;
+              } else if (result.id) {
+                platformExternalIds[platformName] = result.id;
               }
             } else {
               errorMessage = result.error || `${platformName} upload failed`;
