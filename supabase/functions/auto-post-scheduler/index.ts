@@ -225,11 +225,11 @@ Deno.serve(async (req) => {
           continue;
         }
         console.log(`[scheduler]   🎯 Matched slot within extended window (${period.name}, diff=${ev.diff}min)`);
-        console.log(`[scheduler]   ✅ ${period.name.toUpperCase()} slot triggered for user ${settings.user_id || "default"}`);
+        console.log(`[scheduler]   ✅ ${period.name.toUpperCase()} slot triggered for user ${target.user_id || "default"} city=${target.city} city_id=${target.city_id || "legacy"}`);
         console.log(`[scheduler]   Creating scheduled posts for platforms: [${period.platforms.join(", ")}]`);
 
-        if (!settings.user_id) {
-          console.log(`[scheduler]   ⏭️  SKIP ${period.name} — reason: settings row has no user_id (cannot create scheduled_posts)`);
+        if (!target.user_id || !target.city) {
+          console.log(`[scheduler]   ⏭️  SKIP ${period.name} — reason: target missing user_id or city (cannot create scheduled_posts)`);
           continue;
         }
 
@@ -240,7 +240,8 @@ Deno.serve(async (req) => {
         const { data: recentDupes, error: dupErr } = await supabase
           .from("scheduled_posts")
           .select("id, created_at, caption")
-          .eq("user_id", settings.user_id)
+          .eq("user_id", target.user_id)
+          .eq("city", target.city)
           .gte("created_at", dupSince)
           .ilike("caption", `%${slotMarker}%`)
           .limit(1);
@@ -260,16 +261,18 @@ Deno.serve(async (req) => {
         // Image-only platforms (twitter, linkedin) get include_voiceover=false even if the user enabled it.
         // Actual TTS generation happens in process-scheduled-posts so the cron tick stays fast and
         // a TTS failure cannot block the entire schedule.
-        const voiceoverEnabled = (settings as any).enable_voiceover === true;
+        const voiceoverEnabled = target.enable_voiceover === true;
         const VIDEO_PLATFORMS = new Set(["youtube", "tiktok", "instagram"]);
         if (voiceoverEnabled) {
-          console.log(`[scheduler]   🎙️  voiceover enabled for user ${settings.user_id}; will attach to video platforms only`);
+          console.log(`[scheduler]   🎙️  voiceover enabled for user ${target.user_id}; will attach to video platforms only`);
         }
 
         // Insert one scheduled_posts row per platform — process-scheduled-posts will execute them.
         const rows = period.platforms.map((platform) => ({
-          user_id: settings.user_id,
-          city: settings.city,
+          user_id: target.user_id,
+          city: target.city,
+          city_id: target.city_id,
+          automation_id: target.automation_id,
           platform,
           scheduled_at: scheduledAt,
           status: "pending",
