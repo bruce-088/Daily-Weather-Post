@@ -1144,6 +1144,7 @@ Deno.serve(async (req) => {
     for (const post of duePosts) {
       try {
         const scopedCity = await resolveScheduledCity(supabase, post);
+        console.log(`CITY CONFIRMED: ${scopedCity.city}${scopedCity.state ? ", " + scopedCity.state : ""} (city_id=${scopedCity.cityId || "legacy"})`);
         console.log(`[process] post ${post.id}: strict city scope city=${scopedCity.city}${scopedCity.state ? ", " + scopedCity.state : ""} city_id=${scopedCity.cityId || "legacy"} automation_id=${scopedCity.automationId || "none"}`);
         const weather = await fetchWeatherData(scopedCity.city, openWeatherApiKey, scopedCity.state);
         weather.city = scopedCity.city;
