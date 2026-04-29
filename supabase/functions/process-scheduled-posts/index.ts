@@ -1516,11 +1516,19 @@ Deno.serve(async (req) => {
         // Map our internal "posted" → "success" so the insert isn't silently rejected.
         const historyStatus = postStatus === "posted" ? "success" : postStatus;
 
+        // Final action step in the trace
+        trace("final_action", { action: postStatus === "posted" ? "POSTED" : `FAILED — ${errorMessage}`, voice_status: voiceStatus });
+        const persistedTrace = debugTraceEnabled ? { steps: traceSteps, captured_at: new Date().toISOString() } : null;
+
         const { error: historyErr } = await supabase.from("post_history").insert({
           status: historyStatus, platform: post.platform, city: weather.city,
           temperature: weather.temperature, condition: weather.condition,
           image_url: storedImageUrl, error_message: errorMessage, caption,
           user_id: post.user_id, post_url: publishedPostUrl,
+          voice_status: voiceStatus,
+          voice_error: voiceError,
+          voice_attempts: voiceAttemptsCount,
+          debug_trace: persistedTrace,
         });
         if (historyErr) {
           console.error(`[process] post_history insert failed for ${post.id}:`, historyErr);
@@ -1528,7 +1536,6 @@ Deno.serve(async (req) => {
           console.log(`[process] post_history row created for ${post.id} (${post.platform}, ${historyStatus})`);
         }
 
-        // Decide whether to retry once before marking the scheduled row failed.
         const isFailureFlow = postStatus !== "posted";
         const currentRetryCount = (post as any).retry_count ?? 0;
         if (isFailureFlow && currentRetryCount < 1) {
@@ -1538,6 +1545,10 @@ Deno.serve(async (req) => {
             error_message: errorMessage,
             retry_count: currentRetryCount + 1,
             next_retry_at: nextRetryAt,
+            voice_status: voiceStatus,
+            voice_error: voiceError,
+            voice_attempts: voiceAttemptsCount,
+            debug_trace: persistedTrace,
           }).eq("id", post.id);
           await supabase.from("system_logs").insert({
             user_id: post.user_id,
@@ -1547,7 +1558,25 @@ Deno.serve(async (req) => {
             context: { scheduled_post_id: post.id, retry_count: currentRetryCount + 1 },
           });
         } else {
-          await supabase.from("scheduled_posts").update({ status: postStatus, error_message: errorMessage }).eq("id", post.id);
+          await supabase.from("scheduled_posts").update({
+            status: postStatus,
+            error_message: errorMessage,
+            voice_status: voiceStatus,
+            voice_error: voiceError,
+            voice_attempts: voiceAttemptsCount,
+            debug_trace: persistedTrace,
+          }).eq("id", post.id);
+
+          // One-shot: if this run was traced, clear the toggle so the next run is silent again.
+          if (debugTraceEnabled && post.user_id) {
+            try {
+              await supabase.from("weather_settings")
+                .update({ enable_debug_trace: false })
+                .eq("user_id", post.user_id);
+              console.log(`[trace ${post.id}] one-shot debug toggle cleared for user ${post.user_id}`);
+            } catch (e) { console.error("[trace] failed to clear debug toggle:", e); }
+          }
+
           if (isFailureFlow) {
             await supabase.from("system_logs").insert({
               user_id: post.user_id,
