@@ -38,7 +38,7 @@ async function fetchWeatherData(city: string, apiKey: string, state?: string | n
   const geoData = await geoRes.json();
   if (!geoData.length) throw new Error(`Location not found: ${city}`);
 
-  const { lat, lon, name, country, state } = geoData[0];
+  const { lat, lon, name, country, state: geoState } = geoData[0];
 
   const [currentRes, forecastRes] = await Promise.all([
     fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=imperial&appid=${apiKey}`),
