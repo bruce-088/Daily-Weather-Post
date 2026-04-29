@@ -1266,17 +1266,36 @@ Deno.serve(async (req) => {
 
         let voiceUrl: string | null = post.voiceover_url || null;
         let voiceSettingsRow: any = null;
-        if (!voiceUrl && post.user_id && hasVideoPlatform) {
+        if (post.user_id) {
           const { data: vSettings } = await supabase
             .from("weather_settings")
-            .select("enable_voiceover, voiceover_voice_id, voiceover_speed, voiceover_stability, voiceover_similarity")
+            .select("enable_voiceover, voiceover_voice_id, voiceover_speed, voiceover_stability, voiceover_similarity, enable_debug_trace")
             .eq("user_id", post.user_id)
             .limit(1)
             .maybeSingle();
           voiceSettingsRow = vSettings || null;
+          debugTraceEnabled = voiceSettingsRow?.enable_debug_trace === true;
+          if (debugTraceEnabled) {
+            console.log(`[process] post ${post.id}: 🔍 DEBUG TRACE ENABLED — full step trace will be persisted`);
+          }
         }
         const settingsEnabled = voiceSettingsRow?.enable_voiceover === true;
         const wantVoice = !voiceUrl && hasVideoPlatform && (post.include_voiceover === true || settingsEnabled);
+        trace("voice_decision", {
+          include_voiceover_flag: post.include_voiceover === true,
+          settings_enable_voiceover: settingsEnabled,
+          has_video_platform: hasVideoPlatform,
+          will_attempt: wantVoice,
+        });
+
+        if (!hasVideoPlatform) {
+          voiceStatus = "skipped";
+          voiceError = "No video-capable platform in selection";
+        } else if (!wantVoice && !voiceUrl) {
+          voiceStatus = "not_requested";
+        } else if (voiceUrl) {
+          voiceStatus = "success"; // pre-attached audio
+        }
 
         if (wantVoice && post.user_id) {
           console.log(`[process] post ${post.id}: VOICE: enabled (row.include_voiceover=${post.include_voiceover}, settings.enable_voiceover=${settingsEnabled})`);
@@ -1286,6 +1305,7 @@ Deno.serve(async (req) => {
             const voiceStability = voiceSettingsRow?.voiceover_stability;
             const voiceSimilarity = voiceSettingsRow?.voiceover_similarity;
             console.log(`[process] post ${post.id}: VOICE: config voice=${voiceId} speed=${voiceSpeed} stability=${voiceStability} similarity=${voiceSimilarity}`);
+            trace("voice_config", { voice_id: voiceId, speed: voiceSpeed, stability: voiceStability, similarity: voiceSimilarity });
 
             console.log(`[process] post ${post.id}: VOICE: generating script`);
             const script = await generateVoiceScript(weather, captionTone, platformsToPost);
@@ -1294,16 +1314,17 @@ Deno.serve(async (req) => {
             const ttsOpts = { speed: voiceSpeed, stability: voiceStability, similarity: voiceSimilarity };
             // Attempt #1
             let ttsResult = await generateVoiceAudio(script, voiceId, ttsOpts);
+            voiceAttemptsCount = ttsResult.attempts.length;
 
             // === AUDIO VERIFICATION ===
-            // If TTS failed for a transient reason (timeout / network / 5xx), pause 2s
-            // and retry once before we give up and fall back to silent video.
             const transientFailure = !ttsResult.ok && (ttsResult.reason === "timeout" || ttsResult.reason === "network_error" || (ttsResult.reason === "http_error" && (ttsResult.status ?? 0) >= 500));
             if (transientFailure) {
               console.warn(`[process] post ${post.id}: VOICE: transient failure (${(ttsResult as any).reason}) — waiting 2s and retrying once`);
               await new Promise((r) => setTimeout(r, 2000));
               ttsResult = await generateVoiceAudio(script, voiceId, ttsOpts);
+              voiceAttemptsCount += ttsResult.attempts.length;
             }
+            trace("voice_attempts", { count: voiceAttemptsCount, attempts: ttsResult.attempts });
 
             if (ttsResult.ok) {
               const url = await storeVoiceAudio(supabase, post.user_id, ttsResult.bytes);
