@@ -1330,8 +1330,8 @@ Deno.serve(async (req) => {
               const url = await storeVoiceAudio(supabase, post.user_id, ttsResult.bytes);
               if (url) {
                 voiceUrl = url;
+                voiceStatus = voiceAttemptsCount > 1 ? "retried" : "success";
                 console.log(`[process] post ${post.id}: VOICE: audio attached (${url.split("?")[0]})`);
-                // Persist on the row so re-runs don't regenerate the same audio
                 await supabase.from("scheduled_posts").update({ voiceover_url: url }).eq("id", post.id);
               } else {
                 console.warn(`[process] post ${post.id}: VOICE: upload failed — retrying once after 2s`);
@@ -1339,9 +1339,12 @@ Deno.serve(async (req) => {
                 const retryUrl = await storeVoiceAudio(supabase, post.user_id, ttsResult.bytes);
                 if (retryUrl) {
                   voiceUrl = retryUrl;
+                  voiceStatus = "retried";
                   console.log(`[process] post ${post.id}: VOICE: audio attached on retry (${retryUrl.split("?")[0]})`);
                   await supabase.from("scheduled_posts").update({ voiceover_url: retryUrl }).eq("id", post.id);
                 } else {
+                  voiceStatus = "failed";
+                  voiceError = "Storage upload failed twice";
                   console.warn(`[process] post ${post.id}: VOICE: upload failed twice — falling back to silent video`);
                 }
               }
@@ -1349,11 +1352,10 @@ Deno.serve(async (req) => {
               const reason = ttsResult.reason;
               const status = (ttsResult as any).status;
               const detail = (ttsResult as any).detail;
+              voiceStatus = "failed";
+              voiceError = `${reason}${status ? ` (${status})` : ""}${detail ? ` — ${String(detail).slice(0, 160)}` : ""}`;
               console.warn(`[process] post ${post.id}: VOICE: TTS failed (reason=${reason}, status=${status ?? "n/a"}) — falling back to silent video`);
 
-              // === ERROR VISIBILITY ===
-              // ALWAYS write the exact failure (with status code) to system_logs so
-              // the user can see "401" / "500" / "Timeout" in the System Health view.
               try {
                 await supabase.from("system_logs").insert({
                   user_id: post.user_id,
@@ -1366,15 +1368,13 @@ Deno.serve(async (req) => {
                     status: status ?? null,
                     detail: detail ?? null,
                     city: weather.city,
+                    attempts: ttsResult.attempts,
                   },
                 });
               } catch (logErr) {
                 console.error(`[process] post ${post.id}: VOICE: failed to write system_logs entry:`, logErr);
               }
 
-              // Surface auth / timeout / missing-key failures to the in-app
-              // notification bell so the user knows immediately why the post
-              // went out without audio.
               if (reason === "missing_key" || reason === "unauthorized" || reason === "timeout") {
                 const titleMap: Record<string, string> = {
                   missing_key: "Voiceover Disabled — Missing API Key",
@@ -1399,6 +1399,8 @@ Deno.serve(async (req) => {
               }
             }
           } catch (vErr) {
+            voiceStatus = "failed";
+            voiceError = vErr instanceof Error ? vErr.message : String(vErr);
             console.error(`[process] post ${post.id}: VOICE: pipeline error — falling back to silent video:`, vErr);
             voiceUrl = null;
           }
@@ -1406,16 +1408,19 @@ Deno.serve(async (req) => {
           console.log(`[process] post ${post.id}: VOICE: disabled (row.include_voiceover=${post.include_voiceover}, settings.enable_voiceover=${settingsEnabled})`);
         }
 
-        // Final pre-render verification: if voiceover was requested but no audio
-        // is attached, log a clear marker so the silent fallback is auditable.
         if (wantVoice && !voiceUrl) {
           console.warn(`[process] post ${post.id}: VOICE: no audio attached after all attempts — rendering silent`);
         }
+        trace("voice_result", { status: voiceStatus, attempts: voiceAttemptsCount, error: voiceError, has_audio: !!voiceUrl });
 
+        // Capture which background atmosphere bucket the renderer will pick (deterministic from condition).
+        const _bgTheme = getWeatherTheme(weather.condition);
+        trace("background_selected", { condition: weather.condition, video_keyword: _bgTheme.videoKeyword });
 
         // Try video generation once (with voiceover baked in if available)
         console.log(`RENDER START: City: ${weather.city}, VoiceEnabled: ${voiceUrl ? "True" : "False"}`);
         const video = await generateWeatherVideo(weather, timePeriod, voiceUrl);
+        trace("video_render", { success: !!video, mime: video?.mimeType });
 
         let publishedPostUrl: string | null = null;
 
