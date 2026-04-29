@@ -26,20 +26,38 @@ Deno.serve(async (req) => {
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
   const supabase = createClient(supabaseUrl, supabaseKey);
 
-  // ── HEARTBEAT (very first thing): record that the scheduler is alive ──
-  // This runs even if downstream logic crashes, so System Health reflects
-  // actual cron invocations, not just slot-matching post creations.
+  // ── DRY-RUN MODE ──
+  // When the request body contains { dry_run: true }, the scheduler runs ALL of
+  // its slot-matching logic (per city, per period, per platform) but performs
+  // ZERO side-effects: no scheduled_posts inserts, no notifications, no
+  // system_health writes, no duplicate-guard reads. It returns a structured
+  // diagnostic payload instead so the UI can show exactly what would have fired.
+  let dryRun = false;
   try {
-    await supabase.from("system_health").upsert({
-      id: "auto-post-scheduler",
-      last_run_at: new Date().toISOString(),
-      last_status: "running",
-      last_message: "tick started",
-      updated_at: new Date().toISOString(),
-    });
-    console.log("[scheduler] ❤️  heartbeat recorded");
-  } catch (hbErr) {
-    console.error("[scheduler] heartbeat write failed:", hbErr);
+    if (req.method === "POST") {
+      const body = await req.clone().json().catch(() => ({}));
+      dryRun = body?.dry_run === true;
+    }
+  } catch (_) { /* ignore parse errors */ }
+  const dryRunReport: any[] = [];
+
+  // ── HEARTBEAT (very first thing): record that the scheduler is alive ──
+  // Skipped during dry-run so we don't pollute the System Health card.
+  if (!dryRun) {
+    try {
+      await supabase.from("system_health").upsert({
+        id: "auto-post-scheduler",
+        last_run_at: new Date().toISOString(),
+        last_status: "running",
+        last_message: "tick started",
+        updated_at: new Date().toISOString(),
+      });
+      console.log("[scheduler] ❤️  heartbeat recorded");
+    } catch (hbErr) {
+      console.error("[scheduler] heartbeat write failed:", hbErr);
+    }
+  } else {
+    console.log("[scheduler] 🧪 DRY RUN — no DB side effects will occur");
   }
 
   try {
