@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { MapPin, Plus, Star, Trash2, Loader2, Clock, AlertTriangle } from "lucide-react";
+import { MapPin, Plus, Star, Trash2, Loader2, Clock, AlertTriangle, Youtube, Twitter, Linkedin, Video } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,9 +25,15 @@ interface CityManagerProps {
   activeCityId: string | null;
   onActiveCityChange: (id: string | null) => void;
   onCitiesChange?: (cities: UserCity[]) => void;
+  connections?: {
+    youtube?: boolean;
+    twitter?: boolean;
+    linkedin?: boolean;
+    tiktok?: boolean;
+  };
 }
 
-export function CityManager({ activeCityId, onActiveCityChange, onCitiesChange }: CityManagerProps) {
+export function CityManager({ activeCityId, onActiveCityChange, onCitiesChange, connections }: CityManagerProps) {
   const [cities, setCities] = useState<UserCity[]>([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
@@ -344,24 +350,100 @@ export function CityManager({ activeCityId, onActiveCityChange, onCitiesChange }
             <p className="text-[10px] text-muted-foreground">
               These times are unique to {activeCity.name}. Other cities keep their own schedule.
             </p>
-            <div className="grid grid-cols-3 gap-2">
-              {([
-                ["morning_time", "Morning"],
-                ["afternoon_time", "Afternoon"],
-                ["evening_time", "Evening"],
-              ] as const).map(([key, label]) => (
-                <div key={key}>
-                  <Label className="text-[10px] text-muted-foreground">{label}</Label>
-                  <Input
-                    type="time"
-                    value={(automation as any)[key]?.slice(0, 5) || ""}
-                    onChange={(e) => updateAuto({ [key]: `${e.target.value}:00` } as any)}
-                    className="h-8 text-xs"
-                    disabled={!automation.enabled}
-                  />
+            {(() => {
+              const availablePlatforms = [
+                { id: "youtube", label: "YouTube", Icon: Youtube, color: "#FF0000", connected: !!connections?.youtube },
+                { id: "twitter", label: "Twitter / X", Icon: Twitter, color: "#1DA1F2", connected: !!connections?.twitter },
+                { id: "linkedin", label: "LinkedIn", Icon: Linkedin, color: "#0A66C2", connected: !!connections?.linkedin },
+                { id: "tiktok", label: "TikTok", Icon: Video, color: "#FF0050", connected: !!connections?.tiktok },
+              ];
+              const connected = availablePlatforms.filter((p) => p.connected);
+
+              const slotKeyMap = {
+                morning: { time: "morning_time", platforms: "morning_platforms" },
+                afternoon: { time: "afternoon_time", platforms: "afternoon_platforms" },
+                evening: { time: "evening_time", platforms: "evening_platforms" },
+              } as const;
+
+              const togglePlat = (slot: keyof typeof slotKeyMap, platId: string) => {
+                const key = slotKeyMap[slot].platforms as keyof CityAutomation;
+                const current = ((automation as any)[key] as string[]) || [];
+                const next = current.includes(platId)
+                  ? current.filter((p) => p !== platId)
+                  : [...current, platId];
+                updateAuto({ [key]: next } as any);
+              };
+
+              return (
+                <div className="space-y-3">
+                  {(["morning", "afternoon", "evening"] as const).map((slot) => {
+                    const timeKey = slotKeyMap[slot].time as keyof CityAutomation;
+                    const platsKey = slotKeyMap[slot].platforms as keyof CityAutomation;
+                    const selected = ((automation as any)[platsKey] as string[]) || [];
+                    const empty = automation.enabled && selected.length === 0;
+                    return (
+                      <div key={slot} className="rounded-md border border-border/30 bg-secondary/20 p-2.5 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-[11px] text-muted-foreground capitalize">{slot}</Label>
+                          {empty && (
+                            <Badge
+                              variant="outline"
+                              className="text-[9px] gap-0.5 border-destructive/60 text-destructive bg-destructive/10"
+                            >
+                              <AlertTriangle size={9} /> No platforms — automation will skip this slot
+                            </Badge>
+                          )}
+                        </div>
+                        <Input
+                          type="time"
+                          value={((automation as any)[timeKey] as string)?.slice(0, 5) || ""}
+                          onChange={(e) => updateAuto({ [timeKey]: `${e.target.value}:00` } as any)}
+                          className="h-8 text-xs"
+                          disabled={!automation.enabled}
+                        />
+                        {connected.length === 0 ? (
+                          <p className="text-[10px] text-muted-foreground italic">
+                            Connect a social account to enable platform selection.
+                          </p>
+                        ) : (
+                          <div className={`flex flex-wrap gap-1.5 ${automation.enabled ? "" : "opacity-50 pointer-events-none"}`}>
+                            {connected.map(({ id, label, Icon, color }) => {
+                              const active = selected.includes(id);
+                              return (
+                                <button
+                                  key={id}
+                                  type="button"
+                                  onClick={() => togglePlat(slot, id)}
+                                  title={label}
+                                  aria-pressed={active}
+                                  className="h-7 w-7 rounded-md border flex items-center justify-center transition-all"
+                                  style={
+                                    active
+                                      ? {
+                                          borderColor: color,
+                                          backgroundColor: `${color}1F`,
+                                          boxShadow: `0 0 10px ${color}55`,
+                                          color,
+                                        }
+                                      : {
+                                          borderColor: "hsl(var(--border) / 0.4)",
+                                          backgroundColor: "hsl(var(--secondary) / 0.4)",
+                                          color: "hsl(var(--muted-foreground))",
+                                        }
+                                  }
+                                >
+                                  <Icon size={13} />
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
-            </div>
+              );
+            })()}
           </div>
         )}
       </CardContent>

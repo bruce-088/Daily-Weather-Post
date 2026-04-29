@@ -956,6 +956,12 @@ const Index = () => {
                 activeCityId={activeCityId}
                 onActiveCityChange={(id) => { setActiveCityIdState(id); setActiveCityId(id); }}
                 onCitiesChange={setUserCities}
+                connections={{
+                  youtube: youtubeConnected,
+                  twitter: twitterConnected,
+                  linkedin: linkedinConnected,
+                  tiktok: tiktokConnected,
+                }}
               />
               <SettingsPanel
                 settings={settings}
