@@ -1253,6 +1253,7 @@ Deno.serve(async (req) => {
         // video header shows the correct period badge for auto-posts.
         const slotMatch = rawCaption ? /\[auto:([a-z]+)\]/i.exec(rawCaption) : null;
         const timePeriod = slotMatch ? slotMatch[1].toLowerCase() : null;
+        trace("platforms_resolved", { platforms: platformsToPost, slot: timePeriod, automated: isAutoMarker });
 
         // === AI VOICEOVER (auto-posts) ===
         // include_voiceover is set by auto-post-scheduler ONLY for video-capable platforms.
