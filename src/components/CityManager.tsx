@@ -33,7 +33,7 @@ interface CityManagerProps {
   };
 }
 
-export function CityManager({ activeCityId, onActiveCityChange, onCitiesChange }: CityManagerProps) {
+export function CityManager({ activeCityId, onActiveCityChange, onCitiesChange, connections }: CityManagerProps) {
   const [cities, setCities] = useState<UserCity[]>([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
