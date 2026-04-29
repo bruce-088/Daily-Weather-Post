@@ -1128,13 +1128,31 @@ Deno.serve(async (req) => {
     let failed = 0;
 
     for (const post of duePosts) {
+      // === DEBUG TRACE COLLECTOR ===
+      // Always built (cheap), persisted to scheduled_posts/post_history when the
+      // user has flipped on enable_debug_trace in weather_settings (one-shot flag).
+      const traceSteps: Array<{ ts: string; step: string; detail?: any }> = [];
+      const trace = (step: string, detail?: any) => {
+        const entry = { ts: new Date().toISOString(), step, detail };
+        traceSteps.push(entry);
+        console.log(`[trace ${post.id}] ${step}`, detail ?? "");
+      };
+      // Voice telemetry — written to scheduled_posts + post_history regardless of debug flag.
+      let voiceStatus: "success" | "retried" | "failed" | "skipped" | "not_requested" = "not_requested";
+      let voiceError: string | null = null;
+      let voiceAttemptsCount = 0;
+      let debugTraceEnabled = false;
+
       try {
         const scopedCity = await resolveScheduledCity(supabase, post);
         console.log(`CITY CONFIRMED: ${scopedCity.city}${scopedCity.state ? ", " + scopedCity.state : ""} (city_id=${scopedCity.cityId || "legacy"})`);
         console.log(`[process] post ${post.id}: strict city scope city=${scopedCity.city}${scopedCity.state ? ", " + scopedCity.state : ""} city_id=${scopedCity.cityId || "legacy"} automation_id=${scopedCity.automationId || "none"}`);
+        trace("city_resolved", { city: scopedCity.city, state: scopedCity.state, city_id: scopedCity.cityId, automation_id: scopedCity.automationId });
+        trace("schedule_match", { scheduled_at: post.scheduled_at, now: new Date().toISOString(), within_window: true });
         const weather = await fetchWeatherData(scopedCity.city, openWeatherApiKey, scopedCity.state);
         weather.city = scopedCity.city;
         if (scopedCity.state) weather.stateOrRegion = scopedCity.state;
+        trace("weather_fetched", { temperature: weather.temperature, condition: weather.condition });
 
         // Use pre-written caption if available, otherwise auto-generate.
         // Auto-post rows from auto-post-scheduler use a marker like "[auto:morning]"
