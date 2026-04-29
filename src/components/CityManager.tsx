@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { MapPin, Plus, Star, Trash2, Loader2, Clock } from "lucide-react";
+import { MapPin, Plus, Star, Trash2, Loader2, Clock, AlertTriangle } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,8 @@ export function CityManager({ activeCityId, onActiveCityChange, onCitiesChange }
   const [newState, setNewState] = useState("");
   const [automation, setAutomation] = useState<CityAutomation | null>(null);
   const [savingAuto, setSavingAuto] = useState(false);
+  // Map of cityId -> "has at least one platform across any slot when enabled"
+  const [platformStatus, setPlatformStatus] = useState<Record<string, { enabled: boolean; hasPlatforms: boolean }>>({});
 
   const loadCities = async () => {
     setLoading(true);
@@ -45,6 +48,26 @@ export function CityManager({ activeCityId, onActiveCityChange, onCitiesChange }
       const primary = list.find((c) => c.is_primary) || list[0];
       onActiveCityChange(primary.id);
       setActiveCityId(primary.id);
+    }
+    // Load automation status for all cities to compute warning badges
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user && list.length > 0) {
+      const { data: autos } = await supabase
+        .from("automations")
+        .select("city_id, enabled, morning_platforms, afternoon_platforms, evening_platforms")
+        .eq("user_id", user.id);
+      const map: Record<string, { enabled: boolean; hasPlatforms: boolean }> = {};
+      for (const c of list) {
+        const a: any = autos?.find((x: any) => x.city_id === c.id);
+        const m = Array.isArray(a?.morning_platforms) ? a.morning_platforms : [];
+        const af = Array.isArray(a?.afternoon_platforms) ? a.afternoon_platforms : [];
+        const e = Array.isArray(a?.evening_platforms) ? a.evening_platforms : [];
+        map[c.id] = {
+          enabled: !!a?.enabled,
+          hasPlatforms: m.length + af.length + e.length > 0,
+        };
+      }
+      setPlatformStatus(map);
     }
     setLoading(false);
   };
@@ -135,7 +158,20 @@ export function CityManager({ activeCityId, onActiveCityChange, onCitiesChange }
     const saved = await saveAutomation(activeCityId, patch);
     setSavingAuto(false);
     if (!saved) toast.error("Couldn't save automation");
-    else setAutomation(saved);
+    else {
+      setAutomation(saved);
+      // Recompute badge for this city
+      setPlatformStatus((prev) => ({
+        ...prev,
+        [activeCityId]: {
+          enabled: saved.enabled,
+          hasPlatforms:
+            (saved.morning_platforms?.length ?? 0) +
+              (saved.afternoon_platforms?.length ?? 0) +
+              (saved.evening_platforms?.length ?? 0) > 0,
+        },
+      }));
+    }
   };
 
   const activeCity = cities.find((c) => c.id === activeCityId);
@@ -193,6 +229,15 @@ export function CityManager({ activeCityId, onActiveCityChange, onCitiesChange }
                     {c.is_primary && (
                       <Badge variant="outline" className="text-[9px] gap-0.5 border-amber-500/40 text-amber-400">
                         <Star size={9} /> Primary
+                      </Badge>
+                    )}
+                    {platformStatus[c.id]?.enabled && !platformStatus[c.id]?.hasPlatforms && (
+                      <Badge
+                        variant="outline"
+                        className="text-[9px] gap-0.5 border-destructive/50 text-destructive"
+                        title="Automation is on but no platforms are selected for any time slot."
+                      >
+                        <AlertTriangle size={9} /> No platforms
                       </Badge>
                     )}
                   </button>
