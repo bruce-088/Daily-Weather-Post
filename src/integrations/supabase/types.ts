@@ -187,6 +187,7 @@ export type Database = {
           last_attempt_at: string | null
           next_retry_at: string | null
           platform: string | null
+          post_url: string | null
           retry_count: number
           status: string
           temperature: number | null
@@ -203,6 +204,7 @@ export type Database = {
           last_attempt_at?: string | null
           next_retry_at?: string | null
           platform?: string | null
+          post_url?: string | null
           retry_count?: number
           status?: string
           temperature?: number | null
@@ -219,6 +221,7 @@ export type Database = {
           last_attempt_at?: string | null
           next_retry_at?: string | null
           platform?: string | null
+          post_url?: string | null
           retry_count?: number
           status?: string
           temperature?: number | null
