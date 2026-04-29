@@ -645,26 +645,32 @@ async function generateVoiceScript(weather: WeatherResponse, tone?: string, plat
 
 // Result type so callers can distinguish 401 / timeout / other failures and
 // surface meaningful notifications to the System Health bell.
+export interface VoiceAttemptLog {
+  attempt: number;
+  status: number | "timeout" | "network_error" | "missing_key";
+  ok: boolean;
+  error?: string;
+}
+
 type VoiceAudioResult =
-  | { ok: true; bytes: Uint8Array }
-  | { ok: false; reason: "missing_key" | "unauthorized" | "timeout" | "http_error" | "network_error"; status?: number; detail?: string };
+  | { ok: true; bytes: Uint8Array; attempts: VoiceAttemptLog[] }
+  | { ok: false; reason: "missing_key" | "unauthorized" | "timeout" | "http_error" | "network_error"; status?: number; detail?: string; attempts: VoiceAttemptLog[] };
 
 async function generateVoiceAudio(
   script: string,
   voiceId: string,
   opts?: { speed?: number; stability?: number; similarity?: number },
 ): Promise<VoiceAudioResult> {
+  const attempts: VoiceAttemptLog[] = [];
   // Re-read the env var on every call so a key rotation mid-run is picked up
   // without needing to redeploy the worker.
   let apiKey = Deno.env.get("ELEVENLABS_API_KEY");
   if (!apiKey) {
     console.error("CRITICAL: ElevenLabs API Key missing in worker");
-    return { ok: false, reason: "missing_key" };
+    attempts.push({ attempt: 1, status: "missing_key", ok: false, error: "ELEVENLABS_API_KEY env var not set" });
+    return { ok: false, reason: "missing_key", attempts };
   }
 
-  // Default to 1.05× — adds news-anchor energy and trims ~1s off runtime so
-  // the spoken CTA always lands before the video clip ends. User overrides
-  // (saved in weather_settings.voiceover_speed) still win when present.
   const speed = clampVoiceParam(opts?.speed, 0.7, 1.2, 1.05);
   const stability = clampVoiceParam(opts?.stability, 0, 1, 0.55);
   const similarity = clampVoiceParam(opts?.similarity, 0, 1, 0.78);
@@ -675,13 +681,9 @@ async function generateVoiceAudio(
     voice_settings: { stability, similarity_boost: similarity, style: 0.35, use_speaker_boost: true, speed },
   });
 
-  // Up to 2 attempts. On 401 we re-read ELEVENLABS_API_KEY once before retrying
-  // (covers the case where the secret was rotated between attempts).
   const MAX_ATTEMPTS = 2;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     const controller = new AbortController();
-    // Weather scripts can occasionally take longer than the default Deno
-    // fetch budget — give ElevenLabs a full 30s before we abort.
     const timeoutId = setTimeout(() => controller.abort(), 30_000);
     try {
       const res = await fetch(url, {
@@ -695,56 +697,60 @@ async function generateVoiceAudio(
       if (res.status === 401) {
         const detail = (await res.text()).slice(0, 200);
         console.error(`[voice] ElevenLabs 401 Unauthorized (attempt ${attempt}/${MAX_ATTEMPTS}):`, detail);
+        attempts.push({ attempt, status: 401, ok: false, error: detail || "Unauthorized" });
         if (attempt < MAX_ATTEMPTS) {
-          // Re-read the secret in case it was just rotated, then back off 2s.
           const refreshed = Deno.env.get("ELEVENLABS_API_KEY");
           if (!refreshed) {
             console.error("CRITICAL: ElevenLabs API Key missing in worker (during 401 retry)");
-            return { ok: false, reason: "missing_key" };
+            return { ok: false, reason: "missing_key", attempts };
           }
           apiKey = refreshed;
           console.warn(`[voice] backoff 2s before retry (after 401)`);
           await new Promise((r) => setTimeout(r, 2000));
           continue;
         }
-        return { ok: false, reason: "unauthorized", status: 401, detail };
+        return { ok: false, reason: "unauthorized", status: 401, detail, attempts };
       }
 
       if (!res.ok) {
         const detail = (await res.text()).slice(0, 200);
         console.error(`[voice] ElevenLabs TTS failed (attempt ${attempt}/${MAX_ATTEMPTS}): status=${res.status}`, detail);
-        // Retry on 5xx with 2s backoff; bail immediately on 4xx (other than 401 above).
+        attempts.push({ attempt, status: res.status, ok: false, error: detail });
         if (attempt < MAX_ATTEMPTS && res.status >= 500) {
           console.warn(`[voice] backoff 2s before retry (after ${res.status})`);
           await new Promise((r) => setTimeout(r, 2000));
           continue;
         }
-        return { ok: false, reason: "http_error", status: res.status, detail };
+        return { ok: false, reason: "http_error", status: res.status, detail, attempts };
       }
 
-      return { ok: true, bytes: new Uint8Array(await res.arrayBuffer()) };
+      attempts.push({ attempt, status: 200, ok: true });
+      return { ok: true, bytes: new Uint8Array(await res.arrayBuffer()), attempts };
     } catch (e) {
       clearTimeout(timeoutId);
       const isAbort = (e as any)?.name === "AbortError";
       if (isAbort) {
         console.error(`[voice] ElevenLabs TTS timed out after 30s (attempt ${attempt}/${MAX_ATTEMPTS})`);
+        attempts.push({ attempt, status: "timeout", ok: false, error: "exceeded 30s" });
         if (attempt < MAX_ATTEMPTS) {
           console.warn(`[voice] backoff 2s before retry (after timeout)`);
           await new Promise((r) => setTimeout(r, 2000));
           continue;
         }
-        return { ok: false, reason: "timeout", detail: "ElevenLabs request exceeded 30s" };
+        return { ok: false, reason: "timeout", detail: "ElevenLabs request exceeded 30s", attempts };
       }
+      const errMsg = e instanceof Error ? e.message : String(e);
       console.error(`[voice] ElevenLabs TTS error (attempt ${attempt}/${MAX_ATTEMPTS}):`, e);
+      attempts.push({ attempt, status: "network_error", ok: false, error: errMsg });
       if (attempt < MAX_ATTEMPTS) {
         console.warn(`[voice] backoff 2s before retry (after network error)`);
         await new Promise((r) => setTimeout(r, 2000));
         continue;
       }
-      return { ok: false, reason: "network_error", detail: e instanceof Error ? e.message : String(e) };
+      return { ok: false, reason: "network_error", detail: errMsg, attempts };
     }
   }
-  return { ok: false, reason: "network_error", detail: "exhausted retries" };
+  return { ok: false, reason: "network_error", detail: "exhausted retries", attempts };
 }
 
 async function storeVoiceAudio(supabase: any, userId: string, audio: Uint8Array): Promise<string | null> {
