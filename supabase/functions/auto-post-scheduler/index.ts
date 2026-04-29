@@ -44,17 +44,90 @@ Deno.serve(async (req) => {
 
   try {
 
-    // Get all weather settings with auto-post enabled
+    // Weather settings are user-level preferences only (voice, legacy defaults).
+    // Multi-city scheduling must be driven by automations.city_id, never by the
+    // most recently edited weather_settings row.
     const { data: allSettings, error } = await supabase
       .from("weather_settings")
-      .select("*");
+      .select("*")
+      .not("user_id", "is", null)
+      .order("updated_at", { ascending: false });
 
-    if (error || !allSettings?.length) {
+    const { data: automations, error: automationError } = await supabase
+      .from("automations")
+      .select("*")
+      .eq("enabled", true);
+
+    if (error || automationError) {
+      throw new Error(error?.message || automationError?.message || "Failed to load automation settings");
+    }
+
+    if (!allSettings?.length && !automations?.length) {
       return new Response(
         JSON.stringify({ message: "No settings found", triggered: 0 }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    const settingsByUser = new Map<string, any>();
+    for (const row of allSettings || []) {
+      if (row.user_id && !settingsByUser.has(row.user_id)) settingsByUser.set(row.user_id, row);
+    }
+
+    const automationCityIds = [...new Set((automations || []).map((a: any) => a.city_id).filter(Boolean))];
+    const citiesById = new Map<string, any>();
+    if (automationCityIds.length) {
+      const { data: cityRows, error: cityError } = await supabase
+        .from("cities")
+        .select("id, name, state, country, timezone")
+        .in("id", automationCityIds);
+      if (cityError) throw new Error(`Failed to load automation cities: ${cityError.message}`);
+      for (const city of cityRows || []) citiesById.set(city.id, city);
+    }
+
+    const usersWithAutomations = new Set((automations || []).map((a: any) => a.user_id).filter(Boolean));
+    const scheduleTargets = [
+      ...(automations || []).map((automation: any) => {
+        const city = citiesById.get(automation.city_id);
+        const userSettings = settingsByUser.get(automation.user_id) || null;
+        return {
+          source: "automation",
+          user_id: automation.user_id,
+          city_id: automation.city_id,
+          automation_id: automation.id,
+          city: city?.name || "",
+          state: city?.state || null,
+          timezone: automation.timezone || city?.timezone || userSettings?.timezone || "UTC",
+          enable_voiceover: userSettings?.enable_voiceover === true,
+          periods: [
+            { enabled: true, time: automation.morning_time, name: "morning", platforms: jsonArray(automation.morning_platforms), skipDate: null },
+            { enabled: true, time: automation.afternoon_time, name: "afternoon", platforms: jsonArray(automation.afternoon_platforms), skipDate: null },
+            { enabled: true, time: automation.evening_time, name: "evening", platforms: jsonArray(automation.evening_platforms), skipDate: null },
+          ],
+        };
+      }).filter((target: any) => {
+        if (target.user_id && target.city_id && target.city) return true;
+        console.warn(`[scheduler] skipping automation ${target.automation_id || "unknown"}: missing city_id/city/user`);
+        return false;
+      }),
+      ...(allSettings || [])
+        .filter((settings: any) => settings.user_id && !usersWithAutomations.has(settings.user_id))
+        .map((settings: any) => ({
+          source: "legacy_settings",
+          user_id: settings.user_id,
+          city_id: null,
+          automation_id: null,
+          city: settings.city,
+          state: settings.state || null,
+          timezone: settings.timezone || "UTC",
+          enable_voiceover: settings.enable_voiceover === true,
+          periods: [
+            { enabled: settings.auto_post_morning, time: settings.morning_post_time, name: "morning", platforms: jsonArray(settings.morning_platforms), skipDate: settings.morning_skip_date || null },
+            { enabled: settings.auto_post_afternoon, time: settings.afternoon_post_time, name: "afternoon", platforms: jsonArray(settings.afternoon_platforms), skipDate: settings.afternoon_skip_date || null },
+            { enabled: settings.auto_post_evening, time: settings.evening_post_time, name: "evening", platforms: jsonArray(settings.evening_platforms), skipDate: settings.evening_skip_date || null },
+          ],
+        })),
+    ];
 
     const now = new Date();
     const POST_WINDOW_MINUTES = 10;
@@ -108,40 +181,16 @@ Deno.serve(async (req) => {
 
     const nowUtcIso = now.toISOString();
     const nowUtcHm = `${String(now.getUTCHours()).padStart(2, "0")}:${String(now.getUTCMinutes()).padStart(2, "0")}`;
-    console.log(`[scheduler] Tick — now UTC: ${nowUtcIso} (${nowUtcHm}), users: ${allSettings.length}`);
+    console.log(`[scheduler] Tick — now UTC: ${nowUtcIso} (${nowUtcHm}), targets: ${scheduleTargets.length}, automations: ${(automations || []).length}`);
 
     let triggered = 0;
     const results: string[] = [];
 
-    for (const settings of allSettings) {
-      const userTz: string = settings.timezone || "UTC";
+    for (const target of scheduleTargets) {
+      const userTz: string = target.timezone || "UTC";
       const userLocal = getZonedHourMinute(now, userTz);
       const userLocalHm = `${String(userLocal.hour).padStart(2, "0")}:${String(userLocal.minute).padStart(2, "0")}`;
-      console.log(`[scheduler] User ${settings.user_id || "default"} — tz: ${userTz}, local now: ${userLocalHm}`);
-
-      const periods: { enabled: boolean; time: string; name: string; platforms: string[]; skipDate: string | null }[] = [
-        {
-          enabled: settings.auto_post_morning,
-          time: settings.morning_post_time,
-          name: "morning",
-          platforms: Array.isArray(settings.morning_platforms) ? settings.morning_platforms : [],
-          skipDate: settings.morning_skip_date || null,
-        },
-        {
-          enabled: settings.auto_post_afternoon,
-          time: settings.afternoon_post_time,
-          name: "afternoon",
-          platforms: Array.isArray(settings.afternoon_platforms) ? settings.afternoon_platforms : [],
-          skipDate: settings.afternoon_skip_date || null,
-        },
-        {
-          enabled: settings.auto_post_evening,
-          time: settings.evening_post_time,
-          name: "evening",
-          platforms: Array.isArray(settings.evening_platforms) ? settings.evening_platforms : [],
-          skipDate: settings.evening_skip_date || null,
-        },
-      ];
+      console.log(`[scheduler] Target ${target.source} user=${target.user_id} city=${target.city}${target.state ? ", " + target.state : ""} city_id=${target.city_id || "legacy"} — tz: ${userTz}, local now: ${userLocalHm}`);
 
       // Today's date in user's local timezone (YYYY-MM-DD)
       const todayLocal = new Intl.DateTimeFormat("en-CA", {
@@ -151,7 +200,7 @@ Deno.serve(async (req) => {
         day: "2-digit",
       }).format(now);
 
-      for (const period of periods) {
+      for (const period of target.periods) {
         console.log(
           `[scheduler]   ── Checking slot: ${period.name.toUpperCase()} | utc_now=${nowUtcIso} | tz=${userTz} | local_now=${userLocalHm} | target_local=${period.time || "(unset)"} | platforms=[${period.platforms.join(", ") || "none"}]`
         );
