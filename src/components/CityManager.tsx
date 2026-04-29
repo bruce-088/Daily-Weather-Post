@@ -116,7 +116,7 @@ export function CityManager({ activeCityId, onActiveCityChange, onCitiesChange, 
     setAdding(true);
     const result = await addUserCity(newName, newState);
     setAdding(false);
-    if (!result.ok) {
+    if (result.ok === false) {
       toast.error(result.message);
       return;
     }
