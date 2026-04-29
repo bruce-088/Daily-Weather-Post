@@ -355,82 +355,107 @@ Deno.serve(async (req) => {
 
 
       // === DAILY SUMMARY (fires once per user when local time is 23:30 - 23:59) ===
-      try {
-        if (target.user_id && userLocal.hour === 23 && userLocal.minute >= 30) {
-          // Idempotency: skip if a summary notification already exists for today (user-local).
-          const lookback = new Date(now);
-          lookback.setUTCHours(lookback.getUTCHours() - 6);
-          const { data: existingSummary } = await supabase
-            .from("notifications")
-            .select("id, created_at")
-            .eq("user_id", target.user_id)
-            .eq("title", "Daily summary")
-            .gte("created_at", lookback.toISOString())
-            .limit(1);
-
-          if (!existingSummary || existingSummary.length === 0) {
-            const sodLocal = new Date(`${todayLocal}T00:00:00`);
-            const { data: todays } = await supabase
-              .from("post_history")
-              .select("status, platform, error_message, created_at")
+      // Skipped during dry-run — no notifications should be inserted.
+      if (!dryRun) {
+        try {
+          if (target.user_id && userLocal.hour === 23 && userLocal.minute >= 30) {
+            // Idempotency: skip if a summary notification already exists for today (user-local).
+            const lookback = new Date(now);
+            lookback.setUTCHours(lookback.getUTCHours() - 6);
+            const { data: existingSummary } = await supabase
+              .from("notifications")
+              .select("id, created_at")
               .eq("user_id", target.user_id)
-              .gte("created_at", sodLocal.toISOString());
+              .eq("title", "Daily summary")
+              .gte("created_at", lookback.toISOString())
+              .limit(1);
 
-            const total = todays?.length ?? 0;
-            const successCount = (todays ?? []).filter((p) => p.status === "success").length;
-            const failedCount = (todays ?? []).filter((p) => p.status === "failed").length;
+            if (!existingSummary || existingSummary.length === 0) {
+              const sodLocal = new Date(`${todayLocal}T00:00:00`);
+              const { data: todays } = await supabase
+                .from("post_history")
+                .select("status, platform, error_message, created_at")
+                .eq("user_id", target.user_id)
+                .gte("created_at", sodLocal.toISOString());
 
-            let message: string;
-            let type: "success" | "error" | "info" = "info";
+              const total = todays?.length ?? 0;
+              const successCount = (todays ?? []).filter((p) => p.status === "success").length;
+              const failedCount = (todays ?? []).filter((p) => p.status === "failed").length;
 
-            if (total === 0) {
-              message = "Today: no posts published. Check your automation slots in Settings.";
-              type = "info";
-            } else if (failedCount === 0) {
-              message = `Today: ${successCount}/${total} posts successful. Total engagement: coming soon.`;
-              type = "success";
+              let message: string;
+              let type: "success" | "error" | "info" = "info";
+
+              if (total === 0) {
+                message = "Today: no posts published. Check your automation slots in Settings.";
+                type = "info";
+              } else if (failedCount === 0) {
+                message = `Today: ${successCount}/${total} posts successful. Total engagement: coming soon.`;
+                type = "success";
+              } else {
+                message = `Today: ${successCount}/${total} posts successful, ${failedCount} failed. Total engagement: coming soon.`;
+                type = failedCount > successCount ? "error" : "info";
+              }
+
+              const meta = {
+                v: 1,
+                kind: "summary",
+                date: todayLocal,
+                total,
+                success: successCount,
+                failed: failedCount,
+              };
+              const fullMessage = `${message}\n<<META>>${JSON.stringify(meta)}`;
+
+              const { error: sumErr } = await supabase.from("notifications").insert({
+                user_id: target.user_id,
+                title: "Daily summary",
+                message: fullMessage,
+                type,
+              });
+              if (sumErr) console.error("[scheduler] daily summary insert failed:", sumErr);
+              else console.log(`[scheduler] daily summary sent to user ${target.user_id}`);
             } else {
-              message = `Today: ${successCount}/${total} posts successful, ${failedCount} failed. Total engagement: coming soon.`;
-              type = failedCount > successCount ? "error" : "info";
+              console.log(`[scheduler] daily summary already exists for user ${target.user_id} today`);
             }
-
-            const meta = {
-              v: 1,
-              kind: "summary",
-              date: todayLocal,
-              total,
-              success: successCount,
-              failed: failedCount,
-            };
-            const fullMessage = `${message}\n<<META>>${JSON.stringify(meta)}`;
-
-            const { error: sumErr } = await supabase.from("notifications").insert({
-              user_id: target.user_id,
-              title: "Daily summary",
-              message: fullMessage,
-              type,
-            });
-            if (sumErr) console.error("[scheduler] daily summary insert failed:", sumErr);
-            else console.log(`[scheduler] daily summary sent to user ${target.user_id}`);
-          } else {
-            console.log(`[scheduler] daily summary already exists for user ${target.user_id} today`);
           }
+        } catch (sumE) {
+          console.error("[scheduler] daily summary error:", sumE);
         }
-      } catch (sumE) {
-        console.error("[scheduler] daily summary error:", sumE);
       }
     }
 
-    // Mark heartbeat as success
-    try {
-      await supabase.from("system_health").upsert({
-        id: "auto-post-scheduler",
-        last_run_at: new Date().toISOString(),
-        last_status: "ok",
-        last_message: `triggered=${triggered}`,
-        updated_at: new Date().toISOString(),
+    // Mark heartbeat as success (skipped during dry-run).
+    if (!dryRun) {
+      try {
+        await supabase.from("system_health").upsert({
+          id: "auto-post-scheduler",
+          last_run_at: new Date().toISOString(),
+          last_status: "ok",
+          last_message: `triggered=${triggered}`,
+          updated_at: new Date().toISOString(),
+        });
+      } catch (_) { /* best-effort */ }
+    }
+
+    if (dryRun) {
+      // Build a flat human-readable summary the UI can render line-by-line.
+      const summary = dryRunReport.map((e: any) => {
+        const matchedTxt = e.matched ? "✅ Slot Match Found" : "⏭️  No match";
+        const platformsTxt = (e.platforms && e.platforms.length) ? e.platforms.join(", ") : "none";
+        return `${matchedTxt} for ${e.city} [${e.slot}] — Platforms: ${platformsTxt}. ${e.reason}`;
       });
-    } catch (_) { /* best-effort */ }
+      return new Response(
+        JSON.stringify({
+          dry_run: true,
+          message: "Dry run complete — no rows inserted, no notifications sent.",
+          checked_targets: scheduleTargets.length,
+          would_trigger: dryRunReport.filter((e: any) => e.matched).length,
+          report: dryRunReport,
+          summary,
+        }, null, 2),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     return new Response(
       JSON.stringify({ message: "Auto-post check complete", triggered, results }),
