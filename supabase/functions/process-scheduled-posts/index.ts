@@ -137,6 +137,37 @@ async function fetchWeatherData(city: string, apiKey: string, state?: string | n
   };
 }
 
+async function resolveScheduledCity(supabase: any, post: any): Promise<{ city: string; state: string | null; cityId: string | null; automationId: string | null }> {
+  let cityId = post.city_id || null;
+  const automationId = post.automation_id || null;
+
+  if (automationId) {
+    const { data: automation, error: automationError } = await supabase
+      .from("automations")
+      .select("id, city_id, user_id")
+      .eq("id", automationId)
+      .eq("user_id", post.user_id)
+      .maybeSingle();
+    if (automationError) throw new Error("Failed to validate automation city: " + automationError.message);
+    if (!automation?.city_id) throw new Error("Scheduled post automation is missing a city_id");
+    if (cityId && cityId !== automation.city_id) throw new Error("Scheduled post city_id does not match automation city_id");
+    cityId = automation.city_id;
+  }
+
+  if (cityId) {
+    const { data: city, error: cityError } = await supabase
+      .from("cities")
+      .select("id, name, state, country, timezone")
+      .eq("id", cityId)
+      .maybeSingle();
+    if (cityError) throw new Error("Failed to load scheduled city: " + cityError.message);
+    if (!city?.name) throw new Error("Scheduled post city_id was not found");
+    return { city: city.name, state: city.state || null, cityId, automationId };
+  }
+
+  return { city: post.city, state: null, cityId: null, automationId };
+}
+
 // --- SkyBrief Title Generator ---
 
 function getWeatherEmoji(condition: string): string {
