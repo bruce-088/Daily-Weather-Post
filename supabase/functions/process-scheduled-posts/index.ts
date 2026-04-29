@@ -30,9 +30,10 @@ interface WeatherResponse {
   tomorrowCondition: string | null;
 }
 
-async function fetchWeatherData(city: string, apiKey: string): Promise<WeatherResponse> {
+async function fetchWeatherData(city: string, apiKey: string, state?: string | null): Promise<WeatherResponse> {
+  const locationQuery = [city, state, "US"].filter(Boolean).join(",");
   const geoRes = await fetch(
-    `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(city)}&limit=1&appid=${apiKey}`
+    `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(locationQuery)}&limit=1&appid=${apiKey}`
   );
   const geoData = await geoRes.json();
   if (!geoData.length) throw new Error(`Location not found: ${city}`);
