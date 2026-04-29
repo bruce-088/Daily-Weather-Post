@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Activity, RefreshCw, Beaker, CheckCircle2, XCircle } from "lucide-react";
+import { Activity, RefreshCw, Beaker, CheckCircle2, XCircle, Mic, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
@@ -42,6 +44,29 @@ interface DryRunResponse {
   summary: string[];
 }
 
+interface TraceStep { ts: string; step: string; detail?: any }
+interface LatestTraceRow {
+  id: string;
+  city: string;
+  status: string;
+  platform: string | null;
+  voice_status: string | null;
+  voice_error: string | null;
+  voice_attempts: number | null;
+  debug_trace: { steps?: TraceStep[]; captured_at?: string } | null;
+  created_at: string;
+}
+
+function voiceLine(row: { voice_status: string | null; voice_error: string | null; voice_attempts: number | null }) {
+  const s = row.voice_status;
+  const a = row.voice_attempts ?? 0;
+  if (s === "success") return { icon: "✅", label: `Voice: Success (${a || 1} attempt${(a || 1) > 1 ? "s" : ""})`, tone: "ok" as const };
+  if (s === "retried") return { icon: "⚠️", label: `Voice: Retried (${a} attempts)`, tone: "warn" as const };
+  if (s === "failed") return { icon: "❌", label: `Voice: Failed${row.voice_error ? ` — ${row.voice_error}` : ""}`, tone: "err" as const };
+  if (s === "skipped") return { icon: "—", label: `Voice: Skipped — ${row.voice_error || "platform doesn't support audio"}`, tone: "muted" as const };
+  return { icon: "—", label: "Voice: Not requested", tone: "muted" as const };
+}
+
 export function SystemHealthCard() {
   const [lastRun, setLastRun] = useState<string | null>(null);
   const [lastRunIso, setLastRunIso] = useState<string | null>(null);
@@ -52,7 +77,11 @@ export function SystemHealthCard() {
   const [dryRunLoading, setDryRunLoading] = useState(false);
   const [dryRunResult, setDryRunResult] = useState<DryRunResponse | null>(null);
 
-  const fetchHealth = async () => {
+  const [debugEnabled, setDebugEnabled] = useState(false);
+  const [debugSaving, setDebugSaving] = useState(false);
+  const [latestTrace, setLatestTrace] = useState<LatestTraceRow | null>(null);
+
+  const fetchHealth = useCallback(async () => {
     setLoading(true);
     try {
       const { data } = await supabase
@@ -67,6 +96,57 @@ export function SystemHealthCard() {
       setMessage(data?.last_message ?? null);
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  const fetchDebugState = useCallback(async () => {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData?.user) return;
+    const [{ data: settings }, { data: trace }] = await Promise.all([
+      supabase
+        .from("weather_settings")
+        .select("enable_debug_trace")
+        .eq("user_id", userData.user.id)
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("post_history")
+        .select("id, city, status, platform, voice_status, voice_error, voice_attempts, debug_trace, created_at")
+        .eq("user_id", userData.user.id)
+        .order("created_at", { ascending: false })
+        .limit(20),
+    ]);
+    setDebugEnabled((settings as any)?.enable_debug_trace === true);
+    // Pick the most recent row that actually has a stored trace
+    const traced = (trace || []).find((r: any) => r.debug_trace && Array.isArray(r.debug_trace?.steps)) as any;
+    setLatestTrace(traced || (trace?.[0] as any) || null);
+  }, []);
+
+  const toggleDebug = async (next: boolean) => {
+    setDebugSaving(true);
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData?.user) throw new Error("Not signed in");
+      const { error } = await supabase
+        .from("weather_settings")
+        .update({ enable_debug_trace: next })
+        .eq("user_id", userData.user.id);
+      if (error) throw error;
+      setDebugEnabled(next);
+      toast({
+        title: next ? "Debug trace armed" : "Debug trace disabled",
+        description: next
+          ? "The next scheduled run will record a full step-by-step trace, then auto-disable."
+          : "No traces will be captured on upcoming runs.",
+      });
+    } catch (err) {
+      toast({
+        title: "Failed to update debug toggle",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setDebugSaving(false);
     }
   };
 
@@ -98,15 +178,23 @@ export function SystemHealthCard() {
 
   useEffect(() => {
     fetchHealth();
-    const t = setInterval(fetchHealth, 30000);
+    fetchDebugState();
+    const t = setInterval(() => { fetchHealth(); fetchDebugState(); }, 30000);
     return () => clearInterval(t);
-  }, []);
+  }, [fetchHealth, fetchDebugState]);
 
-  // Active if scheduler ticked within the last 12 minutes (cron = every 5)
   const isActive = lastRunIso
     ? Date.now() - new Date(lastRunIso).getTime() < 12 * 60 * 1000
     : false;
   const hasError = status === "error";
+
+  const voice = latestTrace
+    ? voiceLine({
+        voice_status: latestTrace.voice_status,
+        voice_error: latestTrace.voice_error,
+        voice_attempts: latestTrace.voice_attempts,
+      })
+    : null;
 
   return (
     <Card>
@@ -162,11 +250,92 @@ export function SystemHealthCard() {
           </p>
         )}
 
+        {/* Debug Trace toggle */}
+        <div className="rounded-md border border-border/50 bg-muted/30 p-3 space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <Label htmlFor="debug-trace" className="text-sm font-medium flex items-center gap-1.5">
+                <Beaker size={14} className="text-primary" />
+                Enable Debug Trace (Next Run)
+              </Label>
+              <p className="text-[11px] text-muted-foreground leading-snug">
+                Capture a full step trace on the next scheduled execution. Auto-disables after one run.
+              </p>
+            </div>
+            <Switch
+              id="debug-trace"
+              checked={debugEnabled}
+              disabled={debugSaving}
+              onCheckedChange={toggleDebug}
+            />
+          </div>
+          {debugEnabled && (
+            <p className="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1">
+              <AlertTriangle size={11} /> Armed — next auto-run will record + persist a trace.
+            </p>
+          )}
+        </div>
+
+        {/* Last voice status + trace */}
+        {latestTrace && voice && (
+          <div className="rounded-md border border-border/50 bg-muted/30 p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold flex items-center gap-1.5">
+                <Mic size={12} /> Last Voice Status
+              </span>
+              <span className="text-[10px] text-muted-foreground">
+                {timeAgo(latestTrace.created_at)} · {latestTrace.city}
+              </span>
+            </div>
+            <p className={
+              voice.tone === "ok" ? "text-[12px] text-green-500"
+              : voice.tone === "warn" ? "text-[12px] text-amber-500"
+              : voice.tone === "err" ? "text-[12px] text-destructive"
+              : "text-[12px] text-muted-foreground"
+            }>
+              {voice.icon} {voice.label}
+            </p>
+
+            {latestTrace.debug_trace?.steps && latestTrace.debug_trace.steps.length > 0 && (
+              <>
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-xs font-semibold">Step Trace</span>
+                  <Badge variant="outline" className="text-[10px]">
+                    {latestTrace.debug_trace.steps.length} steps
+                  </Badge>
+                </div>
+                <ScrollArea className="h-44 pr-2">
+                  <ul className="space-y-1 text-[11px] font-mono">
+                    {latestTrace.debug_trace.steps.map((s, i) => (
+                      <li key={i} className="leading-tight">
+                        <span className="text-muted-foreground">
+                          {new Date(s.ts).toLocaleTimeString()}
+                        </span>{" "}
+                        <span className="text-foreground font-semibold">{s.step}</span>
+                        {s.detail !== undefined && s.detail !== null && (
+                          <span className="text-muted-foreground/80">
+                            {" "}· {typeof s.detail === "object" ? JSON.stringify(s.detail) : String(s.detail)}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </ScrollArea>
+              </>
+            )}
+            {!latestTrace.debug_trace && (
+              <p className="text-[10px] italic text-muted-foreground">
+                No step trace stored for the most recent run. Toggle "Enable Debug Trace" above and wait for the next run.
+              </p>
+            )}
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-2 pt-1">
           <Button
             size="sm"
             variant="outline"
-            onClick={fetchHealth}
+            onClick={() => { fetchHealth(); fetchDebugState(); }}
             disabled={loading}
             className="gap-2"
           >
