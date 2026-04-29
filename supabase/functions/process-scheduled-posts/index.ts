@@ -1073,7 +1073,11 @@ Deno.serve(async (req) => {
 
     for (const post of duePosts) {
       try {
-        const weather = await fetchWeatherData(post.city, openWeatherApiKey);
+        const scopedCity = await resolveScheduledCity(supabase, post);
+        console.log(`[process] post ${post.id}: strict city scope city=${scopedCity.city}${scopedCity.state ? ", " + scopedCity.state : ""} city_id=${scopedCity.cityId || "legacy"} automation_id=${scopedCity.automationId || "none"}`);
+        const weather = await fetchWeatherData(scopedCity.city, openWeatherApiKey, scopedCity.state);
+        weather.city = scopedCity.city;
+        if (scopedCity.state) weather.stateOrRegion = scopedCity.state;
 
         // Use pre-written caption if available, otherwise auto-generate.
         // Auto-post rows from auto-post-scheduler use a marker like "[auto:morning]"
@@ -1238,6 +1242,7 @@ Deno.serve(async (req) => {
         }
 
         // Try video generation once (with voiceover baked in if available)
+        console.log(`RENDER START: City: ${weather.city}, VoiceEnabled: ${voiceUrl ? "True" : "False"}`);
         const video = await generateWeatherVideo(weather, timePeriod, voiceUrl);
 
         if (video) {
