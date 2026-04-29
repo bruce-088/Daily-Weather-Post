@@ -221,6 +221,7 @@ Deno.serve(async (req) => {
           continue;
         }
         console.log(`[scheduler]   🎯 Matched slot within extended window (${period.name}, diff=${ev.diff}min)`);
+        console.log(`AUTO: Processing slot for ${target.city} at ${period.time} (${period.name}) — city_id=${target.city_id || "legacy"}, user=${target.user_id || "default"}`);
         console.log(`[scheduler]   ✅ ${period.name.toUpperCase()} slot triggered for user ${target.user_id || "default"} city=${target.city} city_id=${target.city_id || "legacy"}`);
         console.log(`[scheduler]   Creating scheduled posts for platforms: [${period.platforms.join(", ")}]`);
 
@@ -290,6 +291,9 @@ Deno.serve(async (req) => {
           console.error(`[scheduler]   ❌ Failed to create scheduled_posts for ${period.name}:`, insErr);
           results.push(`${period.name}: insert_error`);
         } else {
+          for (const r of inserted || []) {
+            console.log(`AUTO: Created scheduled_post row for ${r.platform} (city=${target.city}, slot=${period.name}, voiceover=${voiceoverEnabled && new Set(["youtube","tiktok","instagram"]).has(r.platform)})`);
+          }
           console.log(`[scheduler]   📝 Created ${inserted?.length ?? 0} scheduled_posts row(s) for ${period.name}: ${(inserted || []).map((r: any) => r.platform).join(", ")}`);
           triggered += inserted?.length ?? 0;
           results.push(`${period.name}: queued ${inserted?.length ?? 0}`);
