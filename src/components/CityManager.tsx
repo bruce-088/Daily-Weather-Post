@@ -114,13 +114,18 @@ export function CityManager({ activeCityId, onActiveCityChange, onCitiesChange, 
       return;
     }
     setAdding(true);
-    const added = await addUserCity(newName, newState);
+    const result = await addUserCity(newName, newState);
     setAdding(false);
-    if (!added) {
-      toast.error("Couldn't add city");
+    if (result.ok === false) {
+      toast.error(result.message);
       return;
     }
-    toast.success(`Added ${added.name}, ${added.state ?? ""}`.trim());
+    const added = result.city;
+    if (result.alreadyLinked) {
+      toast.info(`${added.name} is already in your list`);
+    } else {
+      toast.success(`Added ${added.name}, ${added.state ?? ""}`.trim());
+    }
     setNewName("");
     setNewState("");
     setShowForm(false);
