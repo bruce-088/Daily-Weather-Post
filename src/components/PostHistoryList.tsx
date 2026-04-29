@@ -350,6 +350,23 @@ export function PostHistoryList({ posts, loading, onReuse, onChanged }: PostHist
                               <Pencil size={11} /> Reuse
                             </Button>
                           )}
+                          {post.post_url && (
+                            <Button
+                              asChild
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-[11px] gap-1 px-2"
+                              title="Open the published post in a new tab"
+                            >
+                              <a
+                                href={post.post_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                <ExternalLink size={11} /> View Post
+                              </a>
+                            </Button>
+                          )}
                         </div>
                       </div>
 
