@@ -221,6 +221,7 @@ Deno.serve(async (req) => {
           continue;
         }
         console.log(`[scheduler]   🎯 Matched slot within extended window (${period.name}, diff=${ev.diff}min)`);
+        console.log(`AUTO: Processing slot for ${target.city} at ${period.time} (${period.name}) — city_id=${target.city_id || "legacy"}, user=${target.user_id || "default"}`);
         console.log(`[scheduler]   ✅ ${period.name.toUpperCase()} slot triggered for user ${target.user_id || "default"} city=${target.city} city_id=${target.city_id || "legacy"}`);
         console.log(`[scheduler]   Creating scheduled posts for platforms: [${period.platforms.join(", ")}]`);
 
