@@ -158,7 +158,20 @@ export function CityManager({ activeCityId, onActiveCityChange, onCitiesChange }
     const saved = await saveAutomation(activeCityId, patch);
     setSavingAuto(false);
     if (!saved) toast.error("Couldn't save automation");
-    else setAutomation(saved);
+    else {
+      setAutomation(saved);
+      // Recompute badge for this city
+      setPlatformStatus((prev) => ({
+        ...prev,
+        [activeCityId]: {
+          enabled: saved.enabled,
+          hasPlatforms:
+            (saved.morning_platforms?.length ?? 0) +
+              (saved.afternoon_platforms?.length ?? 0) +
+              (saved.evening_platforms?.length ?? 0) > 0,
+        },
+      }));
+    }
   };
 
   const activeCity = cities.find((c) => c.id === activeCityId);
