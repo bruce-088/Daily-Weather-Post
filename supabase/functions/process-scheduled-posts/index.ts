@@ -1445,6 +1445,8 @@ Deno.serve(async (req) => {
         trace("video_render", { success: !!video, mime: video?.mimeType });
 
         let publishedPostUrl: string | null = null;
+        // Map of platform -> external/post id, used to seed post_analytics rows.
+        const platformExternalIds: Record<string, string> = {};
 
         if (video) {
           // Video succeeded — post to all platforms
