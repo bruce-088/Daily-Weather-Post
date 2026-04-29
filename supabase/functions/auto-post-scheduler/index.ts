@@ -291,6 +291,9 @@ Deno.serve(async (req) => {
           console.error(`[scheduler]   ❌ Failed to create scheduled_posts for ${period.name}:`, insErr);
           results.push(`${period.name}: insert_error`);
         } else {
+          for (const r of inserted || []) {
+            console.log(`AUTO: Created scheduled_post row for ${r.platform} (city=${target.city}, slot=${period.name}, voiceover=${voiceoverEnabled && new Set(["youtube","tiktok","instagram"]).has(r.platform)})`);
+          }
           console.log(`[scheduler]   📝 Created ${inserted?.length ?? 0} scheduled_posts row(s) for ${period.name}: ${(inserted || []).map((r: any) => r.platform).join(", ")}`);
           triggered += inserted?.length ?? 0;
           results.push(`${period.name}: queued ${inserted?.length ?? 0}`);
