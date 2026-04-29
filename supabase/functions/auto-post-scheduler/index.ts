@@ -215,19 +215,35 @@ Deno.serve(async (req) => {
       }).format(now);
 
       for (const period of target.periods) {
+        const cityLabelStr = `${target.city}${target.state ? ", " + target.state : ""}`;
+        const baseEntry: any = {
+          city: cityLabelStr,
+          city_id: target.city_id || null,
+          slot: period.name,
+          target_local: period.time || null,
+          current_local: userLocalHm,
+          tz: userTz,
+          platforms: period.platforms,
+          matched: false,
+          reason: "",
+        };
+
         console.log(
           `[scheduler]   ── Checking slot: ${period.name.toUpperCase()} | utc_now=${nowUtcIso} | tz=${userTz} | local_now=${userLocalHm} | target_local=${period.time || "(unset)"} | platforms=[${period.platforms.join(", ") || "none"}]`
         );
         if (!period.enabled || !period.time) {
           console.log(`[scheduler]   ⏭️  SKIP ${period.name} — reason: disabled or no time (enabled=${period.enabled}, time=${period.time})`);
+          if (dryRun) dryRunReport.push({ ...baseEntry, reason: `Disabled or no time set (enabled=${period.enabled}, time=${period.time || "unset"}).` });
           continue;
         }
         if (period.skipDate && period.skipDate === todayLocal) {
           console.log(`[scheduler]   ⏭️  SKIP ${period.name} — reason: skip_date=${period.skipDate} matches today ${todayLocal}`);
+          if (dryRun) dryRunReport.push({ ...baseEntry, reason: `Skipped — slot has skip_date=${period.skipDate} matching today.` });
           continue;
         }
         if (!period.platforms.length) {
           console.log(`[scheduler]   ⏭️  SKIP ${period.name} — reason: no platforms selected for this slot`);
+          if (dryRun) dryRunReport.push({ ...baseEntry, reason: "No platforms selected for this slot. Pick at least one in the city's automation settings." });
           continue;
         }
         const ev = evaluateTime(period.time, userTz);
@@ -236,8 +252,18 @@ Deno.serve(async (req) => {
         );
         if (!ev.shouldPost) {
           console.log(`[scheduler]   ⏭️  SKIP ${period.name} — reason: outside post window (diff=${ev.diff}min, need 0..${POST_WINDOW_MINUTES})`);
+          if (dryRun) {
+            dryRunReport.push({
+              ...baseEntry,
+              target_local: ev.targetLocal,
+              current_local: ev.currentLocal,
+              diff_min: ev.diff,
+              reason: `Outside ${POST_WINDOW_MINUTES}-minute post window (diff=${ev.diff}min). Will fire when local time hits ${ev.targetLocal} ${userTz}.`,
+            });
+          }
           continue;
         }
+
         console.log(`[scheduler]   🎯 Matched slot within extended window (${period.name}, diff=${ev.diff}min)`);
         console.log(`AUTO: Processing slot for ${target.city} at ${period.time} (${period.name}) — city_id=${target.city_id || "legacy"}, user=${target.user_id || "default"}`);
         console.log(`[scheduler]   ✅ ${period.name.toUpperCase()} slot triggered for user ${target.user_id || "default"} city=${target.city} city_id=${target.city_id || "legacy"}`);
@@ -245,11 +271,33 @@ Deno.serve(async (req) => {
 
         if (!target.user_id || !target.city) {
           console.log(`[scheduler]   ⏭️  SKIP ${period.name} — reason: target missing user_id or city (cannot create scheduled_posts)`);
+          if (dryRun) dryRunReport.push({ ...baseEntry, matched: false, reason: "Target missing user_id or city." });
           continue;
         }
 
-        // Duplicate guard: has any scheduled_posts row been created in the last 30 min
-        // for this user + slot (any platform)? Slot is encoded in caption marker [auto:<slot>].
+        // === AI VOICEOVER FLAG (per-user setting) ===
+        const voiceoverEnabled = target.enable_voiceover === true;
+        const VIDEO_PLATFORMS = new Set(["youtube", "tiktok", "instagram"]);
+        if (voiceoverEnabled) {
+          console.log(`[scheduler]   🎙️  voiceover enabled for user ${target.user_id}; will attach to video platforms only`);
+        }
+
+        // ── DRY-RUN: stop before any DB side effects, just record the match. ──
+        if (dryRun) {
+          dryRunReport.push({
+            ...baseEntry,
+            target_local: ev.targetLocal,
+            current_local: ev.currentLocal,
+            diff_min: ev.diff,
+            matched: true,
+            voiceover_enabled: voiceoverEnabled,
+            voiceover_platforms: period.platforms.filter((p: string) => VIDEO_PLATFORMS.has(p)),
+            reason: `Within ${POST_WINDOW_MINUTES}m window (diff=${ev.diff}min). Would publish to: ${period.platforms.join(", ")}.`,
+          });
+          continue;
+        }
+
+        // Duplicate guard (live runs only): has any scheduled_posts row been created in the last 30 min?
         const dupSince = new Date(now.getTime() - DUPLICATE_GUARD_MINUTES * 60 * 1000).toISOString();
         const slotMarker = `[auto:${period.name}]`;
         let dupQuery = supabase
@@ -274,17 +322,6 @@ Deno.serve(async (req) => {
         // Schedule slightly in the future to satisfy validate_scheduled_at trigger.
         const scheduledAt = new Date(now.getTime() + 5_000).toISOString();
 
-        // === AI VOICEOVER FLAG (per-user setting) ===
-        // Only attach voice to video-capable platforms (youtube, tiktok, instagram).
-        // Image-only platforms (twitter, linkedin) get include_voiceover=false even if the user enabled it.
-        // Actual TTS generation happens in process-scheduled-posts so the cron tick stays fast and
-        // a TTS failure cannot block the entire schedule.
-        const voiceoverEnabled = target.enable_voiceover === true;
-        const VIDEO_PLATFORMS = new Set(["youtube", "tiktok", "instagram"]);
-        if (voiceoverEnabled) {
-          console.log(`[scheduler]   🎙️  voiceover enabled for user ${target.user_id}; will attach to video platforms only`);
-        }
-
         // Insert one scheduled_posts row per platform — process-scheduled-posts will execute them.
         const rows = period.platforms.map((platform) => ({
           user_id: target.user_id,
@@ -294,8 +331,6 @@ Deno.serve(async (req) => {
           platform,
           scheduled_at: scheduledAt,
           status: "pending",
-          // Marker lets us detect duplicates and trace origin; process-scheduled-posts
-          // will auto-generate the real caption since this is just a tag, not full copy.
           caption: slotMarker,
           include_voiceover: voiceoverEnabled && VIDEO_PLATFORMS.has(platform),
         }));
@@ -310,7 +345,7 @@ Deno.serve(async (req) => {
           results.push(`${period.name}: insert_error`);
         } else {
           for (const r of inserted || []) {
-            console.log(`AUTO: Created scheduled_post row for ${r.platform} (city=${target.city}, slot=${period.name}, voiceover=${voiceoverEnabled && new Set(["youtube","tiktok","instagram"]).has(r.platform)})`);
+            console.log(`AUTO: Created scheduled_post row for ${r.platform} (city=${target.city}, slot=${period.name}, voiceover=${voiceoverEnabled && VIDEO_PLATFORMS.has(r.platform)})`);
           }
           console.log(`[scheduler]   📝 Created ${inserted?.length ?? 0} scheduled_posts row(s) for ${period.name}: ${(inserted || []).map((r: any) => r.platform).join(", ")}`);
           triggered += inserted?.length ?? 0;
