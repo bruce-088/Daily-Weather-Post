@@ -677,14 +677,19 @@ async function generateVoiceAudio(
   opts?: { speed?: number; stability?: number; similarity?: number },
 ): Promise<VoiceAudioResult> {
   const attempts: VoiceAttemptLog[] = [];
-  // Re-read the env var on every call so a key rotation mid-run is picked up
-  // without needing to redeploy the worker.
-  let apiKey = Deno.env.get("ELEVENLABS_API_KEY");
-  if (!apiKey) {
-    console.error("CRITICAL: ElevenLabs API Key missing in worker");
-    attempts.push({ attempt: 1, status: "missing_key", ok: false, error: "ELEVENLABS_API_KEY env var not set" });
+  // Re-resolve the env var on every call so a key rotation mid-run is picked
+  // up without redeploying the worker. The resolver accepts both the canonical
+  // ELEVENLABS_API_KEY and the legacy ELEVEN_LABS_API_KEY name.
+  const initial = resolveElevenLabsKey();
+  if (!initial) {
+    console.error("Error: ElevenLabs Key not found in environment");
+    console.error("CRITICAL: ElevenLabs API Key missing in worker (checked: ELEVENLABS_API_KEY, ELEVEN_LABS_API_KEY)");
+    attempts.push({ attempt: 1, status: "missing_key", ok: false, error: "No ElevenLabs API key found in env (tried ELEVENLABS_API_KEY, ELEVEN_LABS_API_KEY)" });
     return { ok: false, reason: "missing_key", attempts };
   }
+  let apiKey: string = initial.value;
+  const keySource: string = initial.source;
+  console.log(`[voice] using ElevenLabs key from env var "${keySource}"`);
 
   const speed = clampVoiceParam(opts?.speed, 0.7, 1.2, 1.05);
   const stability = clampVoiceParam(opts?.stability, 0, 1, 0.55);
