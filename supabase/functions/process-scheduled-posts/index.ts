@@ -582,6 +582,21 @@ function resolveVoiceId(input?: string | null): string {
   return input; // assume raw ElevenLabs id
 }
 
+// === ELEVENLABS API KEY RESOLVER ===
+// Background workers run on the service_role side and only see the secrets the
+// project explicitly registered. Different docs/migrations have used two names
+// (ELEVENLABS_API_KEY and ELEVEN_LABS_API_KEY), so we accept either to make
+// the worker robust against accidental rename. We also expose the source name
+// in logs so misconfigurations are obvious without leaking the key value.
+function resolveElevenLabsKey(): { value: string; source: string } | null {
+  const candidates = ["ELEVENLABS_API_KEY", "ELEVEN_LABS_API_KEY", "ELEVENLABS_KEY"];
+  for (const name of candidates) {
+    const v = Deno.env.get(name);
+    if (v && v.trim().length > 0) return { value: v.trim(), source: name };
+  }
+  return null;
+}
+
 function clampVoiceParam(n: any, min: number, max: number, fallback: number): number {
   const v = typeof n === "number" ? n : Number(n);
   if (!isFinite(v)) return fallback;
