@@ -360,13 +360,16 @@ function getTomorrowPreview(weather: WeatherResponse): string {
   return "Tomorrow: " + trend + " and " + c.toLowerCase();
 }
 
-async function fetchPexelsVideoUrl(keyword: string, city: string, region: string): Promise<string | null> {
+// Curated, weather-only Pexels search. NEVER uses city/landmark/region terms —
+// those caused wrong-location footage (e.g. Texas stadiums for Florida cities).
+// Atmosphere clips only: sky, rain, clouds, storms, snow, fog, wind.
+async function fetchPexelsVideoUrl(keyword: string, _city?: string, _region?: string): Promise<string | null> {
   const pexelsKey = Deno.env.get("PEXELS_API_KEY");
   if (!pexelsKey) { console.log("PEXELS_API_KEY not configured, skipping stock video"); return null; }
 
   async function searchPexels(query: string): Promise<string | null> {
     const url = "https://api.pexels.com/videos/search?query=" + encodeURIComponent(query) + "&per_page=15&orientation=portrait&size=medium";
-    console.log("Fetching Pexels video:", query);
+    console.log("[bg] Pexels (weather-only) query:", query);
     const res = await fetch(url, { headers: { Authorization: pexelsKey } });
     if (!res.ok) { console.error("Pexels API error:", res.status); return null; }
     const data = await res.json();
@@ -379,73 +382,35 @@ async function fetchPexelsVideoUrl(keyword: string, city: string, region: string
       || files.find((f: any) => f.quality === "hd")
       || files.find((f: any) => f.quality === "sd")
       || files[0];
-    if (hdFile?.link) { console.log("Pexels video:", hdFile.link.substring(0, 80)); return hdFile.link; }
+    if (hdFile?.link) { console.log("[bg] selected:", hdFile.link.substring(0, 80)); return hdFile.link; }
     return null;
   }
 
-  // City-specific search keywords for cities that don't return accurate Pexels results
-  const cityKeywords: Record<string, string[]> = {
-    "gainesville": ["university of florida campus", "florida swamp nature", "florida oak trees spanish moss"],
-    "tallahassee": ["florida capitol building", "tallahassee florida trees", "florida panhandle nature"],
-    "jacksonville": ["jacksonville florida bridge", "jacksonville beach florida", "st johns river florida"],
-    "orlando": ["orlando florida lake", "orlando florida downtown", "florida theme park"],
-    "tampa": ["tampa bay florida", "tampa skyline waterfront", "tampa riverwalk"],
-    "miami": ["miami beach ocean", "miami skyline biscayne", "south beach florida"],
-    "st. petersburg": ["st pete florida pier", "st petersburg florida waterfront", "tampa bay sunset"],
-    "fort lauderdale": ["fort lauderdale beach", "fort lauderdale florida canal", "south florida coast"],
-    "naples": ["naples florida beach", "naples pier florida", "gulf of mexico florida"],
-    "sarasota": ["sarasota florida beach", "siesta key florida", "sarasota bay"],
-    "pensacola": ["pensacola beach florida", "emerald coast florida", "pensacola bay"],
-    "daytona beach": ["daytona beach florida", "daytona speedway", "florida atlantic coast"],
-    "ocala": ["ocala florida horses", "florida springs nature", "ocala national forest"],
+  // Generic weather-atmosphere library (NO locations, NO landmarks).
+  const atmosphereLibrary: Record<string, string[]> = {
+    sunny:  ["bright blue sky clouds timelapse", "sunshine blue sky", "sun rays clear sky"],
+    clear:  ["clear blue sky timelapse", "sunrise sky clouds", "blue sky white clouds"],
+    cloudy: ["overcast cloudy sky timelapse", "grey clouds moving sky", "cloudy sky"],
+    rain:   ["rain on window closeup", "wet street rain", "raindrops puddle"],
+    storm:  ["thunderstorm lightning sky", "dark storm clouds timelapse", "lightning night sky"],
+    snow:   ["snow falling closeup", "snowfall winter sky", "snowflakes slow motion"],
+    fog:    ["fog mist morning", "foggy atmosphere", "misty fog timelapse"],
+    wind:   ["wind blowing trees", "windy sky clouds fast", "leaves blowing wind"],
   };
 
-  // Build location qualifier to avoid wrong-city matches
-  const locationTag = region && region !== city ? `${city} ${region}` : city;
-  const cityLower = city.toLowerCase();
+  const k = (keyword || "").toLowerCase();
+  const matchedKey = Object.keys(atmosphereLibrary).find((key) => k.includes(key)) || "clear";
+  const queries = atmosphereLibrary[matchedKey];
+  console.log(`[bg] weather-only mode | condition=${matchedKey} (ignored city/region to prevent wrong-location footage)`);
 
   try {
-    // Tier 0: City-specific curated keywords
-    const specificKeywords = cityKeywords[cityLower];
-    if (specificKeywords) {
-      const randomKeyword = specificKeywords[Math.floor(Math.random() * specificKeywords.length)];
-      const specificResult = await searchPexels(randomKeyword);
-      if (specificResult) return specificResult;
-      console.log("No city-specific video for " + city + ", trying skyline");
+    // Try the curated weather queries in random order; fall back to generic sky.
+    const shuffled = [...queries].sort(() => Math.random() - 0.5);
+    for (const q of shuffled) {
+      const result = await searchPexels(q);
+      if (result) return result;
     }
-
-    // Tier 1: City + state skyline (avoids international false matches)
-    if (city) {
-      const skylineResult = await searchPexels(locationTag + " skyline");
-      if (skylineResult) return skylineResult;
-      console.log("No skyline video for " + locationTag + ", trying city + weather");
-    }
-    // Tier 2: City + state + weather condition
-    if (city) {
-      const cityResult = await searchPexels(locationTag + " " + keyword);
-      if (cityResult) return cityResult;
-      console.log("No Pexels videos for " + locationTag + " " + keyword + ", trying region");
-    }
-    // Tier 3: Region/state + weather condition
-    if (region && region !== city) {
-      const regionResult = await searchPexels(region + " " + keyword);
-      if (regionResult) return regionResult;
-      console.log("No Pexels videos for " + region + ", trying nature fallback");
-    }
-    // Tier 4: Nature-based weather (avoids city-name collisions entirely)
-    const natureFallbacks: Record<string, string> = {
-      sunny: "sunshine blue sky nature",
-      clear: "clear sky sunrise nature",
-      cloudy: "cloudy sky timelapse",
-      rain: "rain drops nature",
-      storm: "thunderstorm lightning",
-      snow: "snowfall winter nature",
-      fog: "fog morning nature",
-      wind: "windy trees nature",
-    };
-    const conditionKey = Object.keys(natureFallbacks).find(k => keyword.toLowerCase().includes(k));
-    const fallbackQuery = conditionKey ? natureFallbacks[conditionKey] : keyword + " weather nature";
-    return await searchPexels(fallbackQuery);
+    return await searchPexels("sky clouds timelapse");
   } catch (err) { console.error("Pexels fetch error:", err); return null; }
 }
 
