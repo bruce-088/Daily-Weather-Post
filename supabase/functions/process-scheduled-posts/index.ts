@@ -679,13 +679,25 @@ async function generateVoiceScript(weather: WeatherResponse, tone?: string, plat
   }
 }
 
+// Result type so callers can distinguish 401 / timeout / other failures and
+// surface meaningful notifications to the System Health bell.
+type VoiceAudioResult =
+  | { ok: true; bytes: Uint8Array }
+  | { ok: false; reason: "missing_key" | "unauthorized" | "timeout" | "http_error" | "network_error"; status?: number; detail?: string };
+
 async function generateVoiceAudio(
   script: string,
   voiceId: string,
   opts?: { speed?: number; stability?: number; similarity?: number },
-): Promise<Uint8Array | null> {
-  const apiKey = Deno.env.get("ELEVENLABS_API_KEY");
-  if (!apiKey) { console.error("[voice] ELEVENLABS_API_KEY not configured"); return null; }
+): Promise<VoiceAudioResult> {
+  // Re-read the env var on every call so a key rotation mid-run is picked up
+  // without needing to redeploy the worker.
+  let apiKey = Deno.env.get("ELEVENLABS_API_KEY");
+  if (!apiKey) {
+    console.error("CRITICAL: ElevenLabs API Key missing in worker");
+    return { ok: false, reason: "missing_key" };
+  }
+
   // Default to 1.05× — adds news-anchor energy and trims ~1s off runtime so
   // the spoken CTA always lands before the video clip ends. User overrides
   // (saved in weather_settings.voiceover_speed) still win when present.
@@ -693,25 +705,66 @@ async function generateVoiceAudio(
   const stability = clampVoiceParam(opts?.stability, 0, 1, 0.55);
   const similarity = clampVoiceParam(opts?.similarity, 0, 1, 0.78);
   const url = `https://api.elevenlabs.io/v1/text-to-speech/${resolveVoiceId(voiceId)}?output_format=mp3_44100_128`;
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "xi-api-key": apiKey, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        text: script,
-        model_id: "eleven_turbo_v2_5",
-        voice_settings: { stability, similarity_boost: similarity, style: 0.35, use_speaker_boost: true, speed },
-      }),
-    });
-    if (!res.ok) {
-      console.error("[voice] ElevenLabs TTS failed:", res.status, (await res.text()).slice(0, 200));
-      return null;
+  const body = JSON.stringify({
+    text: script,
+    model_id: "eleven_turbo_v2_5",
+    voice_settings: { stability, similarity_boost: similarity, style: 0.35, use_speaker_boost: true, speed },
+  });
+
+  // Up to 2 attempts. On 401 we re-read ELEVENLABS_API_KEY once before retrying
+  // (covers the case where the secret was rotated between attempts).
+  const MAX_ATTEMPTS = 2;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const controller = new AbortController();
+    // Weather scripts can occasionally take longer than the default Deno
+    // fetch budget — give ElevenLabs a full 30s before we abort.
+    const timeoutId = setTimeout(() => controller.abort(), 30_000);
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "xi-api-key": apiKey!, "Content-Type": "application/json" },
+        body,
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      if (res.status === 401) {
+        const detail = (await res.text()).slice(0, 200);
+        console.error(`[voice] ElevenLabs 401 Unauthorized (attempt ${attempt}/${MAX_ATTEMPTS}):`, detail);
+        if (attempt < MAX_ATTEMPTS) {
+          // Re-read the secret in case it was just rotated.
+          const refreshed = Deno.env.get("ELEVENLABS_API_KEY");
+          if (!refreshed) {
+            console.error("CRITICAL: ElevenLabs API Key missing in worker (during 401 retry)");
+            return { ok: false, reason: "missing_key" };
+          }
+          apiKey = refreshed;
+          continue;
+        }
+        return { ok: false, reason: "unauthorized", status: 401, detail };
+      }
+
+      if (!res.ok) {
+        const detail = (await res.text()).slice(0, 200);
+        console.error("[voice] ElevenLabs TTS failed:", res.status, detail);
+        return { ok: false, reason: "http_error", status: res.status, detail };
+      }
+
+      return { ok: true, bytes: new Uint8Array(await res.arrayBuffer()) };
+    } catch (e) {
+      clearTimeout(timeoutId);
+      const isAbort = (e as any)?.name === "AbortError";
+      if (isAbort) {
+        console.error(`[voice] ElevenLabs TTS timed out after 30s (attempt ${attempt}/${MAX_ATTEMPTS})`);
+        if (attempt < MAX_ATTEMPTS) continue;
+        return { ok: false, reason: "timeout", detail: "ElevenLabs request exceeded 30s" };
+      }
+      console.error("[voice] ElevenLabs TTS error:", e);
+      if (attempt < MAX_ATTEMPTS) continue;
+      return { ok: false, reason: "network_error", detail: e instanceof Error ? e.message : String(e) };
     }
-    return new Uint8Array(await res.arrayBuffer());
-  } catch (e) {
-    console.error("[voice] ElevenLabs TTS error:", e);
-    return null;
   }
+  return { ok: false, reason: "network_error", detail: "exhausted retries" };
 }
 
 async function storeVoiceAudio(supabase: any, userId: string, audio: Uint8Array): Promise<string | null> {
@@ -1058,6 +1111,18 @@ Deno.serve(async (req) => {
       throw new Error("OpenWeatherMap API key not configured");
     }
 
+    // Validate the ElevenLabs API key up front so missing-credential failures
+    // are visible in the worker logs immediately (not deep inside a TTS call).
+    // We do NOT throw — voiceover is optional, and the worker must keep posting
+    // silent video for users who don't have voice enabled.
+    const elevenLabsApiKey = Deno.env.get("ELEVENLABS_API_KEY");
+    if (!elevenLabsApiKey) {
+      console.error("CRITICAL: ElevenLabs API Key missing in worker");
+    } else {
+      console.log("[process] ElevenLabs API key present (worker can generate voiceovers)");
+    }
+
+
     const nowIso = new Date().toISOString();
     // Pick up pending posts that are due, OR retrying posts whose next_retry_at has passed.
     const { data: duePosts, error: fetchError } = await supabase
@@ -1220,23 +1285,75 @@ Deno.serve(async (req) => {
             const script = await generateVoiceScript(weather, captionTone, platformsToPost);
             console.log(`[process] post ${post.id}: VOICE: script="${script}"`);
 
-            const audioBytes = await generateVoiceAudio(script, voiceId, {
-              speed: voiceSpeed,
-              stability: voiceStability,
-              similarity: voiceSimilarity,
-            });
-            if (audioBytes) {
-              const url = await storeVoiceAudio(supabase, post.user_id, audioBytes);
+            const ttsOpts = { speed: voiceSpeed, stability: voiceStability, similarity: voiceSimilarity };
+            // Attempt #1
+            let ttsResult = await generateVoiceAudio(script, voiceId, ttsOpts);
+
+            // === AUDIO VERIFICATION ===
+            // If TTS failed for a transient reason (timeout / network / 5xx), pause 2s
+            // and retry once before we give up and fall back to silent video.
+            const transientFailure = !ttsResult.ok && (ttsResult.reason === "timeout" || ttsResult.reason === "network_error" || (ttsResult.reason === "http_error" && (ttsResult.status ?? 0) >= 500));
+            if (transientFailure) {
+              console.warn(`[process] post ${post.id}: VOICE: transient failure (${(ttsResult as any).reason}) — waiting 2s and retrying once`);
+              await new Promise((r) => setTimeout(r, 2000));
+              ttsResult = await generateVoiceAudio(script, voiceId, ttsOpts);
+            }
+
+            if (ttsResult.ok) {
+              const url = await storeVoiceAudio(supabase, post.user_id, ttsResult.bytes);
               if (url) {
                 voiceUrl = url;
                 console.log(`[process] post ${post.id}: VOICE: audio attached (${url.split("?")[0]})`);
                 // Persist on the row so re-runs don't regenerate the same audio
                 await supabase.from("scheduled_posts").update({ voiceover_url: url }).eq("id", post.id);
               } else {
-                console.warn(`[process] post ${post.id}: VOICE: upload failed — falling back to silent video`);
+                console.warn(`[process] post ${post.id}: VOICE: upload failed — retrying once after 2s`);
+                await new Promise((r) => setTimeout(r, 2000));
+                const retryUrl = await storeVoiceAudio(supabase, post.user_id, ttsResult.bytes);
+                if (retryUrl) {
+                  voiceUrl = retryUrl;
+                  console.log(`[process] post ${post.id}: VOICE: audio attached on retry (${retryUrl.split("?")[0]})`);
+                  await supabase.from("scheduled_posts").update({ voiceover_url: retryUrl }).eq("id", post.id);
+                } else {
+                  console.warn(`[process] post ${post.id}: VOICE: upload failed twice — falling back to silent video`);
+                }
               }
             } else {
-              console.warn(`[process] post ${post.id}: VOICE: TTS failed — falling back to silent video`);
+              const reason = ttsResult.reason;
+              console.warn(`[process] post ${post.id}: VOICE: TTS failed (${reason}) — falling back to silent video`);
+
+              // === ERROR VISIBILITY ===
+              // Surface auth / timeout failures to the in-app notification bell so
+              // the user knows immediately why their post went out without audio.
+              if (reason === "missing_key" || reason === "unauthorized" || reason === "timeout") {
+                const titleMap: Record<string, string> = {
+                  missing_key: "Voiceover Disabled — Missing API Key",
+                  unauthorized: "Voiceover Failed — ElevenLabs 401",
+                  timeout: "Voiceover Failed — Timeout",
+                };
+                const messageMap: Record<string, string> = {
+                  missing_key: `Your post for ${weather.city} was published without voiceover because the ElevenLabs API key is not configured.`,
+                  unauthorized: `Your post for ${weather.city} was published without voiceover — ElevenLabs returned 401 Unauthorized. Please verify your API key.`,
+                  timeout: `Your post for ${weather.city} was published without voiceover — ElevenLabs took longer than 30 seconds to respond.`,
+                };
+                try {
+                  await supabase.from("notifications").insert({
+                    user_id: post.user_id,
+                    title: titleMap[reason],
+                    message: messageMap[reason],
+                    type: "error",
+                  });
+                  await supabase.from("system_logs").insert({
+                    user_id: post.user_id,
+                    type: "voiceover_failed",
+                    message: `ElevenLabs voice generation failed: ${reason}${ttsResult.detail ? ` — ${ttsResult.detail}` : ""}`,
+                    platform: platformsToPost.join(","),
+                    context: { scheduled_post_id: post.id, reason, status: (ttsResult as any).status },
+                  });
+                } catch (notifyErr) {
+                  console.error(`[process] post ${post.id}: VOICE: failed to write failure notification:`, notifyErr);
+                }
+              }
             }
           } catch (vErr) {
             console.error(`[process] post ${post.id}: VOICE: pipeline error — falling back to silent video:`, vErr);
@@ -1245,6 +1362,13 @@ Deno.serve(async (req) => {
         } else if (!voiceUrl && hasVideoPlatform) {
           console.log(`[process] post ${post.id}: VOICE: disabled (row.include_voiceover=${post.include_voiceover}, settings.enable_voiceover=${settingsEnabled})`);
         }
+
+        // Final pre-render verification: if voiceover was requested but no audio
+        // is attached, log a clear marker so the silent fallback is auditable.
+        if (wantVoice && !voiceUrl) {
+          console.warn(`[process] post ${post.id}: VOICE: no audio attached after all attempts — rendering silent`);
+        }
+
 
         // Try video generation once (with voiceover baked in if available)
         console.log(`RENDER START: City: ${weather.city}, VoiceEnabled: ${voiceUrl ? "True" : "False"}`);
