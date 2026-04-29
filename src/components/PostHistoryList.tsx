@@ -22,6 +22,7 @@ import {
   ChevronUp,
   Bot,
   MapPin,
+  ExternalLink,
 } from "lucide-react";
 import type { PostHistoryItem } from "@/lib/api";
 import { triggerDailyPost } from "@/lib/api";
