@@ -1,0 +1,1 @@
+ALTER TABLE public.post_history ADD COLUMN IF NOT EXISTS post_url text;

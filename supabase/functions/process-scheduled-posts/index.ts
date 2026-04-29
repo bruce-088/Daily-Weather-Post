@@ -38,7 +38,7 @@ async function fetchWeatherData(city: string, apiKey: string, state?: string | n
   const geoData = await geoRes.json();
   if (!geoData.length) throw new Error(`Location not found: ${city}`);
 
-  const { lat, lon, name, country, state } = geoData[0];
+  const { lat, lon, name, country, state: geoState } = geoData[0];
 
   const [currentRes, forecastRes] = await Promise.all([
     fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=imperial&appid=${apiKey}`),
@@ -1144,6 +1144,7 @@ Deno.serve(async (req) => {
     for (const post of duePosts) {
       try {
         const scopedCity = await resolveScheduledCity(supabase, post);
+        console.log(`CITY CONFIRMED: ${scopedCity.city}${scopedCity.state ? ", " + scopedCity.state : ""} (city_id=${scopedCity.cityId || "legacy"})`);
         console.log(`[process] post ${post.id}: strict city scope city=${scopedCity.city}${scopedCity.state ? ", " + scopedCity.state : ""} city_id=${scopedCity.cityId || "legacy"} automation_id=${scopedCity.automationId || "none"}`);
         const weather = await fetchWeatherData(scopedCity.city, openWeatherApiKey, scopedCity.state);
         weather.city = scopedCity.city;
@@ -1374,12 +1375,19 @@ Deno.serve(async (req) => {
         console.log(`RENDER START: City: ${weather.city}, VoiceEnabled: ${voiceUrl ? "True" : "False"}`);
         const video = await generateWeatherVideo(weather, timePeriod, voiceUrl);
 
+        let publishedPostUrl: string | null = null;
+
         if (video) {
           // Video succeeded — post to all platforms
           for (const platformName of platformsToPost) {
             const result = await postToPlatform(platformName, supabase, post.user_id, video.data, title, desc, video.mimeType);
             if (result.success) {
               console.log(`Scheduled post ${post.id}: ${platformName} published, ID: ${result.id}`);
+              if (platformName === "youtube" && result.id && !publishedPostUrl) {
+                publishedPostUrl = `https://www.youtube.com/watch?v=${result.id}`;
+              } else if (platformName === "tiktok" && result.id && !publishedPostUrl) {
+                publishedPostUrl = `https://www.tiktok.com/video/${result.id}`;
+              }
             } else {
               errorMessage = result.error || `${platformName} upload failed`;
             }
@@ -1465,7 +1473,7 @@ Deno.serve(async (req) => {
           status: historyStatus, platform: post.platform, city: weather.city,
           temperature: weather.temperature, condition: weather.condition,
           image_url: storedImageUrl, error_message: errorMessage, caption,
-          user_id: post.user_id,
+          user_id: post.user_id, post_url: publishedPostUrl,
         });
         if (historyErr) {
           console.error(`[process] post_history insert failed for ${post.id}:`, historyErr);

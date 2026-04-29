@@ -1506,6 +1506,7 @@ Deno.serve(async (req) => {
       status, platform, city: weather.city, temperature: weather.temperature,
       condition: weather.condition, image_url: storedImageUrl, error_message: errorMessage,
       caption, user_id: userId,
+      post_url: youtubeVideoId ? `https://www.youtube.com/watch?v=${youtubeVideoId}` : null,
     });
     if (historyError) console.error("Failed to log post history:", historyError);
 
