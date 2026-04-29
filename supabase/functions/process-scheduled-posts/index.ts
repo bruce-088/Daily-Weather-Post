@@ -1111,6 +1111,18 @@ Deno.serve(async (req) => {
       throw new Error("OpenWeatherMap API key not configured");
     }
 
+    // Validate the ElevenLabs API key up front so missing-credential failures
+    // are visible in the worker logs immediately (not deep inside a TTS call).
+    // We do NOT throw — voiceover is optional, and the worker must keep posting
+    // silent video for users who don't have voice enabled.
+    const elevenLabsApiKey = Deno.env.get("ELEVENLABS_API_KEY");
+    if (!elevenLabsApiKey) {
+      console.error("CRITICAL: ElevenLabs API Key missing in worker");
+    } else {
+      console.log("[process] ElevenLabs API key present (worker can generate voiceovers)");
+    }
+
+
     const nowIso = new Date().toISOString();
     // Pick up pending posts that are due, OR retrying posts whose next_retry_at has passed.
     const { data: duePosts, error: fetchError } = await supabase
