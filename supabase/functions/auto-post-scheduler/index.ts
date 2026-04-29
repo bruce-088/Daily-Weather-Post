@@ -26,20 +26,38 @@ Deno.serve(async (req) => {
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
   const supabase = createClient(supabaseUrl, supabaseKey);
 
-  // ── HEARTBEAT (very first thing): record that the scheduler is alive ──
-  // This runs even if downstream logic crashes, so System Health reflects
-  // actual cron invocations, not just slot-matching post creations.
+  // ── DRY-RUN MODE ──
+  // When the request body contains { dry_run: true }, the scheduler runs ALL of
+  // its slot-matching logic (per city, per period, per platform) but performs
+  // ZERO side-effects: no scheduled_posts inserts, no notifications, no
+  // system_health writes, no duplicate-guard reads. It returns a structured
+  // diagnostic payload instead so the UI can show exactly what would have fired.
+  let dryRun = false;
   try {
-    await supabase.from("system_health").upsert({
-      id: "auto-post-scheduler",
-      last_run_at: new Date().toISOString(),
-      last_status: "running",
-      last_message: "tick started",
-      updated_at: new Date().toISOString(),
-    });
-    console.log("[scheduler] ❤️  heartbeat recorded");
-  } catch (hbErr) {
-    console.error("[scheduler] heartbeat write failed:", hbErr);
+    if (req.method === "POST") {
+      const body = await req.clone().json().catch(() => ({}));
+      dryRun = body?.dry_run === true;
+    }
+  } catch (_) { /* ignore parse errors */ }
+  const dryRunReport: any[] = [];
+
+  // ── HEARTBEAT (very first thing): record that the scheduler is alive ──
+  // Skipped during dry-run so we don't pollute the System Health card.
+  if (!dryRun) {
+    try {
+      await supabase.from("system_health").upsert({
+        id: "auto-post-scheduler",
+        last_run_at: new Date().toISOString(),
+        last_status: "running",
+        last_message: "tick started",
+        updated_at: new Date().toISOString(),
+      });
+      console.log("[scheduler] ❤️  heartbeat recorded");
+    } catch (hbErr) {
+      console.error("[scheduler] heartbeat write failed:", hbErr);
+    }
+  } else {
+    console.log("[scheduler] 🧪 DRY RUN — no DB side effects will occur");
   }
 
   try {
@@ -197,19 +215,35 @@ Deno.serve(async (req) => {
       }).format(now);
 
       for (const period of target.periods) {
+        const cityLabelStr = `${target.city}${target.state ? ", " + target.state : ""}`;
+        const baseEntry: any = {
+          city: cityLabelStr,
+          city_id: target.city_id || null,
+          slot: period.name,
+          target_local: period.time || null,
+          current_local: userLocalHm,
+          tz: userTz,
+          platforms: period.platforms,
+          matched: false,
+          reason: "",
+        };
+
         console.log(
           `[scheduler]   ── Checking slot: ${period.name.toUpperCase()} | utc_now=${nowUtcIso} | tz=${userTz} | local_now=${userLocalHm} | target_local=${period.time || "(unset)"} | platforms=[${period.platforms.join(", ") || "none"}]`
         );
         if (!period.enabled || !period.time) {
           console.log(`[scheduler]   ⏭️  SKIP ${period.name} — reason: disabled or no time (enabled=${period.enabled}, time=${period.time})`);
+          if (dryRun) dryRunReport.push({ ...baseEntry, reason: `Disabled or no time set (enabled=${period.enabled}, time=${period.time || "unset"}).` });
           continue;
         }
         if (period.skipDate && period.skipDate === todayLocal) {
           console.log(`[scheduler]   ⏭️  SKIP ${period.name} — reason: skip_date=${period.skipDate} matches today ${todayLocal}`);
+          if (dryRun) dryRunReport.push({ ...baseEntry, reason: `Skipped — slot has skip_date=${period.skipDate} matching today.` });
           continue;
         }
         if (!period.platforms.length) {
           console.log(`[scheduler]   ⏭️  SKIP ${period.name} — reason: no platforms selected for this slot`);
+          if (dryRun) dryRunReport.push({ ...baseEntry, reason: "No platforms selected for this slot. Pick at least one in the city's automation settings." });
           continue;
         }
         const ev = evaluateTime(period.time, userTz);
@@ -218,8 +252,18 @@ Deno.serve(async (req) => {
         );
         if (!ev.shouldPost) {
           console.log(`[scheduler]   ⏭️  SKIP ${period.name} — reason: outside post window (diff=${ev.diff}min, need 0..${POST_WINDOW_MINUTES})`);
+          if (dryRun) {
+            dryRunReport.push({
+              ...baseEntry,
+              target_local: ev.targetLocal,
+              current_local: ev.currentLocal,
+              diff_min: ev.diff,
+              reason: `Outside ${POST_WINDOW_MINUTES}-minute post window (diff=${ev.diff}min). Will fire when local time hits ${ev.targetLocal} ${userTz}.`,
+            });
+          }
           continue;
         }
+
         console.log(`[scheduler]   🎯 Matched slot within extended window (${period.name}, diff=${ev.diff}min)`);
         console.log(`AUTO: Processing slot for ${target.city} at ${period.time} (${period.name}) — city_id=${target.city_id || "legacy"}, user=${target.user_id || "default"}`);
         console.log(`[scheduler]   ✅ ${period.name.toUpperCase()} slot triggered for user ${target.user_id || "default"} city=${target.city} city_id=${target.city_id || "legacy"}`);
@@ -227,11 +271,33 @@ Deno.serve(async (req) => {
 
         if (!target.user_id || !target.city) {
           console.log(`[scheduler]   ⏭️  SKIP ${period.name} — reason: target missing user_id or city (cannot create scheduled_posts)`);
+          if (dryRun) dryRunReport.push({ ...baseEntry, matched: false, reason: "Target missing user_id or city." });
           continue;
         }
 
-        // Duplicate guard: has any scheduled_posts row been created in the last 30 min
-        // for this user + slot (any platform)? Slot is encoded in caption marker [auto:<slot>].
+        // === AI VOICEOVER FLAG (per-user setting) ===
+        const voiceoverEnabled = target.enable_voiceover === true;
+        const VIDEO_PLATFORMS = new Set(["youtube", "tiktok", "instagram"]);
+        if (voiceoverEnabled) {
+          console.log(`[scheduler]   🎙️  voiceover enabled for user ${target.user_id}; will attach to video platforms only`);
+        }
+
+        // ── DRY-RUN: stop before any DB side effects, just record the match. ──
+        if (dryRun) {
+          dryRunReport.push({
+            ...baseEntry,
+            target_local: ev.targetLocal,
+            current_local: ev.currentLocal,
+            diff_min: ev.diff,
+            matched: true,
+            voiceover_enabled: voiceoverEnabled,
+            voiceover_platforms: period.platforms.filter((p: string) => VIDEO_PLATFORMS.has(p)),
+            reason: `Within ${POST_WINDOW_MINUTES}m window (diff=${ev.diff}min). Would publish to: ${period.platforms.join(", ")}.`,
+          });
+          continue;
+        }
+
+        // Duplicate guard (live runs only): has any scheduled_posts row been created in the last 30 min?
         const dupSince = new Date(now.getTime() - DUPLICATE_GUARD_MINUTES * 60 * 1000).toISOString();
         const slotMarker = `[auto:${period.name}]`;
         let dupQuery = supabase
@@ -256,17 +322,6 @@ Deno.serve(async (req) => {
         // Schedule slightly in the future to satisfy validate_scheduled_at trigger.
         const scheduledAt = new Date(now.getTime() + 5_000).toISOString();
 
-        // === AI VOICEOVER FLAG (per-user setting) ===
-        // Only attach voice to video-capable platforms (youtube, tiktok, instagram).
-        // Image-only platforms (twitter, linkedin) get include_voiceover=false even if the user enabled it.
-        // Actual TTS generation happens in process-scheduled-posts so the cron tick stays fast and
-        // a TTS failure cannot block the entire schedule.
-        const voiceoverEnabled = target.enable_voiceover === true;
-        const VIDEO_PLATFORMS = new Set(["youtube", "tiktok", "instagram"]);
-        if (voiceoverEnabled) {
-          console.log(`[scheduler]   🎙️  voiceover enabled for user ${target.user_id}; will attach to video platforms only`);
-        }
-
         // Insert one scheduled_posts row per platform — process-scheduled-posts will execute them.
         const rows = period.platforms.map((platform) => ({
           user_id: target.user_id,
@@ -276,8 +331,6 @@ Deno.serve(async (req) => {
           platform,
           scheduled_at: scheduledAt,
           status: "pending",
-          // Marker lets us detect duplicates and trace origin; process-scheduled-posts
-          // will auto-generate the real caption since this is just a tag, not full copy.
           caption: slotMarker,
           include_voiceover: voiceoverEnabled && VIDEO_PLATFORMS.has(platform),
         }));
@@ -292,7 +345,7 @@ Deno.serve(async (req) => {
           results.push(`${period.name}: insert_error`);
         } else {
           for (const r of inserted || []) {
-            console.log(`AUTO: Created scheduled_post row for ${r.platform} (city=${target.city}, slot=${period.name}, voiceover=${voiceoverEnabled && new Set(["youtube","tiktok","instagram"]).has(r.platform)})`);
+            console.log(`AUTO: Created scheduled_post row for ${r.platform} (city=${target.city}, slot=${period.name}, voiceover=${voiceoverEnabled && VIDEO_PLATFORMS.has(r.platform)})`);
           }
           console.log(`[scheduler]   📝 Created ${inserted?.length ?? 0} scheduled_posts row(s) for ${period.name}: ${(inserted || []).map((r: any) => r.platform).join(", ")}`);
           triggered += inserted?.length ?? 0;
@@ -302,82 +355,107 @@ Deno.serve(async (req) => {
 
 
       // === DAILY SUMMARY (fires once per user when local time is 23:30 - 23:59) ===
-      try {
-        if (target.user_id && userLocal.hour === 23 && userLocal.minute >= 30) {
-          // Idempotency: skip if a summary notification already exists for today (user-local).
-          const lookback = new Date(now);
-          lookback.setUTCHours(lookback.getUTCHours() - 6);
-          const { data: existingSummary } = await supabase
-            .from("notifications")
-            .select("id, created_at")
-            .eq("user_id", target.user_id)
-            .eq("title", "Daily summary")
-            .gte("created_at", lookback.toISOString())
-            .limit(1);
-
-          if (!existingSummary || existingSummary.length === 0) {
-            const sodLocal = new Date(`${todayLocal}T00:00:00`);
-            const { data: todays } = await supabase
-              .from("post_history")
-              .select("status, platform, error_message, created_at")
+      // Skipped during dry-run — no notifications should be inserted.
+      if (!dryRun) {
+        try {
+          if (target.user_id && userLocal.hour === 23 && userLocal.minute >= 30) {
+            // Idempotency: skip if a summary notification already exists for today (user-local).
+            const lookback = new Date(now);
+            lookback.setUTCHours(lookback.getUTCHours() - 6);
+            const { data: existingSummary } = await supabase
+              .from("notifications")
+              .select("id, created_at")
               .eq("user_id", target.user_id)
-              .gte("created_at", sodLocal.toISOString());
+              .eq("title", "Daily summary")
+              .gte("created_at", lookback.toISOString())
+              .limit(1);
 
-            const total = todays?.length ?? 0;
-            const successCount = (todays ?? []).filter((p) => p.status === "success").length;
-            const failedCount = (todays ?? []).filter((p) => p.status === "failed").length;
+            if (!existingSummary || existingSummary.length === 0) {
+              const sodLocal = new Date(`${todayLocal}T00:00:00`);
+              const { data: todays } = await supabase
+                .from("post_history")
+                .select("status, platform, error_message, created_at")
+                .eq("user_id", target.user_id)
+                .gte("created_at", sodLocal.toISOString());
 
-            let message: string;
-            let type: "success" | "error" | "info" = "info";
+              const total = todays?.length ?? 0;
+              const successCount = (todays ?? []).filter((p) => p.status === "success").length;
+              const failedCount = (todays ?? []).filter((p) => p.status === "failed").length;
 
-            if (total === 0) {
-              message = "Today: no posts published. Check your automation slots in Settings.";
-              type = "info";
-            } else if (failedCount === 0) {
-              message = `Today: ${successCount}/${total} posts successful. Total engagement: coming soon.`;
-              type = "success";
+              let message: string;
+              let type: "success" | "error" | "info" = "info";
+
+              if (total === 0) {
+                message = "Today: no posts published. Check your automation slots in Settings.";
+                type = "info";
+              } else if (failedCount === 0) {
+                message = `Today: ${successCount}/${total} posts successful. Total engagement: coming soon.`;
+                type = "success";
+              } else {
+                message = `Today: ${successCount}/${total} posts successful, ${failedCount} failed. Total engagement: coming soon.`;
+                type = failedCount > successCount ? "error" : "info";
+              }
+
+              const meta = {
+                v: 1,
+                kind: "summary",
+                date: todayLocal,
+                total,
+                success: successCount,
+                failed: failedCount,
+              };
+              const fullMessage = `${message}\n<<META>>${JSON.stringify(meta)}`;
+
+              const { error: sumErr } = await supabase.from("notifications").insert({
+                user_id: target.user_id,
+                title: "Daily summary",
+                message: fullMessage,
+                type,
+              });
+              if (sumErr) console.error("[scheduler] daily summary insert failed:", sumErr);
+              else console.log(`[scheduler] daily summary sent to user ${target.user_id}`);
             } else {
-              message = `Today: ${successCount}/${total} posts successful, ${failedCount} failed. Total engagement: coming soon.`;
-              type = failedCount > successCount ? "error" : "info";
+              console.log(`[scheduler] daily summary already exists for user ${target.user_id} today`);
             }
-
-            const meta = {
-              v: 1,
-              kind: "summary",
-              date: todayLocal,
-              total,
-              success: successCount,
-              failed: failedCount,
-            };
-            const fullMessage = `${message}\n<<META>>${JSON.stringify(meta)}`;
-
-            const { error: sumErr } = await supabase.from("notifications").insert({
-              user_id: target.user_id,
-              title: "Daily summary",
-              message: fullMessage,
-              type,
-            });
-            if (sumErr) console.error("[scheduler] daily summary insert failed:", sumErr);
-            else console.log(`[scheduler] daily summary sent to user ${target.user_id}`);
-          } else {
-            console.log(`[scheduler] daily summary already exists for user ${target.user_id} today`);
           }
+        } catch (sumE) {
+          console.error("[scheduler] daily summary error:", sumE);
         }
-      } catch (sumE) {
-        console.error("[scheduler] daily summary error:", sumE);
       }
     }
 
-    // Mark heartbeat as success
-    try {
-      await supabase.from("system_health").upsert({
-        id: "auto-post-scheduler",
-        last_run_at: new Date().toISOString(),
-        last_status: "ok",
-        last_message: `triggered=${triggered}`,
-        updated_at: new Date().toISOString(),
+    // Mark heartbeat as success (skipped during dry-run).
+    if (!dryRun) {
+      try {
+        await supabase.from("system_health").upsert({
+          id: "auto-post-scheduler",
+          last_run_at: new Date().toISOString(),
+          last_status: "ok",
+          last_message: `triggered=${triggered}`,
+          updated_at: new Date().toISOString(),
+        });
+      } catch (_) { /* best-effort */ }
+    }
+
+    if (dryRun) {
+      // Build a flat human-readable summary the UI can render line-by-line.
+      const summary = dryRunReport.map((e: any) => {
+        const matchedTxt = e.matched ? "✅ Slot Match Found" : "⏭️  No match";
+        const platformsTxt = (e.platforms && e.platforms.length) ? e.platforms.join(", ") : "none";
+        return `${matchedTxt} for ${e.city} [${e.slot}] — Platforms: ${platformsTxt}. ${e.reason}`;
       });
-    } catch (_) { /* best-effort */ }
+      return new Response(
+        JSON.stringify({
+          dry_run: true,
+          message: "Dry run complete — no rows inserted, no notifications sent.",
+          checked_targets: scheduleTargets.length,
+          would_trigger: dryRunReport.filter((e: any) => e.matched).length,
+          report: dryRunReport,
+          summary,
+        }, null, 2),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     return new Response(
       JSON.stringify({ message: "Auto-post check complete", triggered, results }),
@@ -386,18 +464,21 @@ Deno.serve(async (req) => {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     console.error("Auto-post scheduler error:", message);
-    // Record failure but STILL return 200 so cron doesn't think function is down
-    try {
-      await supabase.from("system_health").upsert({
-        id: "auto-post-scheduler",
-        last_run_at: new Date().toISOString(),
-        last_status: "error",
-        last_message: message.slice(0, 500),
-        updated_at: new Date().toISOString(),
-      });
-    } catch (_) { /* best-effort */ }
+    // Record failure but STILL return 200 so cron doesn't think function is down.
+    // Skipped during dry-run so a debug click doesn't flip System Health to red.
+    if (!dryRun) {
+      try {
+        await supabase.from("system_health").upsert({
+          id: "auto-post-scheduler",
+          last_run_at: new Date().toISOString(),
+          last_status: "error",
+          last_message: message.slice(0, 500),
+          updated_at: new Date().toISOString(),
+        });
+      } catch (_) { /* best-effort */ }
+    }
     return new Response(
-      JSON.stringify({ message: "Scheduler completed with errors", error: message }),
+      JSON.stringify({ dry_run: dryRun, message: "Scheduler completed with errors", error: message }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

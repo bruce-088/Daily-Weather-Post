@@ -696,13 +696,15 @@ async function generateVoiceAudio(
         const detail = (await res.text()).slice(0, 200);
         console.error(`[voice] ElevenLabs 401 Unauthorized (attempt ${attempt}/${MAX_ATTEMPTS}):`, detail);
         if (attempt < MAX_ATTEMPTS) {
-          // Re-read the secret in case it was just rotated.
+          // Re-read the secret in case it was just rotated, then back off 2s.
           const refreshed = Deno.env.get("ELEVENLABS_API_KEY");
           if (!refreshed) {
             console.error("CRITICAL: ElevenLabs API Key missing in worker (during 401 retry)");
             return { ok: false, reason: "missing_key" };
           }
           apiKey = refreshed;
+          console.warn(`[voice] backoff 2s before retry (after 401)`);
+          await new Promise((r) => setTimeout(r, 2000));
           continue;
         }
         return { ok: false, reason: "unauthorized", status: 401, detail };
@@ -710,7 +712,13 @@ async function generateVoiceAudio(
 
       if (!res.ok) {
         const detail = (await res.text()).slice(0, 200);
-        console.error("[voice] ElevenLabs TTS failed:", res.status, detail);
+        console.error(`[voice] ElevenLabs TTS failed (attempt ${attempt}/${MAX_ATTEMPTS}): status=${res.status}`, detail);
+        // Retry on 5xx with 2s backoff; bail immediately on 4xx (other than 401 above).
+        if (attempt < MAX_ATTEMPTS && res.status >= 500) {
+          console.warn(`[voice] backoff 2s before retry (after ${res.status})`);
+          await new Promise((r) => setTimeout(r, 2000));
+          continue;
+        }
         return { ok: false, reason: "http_error", status: res.status, detail };
       }
 
@@ -720,11 +728,19 @@ async function generateVoiceAudio(
       const isAbort = (e as any)?.name === "AbortError";
       if (isAbort) {
         console.error(`[voice] ElevenLabs TTS timed out after 30s (attempt ${attempt}/${MAX_ATTEMPTS})`);
-        if (attempt < MAX_ATTEMPTS) continue;
+        if (attempt < MAX_ATTEMPTS) {
+          console.warn(`[voice] backoff 2s before retry (after timeout)`);
+          await new Promise((r) => setTimeout(r, 2000));
+          continue;
+        }
         return { ok: false, reason: "timeout", detail: "ElevenLabs request exceeded 30s" };
       }
-      console.error("[voice] ElevenLabs TTS error:", e);
-      if (attempt < MAX_ATTEMPTS) continue;
+      console.error(`[voice] ElevenLabs TTS error (attempt ${attempt}/${MAX_ATTEMPTS}):`, e);
+      if (attempt < MAX_ATTEMPTS) {
+        console.warn(`[voice] backoff 2s before retry (after network error)`);
+        await new Promise((r) => setTimeout(r, 2000));
+        continue;
+      }
       return { ok: false, reason: "network_error", detail: e instanceof Error ? e.message : String(e) };
     }
   }
@@ -1285,11 +1301,34 @@ Deno.serve(async (req) => {
               }
             } else {
               const reason = ttsResult.reason;
-              console.warn(`[process] post ${post.id}: VOICE: TTS failed (${reason}) — falling back to silent video`);
+              const status = (ttsResult as any).status;
+              const detail = (ttsResult as any).detail;
+              console.warn(`[process] post ${post.id}: VOICE: TTS failed (reason=${reason}, status=${status ?? "n/a"}) — falling back to silent video`);
 
               // === ERROR VISIBILITY ===
-              // Surface auth / timeout failures to the in-app notification bell so
-              // the user knows immediately why their post went out without audio.
+              // ALWAYS write the exact failure (with status code) to system_logs so
+              // the user can see "401" / "500" / "Timeout" in the System Health view.
+              try {
+                await supabase.from("system_logs").insert({
+                  user_id: post.user_id,
+                  type: "voiceover_failed",
+                  message: `ElevenLabs voice generation failed: reason=${reason}, status=${status ?? "n/a"}${detail ? ` — ${String(detail).slice(0, 200)}` : ""}`,
+                  platform: platformsToPost.join(","),
+                  context: {
+                    scheduled_post_id: post.id,
+                    reason,
+                    status: status ?? null,
+                    detail: detail ?? null,
+                    city: weather.city,
+                  },
+                });
+              } catch (logErr) {
+                console.error(`[process] post ${post.id}: VOICE: failed to write system_logs entry:`, logErr);
+              }
+
+              // Surface auth / timeout / missing-key failures to the in-app
+              // notification bell so the user knows immediately why the post
+              // went out without audio.
               if (reason === "missing_key" || reason === "unauthorized" || reason === "timeout") {
                 const titleMap: Record<string, string> = {
                   missing_key: "Voiceover Disabled — Missing API Key",
@@ -1307,13 +1346,6 @@ Deno.serve(async (req) => {
                     title: titleMap[reason],
                     message: messageMap[reason],
                     type: "error",
-                  });
-                  await supabase.from("system_logs").insert({
-                    user_id: post.user_id,
-                    type: "voiceover_failed",
-                    message: `ElevenLabs voice generation failed: ${reason}${ttsResult.detail ? ` — ${ttsResult.detail}` : ""}`,
-                    platform: platformsToPost.join(","),
-                    context: { scheduled_post_id: post.id, reason, status: (ttsResult as any).status },
                   });
                 } catch (notifyErr) {
                   console.error(`[process] post ${post.id}: VOICE: failed to write failure notification:`, notifyErr);
