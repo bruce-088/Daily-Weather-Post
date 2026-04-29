@@ -1301,11 +1301,34 @@ Deno.serve(async (req) => {
               }
             } else {
               const reason = ttsResult.reason;
-              console.warn(`[process] post ${post.id}: VOICE: TTS failed (${reason}) — falling back to silent video`);
+              const status = (ttsResult as any).status;
+              const detail = (ttsResult as any).detail;
+              console.warn(`[process] post ${post.id}: VOICE: TTS failed (reason=${reason}, status=${status ?? "n/a"}) — falling back to silent video`);
 
               // === ERROR VISIBILITY ===
-              // Surface auth / timeout failures to the in-app notification bell so
-              // the user knows immediately why their post went out without audio.
+              // ALWAYS write the exact failure (with status code) to system_logs so
+              // the user can see "401" / "500" / "Timeout" in the System Health view.
+              try {
+                await supabase.from("system_logs").insert({
+                  user_id: post.user_id,
+                  type: "voiceover_failed",
+                  message: `ElevenLabs voice generation failed: reason=${reason}, status=${status ?? "n/a"}${detail ? ` — ${String(detail).slice(0, 200)}` : ""}`,
+                  platform: platformsToPost.join(","),
+                  context: {
+                    scheduled_post_id: post.id,
+                    reason,
+                    status: status ?? null,
+                    detail: detail ?? null,
+                    city: weather.city,
+                  },
+                });
+              } catch (logErr) {
+                console.error(`[process] post ${post.id}: VOICE: failed to write system_logs entry:`, logErr);
+              }
+
+              // Surface auth / timeout / missing-key failures to the in-app
+              // notification bell so the user knows immediately why the post
+              // went out without audio.
               if (reason === "missing_key" || reason === "unauthorized" || reason === "timeout") {
                 const titleMap: Record<string, string> = {
                   missing_key: "Voiceover Disabled — Missing API Key",
@@ -1323,13 +1346,6 @@ Deno.serve(async (req) => {
                     title: titleMap[reason],
                     message: messageMap[reason],
                     type: "error",
-                  });
-                  await supabase.from("system_logs").insert({
-                    user_id: post.user_id,
-                    type: "voiceover_failed",
-                    message: `ElevenLabs voice generation failed: ${reason}${ttsResult.detail ? ` — ${ttsResult.detail}` : ""}`,
-                    platform: platformsToPost.join(","),
-                    context: { scheduled_post_id: post.id, reason, status: (ttsResult as any).status },
                   });
                 } catch (notifyErr) {
                   console.error(`[process] post ${post.id}: VOICE: failed to write failure notification:`, notifyErr);
