@@ -220,6 +220,10 @@ export interface PostHistoryItem {
   next_retry_at?: string | null;
   last_attempt_at?: string | null;
   post_url?: string | null;
+  voice_status?: string | null;
+  voice_error?: string | null;
+  voice_attempts?: number | null;
+  debug_trace?: { steps?: Array<{ ts: string; step: string; detail?: any }>; captured_at?: string } | null;
 }
 
 export async function fetchPostHistory(limit = 10): Promise<PostHistoryItem[]> {
@@ -230,7 +234,7 @@ export async function fetchPostHistory(limit = 10): Promise<PostHistoryItem[]> {
     .limit(limit);
 
   if (error) return [];
-  return data || [];
+  return (data || []) as unknown as PostHistoryItem[];
 }
 
 // --- Scheduled Posts ---

@@ -181,6 +181,7 @@ export type Database = {
           city: string
           condition: string | null
           created_at: string
+          debug_trace: Json | null
           error_message: string | null
           id: string
           image_url: string | null
@@ -192,12 +193,16 @@ export type Database = {
           status: string
           temperature: number | null
           user_id: string | null
+          voice_attempts: number
+          voice_error: string | null
+          voice_status: string | null
         }
         Insert: {
           caption?: string | null
           city: string
           condition?: string | null
           created_at?: string
+          debug_trace?: Json | null
           error_message?: string | null
           id?: string
           image_url?: string | null
@@ -209,12 +214,16 @@ export type Database = {
           status?: string
           temperature?: number | null
           user_id?: string | null
+          voice_attempts?: number
+          voice_error?: string | null
+          voice_status?: string | null
         }
         Update: {
           caption?: string | null
           city?: string
           condition?: string | null
           created_at?: string
+          debug_trace?: Json | null
           error_message?: string | null
           id?: string
           image_url?: string | null
@@ -226,6 +235,9 @@ export type Database = {
           status?: string
           temperature?: number | null
           user_id?: string | null
+          voice_attempts?: number
+          voice_error?: string | null
+          voice_status?: string | null
         }
         Relationships: []
       }
@@ -269,6 +281,7 @@ export type Database = {
           city: string
           city_id: string | null
           created_at: string
+          debug_trace: Json | null
           error_message: string | null
           id: string
           include_voiceover: boolean
@@ -278,6 +291,9 @@ export type Database = {
           scheduled_at: string
           status: string
           user_id: string
+          voice_attempts: number
+          voice_error: string | null
+          voice_status: string | null
           voiceover_url: string | null
         }
         Insert: {
@@ -286,6 +302,7 @@ export type Database = {
           city: string
           city_id?: string | null
           created_at?: string
+          debug_trace?: Json | null
           error_message?: string | null
           id?: string
           include_voiceover?: boolean
@@ -295,6 +312,9 @@ export type Database = {
           scheduled_at: string
           status?: string
           user_id: string
+          voice_attempts?: number
+          voice_error?: string | null
+          voice_status?: string | null
           voiceover_url?: string | null
         }
         Update: {
@@ -303,6 +323,7 @@ export type Database = {
           city?: string
           city_id?: string | null
           created_at?: string
+          debug_trace?: Json | null
           error_message?: string | null
           id?: string
           include_voiceover?: boolean
@@ -312,6 +333,9 @@ export type Database = {
           scheduled_at?: string
           status?: string
           user_id?: string
+          voice_attempts?: number
+          voice_error?: string | null
+          voice_status?: string | null
           voiceover_url?: string | null
         }
         Relationships: []
@@ -456,6 +480,7 @@ export type Database = {
           caption_tone: string
           city: string
           created_at: string
+          enable_debug_trace: boolean
           enable_voiceover: boolean
           evening_platforms: Json
           evening_post_time: string
@@ -503,6 +528,7 @@ export type Database = {
           caption_tone?: string
           city?: string
           created_at?: string
+          enable_debug_trace?: boolean
           enable_voiceover?: boolean
           evening_platforms?: Json
           evening_post_time?: string
@@ -550,6 +576,7 @@ export type Database = {
           caption_tone?: string
           city?: string
           created_at?: string
+          enable_debug_trace?: boolean
           enable_voiceover?: boolean
           evening_platforms?: Json
           evening_post_time?: string

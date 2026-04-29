@@ -283,6 +283,43 @@ export function PostHistoryList({ posts, loading, onReuse, onChanged }: PostHist
                               🤖 Automated
                             </span>
                           )}
+                          {(() => {
+                            // Visual status indicator: ✅ posted with voice / ⚠️ posted without voice / ❌ failed
+                            const isSuccess = post.status === "success";
+                            const vs = post.voice_status;
+                            const hadVoice = vs === "success" || vs === "retried";
+                            if (!isSuccess) {
+                              return (
+                                <span
+                                  className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium bg-destructive/15 text-destructive border border-destructive/30"
+                                  title={post.error_message || "Failed"}
+                                >
+                                  ❌ Failed
+                                </span>
+                              );
+                            }
+                            if (hadVoice) {
+                              return (
+                                <span
+                                  className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium bg-green-500/15 text-green-500 border border-green-500/30"
+                                  title={`Voiceover attached${vs === "retried" ? ` (retried, ${post.voice_attempts ?? 2} attempts)` : ""}`}
+                                >
+                                  ✅ Posted with voice
+                                </span>
+                              );
+                            }
+                            if (vs === "failed") {
+                              return (
+                                <span
+                                  className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium bg-amber-500/15 text-amber-500 border border-amber-500/30"
+                                  title={post.voice_error || "Voiceover failed — published silently"}
+                                >
+                                  ⚠️ Posted without voice
+                                </span>
+                              );
+                            }
+                            return null;
+                          })()}
                         </div>
                         {post.caption && (
                           <p className="text-xs text-muted-foreground line-clamp-2 mt-1 italic">

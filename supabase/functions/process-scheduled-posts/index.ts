@@ -645,26 +645,32 @@ async function generateVoiceScript(weather: WeatherResponse, tone?: string, plat
 
 // Result type so callers can distinguish 401 / timeout / other failures and
 // surface meaningful notifications to the System Health bell.
+export interface VoiceAttemptLog {
+  attempt: number;
+  status: number | "timeout" | "network_error" | "missing_key";
+  ok: boolean;
+  error?: string;
+}
+
 type VoiceAudioResult =
-  | { ok: true; bytes: Uint8Array }
-  | { ok: false; reason: "missing_key" | "unauthorized" | "timeout" | "http_error" | "network_error"; status?: number; detail?: string };
+  | { ok: true; bytes: Uint8Array; attempts: VoiceAttemptLog[] }
+  | { ok: false; reason: "missing_key" | "unauthorized" | "timeout" | "http_error" | "network_error"; status?: number; detail?: string; attempts: VoiceAttemptLog[] };
 
 async function generateVoiceAudio(
   script: string,
   voiceId: string,
   opts?: { speed?: number; stability?: number; similarity?: number },
 ): Promise<VoiceAudioResult> {
+  const attempts: VoiceAttemptLog[] = [];
   // Re-read the env var on every call so a key rotation mid-run is picked up
   // without needing to redeploy the worker.
   let apiKey = Deno.env.get("ELEVENLABS_API_KEY");
   if (!apiKey) {
     console.error("CRITICAL: ElevenLabs API Key missing in worker");
-    return { ok: false, reason: "missing_key" };
+    attempts.push({ attempt: 1, status: "missing_key", ok: false, error: "ELEVENLABS_API_KEY env var not set" });
+    return { ok: false, reason: "missing_key", attempts };
   }
 
-  // Default to 1.05× — adds news-anchor energy and trims ~1s off runtime so
-  // the spoken CTA always lands before the video clip ends. User overrides
-  // (saved in weather_settings.voiceover_speed) still win when present.
   const speed = clampVoiceParam(opts?.speed, 0.7, 1.2, 1.05);
   const stability = clampVoiceParam(opts?.stability, 0, 1, 0.55);
   const similarity = clampVoiceParam(opts?.similarity, 0, 1, 0.78);
@@ -675,13 +681,9 @@ async function generateVoiceAudio(
     voice_settings: { stability, similarity_boost: similarity, style: 0.35, use_speaker_boost: true, speed },
   });
 
-  // Up to 2 attempts. On 401 we re-read ELEVENLABS_API_KEY once before retrying
-  // (covers the case where the secret was rotated between attempts).
   const MAX_ATTEMPTS = 2;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     const controller = new AbortController();
-    // Weather scripts can occasionally take longer than the default Deno
-    // fetch budget — give ElevenLabs a full 30s before we abort.
     const timeoutId = setTimeout(() => controller.abort(), 30_000);
     try {
       const res = await fetch(url, {
@@ -695,56 +697,60 @@ async function generateVoiceAudio(
       if (res.status === 401) {
         const detail = (await res.text()).slice(0, 200);
         console.error(`[voice] ElevenLabs 401 Unauthorized (attempt ${attempt}/${MAX_ATTEMPTS}):`, detail);
+        attempts.push({ attempt, status: 401, ok: false, error: detail || "Unauthorized" });
         if (attempt < MAX_ATTEMPTS) {
-          // Re-read the secret in case it was just rotated, then back off 2s.
           const refreshed = Deno.env.get("ELEVENLABS_API_KEY");
           if (!refreshed) {
             console.error("CRITICAL: ElevenLabs API Key missing in worker (during 401 retry)");
-            return { ok: false, reason: "missing_key" };
+            return { ok: false, reason: "missing_key", attempts };
           }
           apiKey = refreshed;
           console.warn(`[voice] backoff 2s before retry (after 401)`);
           await new Promise((r) => setTimeout(r, 2000));
           continue;
         }
-        return { ok: false, reason: "unauthorized", status: 401, detail };
+        return { ok: false, reason: "unauthorized", status: 401, detail, attempts };
       }
 
       if (!res.ok) {
         const detail = (await res.text()).slice(0, 200);
         console.error(`[voice] ElevenLabs TTS failed (attempt ${attempt}/${MAX_ATTEMPTS}): status=${res.status}`, detail);
-        // Retry on 5xx with 2s backoff; bail immediately on 4xx (other than 401 above).
+        attempts.push({ attempt, status: res.status, ok: false, error: detail });
         if (attempt < MAX_ATTEMPTS && res.status >= 500) {
           console.warn(`[voice] backoff 2s before retry (after ${res.status})`);
           await new Promise((r) => setTimeout(r, 2000));
           continue;
         }
-        return { ok: false, reason: "http_error", status: res.status, detail };
+        return { ok: false, reason: "http_error", status: res.status, detail, attempts };
       }
 
-      return { ok: true, bytes: new Uint8Array(await res.arrayBuffer()) };
+      attempts.push({ attempt, status: 200, ok: true });
+      return { ok: true, bytes: new Uint8Array(await res.arrayBuffer()), attempts };
     } catch (e) {
       clearTimeout(timeoutId);
       const isAbort = (e as any)?.name === "AbortError";
       if (isAbort) {
         console.error(`[voice] ElevenLabs TTS timed out after 30s (attempt ${attempt}/${MAX_ATTEMPTS})`);
+        attempts.push({ attempt, status: "timeout", ok: false, error: "exceeded 30s" });
         if (attempt < MAX_ATTEMPTS) {
           console.warn(`[voice] backoff 2s before retry (after timeout)`);
           await new Promise((r) => setTimeout(r, 2000));
           continue;
         }
-        return { ok: false, reason: "timeout", detail: "ElevenLabs request exceeded 30s" };
+        return { ok: false, reason: "timeout", detail: "ElevenLabs request exceeded 30s", attempts };
       }
+      const errMsg = e instanceof Error ? e.message : String(e);
       console.error(`[voice] ElevenLabs TTS error (attempt ${attempt}/${MAX_ATTEMPTS}):`, e);
+      attempts.push({ attempt, status: "network_error", ok: false, error: errMsg });
       if (attempt < MAX_ATTEMPTS) {
         console.warn(`[voice] backoff 2s before retry (after network error)`);
         await new Promise((r) => setTimeout(r, 2000));
         continue;
       }
-      return { ok: false, reason: "network_error", detail: e instanceof Error ? e.message : String(e) };
+      return { ok: false, reason: "network_error", detail: errMsg, attempts };
     }
   }
-  return { ok: false, reason: "network_error", detail: "exhausted retries" };
+  return { ok: false, reason: "network_error", detail: "exhausted retries", attempts };
 }
 
 async function storeVoiceAudio(supabase: any, userId: string, audio: Uint8Array): Promise<string | null> {
@@ -1122,13 +1128,31 @@ Deno.serve(async (req) => {
     let failed = 0;
 
     for (const post of duePosts) {
+      // === DEBUG TRACE COLLECTOR ===
+      // Always built (cheap), persisted to scheduled_posts/post_history when the
+      // user has flipped on enable_debug_trace in weather_settings (one-shot flag).
+      const traceSteps: Array<{ ts: string; step: string; detail?: any }> = [];
+      const trace = (step: string, detail?: any) => {
+        const entry = { ts: new Date().toISOString(), step, detail };
+        traceSteps.push(entry);
+        console.log(`[trace ${post.id}] ${step}`, detail ?? "");
+      };
+      // Voice telemetry — written to scheduled_posts + post_history regardless of debug flag.
+      let voiceStatus: "success" | "retried" | "failed" | "skipped" | "not_requested" = "not_requested";
+      let voiceError: string | null = null;
+      let voiceAttemptsCount = 0;
+      let debugTraceEnabled = false;
+
       try {
         const scopedCity = await resolveScheduledCity(supabase, post);
         console.log(`CITY CONFIRMED: ${scopedCity.city}${scopedCity.state ? ", " + scopedCity.state : ""} (city_id=${scopedCity.cityId || "legacy"})`);
         console.log(`[process] post ${post.id}: strict city scope city=${scopedCity.city}${scopedCity.state ? ", " + scopedCity.state : ""} city_id=${scopedCity.cityId || "legacy"} automation_id=${scopedCity.automationId || "none"}`);
+        trace("city_resolved", { city: scopedCity.city, state: scopedCity.state, city_id: scopedCity.cityId, automation_id: scopedCity.automationId });
+        trace("schedule_match", { scheduled_at: post.scheduled_at, now: new Date().toISOString(), within_window: true });
         const weather = await fetchWeatherData(scopedCity.city, openWeatherApiKey, scopedCity.state);
         weather.city = scopedCity.city;
         if (scopedCity.state) weather.stateOrRegion = scopedCity.state;
+        trace("weather_fetched", { temperature: weather.temperature, condition: weather.condition });
 
         // Use pre-written caption if available, otherwise auto-generate.
         // Auto-post rows from auto-post-scheduler use a marker like "[auto:morning]"
@@ -1229,6 +1253,7 @@ Deno.serve(async (req) => {
         // video header shows the correct period badge for auto-posts.
         const slotMatch = rawCaption ? /\[auto:([a-z]+)\]/i.exec(rawCaption) : null;
         const timePeriod = slotMatch ? slotMatch[1].toLowerCase() : null;
+        trace("platforms_resolved", { platforms: platformsToPost, slot: timePeriod, automated: isAutoMarker });
 
         // === AI VOICEOVER (auto-posts) ===
         // include_voiceover is set by auto-post-scheduler ONLY for video-capable platforms.
@@ -1241,17 +1266,36 @@ Deno.serve(async (req) => {
 
         let voiceUrl: string | null = post.voiceover_url || null;
         let voiceSettingsRow: any = null;
-        if (!voiceUrl && post.user_id && hasVideoPlatform) {
+        if (post.user_id) {
           const { data: vSettings } = await supabase
             .from("weather_settings")
-            .select("enable_voiceover, voiceover_voice_id, voiceover_speed, voiceover_stability, voiceover_similarity")
+            .select("enable_voiceover, voiceover_voice_id, voiceover_speed, voiceover_stability, voiceover_similarity, enable_debug_trace")
             .eq("user_id", post.user_id)
             .limit(1)
             .maybeSingle();
           voiceSettingsRow = vSettings || null;
+          debugTraceEnabled = voiceSettingsRow?.enable_debug_trace === true;
+          if (debugTraceEnabled) {
+            console.log(`[process] post ${post.id}: 🔍 DEBUG TRACE ENABLED — full step trace will be persisted`);
+          }
         }
         const settingsEnabled = voiceSettingsRow?.enable_voiceover === true;
         const wantVoice = !voiceUrl && hasVideoPlatform && (post.include_voiceover === true || settingsEnabled);
+        trace("voice_decision", {
+          include_voiceover_flag: post.include_voiceover === true,
+          settings_enable_voiceover: settingsEnabled,
+          has_video_platform: hasVideoPlatform,
+          will_attempt: wantVoice,
+        });
+
+        if (!hasVideoPlatform) {
+          voiceStatus = "skipped";
+          voiceError = "No video-capable platform in selection";
+        } else if (!wantVoice && !voiceUrl) {
+          voiceStatus = "not_requested";
+        } else if (voiceUrl) {
+          voiceStatus = "success"; // pre-attached audio
+        }
 
         if (wantVoice && post.user_id) {
           console.log(`[process] post ${post.id}: VOICE: enabled (row.include_voiceover=${post.include_voiceover}, settings.enable_voiceover=${settingsEnabled})`);
@@ -1261,6 +1305,7 @@ Deno.serve(async (req) => {
             const voiceStability = voiceSettingsRow?.voiceover_stability;
             const voiceSimilarity = voiceSettingsRow?.voiceover_similarity;
             console.log(`[process] post ${post.id}: VOICE: config voice=${voiceId} speed=${voiceSpeed} stability=${voiceStability} similarity=${voiceSimilarity}`);
+            trace("voice_config", { voice_id: voiceId, speed: voiceSpeed, stability: voiceStability, similarity: voiceSimilarity });
 
             console.log(`[process] post ${post.id}: VOICE: generating script`);
             const script = await generateVoiceScript(weather, captionTone, platformsToPost);
@@ -1269,23 +1314,24 @@ Deno.serve(async (req) => {
             const ttsOpts = { speed: voiceSpeed, stability: voiceStability, similarity: voiceSimilarity };
             // Attempt #1
             let ttsResult = await generateVoiceAudio(script, voiceId, ttsOpts);
+            voiceAttemptsCount = ttsResult.attempts.length;
 
             // === AUDIO VERIFICATION ===
-            // If TTS failed for a transient reason (timeout / network / 5xx), pause 2s
-            // and retry once before we give up and fall back to silent video.
             const transientFailure = !ttsResult.ok && (ttsResult.reason === "timeout" || ttsResult.reason === "network_error" || (ttsResult.reason === "http_error" && (ttsResult.status ?? 0) >= 500));
             if (transientFailure) {
               console.warn(`[process] post ${post.id}: VOICE: transient failure (${(ttsResult as any).reason}) — waiting 2s and retrying once`);
               await new Promise((r) => setTimeout(r, 2000));
               ttsResult = await generateVoiceAudio(script, voiceId, ttsOpts);
+              voiceAttemptsCount += ttsResult.attempts.length;
             }
+            trace("voice_attempts", { count: voiceAttemptsCount, attempts: ttsResult.attempts });
 
             if (ttsResult.ok) {
               const url = await storeVoiceAudio(supabase, post.user_id, ttsResult.bytes);
               if (url) {
                 voiceUrl = url;
+                voiceStatus = voiceAttemptsCount > 1 ? "retried" : "success";
                 console.log(`[process] post ${post.id}: VOICE: audio attached (${url.split("?")[0]})`);
-                // Persist on the row so re-runs don't regenerate the same audio
                 await supabase.from("scheduled_posts").update({ voiceover_url: url }).eq("id", post.id);
               } else {
                 console.warn(`[process] post ${post.id}: VOICE: upload failed — retrying once after 2s`);
@@ -1293,9 +1339,12 @@ Deno.serve(async (req) => {
                 const retryUrl = await storeVoiceAudio(supabase, post.user_id, ttsResult.bytes);
                 if (retryUrl) {
                   voiceUrl = retryUrl;
+                  voiceStatus = "retried";
                   console.log(`[process] post ${post.id}: VOICE: audio attached on retry (${retryUrl.split("?")[0]})`);
                   await supabase.from("scheduled_posts").update({ voiceover_url: retryUrl }).eq("id", post.id);
                 } else {
+                  voiceStatus = "failed";
+                  voiceError = "Storage upload failed twice";
                   console.warn(`[process] post ${post.id}: VOICE: upload failed twice — falling back to silent video`);
                 }
               }
@@ -1303,11 +1352,10 @@ Deno.serve(async (req) => {
               const reason = ttsResult.reason;
               const status = (ttsResult as any).status;
               const detail = (ttsResult as any).detail;
+              voiceStatus = "failed";
+              voiceError = `${reason}${status ? ` (${status})` : ""}${detail ? ` — ${String(detail).slice(0, 160)}` : ""}`;
               console.warn(`[process] post ${post.id}: VOICE: TTS failed (reason=${reason}, status=${status ?? "n/a"}) — falling back to silent video`);
 
-              // === ERROR VISIBILITY ===
-              // ALWAYS write the exact failure (with status code) to system_logs so
-              // the user can see "401" / "500" / "Timeout" in the System Health view.
               try {
                 await supabase.from("system_logs").insert({
                   user_id: post.user_id,
@@ -1320,15 +1368,13 @@ Deno.serve(async (req) => {
                     status: status ?? null,
                     detail: detail ?? null,
                     city: weather.city,
+                    attempts: ttsResult.attempts,
                   },
                 });
               } catch (logErr) {
                 console.error(`[process] post ${post.id}: VOICE: failed to write system_logs entry:`, logErr);
               }
 
-              // Surface auth / timeout / missing-key failures to the in-app
-              // notification bell so the user knows immediately why the post
-              // went out without audio.
               if (reason === "missing_key" || reason === "unauthorized" || reason === "timeout") {
                 const titleMap: Record<string, string> = {
                   missing_key: "Voiceover Disabled — Missing API Key",
@@ -1353,6 +1399,8 @@ Deno.serve(async (req) => {
               }
             }
           } catch (vErr) {
+            voiceStatus = "failed";
+            voiceError = vErr instanceof Error ? vErr.message : String(vErr);
             console.error(`[process] post ${post.id}: VOICE: pipeline error — falling back to silent video:`, vErr);
             voiceUrl = null;
           }
@@ -1360,16 +1408,19 @@ Deno.serve(async (req) => {
           console.log(`[process] post ${post.id}: VOICE: disabled (row.include_voiceover=${post.include_voiceover}, settings.enable_voiceover=${settingsEnabled})`);
         }
 
-        // Final pre-render verification: if voiceover was requested but no audio
-        // is attached, log a clear marker so the silent fallback is auditable.
         if (wantVoice && !voiceUrl) {
           console.warn(`[process] post ${post.id}: VOICE: no audio attached after all attempts — rendering silent`);
         }
+        trace("voice_result", { status: voiceStatus, attempts: voiceAttemptsCount, error: voiceError, has_audio: !!voiceUrl });
 
+        // Capture which background atmosphere bucket the renderer will pick (deterministic from condition).
+        const _bgTheme = getWeatherTheme(weather.condition);
+        trace("background_selected", { condition: weather.condition, video_keyword: _bgTheme.videoKeyword });
 
         // Try video generation once (with voiceover baked in if available)
         console.log(`RENDER START: City: ${weather.city}, VoiceEnabled: ${voiceUrl ? "True" : "False"}`);
         const video = await generateWeatherVideo(weather, timePeriod, voiceUrl);
+        trace("video_render", { success: !!video, mime: video?.mimeType });
 
         let publishedPostUrl: string | null = null;
 
@@ -1465,11 +1516,19 @@ Deno.serve(async (req) => {
         // Map our internal "posted" → "success" so the insert isn't silently rejected.
         const historyStatus = postStatus === "posted" ? "success" : postStatus;
 
+        // Final action step in the trace
+        trace("final_action", { action: postStatus === "posted" ? "POSTED" : `FAILED — ${errorMessage}`, voice_status: voiceStatus });
+        const persistedTrace = debugTraceEnabled ? { steps: traceSteps, captured_at: new Date().toISOString() } : null;
+
         const { error: historyErr } = await supabase.from("post_history").insert({
           status: historyStatus, platform: post.platform, city: weather.city,
           temperature: weather.temperature, condition: weather.condition,
           image_url: storedImageUrl, error_message: errorMessage, caption,
           user_id: post.user_id, post_url: publishedPostUrl,
+          voice_status: voiceStatus,
+          voice_error: voiceError,
+          voice_attempts: voiceAttemptsCount,
+          debug_trace: persistedTrace,
         });
         if (historyErr) {
           console.error(`[process] post_history insert failed for ${post.id}:`, historyErr);
@@ -1477,7 +1536,6 @@ Deno.serve(async (req) => {
           console.log(`[process] post_history row created for ${post.id} (${post.platform}, ${historyStatus})`);
         }
 
-        // Decide whether to retry once before marking the scheduled row failed.
         const isFailureFlow = postStatus !== "posted";
         const currentRetryCount = (post as any).retry_count ?? 0;
         if (isFailureFlow && currentRetryCount < 1) {
@@ -1487,6 +1545,10 @@ Deno.serve(async (req) => {
             error_message: errorMessage,
             retry_count: currentRetryCount + 1,
             next_retry_at: nextRetryAt,
+            voice_status: voiceStatus,
+            voice_error: voiceError,
+            voice_attempts: voiceAttemptsCount,
+            debug_trace: persistedTrace,
           }).eq("id", post.id);
           await supabase.from("system_logs").insert({
             user_id: post.user_id,
@@ -1496,7 +1558,25 @@ Deno.serve(async (req) => {
             context: { scheduled_post_id: post.id, retry_count: currentRetryCount + 1 },
           });
         } else {
-          await supabase.from("scheduled_posts").update({ status: postStatus, error_message: errorMessage }).eq("id", post.id);
+          await supabase.from("scheduled_posts").update({
+            status: postStatus,
+            error_message: errorMessage,
+            voice_status: voiceStatus,
+            voice_error: voiceError,
+            voice_attempts: voiceAttemptsCount,
+            debug_trace: persistedTrace,
+          }).eq("id", post.id);
+
+          // One-shot: if this run was traced, clear the toggle so the next run is silent again.
+          if (debugTraceEnabled && post.user_id) {
+            try {
+              await supabase.from("weather_settings")
+                .update({ enable_debug_trace: false })
+                .eq("user_id", post.user_id);
+              console.log(`[trace ${post.id}] one-shot debug toggle cleared for user ${post.user_id}`);
+            } catch (e) { console.error("[trace] failed to clear debug toggle:", e); }
+          }
+
           if (isFailureFlow) {
             await supabase.from("system_logs").insert({
               user_id: post.user_id,
