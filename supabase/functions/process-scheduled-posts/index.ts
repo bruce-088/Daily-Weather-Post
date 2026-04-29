@@ -1473,7 +1473,7 @@ Deno.serve(async (req) => {
           status: historyStatus, platform: post.platform, city: weather.city,
           temperature: weather.temperature, condition: weather.condition,
           image_url: storedImageUrl, error_message: errorMessage, caption,
-          user_id: post.user_id,
+          user_id: post.user_id, post_url: publishedPostUrl,
         });
         if (historyErr) {
           console.error(`[process] post_history insert failed for ${post.id}:`, historyErr);
