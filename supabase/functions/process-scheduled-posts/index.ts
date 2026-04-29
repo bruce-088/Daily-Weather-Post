@@ -719,13 +719,13 @@ async function generateVoiceAudio(
         console.error(`[voice] ElevenLabs 401 Unauthorized (attempt ${attempt}/${MAX_ATTEMPTS}):`, detail);
         attempts.push({ attempt, status: 401, ok: false, error: detail || "Unauthorized" });
         if (attempt < MAX_ATTEMPTS) {
-          const refreshed = Deno.env.get("ELEVENLABS_API_KEY");
+          const refreshed = resolveElevenLabsKey();
           if (!refreshed) {
             console.error("CRITICAL: ElevenLabs API Key missing in worker (during 401 retry)");
             return { ok: false, reason: "missing_key", attempts };
           }
-          apiKey = refreshed;
-          console.warn(`[voice] backoff 2s before retry (after 401)`);
+          apiKey = refreshed.value;
+          console.warn(`[voice] backoff 2s before retry (after 401, key source="${refreshed.source}")`);
           await new Promise((r) => setTimeout(r, 2000));
           continue;
         }
