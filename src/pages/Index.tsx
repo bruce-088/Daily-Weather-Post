@@ -975,6 +975,7 @@ const Index = () => {
                 twitterConnected={twitterConnected}
                 linkedinConnected={linkedinConnected}
                 onDisconnect={handleDisconnect}
+                showAutomation={false}
               />
             </div>
           </TabsContent>
