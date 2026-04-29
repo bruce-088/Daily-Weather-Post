@@ -165,6 +165,20 @@ Deno.serve(async (req) => {
     const nowUtcHm = `${String(now.getUTCHours()).padStart(2, "0")}:${String(now.getUTCMinutes()).padStart(2, "0")}`;
     console.log(`[scheduler] Tick — now UTC: ${nowUtcIso} (${nowUtcHm}), targets: ${scheduleTargets.length}, enabled automations: ${enabledAutomations.length}, total automations: ${(automations || []).length}`);
 
+    // Count valid slots: enabled automations that have a city_id AND at least one platform on at least one slot.
+    const validSlots = enabledAutomations.filter((a: any) => {
+      if (!a.city_id) return false;
+      const m = Array.isArray(a.morning_platforms) ? a.morning_platforms.length : 0;
+      const af = Array.isArray(a.afternoon_platforms) ? a.afternoon_platforms.length : 0;
+      const e = Array.isArray(a.evening_platforms) ? a.evening_platforms.length : 0;
+      return m + af + e > 0;
+    }).length;
+    if (validSlots === 0) {
+      console.log("AUTO: No valid slots — check city/platform config");
+    } else {
+      console.log(`AUTO: Found ${validSlots} valid slots`);
+    }
+
     let triggered = 0;
     const results: string[] = [];
 
