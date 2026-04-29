@@ -7,6 +7,14 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+function jsonArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.map(String).filter(Boolean) : [];
+}
+
+function cityLabel(city: any): string {
+  return city?.state ? String(city.name) + ", " + String(city.state) : String(city?.name || "Unknown");
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -36,17 +44,72 @@ Deno.serve(async (req) => {
 
   try {
 
-    // Get all weather settings with auto-post enabled
+    // Weather settings are user-level preferences only (voice, legacy defaults).
+    // Multi-city scheduling must be driven by automations.city_id, never by the
+    // most recently edited weather_settings row.
     const { data: allSettings, error } = await supabase
       .from("weather_settings")
+      .select("*")
+      .not("user_id", "is", null)
+      .order("updated_at", { ascending: false });
+
+    const { data: automations, error: automationError } = await supabase
+      .from("automations")
       .select("*");
 
-    if (error || !allSettings?.length) {
+    if (error || automationError) {
+      throw new Error(error?.message || automationError?.message || "Failed to load automation settings");
+    }
+
+    if (!allSettings?.length && !automations?.length) {
       return new Response(
         JSON.stringify({ message: "No settings found", triggered: 0 }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    const settingsByUser = new Map<string, any>();
+    for (const row of allSettings || []) {
+      if (row.user_id && !settingsByUser.has(row.user_id)) settingsByUser.set(row.user_id, row);
+    }
+
+    const enabledAutomations = (automations || []).filter((a: any) => a.enabled === true);
+    const automationCityIds = [...new Set(enabledAutomations.map((a: any) => a.city_id).filter(Boolean))];
+    const citiesById = new Map<string, any>();
+    if (automationCityIds.length) {
+      const { data: cityRows, error: cityError } = await supabase
+        .from("cities")
+        .select("id, name, state, country, timezone")
+        .in("id", automationCityIds);
+      if (cityError) throw new Error(`Failed to load automation cities: ${cityError.message}`);
+      for (const city of cityRows || []) citiesById.set(city.id, city);
+    }
+
+    const scheduleTargets = [
+      ...enabledAutomations.map((automation: any) => {
+        const city = citiesById.get(automation.city_id);
+        const userSettings = settingsByUser.get(automation.user_id) || null;
+        return {
+          source: "automation",
+          user_id: automation.user_id,
+          city_id: automation.city_id,
+          automation_id: automation.id,
+          city: city?.name || "",
+          state: city?.state || null,
+          timezone: automation.timezone || city?.timezone || userSettings?.timezone || "UTC",
+          enable_voiceover: userSettings?.enable_voiceover === true,
+          periods: [
+            { enabled: true, time: automation.morning_time, name: "morning", platforms: jsonArray(automation.morning_platforms), skipDate: null },
+            { enabled: true, time: automation.afternoon_time, name: "afternoon", platforms: jsonArray(automation.afternoon_platforms), skipDate: null },
+            { enabled: true, time: automation.evening_time, name: "evening", platforms: jsonArray(automation.evening_platforms), skipDate: null },
+          ],
+        };
+      }).filter((target: any) => {
+        if (target.user_id && target.city_id && target.city) return true;
+        console.warn(`[scheduler] skipping automation ${target.automation_id || "unknown"}: missing city_id/city/user`);
+        return false;
+      }),
+    ];
 
     const now = new Date();
     const POST_WINDOW_MINUTES = 10;
@@ -100,40 +163,16 @@ Deno.serve(async (req) => {
 
     const nowUtcIso = now.toISOString();
     const nowUtcHm = `${String(now.getUTCHours()).padStart(2, "0")}:${String(now.getUTCMinutes()).padStart(2, "0")}`;
-    console.log(`[scheduler] Tick — now UTC: ${nowUtcIso} (${nowUtcHm}), users: ${allSettings.length}`);
+    console.log(`[scheduler] Tick — now UTC: ${nowUtcIso} (${nowUtcHm}), targets: ${scheduleTargets.length}, enabled automations: ${enabledAutomations.length}, total automations: ${(automations || []).length}`);
 
     let triggered = 0;
     const results: string[] = [];
 
-    for (const settings of allSettings) {
-      const userTz: string = settings.timezone || "UTC";
+    for (const target of scheduleTargets) {
+      const userTz: string = target.timezone || "UTC";
       const userLocal = getZonedHourMinute(now, userTz);
       const userLocalHm = `${String(userLocal.hour).padStart(2, "0")}:${String(userLocal.minute).padStart(2, "0")}`;
-      console.log(`[scheduler] User ${settings.user_id || "default"} — tz: ${userTz}, local now: ${userLocalHm}`);
-
-      const periods: { enabled: boolean; time: string; name: string; platforms: string[]; skipDate: string | null }[] = [
-        {
-          enabled: settings.auto_post_morning,
-          time: settings.morning_post_time,
-          name: "morning",
-          platforms: Array.isArray(settings.morning_platforms) ? settings.morning_platforms : [],
-          skipDate: settings.morning_skip_date || null,
-        },
-        {
-          enabled: settings.auto_post_afternoon,
-          time: settings.afternoon_post_time,
-          name: "afternoon",
-          platforms: Array.isArray(settings.afternoon_platforms) ? settings.afternoon_platforms : [],
-          skipDate: settings.afternoon_skip_date || null,
-        },
-        {
-          enabled: settings.auto_post_evening,
-          time: settings.evening_post_time,
-          name: "evening",
-          platforms: Array.isArray(settings.evening_platforms) ? settings.evening_platforms : [],
-          skipDate: settings.evening_skip_date || null,
-        },
-      ];
+      console.log(`[scheduler] Target ${target.source} user=${target.user_id} city=${target.city}${target.state ? ", " + target.state : ""} city_id=${target.city_id || "legacy"} — tz: ${userTz}, local now: ${userLocalHm}`);
 
       // Today's date in user's local timezone (YYYY-MM-DD)
       const todayLocal = new Intl.DateTimeFormat("en-CA", {
@@ -143,7 +182,7 @@ Deno.serve(async (req) => {
         day: "2-digit",
       }).format(now);
 
-      for (const period of periods) {
+      for (const period of target.periods) {
         console.log(
           `[scheduler]   ── Checking slot: ${period.name.toUpperCase()} | utc_now=${nowUtcIso} | tz=${userTz} | local_now=${userLocalHm} | target_local=${period.time || "(unset)"} | platforms=[${period.platforms.join(", ") || "none"}]`
         );
@@ -168,11 +207,11 @@ Deno.serve(async (req) => {
           continue;
         }
         console.log(`[scheduler]   🎯 Matched slot within extended window (${period.name}, diff=${ev.diff}min)`);
-        console.log(`[scheduler]   ✅ ${period.name.toUpperCase()} slot triggered for user ${settings.user_id || "default"}`);
+        console.log(`[scheduler]   ✅ ${period.name.toUpperCase()} slot triggered for user ${target.user_id || "default"} city=${target.city} city_id=${target.city_id || "legacy"}`);
         console.log(`[scheduler]   Creating scheduled posts for platforms: [${period.platforms.join(", ")}]`);
 
-        if (!settings.user_id) {
-          console.log(`[scheduler]   ⏭️  SKIP ${period.name} — reason: settings row has no user_id (cannot create scheduled_posts)`);
+        if (!target.user_id || !target.city) {
+          console.log(`[scheduler]   ⏭️  SKIP ${period.name} — reason: target missing user_id or city (cannot create scheduled_posts)`);
           continue;
         }
 
@@ -180,13 +219,17 @@ Deno.serve(async (req) => {
         // for this user + slot (any platform)? Slot is encoded in caption marker [auto:<slot>].
         const dupSince = new Date(now.getTime() - DUPLICATE_GUARD_MINUTES * 60 * 1000).toISOString();
         const slotMarker = `[auto:${period.name}]`;
-        const { data: recentDupes, error: dupErr } = await supabase
+        let dupQuery = supabase
           .from("scheduled_posts")
           .select("id, created_at, caption")
-          .eq("user_id", settings.user_id)
+          .eq("user_id", target.user_id)
+          .eq("city", target.city)
           .gte("created_at", dupSince)
           .ilike("caption", `%${slotMarker}%`)
           .limit(1);
+        if (target.city_id) dupQuery = dupQuery.eq("city_id", target.city_id);
+        if (target.automation_id) dupQuery = dupQuery.eq("automation_id", target.automation_id);
+        const { data: recentDupes, error: dupErr } = await dupQuery;
 
         if (dupErr) {
           console.error(`[scheduler]   duplicate check failed for ${period.name}:`, dupErr);
@@ -203,16 +246,18 @@ Deno.serve(async (req) => {
         // Image-only platforms (twitter, linkedin) get include_voiceover=false even if the user enabled it.
         // Actual TTS generation happens in process-scheduled-posts so the cron tick stays fast and
         // a TTS failure cannot block the entire schedule.
-        const voiceoverEnabled = (settings as any).enable_voiceover === true;
+        const voiceoverEnabled = target.enable_voiceover === true;
         const VIDEO_PLATFORMS = new Set(["youtube", "tiktok", "instagram"]);
         if (voiceoverEnabled) {
-          console.log(`[scheduler]   🎙️  voiceover enabled for user ${settings.user_id}; will attach to video platforms only`);
+          console.log(`[scheduler]   🎙️  voiceover enabled for user ${target.user_id}; will attach to video platforms only`);
         }
 
         // Insert one scheduled_posts row per platform — process-scheduled-posts will execute them.
         const rows = period.platforms.map((platform) => ({
-          user_id: settings.user_id,
-          city: settings.city,
+          user_id: target.user_id,
+          city: target.city,
+          city_id: target.city_id,
+          automation_id: target.automation_id,
           platform,
           scheduled_at: scheduledAt,
           status: "pending",
@@ -240,14 +285,14 @@ Deno.serve(async (req) => {
 
       // === DAILY SUMMARY (fires once per user when local time is 23:30 - 23:59) ===
       try {
-        if (settings.user_id && userLocal.hour === 23 && userLocal.minute >= 30) {
+        if (target.user_id && userLocal.hour === 23 && userLocal.minute >= 30) {
           // Idempotency: skip if a summary notification already exists for today (user-local).
           const lookback = new Date(now);
           lookback.setUTCHours(lookback.getUTCHours() - 6);
           const { data: existingSummary } = await supabase
             .from("notifications")
             .select("id, created_at")
-            .eq("user_id", settings.user_id)
+            .eq("user_id", target.user_id)
             .eq("title", "Daily summary")
             .gte("created_at", lookback.toISOString())
             .limit(1);
@@ -257,7 +302,7 @@ Deno.serve(async (req) => {
             const { data: todays } = await supabase
               .from("post_history")
               .select("status, platform, error_message, created_at")
-              .eq("user_id", settings.user_id)
+              .eq("user_id", target.user_id)
               .gte("created_at", sodLocal.toISOString());
 
             const total = todays?.length ?? 0;
@@ -289,15 +334,15 @@ Deno.serve(async (req) => {
             const fullMessage = `${message}\n<<META>>${JSON.stringify(meta)}`;
 
             const { error: sumErr } = await supabase.from("notifications").insert({
-              user_id: settings.user_id,
+              user_id: target.user_id,
               title: "Daily summary",
               message: fullMessage,
               type,
             });
             if (sumErr) console.error("[scheduler] daily summary insert failed:", sumErr);
-            else console.log(`[scheduler] daily summary sent to user ${settings.user_id}`);
+            else console.log(`[scheduler] daily summary sent to user ${target.user_id}`);
           } else {
-            console.log(`[scheduler] daily summary already exists for user ${settings.user_id} today`);
+            console.log(`[scheduler] daily summary already exists for user ${target.user_id} today`);
           }
         }
       } catch (sumE) {

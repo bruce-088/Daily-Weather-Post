@@ -30,9 +30,10 @@ interface WeatherResponse {
   tomorrowCondition: string | null;
 }
 
-async function fetchWeatherData(city: string, apiKey: string): Promise<WeatherResponse> {
+async function fetchWeatherData(city: string, apiKey: string, state?: string | null): Promise<WeatherResponse> {
+  const locationQuery = [city, state, "US"].filter(Boolean).join(",");
   const geoRes = await fetch(
-    `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(city)}&limit=1&appid=${apiKey}`
+    `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(locationQuery)}&limit=1&appid=${apiKey}`
   );
   const geoData = await geoRes.json();
   if (!geoData.length) throw new Error(`Location not found: ${city}`);
@@ -134,6 +135,42 @@ async function fetchWeatherData(city: string, apiKey: string): Promise<WeatherRe
     stateOrRegion: state || country || "",
     tomorrowHigh, tomorrowLow, tomorrowCondition,
   };
+}
+
+async function resolveScheduledCity(supabase: any, post: any): Promise<{ city: string; state: string | null; cityId: string | null; automationId: string | null }> {
+  let cityId = post.city_id || null;
+  const automationId = post.automation_id || null;
+  const isAutoPost = typeof post.caption === "string" && /^\s*\[auto:[a-z]+\]\s*$/i.test(post.caption);
+
+  if (isAutoPost && !cityId && !automationId) {
+    throw new Error("Auto-post is missing city_id/automation_id; refusing to render without strict city scope");
+  }
+
+  if (automationId) {
+    const { data: automation, error: automationError } = await supabase
+      .from("automations")
+      .select("id, city_id, user_id")
+      .eq("id", automationId)
+      .eq("user_id", post.user_id)
+      .maybeSingle();
+    if (automationError) throw new Error("Failed to validate automation city: " + automationError.message);
+    if (!automation?.city_id) throw new Error("Scheduled post automation is missing a city_id");
+    if (cityId && cityId !== automation.city_id) throw new Error("Scheduled post city_id does not match automation city_id");
+    cityId = automation.city_id;
+  }
+
+  if (cityId) {
+    const { data: city, error: cityError } = await supabase
+      .from("cities")
+      .select("id, name, state, country, timezone")
+      .eq("id", cityId)
+      .maybeSingle();
+    if (cityError) throw new Error("Failed to load scheduled city: " + cityError.message);
+    if (!city?.name) throw new Error("Scheduled post city_id was not found");
+    return { city: city.name, state: city.state || null, cityId, automationId };
+  }
+
+  return { city: post.city, state: null, cityId: null, automationId };
 }
 
 // --- SkyBrief Title Generator ---
@@ -1041,7 +1078,11 @@ Deno.serve(async (req) => {
 
     for (const post of duePosts) {
       try {
-        const weather = await fetchWeatherData(post.city, openWeatherApiKey);
+        const scopedCity = await resolveScheduledCity(supabase, post);
+        console.log(`[process] post ${post.id}: strict city scope city=${scopedCity.city}${scopedCity.state ? ", " + scopedCity.state : ""} city_id=${scopedCity.cityId || "legacy"} automation_id=${scopedCity.automationId || "none"}`);
+        const weather = await fetchWeatherData(scopedCity.city, openWeatherApiKey, scopedCity.state);
+        weather.city = scopedCity.city;
+        if (scopedCity.state) weather.stateOrRegion = scopedCity.state;
 
         // Use pre-written caption if available, otherwise auto-generate.
         // Auto-post rows from auto-post-scheduler use a marker like "[auto:morning]"
@@ -1206,6 +1247,7 @@ Deno.serve(async (req) => {
         }
 
         // Try video generation once (with voiceover baked in if available)
+        console.log(`RENDER START: City: ${weather.city}, VoiceEnabled: ${voiceUrl ? "True" : "False"}`);
         const video = await generateWeatherVideo(weather, timePeriod, voiceUrl);
 
         if (video) {
