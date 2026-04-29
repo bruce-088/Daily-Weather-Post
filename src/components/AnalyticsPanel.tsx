@@ -144,13 +144,27 @@ export function AnalyticsPanel() {
     return <Card className="p-6 text-sm text-muted-foreground">Loading analytics…</Card>;
   }
 
-  if (analytics.length === 0) {
+  const hasZeroMetrics = analytics.length > 0 && analytics.every(a => (a.views || 0) === 0 && (a.likes || 0) === 0 && (a.comments || 0) === 0);
+
+  if (analytics.length === 0 && posts.length === 0) {
     return (
       <Card className="p-8 text-center">
         <BarChart3 className="mx-auto mb-3 text-muted-foreground" size={32} />
         <h3 className="font-display text-lg mb-1">No analytics yet</h3>
         <p className="text-sm text-muted-foreground max-w-sm mx-auto">
           Once your posts are live, performance data will appear here so you can see what's working.
+        </p>
+      </Card>
+    );
+  }
+
+  if (analytics.length === 0 || hasZeroMetrics) {
+    return (
+      <Card className="p-8 text-center">
+        <Clock className="mx-auto mb-3 text-primary animate-pulse" size={32} />
+        <h3 className="font-display text-lg mb-1">Collecting data…</h3>
+        <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+          Your posts are live. Metrics may take 30–60 minutes to appear as platforms report views, likes, and comments.
         </p>
       </Card>
     );

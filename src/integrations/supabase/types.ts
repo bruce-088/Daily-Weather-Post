@@ -183,6 +183,7 @@ export type Database = {
           created_at: string
           debug_trace: Json | null
           error_message: string | null
+          external_id: string | null
           id: string
           image_url: string | null
           last_attempt_at: string | null
@@ -204,6 +205,7 @@ export type Database = {
           created_at?: string
           debug_trace?: Json | null
           error_message?: string | null
+          external_id?: string | null
           id?: string
           image_url?: string | null
           last_attempt_at?: string | null
@@ -225,6 +227,7 @@ export type Database = {
           created_at?: string
           debug_trace?: Json | null
           error_message?: string | null
+          external_id?: string | null
           id?: string
           image_url?: string | null
           last_attempt_at?: string | null

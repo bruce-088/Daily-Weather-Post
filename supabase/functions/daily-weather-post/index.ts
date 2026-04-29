@@ -1474,13 +1474,33 @@ Deno.serve(async (req) => {
       }
     }
 
-    const { error: historyError } = await supabase.from("post_history").insert({
+    const { data: historyRow, error: historyError } = await supabase.from("post_history").insert({
       status, platform, city: weather.city, temperature: weather.temperature,
       condition: weather.condition, image_url: storedImageUrl, error_message: errorMessage,
       caption, user_id: userId,
       post_url: youtubeVideoId ? `https://www.youtube.com/watch?v=${youtubeVideoId}` : null,
-    });
+      external_id: youtubeVideoId || null,
+    }).select("id").single();
     if (historyError) console.error("Failed to log post history:", historyError);
+
+    // Seed analytics rows for each successful platform so the Analytics tab shows the post immediately.
+    if (!historyError && historyRow?.id && userId) {
+      const successful = platformResults.filter((r) => r.ok);
+      if (successful.length > 0) {
+        const seedRows = successful.map((r) => ({
+          user_id: userId,
+          post_id: historyRow.id,
+          platform: r.name,
+          views: 0,
+          likes: 0,
+          comments: 0,
+          shares: 0,
+        }));
+        const { error: seedErr } = await supabase.from("post_analytics").insert(seedRows);
+        if (seedErr) console.error("Failed to seed post_analytics:", seedErr);
+        else console.log(`Seeded ${seedRows.length} post_analytics row(s) for ${historyRow.id}`);
+      }
+    }
 
     // === GROUPED NOTIFICATION ===
     // Schema is fixed (title/message/type) so we encode actionable metadata as a JSON
