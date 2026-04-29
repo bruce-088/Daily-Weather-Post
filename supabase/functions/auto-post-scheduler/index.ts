@@ -85,7 +85,6 @@ Deno.serve(async (req) => {
       for (const city of cityRows || []) citiesById.set(city.id, city);
     }
 
-    const usersWithAutomations = new Set((automations || []).map((a: any) => a.user_id).filter(Boolean));
     const scheduleTargets = [
       ...enabledAutomations.map((automation: any) => {
         const city = citiesById.get(automation.city_id);
@@ -110,23 +109,6 @@ Deno.serve(async (req) => {
         console.warn(`[scheduler] skipping automation ${target.automation_id || "unknown"}: missing city_id/city/user`);
         return false;
       }),
-      ...(allSettings || [])
-        .filter((settings: any) => settings.user_id && !usersWithAutomations.has(settings.user_id))
-        .map((settings: any) => ({
-          source: "legacy_settings",
-          user_id: settings.user_id,
-          city_id: null,
-          automation_id: null,
-          city: settings.city,
-          state: settings.state || null,
-          timezone: settings.timezone || "UTC",
-          enable_voiceover: settings.enable_voiceover === true,
-          periods: [
-            { enabled: settings.auto_post_morning, time: settings.morning_post_time, name: "morning", platforms: jsonArray(settings.morning_platforms), skipDate: settings.morning_skip_date || null },
-            { enabled: settings.auto_post_afternoon, time: settings.afternoon_post_time, name: "afternoon", platforms: jsonArray(settings.afternoon_platforms), skipDate: settings.afternoon_skip_date || null },
-            { enabled: settings.auto_post_evening, time: settings.evening_post_time, name: "evening", platforms: jsonArray(settings.evening_platforms), skipDate: settings.evening_skip_date || null },
-          ],
-        })),
     ];
 
     const now = new Date();
