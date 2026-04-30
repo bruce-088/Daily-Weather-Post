@@ -1,13 +1,14 @@
 import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Activity, RefreshCw, Beaker, CheckCircle2, XCircle, Mic, AlertTriangle } from "lucide-react";
+import { Activity, RefreshCw, Beaker, CheckCircle2, XCircle, Mic, AlertTriangle, Bug, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { copyDebugSnapshot } from "@/lib/debugSnapshot";
 
 function timeAgo(iso: string | null): string {
   if (!iso) return "Never";
@@ -353,6 +354,30 @@ export function SystemHealthCard() {
             {dryRunLoading ? "Running…" : "Test Automation Logic (Dry Run)"}
           </Button>
         </div>
+
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={async () => {
+            try {
+              const snap = await copyDebugSnapshot();
+              toast({
+                title: "🐛 Debug snapshot copied",
+                description: `${snap.split("\n").length} lines copied to clipboard — ready to paste.`,
+              });
+            } catch (err) {
+              toast({
+                title: "Failed to build snapshot",
+                description: err instanceof Error ? err.message : String(err),
+                variant: "destructive",
+              });
+            }
+          }}
+          className="w-full gap-2"
+        >
+          <Bug size={12} />
+          Report Issue — Copy Debug Snapshot
+        </Button>
 
         {dryRunResult && (
           <div className="mt-3 rounded-md border border-border/50 bg-muted/40 p-3 space-y-2">
