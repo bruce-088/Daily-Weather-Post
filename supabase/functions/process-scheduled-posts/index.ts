@@ -1313,10 +1313,58 @@ Deno.serve(async (req) => {
         console.log(`[process] post ${post.id}: strict city scope city=${scopedCity.city}${scopedCity.state ? ", " + scopedCity.state : ""} city_id=${scopedCity.cityId || "legacy"} automation_id=${scopedCity.automationId || "none"}`);
         trace("city_resolved", { city: scopedCity.city, state: scopedCity.state, city_id: scopedCity.cityId, automation_id: scopedCity.automationId });
         trace("schedule_match", { scheduled_at: post.scheduled_at, now: new Date().toISOString(), within_window: true });
-        const weather = await fetchWeatherData(scopedCity.city, openWeatherApiKey, scopedCity.state);
+        // ── WEATHER FETCH WITH 6h LAST-KNOWN FALLBACK ──
+        // Try the live API first; on success, refresh the cache. On failure,
+        // fall back to weather_cache if the most recent row is < 6h old, so a
+        // transient OpenWeather outage never kills a post.
+        const CACHE_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+        let weather: any;
+        let weatherSource: "live" | "cache" = "live";
+        try {
+          weather = await fetchWeatherData(scopedCity.city, openWeatherApiKey, scopedCity.state);
+          // Refresh the cache (best-effort).
+          try {
+            await supabase.from("weather_cache").upsert({
+              city: scopedCity.city,
+              state: scopedCity.state || null,
+              country: "US",
+              payload: weather,
+              fetched_at: new Date().toISOString(),
+            }, { onConflict: "city,state,country" });
+          } catch (cacheWriteErr) {
+            console.warn(`[weather-cache] write failed for ${scopedCity.city}:`, cacheWriteErr);
+          }
+        } catch (liveErr) {
+          const liveMsg = liveErr instanceof Error ? liveErr.message : String(liveErr);
+          console.warn(`[weather] live fetch failed for ${scopedCity.city}: ${liveMsg} — checking cache`);
+          let cacheQ = supabase
+            .from("weather_cache")
+            .select("payload, fetched_at")
+            .ilike("city", scopedCity.city)
+            .order("fetched_at", { ascending: false })
+            .limit(1);
+          if (scopedCity.state) cacheQ = cacheQ.ilike("state", scopedCity.state);
+          const { data: cacheRow } = await cacheQ.maybeSingle();
+          const ageMs = cacheRow ? (Date.now() - new Date(cacheRow.fetched_at).getTime()) : Infinity;
+          if (cacheRow && ageMs <= CACHE_MAX_AGE_MS) {
+            weather = cacheRow.payload;
+            weatherSource = "cache";
+            const ageMin = Math.round(ageMs / 60000);
+            console.log(`[weather] ✅ using cached payload for ${scopedCity.city} (age=${ageMin}min)`);
+            await notifyFailure(
+              "render", // closest existing stage label; system_logs type will reflect intent below
+              "Weather API unavailable — using cached data",
+              `Live fetch failed (${liveMsg}). Falling back to weather data from ${ageMin} minutes ago.`,
+              { city: scopedCity.city, cache_age_min: ageMin, fallback: "weather_cache" },
+            );
+          } else {
+            // No usable cache — re-throw so the row enters the normal retry/fail flow.
+            throw new Error(`Weather fetch failed and no cache within 6h: ${liveMsg}`);
+          }
+        }
         weather.city = scopedCity.city;
         if (scopedCity.state) weather.stateOrRegion = scopedCity.state;
-        trace("weather_fetched", { temperature: weather.temperature, condition: weather.condition });
+        trace("weather_fetched", { temperature: weather.temperature, condition: weather.condition, source: weatherSource });
 
         // ── PRE-FLIGHT VALIDATION ──
         // Catch config errors (missing platform, missing keys, bad weather data,
