@@ -1172,19 +1172,59 @@ Deno.serve(async (req) => {
 
 
     const nowIso = new Date().toISOString();
-    // Pick up pending posts that are due, OR retrying posts whose next_retry_at has passed.
+    const tenMinAgoIso = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+
+    // ── MISSED-JOB RECOVERY ──
+    // If cron skipped a tick (sleep, deploy, outage…), `pending` rows may be
+    // sitting overdue. Our base query already grabs any pending row with
+    // scheduled_at <= now, so missed jobs of any age get picked up. We surface
+    // a count here purely for observability/logging.
+    const { count: missedCount } = await supabase
+      .from("scheduled_posts")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending")
+      .lt("scheduled_at", tenMinAgoIso);
+    if (missedCount && missedCount > 0) {
+      console.log(`[process] 🛟 missed-job recovery: ${missedCount} pending row(s) overdue by >10min — including in this run`);
+    }
+
+    // ── STUCK PROCESSING RECOVERY ──
+    // If a worker crashed mid-run, its row stays in `processing` forever.
+    // Reset any row stuck in `processing` for >10 minutes back to its retry
+    // state so the next tick re-claims it via the atomic claim block.
+    const { data: stuck, error: stuckErr } = await supabase
+      .from("scheduled_posts")
+      .update({
+        status: "retrying",
+        next_retry_at: nowIso,
+        error_message: "Recovered from stuck processing state (worker likely crashed)",
+      })
+      .eq("status", "processing")
+      .lt("last_attempt_at", tenMinAgoIso)
+      .select("id");
+    if (stuckErr) {
+      console.error("[process] stuck-processing recovery query failed:", stuckErr);
+    } else if (stuck && stuck.length > 0) {
+      console.log(`[process] 🛟 reset ${stuck.length} stuck 'processing' row(s) → 'retrying'`);
+    }
+
+    // Pick up: pending posts that are due, retrying posts past next_retry_at.
+    // Both branches use scheduled_at/next_retry_at <= now, so genuinely missed
+    // jobs (overdue by hours) are still caught.
     const { data: duePosts, error: fetchError } = await supabase
       .from("scheduled_posts")
       .select("*")
-      .or(`and(status.eq.pending,scheduled_at.lte.${nowIso}),and(status.eq.retrying,next_retry_at.lte.${nowIso})`);
+      .or(`and(status.eq.pending,scheduled_at.lte.${nowIso}),and(status.eq.retrying,next_retry_at.lte.${nowIso})`)
+      .order("scheduled_at", { ascending: true });
 
     if (fetchError) throw new Error(`Failed to fetch scheduled posts: ${fetchError.message}`);
     if (!duePosts || duePosts.length === 0) {
       return new Response(
-        JSON.stringify({ success: true, message: "No posts due", processed: 0 }),
+        JSON.stringify({ success: true, message: "No posts due", processed: 0, missed_recovered: missedCount || 0 }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+    console.log(`[process] picked up ${duePosts.length} due row(s) (missed/overdue: ${missedCount || 0})`);
 
     let processed = 0;
     let failed = 0;
