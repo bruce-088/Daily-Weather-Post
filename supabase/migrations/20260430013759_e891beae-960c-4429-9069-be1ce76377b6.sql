@@ -1,0 +1,2 @@
+ALTER PUBLICATION supabase_realtime ADD TABLE public.jobs;
+ALTER TABLE public.jobs REPLICA IDENTITY FULL;
