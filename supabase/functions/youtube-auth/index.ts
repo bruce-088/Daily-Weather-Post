@@ -98,11 +98,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // All other actions require authenticated user
-    const auth = await verifyUser(req);
-    if (auth.response) return auth.response;
-    const userId = auth.userId;
-
     if (action === "exchange_code") {
       if (!code || !redirect_uri || !state) {
         return new Response(
@@ -122,7 +117,7 @@ Deno.serve(async (req) => {
       }
 
       if (
-        statePayload.user_id !== userId ||
+        !statePayload.user_id ||
         statePayload.redirect_uri !== redirect_uri ||
         !statePayload.exp ||
         statePayload.exp < Date.now()
@@ -132,6 +127,7 @@ Deno.serve(async (req) => {
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
+      const userId = statePayload.user_id;
 
       const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
@@ -218,6 +214,10 @@ Deno.serve(async (req) => {
     }
 
     if (action === "refresh_token") {
+      const auth = await verifyUser(req);
+      if (auth.response) return auth.response;
+      const userId = auth.userId;
+
       const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
       const { data: settings } = await supabaseAdmin
         .from("weather_settings")
