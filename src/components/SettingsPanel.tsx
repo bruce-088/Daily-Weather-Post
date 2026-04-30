@@ -379,13 +379,18 @@ export function SettingsPanel({
     <div className="space-y-4">
       {showLocation && (
       <Card className="border-border/50 bg-card/80 backdrop-blur">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <MapPin size={16} className="text-primary" />
-            Location
-          </CardTitle>
-          <CardDescription className="text-xs">City for daily weather reports</CardDescription>
-        </CardHeader>
+        <Collapsible open={locationOpen} onOpenChange={setLocationOpen}>
+          <CollapsibleCardHeader
+            open={locationOpen}
+            icon={<MapPin size={16} className="text-primary" />}
+            title="Location"
+            description={
+              settings.location
+                ? `${settings.location}${settings.state ? `, ${settings.state}` : ""}`
+                : "City for daily weather reports"
+            }
+          />
+          <CollapsibleContent>
         <CardContent className="space-y-3">
           <div className="flex gap-2">
             <div className="flex-1 space-y-2">
