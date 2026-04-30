@@ -10,6 +10,7 @@ import { Clock, MapPin, Instagram, Video, RefreshCw, Save, CheckCircle, External
 import { Badge } from "@/components/ui/badge";
 import { setSkipToday } from "@/lib/api";
 import { SystemHealthCard } from "@/components/SystemHealthCard";
+import { JobPipelineToggle } from "@/components/JobPipelineToggle";
 
 const TIMEZONE_OPTIONS = [
   { value: "America/New_York", label: "Eastern (New York)" },
@@ -859,6 +860,7 @@ export function SettingsPanel({
         </Card>
       )}
 
+      {showAutomation && <JobPipelineToggle />}
       {showAutomation && <SystemHealthCard />}
 
       {(showLocation || showConnections || showAutomation) && (

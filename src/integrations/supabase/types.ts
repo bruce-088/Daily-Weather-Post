@@ -106,6 +106,78 @@ export type Database = {
         }
         Relationships: []
       }
+      jobs: {
+        Row: {
+          attempts: number
+          city: string | null
+          completed_at: string | null
+          created_at: string
+          id: string
+          last_error: string | null
+          locked_at: string | null
+          locked_by: string | null
+          max_attempts: number
+          parent_job_id: string | null
+          payload: Json
+          platform: string | null
+          result: Json | null
+          root_job_id: string | null
+          scheduled_for: string
+          scheduled_post_id: string | null
+          started_at: string | null
+          status: string
+          type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          attempts?: number
+          city?: string | null
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          last_error?: string | null
+          locked_at?: string | null
+          locked_by?: string | null
+          max_attempts?: number
+          parent_job_id?: string | null
+          payload?: Json
+          platform?: string | null
+          result?: Json | null
+          root_job_id?: string | null
+          scheduled_for?: string
+          scheduled_post_id?: string | null
+          started_at?: string | null
+          status?: string
+          type: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          attempts?: number
+          city?: string | null
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          last_error?: string | null
+          locked_at?: string | null
+          locked_by?: string | null
+          max_attempts?: number
+          parent_job_id?: string | null
+          payload?: Json
+          platform?: string | null
+          result?: Json | null
+          root_job_id?: string | null
+          scheduled_for?: string
+          scheduled_post_id?: string | null
+          started_at?: string | null
+          status?: string
+          type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           created_at: string
@@ -543,6 +615,7 @@ export type Database = {
           twitter_access_token_secret: string | null
           twitter_user_id: string | null
           updated_at: string
+          use_jobs_pipeline: boolean
           user_id: string | null
           voiceover_similarity: number
           voiceover_speed: number
@@ -591,6 +664,7 @@ export type Database = {
           twitter_access_token_secret?: string | null
           twitter_user_id?: string | null
           updated_at?: string
+          use_jobs_pipeline?: boolean
           user_id?: string | null
           voiceover_similarity?: number
           voiceover_speed?: number
@@ -639,6 +713,7 @@ export type Database = {
           twitter_access_token_secret?: string | null
           twitter_user_id?: string | null
           updated_at?: string
+          use_jobs_pipeline?: boolean
           user_id?: string | null
           voiceover_similarity?: number
           voiceover_speed?: number
@@ -656,7 +731,53 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      claim_next_jobs: {
+        Args: { p_limit?: number; p_worker_id: string }
+        Returns: {
+          attempts: number
+          city: string | null
+          completed_at: string | null
+          created_at: string
+          id: string
+          last_error: string | null
+          locked_at: string | null
+          locked_by: string | null
+          max_attempts: number
+          parent_job_id: string | null
+          payload: Json
+          platform: string | null
+          result: Json | null
+          root_job_id: string | null
+          scheduled_for: string
+          scheduled_post_id: string | null
+          started_at: string | null
+          status: string
+          type: string
+          updated_at: string
+          user_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "jobs"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      enqueue_job: {
+        Args: {
+          p_city?: string
+          p_parent_job_id?: string
+          p_payload: Json
+          p_platform?: string
+          p_root_job_id?: string
+          p_scheduled_for?: string
+          p_scheduled_post_id?: string
+          p_type: string
+          p_user_id: string
+        }
+        Returns: string
+      }
+      recover_stuck_jobs: { Args: never; Returns: number }
     }
     Enums: {
       [_ in never]: never
