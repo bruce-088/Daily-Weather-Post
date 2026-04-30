@@ -7,6 +7,50 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+
+function base64UrlEncode(bytes: Uint8Array) {
+  let binary = "";
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function base64UrlDecode(value: string) {
+  const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "=");
+  const binary = atob(padded);
+  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+}
+
+async function signStatePayload(payload: string, secret: string) {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
+  return base64UrlEncode(new Uint8Array(signature));
+}
+
+async function createSignedState(payload: Record<string, unknown>, secret: string) {
+  const encodedPayload = base64UrlEncode(encoder.encode(JSON.stringify(payload)));
+  const signature = await signStatePayload(encodedPayload, secret);
+  return `${encodedPayload}.${signature}`;
+}
+
+async function readSignedState(state: string, secret: string) {
+  const [encodedPayload, signature] = state.split(".");
+  if (!encodedPayload || !signature) throw new Error("Malformed state");
+  const expectedSignature = await signStatePayload(encodedPayload, secret);
+  if (signature !== expectedSignature) throw new Error("Invalid signature");
+  return JSON.parse(decoder.decode(base64UrlDecode(encodedPayload)));
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -16,15 +60,25 @@ Deno.serve(async (req) => {
   const YOUTUBE_CLIENT_SECRET = Deno.env.get("YOUTUBE_CLIENT_SECRET")!;
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
   const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const STATE_SECRET = SUPABASE_SERVICE_ROLE_KEY;
 
   try {
     const body = await req.json();
-    const { action, code, redirect_uri } = body;
+    const { action, code, redirect_uri, state } = body;
     console.log("YouTube auth action:", action);
 
     // get_auth_url doesn't need auth
     if (action === "get_auth_url") {
-      const csrfState = crypto.randomUUID();
+      const auth = await verifyUser(req);
+      if (auth.response) return auth.response;
+
+      const statePayload = {
+        nonce: crypto.randomUUID(),
+        user_id: auth.userId,
+        redirect_uri,
+        exp: Date.now() + 10 * 60 * 1000,
+      };
+      const csrfState = await createSignedState(statePayload, STATE_SECRET);
       const params = new URLSearchParams({
         client_id: YOUTUBE_CLIENT_ID,
         redirect_uri: redirect_uri,
@@ -44,18 +98,36 @@ Deno.serve(async (req) => {
       );
     }
 
-    // All other actions require authenticated user
-    const auth = await verifyUser(req);
-    if (auth.response) return auth.response;
-    const userId = auth.userId;
-
     if (action === "exchange_code") {
-      if (!code || !redirect_uri) {
+      if (!code || !redirect_uri || !state) {
         return new Response(
-          JSON.stringify({ error: "Missing code or redirect_uri" }),
+          JSON.stringify({ error: "Missing code, redirect_uri, or state" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
+
+      let statePayload: { user_id?: string; redirect_uri?: string; exp?: number } = {};
+      try {
+        statePayload = await readSignedState(state, STATE_SECRET);
+      } catch {
+        return new Response(
+          JSON.stringify({ error: "Invalid OAuth state" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      if (
+        !statePayload.user_id ||
+        statePayload.redirect_uri !== redirect_uri ||
+        !statePayload.exp ||
+        statePayload.exp < Date.now()
+      ) {
+        return new Response(
+          JSON.stringify({ error: "Invalid or expired OAuth state" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      const userId = statePayload.user_id;
 
       const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
@@ -142,6 +214,10 @@ Deno.serve(async (req) => {
     }
 
     if (action === "refresh_token") {
+      const auth = await verifyUser(req);
+      if (auth.response) return auth.response;
+      const userId = auth.userId;
+
       const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
       const { data: settings } = await supabaseAdmin
         .from("weather_settings")

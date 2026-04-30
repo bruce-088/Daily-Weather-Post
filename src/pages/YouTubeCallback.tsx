@@ -3,6 +3,15 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
+const getOAuthRedirectOrigin = () => {
+  const { origin, hostname } = window.location;
+  const editorPreviewMatch = hostname.match(/^([0-9a-f-]{36})\.lovableproject\.com$/i);
+  if (editorPreviewMatch) {
+    return `https://id-preview--${editorPreviewMatch[1]}.lovable.app`;
+  }
+  return origin;
+};
+
 const YouTubeCallback = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -21,12 +30,7 @@ const YouTubeCallback = () => {
         return;
       }
 
-      // CSRF state validation — check both localStorage and sessionStorage
-      // since the OAuth flow may have started in a different browsing context.
-      const storedState =
-        localStorage.getItem("youtube_oauth_state") ||
-        sessionStorage.getItem("youtube_oauth_state");
-      if (!returnedState || (storedState && returnedState !== storedState)) {
+      if (!returnedState) {
         toast.error("Invalid OAuth state — possible CSRF attack");
         setStatus("error");
         setTimeout(() => navigate("/"), 2000);
@@ -54,7 +58,8 @@ const YouTubeCallback = () => {
         body: {
           action: "exchange_code",
           code,
-          redirect_uri: `${window.location.origin}/youtube/callback`,
+            redirect_uri: `${getOAuthRedirectOrigin()}/youtube/callback`,
+            state: returnedState,
         },
       });
 
