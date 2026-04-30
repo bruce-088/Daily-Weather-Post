@@ -1560,6 +1560,28 @@ Deno.serve(async (req) => {
         const { error: seedErr } = await supabase.from("post_analytics").insert(seedRows);
         if (seedErr) console.error("Failed to seed post_analytics:", seedErr);
         else console.log(`Seeded ${seedRows.length} post_analytics row(s) for ${historyRow.id}`);
+
+        // Seed post_hooks for the auto-growth analyzer
+        try {
+          const lines = (caption || "").split("\n").map((s: string) => s.trim()).filter(Boolean);
+          const hookText = lines[0] || null;
+          const opener = hookText ? hookText.split(/\s+/).slice(0, 6).join(" ").toLowerCase() : null;
+          if (hookText) {
+            const hookRows = successful.map((r) => ({
+              user_id: userId,
+              post_id: historyRow.id,
+              platform: r.name,
+              hook_text: hookText,
+              opener,
+              tone: (settings as any)?.caption_tone || null,
+              city: weather.city || null,
+            }));
+            const { error: hookErr } = await supabase.from("post_hooks").insert(hookRows);
+            if (hookErr) console.warn("Failed to seed post_hooks:", hookErr);
+          }
+        } catch (e) {
+          console.warn("post_hooks seed exception:", e);
+        }
       }
     }
 

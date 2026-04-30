@@ -154,6 +154,84 @@ export type Database = {
         }
         Relationships: []
       }
+      growth_recommendations: {
+        Row: {
+          best_slot: Json | null
+          computed_at: string
+          recent_openers: Json
+          recent_tones: Json
+          recommendation: string
+          top_hooks: Json
+          user_id: string
+          variety_score: number
+        }
+        Insert: {
+          best_slot?: Json | null
+          computed_at?: string
+          recent_openers?: Json
+          recent_tones?: Json
+          recommendation: string
+          top_hooks?: Json
+          user_id: string
+          variety_score?: number
+        }
+        Update: {
+          best_slot?: Json | null
+          computed_at?: string
+          recent_openers?: Json
+          recent_tones?: Json
+          recommendation?: string
+          top_hooks?: Json
+          user_id?: string
+          variety_score?: number
+        }
+        Relationships: []
+      }
+      hook_stats: {
+        Row: {
+          avg_views: number
+          computed_at: string
+          created_at: string
+          hook_text: string
+          id: string
+          last_used_at: string | null
+          rank: number | null
+          status: string
+          total_engagement: number
+          total_views: number
+          user_id: string
+          uses: number
+        }
+        Insert: {
+          avg_views?: number
+          computed_at?: string
+          created_at?: string
+          hook_text: string
+          id?: string
+          last_used_at?: string | null
+          rank?: number | null
+          status?: string
+          total_engagement?: number
+          total_views?: number
+          user_id: string
+          uses?: number
+        }
+        Update: {
+          avg_views?: number
+          computed_at?: string
+          created_at?: string
+          hook_text?: string
+          id?: string
+          last_used_at?: string | null
+          rank?: number | null
+          status?: string
+          total_engagement?: number
+          total_views?: number
+          user_id?: string
+          uses?: number
+        }
+        Relationships: []
+      }
       jobs: {
         Row: {
           attempts: number
@@ -388,6 +466,7 @@ export type Database = {
           created_at: string
           hook_text: string | null
           id: string
+          opener: string | null
           platform: string | null
           post_id: string | null
           tone: string | null
@@ -398,6 +477,7 @@ export type Database = {
           created_at?: string
           hook_text?: string | null
           id?: string
+          opener?: string | null
           platform?: string | null
           post_id?: string | null
           tone?: string | null
@@ -408,6 +488,7 @@ export type Database = {
           created_at?: string
           hook_text?: string | null
           id?: string
+          opener?: string | null
           platform?: string | null
           post_id?: string | null
           tone?: string | null
@@ -574,6 +655,84 @@ export type Database = {
           platform?: string | null
           type?: string
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      time_slot_stats: {
+        Row: {
+          avg_views: number
+          computed_at: string
+          day_of_week: number
+          hour: number
+          id: string
+          posts: number
+          total_engagement: number
+          total_views: number
+          user_id: string
+        }
+        Insert: {
+          avg_views?: number
+          computed_at?: string
+          day_of_week: number
+          hour: number
+          id?: string
+          posts?: number
+          total_engagement?: number
+          total_views?: number
+          user_id: string
+        }
+        Update: {
+          avg_views?: number
+          computed_at?: string
+          day_of_week?: number
+          hour?: number
+          id?: string
+          posts?: number
+          total_engagement?: number
+          total_views?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      trend_alerts: {
+        Row: {
+          alert_date: string
+          alert_type: string
+          city: string
+          created_at: string
+          dismissed: boolean
+          id: string
+          message: string
+          severity: string
+          starts_at: string | null
+          suggested_post_id: string | null
+          user_id: string
+        }
+        Insert: {
+          alert_date?: string
+          alert_type: string
+          city: string
+          created_at?: string
+          dismissed?: boolean
+          id?: string
+          message: string
+          severity?: string
+          starts_at?: string | null
+          suggested_post_id?: string | null
+          user_id: string
+        }
+        Update: {
+          alert_date?: string
+          alert_type?: string
+          city?: string
+          created_at?: string
+          dismissed?: boolean
+          id?: string
+          message?: string
+          severity?: string
+          starts_at?: string | null
+          suggested_post_id?: string | null
+          user_id?: string
         }
         Relationships: []
       }
