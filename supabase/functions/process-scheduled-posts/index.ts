@@ -1392,6 +1392,10 @@ Deno.serve(async (req) => {
             trace("voice_attempts", { count: voiceAttemptsCount, attempts: ttsResult.attempts });
 
             if (ttsResult.ok) {
+              // Estimate audio duration from MP3 byte length (CBR 128 kbps from ElevenLabs).
+              voiceAudioDurationSec = estimateMp3DurationSeconds(ttsResult.bytes.length);
+              console.log(`[process] post ${post.id}: VOICE: estimated audio duration ${voiceAudioDurationSec?.toFixed(2) ?? "n/a"}s (${ttsResult.bytes.length} bytes)`);
+              trace("voice_audio_duration", { bytes: ttsResult.bytes.length, seconds: voiceAudioDurationSec });
               const url = await storeVoiceAudio(supabase, post.user_id, ttsResult.bytes);
               if (url) {
                 voiceUrl = url;
