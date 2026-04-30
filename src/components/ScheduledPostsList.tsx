@@ -523,20 +523,29 @@ export function ScheduledPostsList({ posts, loading, onRefresh }: ScheduledPosts
         </Select>
       </div>
 
-      {/* List */}
+      {/* List — scrollable, ~5 posts visible at once */}
       {!filtered.length ? (
         <div className="text-center py-8 text-muted-foreground text-sm">
           No posts match the selected filter
         </div>
       ) : (
-        filtered.map((post) => (
-          <PostRow
-            key={post.id}
-            post={post}
-            onRefresh={onRefresh}
-            onCancelRequest={setCancellingId}
-          />
-        ))
+        <>
+          <div className="max-h-[520px] overflow-y-auto pr-1 space-y-3 rounded-md">
+            {filtered.map((post) => (
+              <PostRow
+                key={post.id}
+                post={post}
+                onRefresh={onRefresh}
+                onCancelRequest={setCancellingId}
+              />
+            ))}
+          </div>
+          {filtered.length > 5 && (
+            <p className="text-[10px] text-muted-foreground text-center pt-1">
+              Showing {filtered.length} posts — scroll for more
+            </p>
+          )}
+        </>
       )}
 
       <AlertDialog open={!!cancellingId} onOpenChange={(open) => !open && setCancellingId(null)}>
