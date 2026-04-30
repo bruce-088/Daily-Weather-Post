@@ -1179,6 +1179,23 @@ Deno.serve(async (req) => {
     const nowIso = new Date().toISOString();
     const tenMinAgoIso = new Date(Date.now() - 10 * 60 * 1000).toISOString();
 
+    // ── SINGLE-POST MODE (job runner) ──
+    // When invoked by the new job pipeline (run-jobs), the caller passes a
+    // specific scheduled_post_id. We process ONLY that row and skip the
+    // sweep / recovery logic — the job runner handles those concerns itself.
+    let singlePostId: string | null = null;
+    if (req.method === "POST") {
+      try {
+        const body = await req.json();
+        if (body && typeof body.scheduled_post_id === "string") {
+          singlePostId = body.scheduled_post_id;
+          console.log(`[process] single-post mode for ${singlePostId} (source=${body.source ?? "unknown"})`);
+        }
+      } catch {
+        // No body — legacy cron invocation, fall through to sweep mode.
+      }
+    }
+
     // ── MISSED-JOB RECOVERY ──
     // If cron skipped a tick (sleep, deploy, outage…), `pending` rows may be
     // sitting overdue. Our base query already grabs any pending row with
@@ -1216,11 +1233,14 @@ Deno.serve(async (req) => {
     // Pick up: pending posts that are due, retrying posts past next_retry_at.
     // Both branches use scheduled_at/next_retry_at <= now, so genuinely missed
     // jobs (overdue by hours) are still caught.
-    const { data: duePosts, error: fetchError } = await supabase
-      .from("scheduled_posts")
-      .select("*")
-      .or(`and(status.eq.pending,scheduled_at.lte.${nowIso}),and(status.eq.retrying,next_retry_at.lte.${nowIso})`)
-      .order("scheduled_at", { ascending: true });
+    // Single-post mode: fetch ONLY the target row regardless of status,
+    // so the job runner can reprocess a row even if it's been touched already.
+    const baseQuery = supabase.from("scheduled_posts").select("*");
+    const { data: duePosts, error: fetchError } = singlePostId
+      ? await baseQuery.eq("id", singlePostId).limit(1)
+      : await baseQuery
+          .or(`and(status.eq.pending,scheduled_at.lte.${nowIso}),and(status.eq.retrying,next_retry_at.lte.${nowIso})`)
+          .order("scheduled_at", { ascending: true });
 
     if (fetchError) throw new Error(`Failed to fetch scheduled posts: ${fetchError.message}`);
     if (!duePosts || duePosts.length === 0) {
