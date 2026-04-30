@@ -11,6 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { setSkipToday } from "@/lib/api";
 import { SystemHealthCard } from "@/components/SystemHealthCard";
 import { JobPipelineToggle } from "@/components/JobPipelineToggle";
+import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
+import { CollapsibleCardHeader } from "@/components/CollapsibleCardHeader";
 
 const TIMEZONE_OPTIONS = [
   { value: "America/New_York", label: "Eastern (New York)" },
@@ -102,6 +104,9 @@ export function SettingsPanel({
   const update = (key: keyof AutomationSettings, value: string | boolean | string[] | number) => {
     onUpdate({ ...settings, [key]: value } as AutomationSettings);
   };
+
+  const [locationOpen, setLocationOpen] = useState(false);
+  const [connectionsOpen, setConnectionsOpen] = useState(false);
 
   // ---- Voice preview state (no persistence — this just plays a sample) ----
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -374,13 +379,18 @@ export function SettingsPanel({
     <div className="space-y-4">
       {showLocation && (
       <Card className="border-border/50 bg-card/80 backdrop-blur">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <MapPin size={16} className="text-primary" />
-            Location
-          </CardTitle>
-          <CardDescription className="text-xs">City for daily weather reports</CardDescription>
-        </CardHeader>
+        <Collapsible open={locationOpen} onOpenChange={setLocationOpen}>
+          <CollapsibleCardHeader
+            open={locationOpen}
+            icon={<MapPin size={16} className="text-primary" />}
+            title="Location"
+            description={
+              settings.location
+                ? `${settings.location}${settings.state ? `, ${settings.state}` : ""}`
+                : "City for daily weather reports"
+            }
+          />
+          <CollapsibleContent>
         <CardContent className="space-y-3">
           <div className="flex gap-2">
             <div className="flex-1 space-y-2">
@@ -432,18 +442,30 @@ export function SettingsPanel({
             </p>
           </div>
         </CardContent>
+          </CollapsibleContent>
+        </Collapsible>
       </Card>
       )}
 
       {showConnections && (
       <Card className="border-border/50 bg-card/80 backdrop-blur">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Video size={16} className="text-primary" />
-            Social Connections
-          </CardTitle>
-          <CardDescription className="text-xs">Connect your social accounts</CardDescription>
-        </CardHeader>
+        <Collapsible open={connectionsOpen} onOpenChange={setConnectionsOpen}>
+          <CollapsibleCardHeader
+            open={connectionsOpen}
+            icon={<Video size={16} className="text-primary" />}
+            title="Social Connections"
+            description={
+              connectedPlatforms.length > 0
+                ? `${connectedPlatforms.length} connected: ${connectedPlatforms.map((p) => p.label).join(", ")}`
+                : "Connect your social accounts"
+            }
+            collapsedHint={
+              <Badge variant="outline" className="text-[10px]">
+                {connectedPlatforms.length}/{availablePlatforms.length}
+              </Badge>
+            }
+          />
+          <CollapsibleContent>
         <CardContent className="space-y-4">
           {/* TikTok OAuth */}
           <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/30 border border-border/30">
@@ -573,6 +595,8 @@ export function SettingsPanel({
             />
           </div>
         </CardContent>
+          </CollapsibleContent>
+        </Collapsible>
       </Card>
       )}
 
