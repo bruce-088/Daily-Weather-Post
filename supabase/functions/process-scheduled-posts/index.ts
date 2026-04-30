@@ -836,6 +836,11 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
   console.log(`Starting Creatomate render for ${weather.city} ${voiceUrl ? "(with voiceover)" : "(no voice)"} — composition ${compDuration.toFixed(2)}s (audio=${audioDurationSec ?? "n/a"}s)`);
   const theme = getWeatherTheme(weather.condition);
   const videoUrl = await fetchPexelsVideoUrl(theme.videoKeyword, weather.city, weather.stateOrRegion);
+  if (!videoUrl) {
+    console.warn(`[render] Pexels background unavailable (keyword="${theme.videoKeyword}") — falling back to gradient (${theme.bg1} → ${theme.bg2})`);
+  } else {
+    console.log(`[render] Pexels background acquired for "${theme.videoKeyword}"`);
+  }
   const source = buildCreatomateSource(weather, videoUrl, timePeriod, voiceUrl, audioDurationSec);
 
   const requestBody = JSON.stringify({ output_format: "mp4", ...source });
