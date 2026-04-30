@@ -1531,10 +1531,27 @@ Deno.serve(async (req) => {
     if (!historyError && historyRow?.id && userId) {
       const successful = platformResults.filter((r) => r.ok);
       if (successful.length > 0) {
+        const hourLocal = new Date().getHours();
+        const timeOfDay =
+          hourLocal < 11 ? "morning" :
+          hourLocal < 16 ? "afternoon" :
+          hourLocal < 21 ? "evening" : "night";
+        const captionLower = (caption || "").toLowerCase();
+        const cityLower = (weather.city || "").toLowerCase();
+        const localKeywords = ["downtown", "park", "river", "bay", "beach", "neighborhood", "ave", "street", "blvd"];
+        const hasLocalReference =
+          (cityLower && captionLower.includes(cityLower)) ||
+          localKeywords.some((k) => captionLower.includes(k));
         const seedRows = successful.map((r) => ({
           user_id: userId,
           post_id: historyRow.id,
           platform: r.name,
+          external_id: r.name === "youtube" ? (youtubeVideoId || null) : (r as any).id || null,
+          tone: (settings as any)?.caption_tone || null,
+          condition: weather.condition || null,
+          time_of_day: timeOfDay,
+          has_voiceover: !!voiceUrl,
+          has_local_reference: hasLocalReference,
           views: 0,
           likes: 0,
           comments: 0,
