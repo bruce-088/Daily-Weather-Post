@@ -1488,7 +1488,7 @@ Deno.serve(async (req) => {
 
         // Try video generation once (with voiceover baked in if available)
         console.log(`RENDER START: City: ${weather.city}, VoiceEnabled: ${voiceUrl ? "True" : "False"}`);
-        const video = await generateWeatherVideo(weather, timePeriod, voiceUrl);
+        const video = await generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec);
         trace("video_render", { success: !!video, mime: video?.mimeType });
 
         let publishedPostUrl: string | null = null;
