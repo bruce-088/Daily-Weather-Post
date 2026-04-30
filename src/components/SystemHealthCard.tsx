@@ -201,15 +201,39 @@ export function SystemHealthCard() {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-base flex items-center gap-2">
-          <Activity size={16} className="text-primary" />
-          System Health
-        </CardTitle>
-        <CardDescription className="text-xs">
-          Background automation status
-        </CardDescription>
-      </CardHeader>
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <CollapsibleTrigger asChild>
+          <CardHeader className="cursor-pointer select-none hover:bg-muted/30 transition-colors rounded-t-lg">
+            <div className="flex items-center justify-between gap-2">
+              <div className="space-y-1">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Activity size={16} className="text-primary" />
+                  System Health
+                  <Badge
+                    variant={isActive ? "default" : "secondary"}
+                    className={`ml-1 ${isActive ? "bg-green-500/20 text-green-600 border-green-500/30 hover:bg-green-500/20" : ""}`}
+                  >
+                    <span className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${isActive ? "bg-green-500 animate-pulse" : "bg-muted-foreground"}`} />
+                    {isActive ? "Active" : "Inactive"}
+                  </Badge>
+                  {hasError && (
+                    <Badge variant="outline" className="bg-destructive/15 text-destructive border-destructive/30 text-[10px]">
+                      ❌ Error
+                    </Badge>
+                  )}
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  {open ? "Background automation status" : `Last run: ${lastRun ?? "—"}`}
+                </CardDescription>
+              </div>
+              <ChevronDown
+                size={18}
+                className={`text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
+              />
+            </div>
+          </CardHeader>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
       <CardContent className="space-y-3">
         <div className="flex items-center justify-between">
           <span className="text-sm text-muted-foreground">Cron Status</span>
