@@ -60,6 +60,7 @@ Deno.serve(async (req) => {
   const YOUTUBE_CLIENT_SECRET = Deno.env.get("YOUTUBE_CLIENT_SECRET")!;
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
   const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const STATE_SECRET = SUPABASE_SERVICE_ROLE_KEY;
 
   try {
     const body = await req.json();
@@ -77,7 +78,7 @@ Deno.serve(async (req) => {
         redirect_uri,
         exp: Date.now() + 10 * 60 * 1000,
       };
-      const csrfState = btoa(JSON.stringify(statePayload));
+      const csrfState = await createSignedState(statePayload, STATE_SECRET);
       const params = new URLSearchParams({
         client_id: YOUTUBE_CLIENT_ID,
         redirect_uri: redirect_uri,
@@ -112,7 +113,7 @@ Deno.serve(async (req) => {
 
       let statePayload: { user_id?: string; redirect_uri?: string; exp?: number } = {};
       try {
-        statePayload = JSON.parse(atob(state));
+        statePayload = await readSignedState(state, STATE_SECRET);
       } catch {
         return new Response(
           JSON.stringify({ error: "Invalid OAuth state" }),
