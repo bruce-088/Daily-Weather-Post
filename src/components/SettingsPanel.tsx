@@ -595,6 +595,8 @@ export function SettingsPanel({
             />
           </div>
         </CardContent>
+          </CollapsibleContent>
+        </Collapsible>
       </Card>
       )}
 
