@@ -335,21 +335,34 @@ Deno.serve(async (req) => {
           include_voiceover: voiceoverEnabled && VIDEO_PLATFORMS.has(platform),
         }));
 
+        // Idempotent insert — the unique constraint
+        // (user_id, city, platform, scheduled_at) makes this safe against
+        // duplicate cron ticks. We use upsert with ignoreDuplicates so that
+        // if a row for this exact job already exists, the insert is silently
+        // skipped instead of erroring.
         const { error: insErr, data: inserted } = await supabase
           .from("scheduled_posts")
-          .insert(rows)
+          .upsert(rows, {
+            onConflict: "user_id,city,platform,scheduled_at",
+            ignoreDuplicates: true,
+          })
           .select("id, platform");
 
         if (insErr) {
           console.error(`[scheduler]   ❌ Failed to create scheduled_posts for ${period.name}:`, insErr);
           results.push(`${period.name}: insert_error`);
         } else {
+          const insertedCount = inserted?.length ?? 0;
+          const skippedCount = rows.length - insertedCount;
           for (const r of inserted || []) {
             console.log(`AUTO: Created scheduled_post row for ${r.platform} (city=${target.city}, slot=${period.name}, voiceover=${voiceoverEnabled && VIDEO_PLATFORMS.has(r.platform)})`);
           }
-          console.log(`[scheduler]   📝 Created ${inserted?.length ?? 0} scheduled_posts row(s) for ${period.name}: ${(inserted || []).map((r: any) => r.platform).join(", ")}`);
-          triggered += inserted?.length ?? 0;
-          results.push(`${period.name}: queued ${inserted?.length ?? 0}`);
+          if (skippedCount > 0) {
+            console.log(`[scheduler]   🔁 Skipped ${skippedCount} duplicate job(s) for ${period.name} (unique_key collision — already queued)`);
+          }
+          console.log(`[scheduler]   📝 Created ${insertedCount} scheduled_posts row(s) for ${period.name}: ${(inserted || []).map((r: any) => r.platform).join(", ")}`);
+          triggered += insertedCount;
+          results.push(`${period.name}: queued ${insertedCount}${skippedCount ? ` (skipped ${skippedCount} dup)` : ""}`);
         }
       }
 
