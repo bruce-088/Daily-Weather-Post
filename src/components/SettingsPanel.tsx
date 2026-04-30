@@ -449,13 +449,23 @@ export function SettingsPanel({
 
       {showConnections && (
       <Card className="border-border/50 bg-card/80 backdrop-blur">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Video size={16} className="text-primary" />
-            Social Connections
-          </CardTitle>
-          <CardDescription className="text-xs">Connect your social accounts</CardDescription>
-        </CardHeader>
+        <Collapsible open={connectionsOpen} onOpenChange={setConnectionsOpen}>
+          <CollapsibleCardHeader
+            open={connectionsOpen}
+            icon={<Video size={16} className="text-primary" />}
+            title="Social Connections"
+            description={
+              connectedPlatforms.length > 0
+                ? `${connectedPlatforms.length} connected: ${connectedPlatforms.map((p) => p.label).join(", ")}`
+                : "Connect your social accounts"
+            }
+            collapsedHint={
+              <Badge variant="outline" className="text-[10px]">
+                {connectedPlatforms.length}/{availablePlatforms.length}
+              </Badge>
+            }
+          />
+          <CollapsibleContent>
         <CardContent className="space-y-4">
           {/* TikTok OAuth */}
           <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/30 border border-border/30">
