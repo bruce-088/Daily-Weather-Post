@@ -30,12 +30,7 @@ const YouTubeCallback = () => {
         return;
       }
 
-      // CSRF state validation — check both localStorage and sessionStorage
-      // since the OAuth flow may have started in a different browsing context.
-      const storedState =
-        localStorage.getItem("youtube_oauth_state") ||
-        sessionStorage.getItem("youtube_oauth_state");
-      if (!returnedState || (storedState && returnedState !== storedState)) {
+      if (!returnedState) {
         toast.error("Invalid OAuth state — possible CSRF attack");
         setStatus("error");
         setTimeout(() => navigate("/"), 2000);
