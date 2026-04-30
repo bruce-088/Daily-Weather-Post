@@ -237,7 +237,7 @@ extra_note: ${body.extra_note ?? body.extraNote ?? ""}${extremeNote}${styleNote}
 
 ${buildVerifiedLandmarksBlock(city)}
 
-${styleAddendum}`;
+${styleAddendum}${insightNote}`;
 
     const systemPrompt = `${SKYBRIEF_SYSTEM_PROMPT}\n\n${LOCATION_ACCURACY_RULES}`;
 
