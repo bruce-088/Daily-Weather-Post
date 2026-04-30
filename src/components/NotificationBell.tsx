@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Bell, CheckCheck, RotateCw, ExternalLink, Volume2, VolumeX, Loader2 } from "lucide-react";
+import { Bell, CheckCheck, RotateCw, ExternalLink, Volume2, VolumeX, Loader2, Bug } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
@@ -12,6 +12,7 @@ import {
   isSoundEnabled,
   setSoundEnabled,
 } from "@/lib/notificationUtils";
+import { copyDebugSnapshot } from "@/lib/debugSnapshot";
 import { toast } from "sonner";
 
 export function NotificationBell() {
@@ -113,8 +114,8 @@ export function NotificationBell() {
                         </div>
                       </div>
                     </button>
-                    {(canRetry || viewUrl) && (
-                      <div className="flex items-center gap-2 mt-2 pl-4">
+                    {(canRetry || viewUrl || n.type === "error") && (
+                      <div className="flex items-center gap-2 mt-2 pl-4 flex-wrap">
                         {canRetry && (
                           <Button
                             size="sm"
@@ -139,6 +140,35 @@ export function NotificationBell() {
                             onClick={() => window.open(viewUrl, "_blank", "noopener,noreferrer")}
                           >
                             <ExternalLink size={12} /> View Post
+                          </Button>
+                        )}
+                        {n.type === "error" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs gap-1"
+                            onClick={async () => {
+                              try {
+                                const snap = await copyDebugSnapshot({
+                                  notification: {
+                                    title: n.title,
+                                    message: n.displayMessage ?? "",
+                                    type: n.type,
+                                    created_at: n.created_at,
+                                    meta: n.meta,
+                                  },
+                                });
+                                toast.success("🐛 Debug info copied", {
+                                  description: `${snap.split("\n").length} lines on clipboard.`,
+                                });
+                              } catch (err) {
+                                toast.error("Failed to build snapshot", {
+                                  description: err instanceof Error ? err.message : String(err),
+                                });
+                              }
+                            }}
+                          >
+                            <Bug size={12} /> Copy Debug Info
                           </Button>
                         )}
                       </div>
