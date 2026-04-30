@@ -29,6 +29,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { AutomationSettings } from "@/types/weather";
 
+const getOAuthRedirectOrigin = () => {
+  const { origin, hostname } = window.location;
+  const editorPreviewMatch = hostname.match(/^([0-9a-f-]{36})\.lovableproject\.com$/i);
+  if (editorPreviewMatch) {
+    return `https://id-preview--${editorPreviewMatch[1]}.lovable.app`;
+  }
+  return origin;
+};
+
 /**
  * Live indicator that shows when the next auto-post cron tick will run.
  * The auto-post-scheduler runs every 5 minutes (at :00, :05, :10, …),
@@ -259,7 +268,7 @@ export function SettingsPanel({
   };
 
   const handleConnectYouTube = async () => {
-    const redirectUri = `${window.location.origin}/youtube/callback`;
+    const redirectUri = `${getOAuthRedirectOrigin()}/youtube/callback`;
     const { data, error } = await supabase.functions.invoke("youtube-auth", {
       body: { action: "get_auth_url", redirect_uri: redirectUri },
     });
