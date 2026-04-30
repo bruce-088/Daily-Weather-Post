@@ -1244,6 +1244,97 @@ Deno.serve(async (req) => {
         if (scopedCity.state) weather.stateOrRegion = scopedCity.state;
         trace("weather_fetched", { temperature: weather.temperature, condition: weather.condition });
 
+        // ── PRE-FLIGHT VALIDATION ──
+        // Catch config errors (missing platform, missing keys, bad weather data,
+        // invalid voice settings) BEFORE we spend time on caption/render/upload.
+        // Failures here mark the row as `failed_precheck` and DO NOT retry —
+        // retrying a missing API key won't fix it.
+        const preflightErrors: string[] = [];
+
+        // 1. City exists
+        if (!scopedCity.city || !String(scopedCity.city).trim()) {
+          preflightErrors.push("city is missing or empty");
+        }
+
+        // 2. Weather data is valid
+        if (typeof weather?.temperature !== "number" || Number.isNaN(weather.temperature)) {
+          preflightErrors.push("weather data invalid (no temperature)");
+        }
+        if (!weather?.condition || !String(weather.condition).trim()) {
+          preflightErrors.push("weather data invalid (no condition)");
+        }
+
+        // 3. At least one platform selected
+        const preflightPlatforms = post.platform === "both"
+          ? ["youtube", "tiktok"]
+          : String(post.platform || "").split(",").map((p: string) => p.trim()).filter(Boolean);
+        if (preflightPlatforms.length === 0) {
+          preflightErrors.push("no platform selected on scheduled_posts row");
+        }
+
+        // 4. Required API keys exist for this run
+        if (!openWeatherApiKey) preflightErrors.push("missing OPENWEATHER_API_KEY");
+        if (!Deno.env.get("LOVABLE_API_KEY")) preflightErrors.push("missing LOVABLE_API_KEY");
+        if (preflightPlatforms.some((p) => ["youtube", "tiktok", "instagram"].includes(p))
+            && !Deno.env.get("CREATOMATE_API_KEY")) {
+          preflightErrors.push("missing CREATOMATE_API_KEY (required for video platforms)");
+        }
+
+        // 5. Voice settings (only when voiceover is requested for this row)
+        const VIDEO_PLATFORMS_PF = new Set(["youtube", "tiktok", "instagram"]);
+        const voiceRequested = post.include_voiceover === true
+          && preflightPlatforms.some((p) => VIDEO_PLATFORMS_PF.has(p));
+        if (voiceRequested) {
+          if (!resolveElevenLabsKey()) preflightErrors.push("voiceover enabled but ElevenLabs API key missing");
+          try {
+            const { data: vs } = await supabase
+              .from("weather_settings")
+              .select("voiceover_voice_id, voiceover_speed, voiceover_stability, voiceover_similarity")
+              .eq("user_id", post.user_id)
+              .limit(1)
+              .maybeSingle();
+            if (vs) {
+              if (!(vs as any).voiceover_voice_id) preflightErrors.push("voice_id not set");
+              const spd = Number((vs as any).voiceover_speed);
+              const stb = Number((vs as any).voiceover_stability);
+              const sim = Number((vs as any).voiceover_similarity);
+              if (!(spd >= 0.5 && spd <= 2.0)) preflightErrors.push(`voice speed out of range (${spd})`);
+              if (!(stb >= 0 && stb <= 1)) preflightErrors.push(`voice stability out of range (${stb})`);
+              if (!(sim >= 0 && sim <= 1)) preflightErrors.push(`voice similarity out of range (${sim})`);
+            }
+          } catch (vErr) {
+            console.warn(`[preflight ${post.id}] voice settings lookup failed:`, vErr);
+          }
+        }
+
+        if (preflightErrors.length > 0) {
+          const reason = preflightErrors.join("; ");
+          console.error(`[preflight ${post.id}] ❌ FAILED: ${reason}`);
+          trace("preflight_failed", { errors: preflightErrors });
+          await supabase.from("scheduled_posts").update({
+            status: "failed_precheck",
+            error_message: `Pre-flight check failed: ${reason}`,
+            last_attempt_at: new Date().toISOString(),
+          }).eq("id", post.id);
+          await supabase.from("system_logs").insert({
+            user_id: post.user_id,
+            type: "post_precheck_failed",
+            message: `Pre-flight check failed for ${scopedCity.city}: ${reason}`,
+            platform: post.platform,
+            context: { scheduled_post_id: post.id, errors: preflightErrors },
+          });
+          await supabase.from("notifications").insert({
+            user_id: post.user_id,
+            title: "Post Skipped — Configuration Issue",
+            message: `Post for ${scopedCity.city} was skipped before processing: ${reason}`,
+            type: "error",
+          });
+          failed++;
+          continue;
+        }
+        console.log(`[preflight ${post.id}] ✅ all checks passed`);
+        trace("preflight_passed", { platforms: preflightPlatforms, voice_requested: voiceRequested });
+
         // Use pre-written caption if available, otherwise auto-generate.
         // Auto-post rows from auto-post-scheduler use a marker like "[auto:morning]"
         // as the caption (for duplicate detection). Treat those as empty so we
