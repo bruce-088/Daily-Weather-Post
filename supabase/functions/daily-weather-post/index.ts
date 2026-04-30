@@ -588,7 +588,32 @@ async function storeVoiceAudio(
   return { signedUrl: signed.signedUrl, storagePath: path };
 }
 
-function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | null, timePeriod?: string | null, voiceUrl?: string | null): object {
+/**
+ * Estimate the duration (seconds) of an MP3 buffer produced by ElevenLabs.
+ * We request `mp3_44100_128` (CBR 128 kbps) so duration ≈ bytes / (128_000/8) = bytes / 16000.
+ */
+function estimateMp3DurationSeconds(byteLength: number | null | undefined): number | null {
+  if (!byteLength || byteLength <= 0) return null;
+  const seconds = byteLength / 16000;
+  if (!isFinite(seconds) || seconds <= 0) return null;
+  return seconds;
+}
+
+/**
+ * Compute the final composition duration so the voiceover (which starts at t=0.5s)
+ * always finishes with at least `VOICE_TAIL_PAD` seconds of silent video at the end.
+ */
+const VOICE_START = 0.5;        // seconds — when voice element starts
+const VOICE_TAIL_PAD = 1.5;     // seconds — silence held after voice ends
+const MIN_VIDEO_DURATION = 10;  // seconds — hard floor
+
+function computeVideoDuration(audioDurationSec: number | null | undefined): number {
+  const audio = typeof audioDurationSec === "number" && isFinite(audioDurationSec) && audioDurationSec > 0 ? audioDurationSec : 0;
+  const target = audio > 0 ? VOICE_START + audio + VOICE_TAIL_PAD : MIN_VIDEO_DURATION;
+  return Math.max(target, MIN_VIDEO_DURATION);
+}
+
+function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | null, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null): object {
   const now = new Date();
   const dateStr = now.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
   const theme = getWeatherTheme(weather.condition);
