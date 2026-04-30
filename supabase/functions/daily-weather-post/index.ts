@@ -774,21 +774,27 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
   );
 
   // === AI VOICE NARRATION TRACK ===
-  // Voice plays from t=0.5s. If existing background music is added later, it should
-  // be added on its own track at a reduced volume (e.g. 25%) to duck under the voice.
+  // Voice plays from t=VOICE_START. We do NOT trim the audio track — its duration mirrors
+  // the real audio length so the CTA always finishes. Composition (D) leaves
+  // VOICE_TAIL_PAD seconds of silent video after the voice ends. Background music (if
+  // added later) should be on its own track at reduced volume to duck under the voice.
   if (voiceUrl) {
+    const audioLen = typeof audioDurationSec === "number" && isFinite(audioDurationSec) && audioDurationSec > 0
+      ? audioDurationSec
+      : Math.max(0.1, D - VOICE_START); // fallback: play to end of composition
     elements.push({
       type: "audio",
       track: nt(),
-      time: 0.5,
-      duration: dur(9.5),
+      time: VOICE_START,
+      duration: audioLen,
       source: voiceUrl,
       volume: "100%",
+      // Explicitly do not fade out — keep audio crisp through the CTA.
     });
   }
 
   return {
-    width: 1440, height: 2560, duration: 10, frame_rate: 30, fill_color: theme.bg1,
+    width: 1440, height: 2560, duration: D, frame_rate: 30, fill_color: theme.bg1,
     elements,
   };
 }
