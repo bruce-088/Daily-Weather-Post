@@ -576,20 +576,26 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
   );
 
   // === AI VOICEOVER (optional) ===
-  // Plays from t=0.5s on its own track. If TTS step failed upstream, voiceUrl is null and we render silently.
+  // Plays from t=0.5s on its own track. We do NOT trim the audio track — its duration
+  // mirrors the real audio length so the CTA always finishes. The composition (D) is
+  // sized to leave VOICE_TAIL_PAD seconds of silent video after the voice ends.
   if (voiceUrl) {
+    const audioLen = typeof audioDurationSec === "number" && isFinite(audioDurationSec) && audioDurationSec > 0
+      ? audioDurationSec
+      : Math.max(0.1, D - VOICE_START); // fallback: play to end of composition
     elements.push({
       type: "audio",
       track: nt(),
-      time: 0.5,
-      duration: dur(9.5),
+      time: VOICE_START,
+      duration: audioLen,
       source: voiceUrl,
       volume: "100%",
+      // Explicitly do not fade out — keep audio crisp through the CTA.
     });
   }
 
   return {
-    width: 1080, height: 1920, duration: dur(10.0), frame_rate: 30, fill_color: theme.bg1,
+    width: 1080, height: 1920, duration: D, frame_rate: 30, fill_color: theme.bg1,
     elements,
   };
 }
