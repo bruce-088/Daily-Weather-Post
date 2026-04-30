@@ -471,6 +471,39 @@ export type Database = {
           },
         ]
       }
+      weather_cache: {
+        Row: {
+          city: string
+          country: string
+          created_at: string
+          fetched_at: string
+          id: string
+          payload: Json
+          state: string | null
+          updated_at: string
+        }
+        Insert: {
+          city: string
+          country?: string
+          created_at?: string
+          fetched_at?: string
+          id?: string
+          payload: Json
+          state?: string | null
+          updated_at?: string
+        }
+        Update: {
+          city?: string
+          country?: string
+          created_at?: string
+          fetched_at?: string
+          id?: string
+          payload?: Json
+          state?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       weather_settings: {
         Row: {
           afternoon_platforms: Json
