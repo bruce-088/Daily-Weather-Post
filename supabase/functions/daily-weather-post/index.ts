@@ -1269,12 +1269,17 @@ Deno.serve(async (req) => {
     let voiceUrl: string | null = null;
     let voiceStoragePath: string | null = null;
     let voiceScript: string | null = null;
+    // Estimated voiceover audio duration (seconds). Drives the dynamic composition length
+    // so the full voiceover + CTA is never cut off. null = no voiceover (use 10s minimum).
+    let voiceAudioDurationSec: number | null = null;
     if (voiceOpts.enabled && userId) {
       console.log("Voice enabled — generating script + TTS audio");
       voiceScript = await generateVoiceScript(weather, voiceOpts.tone, selectedPlatforms);
       console.log("Voice script:", voiceScript);
       const audioBytes = await generateVoiceAudio(voiceScript, voiceOpts);
       if (audioBytes) {
+        voiceAudioDurationSec = estimateMp3DurationSeconds(audioBytes.length);
+        console.log(`Voice audio estimated duration: ${voiceAudioDurationSec?.toFixed(2) ?? "n/a"}s (${audioBytes.length} bytes)`);
         const stored = await storeVoiceAudio(supabase, userId, audioBytes);
         if (stored) {
           voiceUrl = stored.signedUrl;
@@ -1286,8 +1291,9 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Generate video (with voice baked in if available)
-    const video = await generateWeatherVideo(weather, timePeriod, voiceUrl);
+    // Generate video (with voice baked in if available). Composition length is sized
+    // dynamically from the audio duration so the voiceover + CTA always finish in full.
+    const video = await generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec);
 
 
     // === PREVIEW MODE ===
