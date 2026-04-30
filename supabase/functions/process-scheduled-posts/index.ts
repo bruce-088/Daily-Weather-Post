@@ -1273,6 +1273,40 @@ Deno.serve(async (req) => {
       let voiceAttemptsCount = 0;
       let debugTraceEnabled = false;
 
+      // ── FAILURE NOTIFIER ──
+      // Single helper so every silent failure (render, upload, fallback)
+      // produces both a user-facing notification AND a system_logs row.
+      // Call sites pass a short stage label and the raw error/status detail.
+      const notifyFailure = async (
+        stage: "voice" | "render" | "upload" | "fallback_image" | "platform",
+        title: string,
+        detail: string,
+        context: Record<string, unknown> = {},
+      ) => {
+        const safeDetail = (detail || "unknown error").slice(0, 500);
+        try {
+          await supabase.from("notifications").insert({
+            user_id: post.user_id,
+            title: `❌ ${title}`,
+            message: safeDetail,
+            type: "error",
+          });
+        } catch (e) {
+          console.error(`[process] post ${post.id}: failed to write notification (${stage}):`, e);
+        }
+        try {
+          await supabase.from("system_logs").insert({
+            user_id: post.user_id,
+            type: `post_${stage}_failed`,
+            message: `${title}: ${safeDetail}`,
+            platform: post.platform,
+            context: { scheduled_post_id: post.id, stage, ...context },
+          });
+        } catch (e) {
+          console.error(`[process] post ${post.id}: failed to write system_logs (${stage}):`, e);
+        }
+      };
+
       try {
         const scopedCity = await resolveScheduledCity(supabase, post);
         console.log(`CITY CONFIRMED: ${scopedCity.city}${scopedCity.state ? ", " + scopedCity.state : ""} (city_id=${scopedCity.cityId || "legacy"})`);
@@ -1671,15 +1705,18 @@ Deno.serve(async (req) => {
               }
             } else {
               errorMessage = result.error || `${platformName} upload failed`;
+              await notifyFailure("upload", `${platformName} upload failed`, errorMessage, { platform: platformName });
             }
           }
         } else {
           // Video failed — fallback to image for image-capable platforms
           console.log("Video generation failed for scheduled post, attempting fallback image...");
+          await notifyFailure("render", "Render failed", "Video render failed — attempting fallback image.", { city: weather.city });
           const fallbackImage = await generateFallbackImage(weather);
 
           if (!fallbackImage) {
             errorMessage = "Both video and fallback image generation failed";
+            await notifyFailure("fallback_image", "Fallback image failed", errorMessage, { city: weather.city });
           } else {
             // Store the generated image to Supabase Storage
             const stored = await storeGeneratedImage(supabase, post.user_id, fallbackImage.data, fallbackImage.mimeType, weather.city);
@@ -1699,34 +1736,41 @@ Deno.serve(async (req) => {
                   const adapter = getAdapter(platformName);
                   if (!adapter) continue;
                   const token = await adapter.getValidToken(supabase, post.user_id);
-                  if (!token) { console.error(`${platformName}: failed to get token for image post`); continue; }
+                  if (!token) {
+                    console.error(`${platformName}: failed to get token for image post`);
+                    await notifyFailure("upload", `${platformName} auth failed`, "Could not get valid token for image post.", { platform: platformName });
+                    continue;
+                  }
 
                   if (platformName === "linkedin") {
                     const postResult = await postLinkedInImage(token, fallbackImage.data, title, desc);
                     if (postResult) { postedAny = true; console.log(`Scheduled ${post.id}: linkedin image posted, ID: ${postResult}`); }
-                    else { errorMessage = "LinkedIn image post failed"; }
+                    else { errorMessage = "LinkedIn image post failed"; await notifyFailure("upload", "LinkedIn image post failed", errorMessage, { platform: "linkedin" }); }
                   } else if (platformName === "twitter") {
                     const postResult = await postTwitterImage(token, fallbackImage.data, desc);
                     if (postResult) { postedAny = true; console.log(`Scheduled ${post.id}: twitter image posted, ID: ${postResult}`); }
-                    else { errorMessage = "Twitter image post failed"; }
+                    else { errorMessage = "Twitter image post failed"; await notifyFailure("upload", "X / Twitter image post failed", errorMessage, { platform: "twitter" }); }
                   } else if (platformName === "tiktok") {
                     if (storedImageUrl) {
                       const { TikTokAdapter } = await import("../_shared/tiktok-adapter.ts");
                       const tiktokAdapter = new TikTokAdapter();
                       const postResult = await tiktokAdapter.uploadImage(token, storedImageUrl, title, desc);
                       if (postResult) { postedAny = true; console.log(`Scheduled ${post.id}: tiktok photo posted, publish_id: ${postResult}`); }
-                      else { errorMessage = "TikTok photo post failed"; }
+                      else { errorMessage = "TikTok photo post failed"; await notifyFailure("upload", "TikTok photo post failed", errorMessage, { platform: "tiktok" }); }
                     } else {
                       console.log(`Skipping TikTok for scheduled ${post.id} — no stored image URL`);
+                      await notifyFailure("upload", "TikTok skipped", "No stored image URL available for TikTok photo post.", { platform: "tiktok" });
                     }
                   }
                 } catch (err) {
                   console.error(`${platformName} image post error:`, err);
                   errorMessage = `${platformName} image post failed`;
+                  await notifyFailure("upload", `${platformName} image post error`, err instanceof Error ? err.message : String(err), { platform: platformName });
                 }
               } else if (videoOnlyPlatforms.includes(platformName)) {
                 console.log("Skipping " + platformName + " — requires video (image fallback only)");
                 errorMessage = (errorMessage || "") + platformName + " skipped (video required, credits depleted); ";
+                await notifyFailure("upload", `${platformName} skipped`, "Video render failed and this platform does not accept image fallbacks.", { platform: platformName });
               }
             }
 
