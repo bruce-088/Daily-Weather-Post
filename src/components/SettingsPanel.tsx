@@ -859,6 +859,7 @@ export function SettingsPanel({
         </Card>
       )}
 
+      {showAutomation && <JobPipelineToggle />}
       {showAutomation && <SystemHealthCard />}
 
       {(showLocation || showConnections || showAutomation) && (
