@@ -1932,6 +1932,29 @@ Deno.serve(async (req) => {
             } else {
               console.log(`[process] seeded ${analyticsRows.length} post_analytics row(s) for ${historyRow.id}`);
             }
+
+            // Seed post_hooks for the auto-growth analyzer.
+            // hook_text = first non-empty line, opener = first 6 words.
+            try {
+              const lines = (caption || "").split("\n").map(s => s.trim()).filter(Boolean);
+              const hookText = lines[0] || null;
+              const opener = hookText ? hookText.split(/\s+/).slice(0, 6).join(" ").toLowerCase() : null;
+              if (hookText) {
+                const hookRows = Object.keys(platformExternalIds).map((plat) => ({
+                  user_id: post.user_id,
+                  post_id: historyRow.id,
+                  platform: plat,
+                  hook_text: hookText,
+                  opener,
+                  tone: captionTone || null,
+                  city: weather.city || null,
+                }));
+                const { error: hookErr } = await supabase.from("post_hooks").insert(hookRows);
+                if (hookErr) console.warn(`[process] post_hooks seed failed for ${post.id}:`, hookErr);
+              }
+            } catch (e) {
+              console.warn(`[process] hook seed exception:`, e);
+            }
           }
         }
 
