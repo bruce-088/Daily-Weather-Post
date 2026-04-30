@@ -1728,13 +1728,13 @@ Deno.serve(async (req) => {
 
         await supabase.from("notifications").insert({
           user_id: post.user_id,
-          title: postStatus === "posted" ? "Post Published" : (currentRetryCount < 1 && isFailureFlow ? "Post Retrying" : "Post Failed"),
+          title: postStatus === "posted" ? "Post Published" : (currentRetryCount < MAX_RETRIES && isFailureFlow ? "Post Retrying" : "Post Failed"),
           message: postStatus === "posted"
             ? `Your weather post for ${weather.city} was processed on ${post.platform}.`
-            : (currentRetryCount < 1 && isFailureFlow
-                ? `Post for ${weather.city} failed — retrying in 60 seconds.`
+            : (currentRetryCount < MAX_RETRIES && isFailureFlow
+                ? `Post for ${weather.city} failed — retrying in 2 minutes (attempt ${currentRetryCount + 1}/${MAX_RETRIES}).`
                 : `Your scheduled post for ${weather.city} failed: ${errorMessage}`),
-          type: postStatus === "posted" ? "success" : (currentRetryCount < 1 && isFailureFlow ? "info" : "error"),
+          type: postStatus === "posted" ? "success" : (currentRetryCount < MAX_RETRIES && isFailureFlow ? "info" : "error"),
         });
 
         processed++;
