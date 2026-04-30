@@ -1188,8 +1188,36 @@ Deno.serve(async (req) => {
 
     let processed = 0;
     let failed = 0;
+    let skippedLocked = 0;
 
     for (const post of duePosts) {
+      // === ATOMIC CLAIM ===
+      // Flip status pending|retrying → processing, scoped to this exact row AND
+      // the status we read it at. If another worker already claimed it, the
+      // update affects 0 rows and we skip. This is our distributed lock — no
+      // double execution even if the cron fires twice or the function is
+      // invoked concurrently.
+      const expectedStatus = post.status; // "pending" or "retrying"
+      const { data: claimed, error: claimErr } = await supabase
+        .from("scheduled_posts")
+        .update({ status: "processing", last_attempt_at: new Date().toISOString() })
+        .eq("id", post.id)
+        .eq("status", expectedStatus)
+        .select("id")
+        .maybeSingle();
+
+      if (claimErr) {
+        console.error(`[process] failed to claim post ${post.id}:`, claimErr);
+        continue;
+      }
+      if (!claimed) {
+        skippedLocked += 1;
+        console.log(`[process] ⏭️  post ${post.id} already claimed by another worker — skipping`);
+        continue;
+      }
+      // Reflect the claim locally so downstream code sees the right status.
+      post.status = "processing";
+
       // === DEBUG TRACE COLLECTOR ===
       // Always built (cheap), persisted to scheduled_posts/post_history when the
       // user has flipped on enable_debug_trace in weather_settings (one-shot flag).
