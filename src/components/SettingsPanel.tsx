@@ -283,7 +283,9 @@ export function SettingsPanel({
     try {
       localStorage.setItem("youtube_oauth_state", data.state);
       sessionStorage.setItem("youtube_oauth_state", data.state);
-    } catch {}
+    } catch {
+      console.warn("Unable to persist YouTube OAuth state locally; backend state validation will be used.");
+    }
 
     // Always navigate the TOP window so the callback returns to the same
     // origin where we stored the state (avoids cross-origin localStorage
