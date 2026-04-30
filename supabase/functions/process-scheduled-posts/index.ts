@@ -1741,33 +1741,40 @@ Deno.serve(async (req) => {
       } catch (postError) {
         const errMsg = postError instanceof Error ? postError.message : "Processing failed";
         const currentRetryCount = (post as any).retry_count ?? 0;
-        if (currentRetryCount < 1) {
-          const nextRetryAt = new Date(Date.now() + 60 * 1000).toISOString();
+        const MAX_RETRIES = 2;
+        const RETRY_DELAY_MS = 2 * 60 * 1000;
+        if (currentRetryCount < MAX_RETRIES) {
+          const nextRetryAt = new Date(Date.now() + RETRY_DELAY_MS).toISOString();
           await supabase.from("scheduled_posts").update({
             status: "retrying",
             error_message: errMsg,
             retry_count: currentRetryCount + 1,
             next_retry_at: nextRetryAt,
+            last_attempt_at: new Date().toISOString(),
           }).eq("id", post.id);
           await supabase.from("system_logs").insert({
             user_id: post.user_id,
             type: "post_retry_scheduled",
-            message: `Processing threw, retrying in 60s: ${errMsg}`,
+            message: `Processing threw, retrying in 2 minutes (attempt ${currentRetryCount + 1}/${MAX_RETRIES}): ${errMsg}`,
             platform: post.platform,
             context: { scheduled_post_id: post.id, retry_count: currentRetryCount + 1 },
           });
           await supabase.from("notifications").insert({
             user_id: post.user_id,
             title: "Post Retrying",
-            message: `Post for ${post.city} hit an error — retrying in 60 seconds.`,
+            message: `Post for ${post.city} hit an error — retrying in 2 minutes (attempt ${currentRetryCount + 1}/${MAX_RETRIES}).`,
             type: "info",
           });
         } else {
-          await supabase.from("scheduled_posts").update({ status: "failed", error_message: errMsg }).eq("id", post.id);
+          await supabase.from("scheduled_posts").update({
+            status: "failed",
+            error_message: errMsg,
+            last_attempt_at: new Date().toISOString(),
+          }).eq("id", post.id);
           await supabase.from("system_logs").insert({
             user_id: post.user_id,
             type: "post_error",
-            message: `Scheduled post failed permanently: ${errMsg}`,
+            message: `Scheduled post failed permanently after ${MAX_RETRIES} retries: ${errMsg}`,
             platform: post.platform,
             context: { scheduled_post_id: post.id, retry_count: currentRetryCount },
           });
