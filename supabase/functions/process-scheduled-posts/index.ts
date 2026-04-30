@@ -1327,6 +1327,9 @@ Deno.serve(async (req) => {
         const hasVideoPlatform = platformsToPost.some((p) => VIDEO_PLATFORMS.has(p));
 
         let voiceUrl: string | null = post.voiceover_url || null;
+        // Estimated duration of the voiceover audio (seconds). Used to size the video composition
+        // so the full voiceover + CTA always plays before the video ends. null = no voiceover.
+        let voiceAudioDurationSec: number | null = null;
         let voiceSettingsRow: any = null;
         if (post.user_id) {
           const { data: vSettings } = await supabase
