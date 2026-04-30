@@ -363,6 +363,32 @@ Deno.serve(async (req) => {
           console.log(`[scheduler]   📝 Created ${insertedCount} scheduled_posts row(s) for ${period.name}: ${(inserted || []).map((r: any) => r.platform).join(", ")}`);
           triggered += insertedCount;
           results.push(`${period.name}: queued ${insertedCount}${skippedCount ? ` (skipped ${skippedCount} dup)` : ""}`);
+
+          // ── JOB PIPELINE (opt-in via weather_settings.use_jobs_pipeline) ──
+          // When enabled, also enqueue a generate_content job per inserted row.
+          // The legacy cron continues to run unchanged — the job runner takes
+          // ownership of execution by calling process-scheduled-posts itself.
+          const userSettings = settingsByUser.get(target.user_id);
+          if (!dryRun && userSettings?.use_jobs_pipeline === true && inserted && inserted.length > 0) {
+            for (const row of inserted) {
+              const { error: enqueueErr } = await supabase.rpc("enqueue_job", {
+                p_user_id: target.user_id,
+                p_type: "generate_content",
+                p_payload: { source: "auto-scheduler", slot: period.name },
+                p_parent_job_id: null,
+                p_root_job_id: null,
+                p_scheduled_post_id: row.id,
+                p_city: target.city,
+                p_platform: row.platform,
+                p_scheduled_for: scheduledAt,
+              });
+              if (enqueueErr) {
+                console.error(`[scheduler]   ⚠️ enqueue_job failed for ${row.id}:`, enqueueErr.message);
+              } else {
+                console.log(`[scheduler]   🧩 enqueued generate_content job for scheduled_post ${row.id}`);
+              }
+            }
+          }
         }
       }
 
