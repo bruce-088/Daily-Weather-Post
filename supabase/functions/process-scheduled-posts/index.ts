@@ -1736,34 +1736,41 @@ Deno.serve(async (req) => {
                   const adapter = getAdapter(platformName);
                   if (!adapter) continue;
                   const token = await adapter.getValidToken(supabase, post.user_id);
-                  if (!token) { console.error(`${platformName}: failed to get token for image post`); continue; }
+                  if (!token) {
+                    console.error(`${platformName}: failed to get token for image post`);
+                    await notifyFailure("upload", `${platformName} auth failed`, "Could not get valid token for image post.", { platform: platformName });
+                    continue;
+                  }
 
                   if (platformName === "linkedin") {
                     const postResult = await postLinkedInImage(token, fallbackImage.data, title, desc);
                     if (postResult) { postedAny = true; console.log(`Scheduled ${post.id}: linkedin image posted, ID: ${postResult}`); }
-                    else { errorMessage = "LinkedIn image post failed"; }
+                    else { errorMessage = "LinkedIn image post failed"; await notifyFailure("upload", "LinkedIn image post failed", errorMessage, { platform: "linkedin" }); }
                   } else if (platformName === "twitter") {
                     const postResult = await postTwitterImage(token, fallbackImage.data, desc);
                     if (postResult) { postedAny = true; console.log(`Scheduled ${post.id}: twitter image posted, ID: ${postResult}`); }
-                    else { errorMessage = "Twitter image post failed"; }
+                    else { errorMessage = "Twitter image post failed"; await notifyFailure("upload", "X / Twitter image post failed", errorMessage, { platform: "twitter" }); }
                   } else if (platformName === "tiktok") {
                     if (storedImageUrl) {
                       const { TikTokAdapter } = await import("../_shared/tiktok-adapter.ts");
                       const tiktokAdapter = new TikTokAdapter();
                       const postResult = await tiktokAdapter.uploadImage(token, storedImageUrl, title, desc);
                       if (postResult) { postedAny = true; console.log(`Scheduled ${post.id}: tiktok photo posted, publish_id: ${postResult}`); }
-                      else { errorMessage = "TikTok photo post failed"; }
+                      else { errorMessage = "TikTok photo post failed"; await notifyFailure("upload", "TikTok photo post failed", errorMessage, { platform: "tiktok" }); }
                     } else {
                       console.log(`Skipping TikTok for scheduled ${post.id} — no stored image URL`);
+                      await notifyFailure("upload", "TikTok skipped", "No stored image URL available for TikTok photo post.", { platform: "tiktok" });
                     }
                   }
                 } catch (err) {
                   console.error(`${platformName} image post error:`, err);
                   errorMessage = `${platformName} image post failed`;
+                  await notifyFailure("upload", `${platformName} image post error`, err instanceof Error ? err.message : String(err), { platform: platformName });
                 }
               } else if (videoOnlyPlatforms.includes(platformName)) {
                 console.log("Skipping " + platformName + " — requires video (image fallback only)");
                 errorMessage = (errorMessage || "") + platformName + " skipped (video required, credits depleted); ";
+                await notifyFailure("upload", `${platformName} skipped`, "Video render failed and this platform does not accept image fallbacks.", { platform: platformName });
               }
             }
 
