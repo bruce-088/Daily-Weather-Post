@@ -1711,10 +1711,12 @@ Deno.serve(async (req) => {
         } else {
           // Video failed — fallback to image for image-capable platforms
           console.log("Video generation failed for scheduled post, attempting fallback image...");
+          await notifyFailure("render", "Render failed", "Video render failed — attempting fallback image.", { city: weather.city });
           const fallbackImage = await generateFallbackImage(weather);
 
           if (!fallbackImage) {
             errorMessage = "Both video and fallback image generation failed";
+            await notifyFailure("fallback_image", "Fallback image failed", errorMessage, { city: weather.city });
           } else {
             // Store the generated image to Supabase Storage
             const stored = await storeGeneratedImage(supabase, post.user_id, fallbackImage.data, fallbackImage.mimeType, weather.city);
