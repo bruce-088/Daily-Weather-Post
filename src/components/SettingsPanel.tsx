@@ -11,6 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { setSkipToday } from "@/lib/api";
 import { SystemHealthCard } from "@/components/SystemHealthCard";
 import { JobPipelineToggle } from "@/components/JobPipelineToggle";
+import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
+import { CollapsibleCardHeader } from "@/components/CollapsibleCardHeader";
 
 const TIMEZONE_OPTIONS = [
   { value: "America/New_York", label: "Eastern (New York)" },
