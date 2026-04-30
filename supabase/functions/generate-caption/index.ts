@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { verifyUser } from "../_shared/auth-helpers.ts";
 import { buildStyleAddendum, normalizeTone } from "../_shared/caption-style.ts";
 import {
@@ -169,6 +170,49 @@ Deno.serve(async (req) => {
       platform: body.platform ?? null,
     });
 
+    // ---- AI learning: pull top content_insights for this user/condition/time_of_day ----
+    let insightNote = "";
+    let aiOptimized = false;
+    try {
+      const svc = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      );
+      const { data: settingsRow } = await svc
+        .from("weather_settings")
+        .select("use_performance_learning")
+        .eq("user_id", auth.userId)
+        .maybeSingle();
+      const learningOn = (settingsRow as any)?.use_performance_learning !== false;
+      if (learningOn) {
+        const hourLocal = new Date().getHours();
+        const tod =
+          hourLocal < 11 ? "morning" :
+          hourLocal < 16 ? "afternoon" :
+          hourLocal < 21 ? "evening" : "night";
+        const condKey = (conditions || "").toLowerCase().split(/[,;]/)[0]?.trim();
+        if (condKey) {
+          const { data: ins } = await svc
+            .from("content_insights")
+            .select("tone, top_hook, delta_pct, sample_size, rank")
+            .eq("user_id", auth.userId)
+            .eq("condition", condKey)
+            .eq("time_of_day", tod)
+            .order("rank", { ascending: true })
+            .limit(1);
+          const top = ins?.[0];
+          if (top && (top as any).sample_size >= 3) {
+            aiOptimized = true;
+            const deltaTxt = (top as any).delta_pct ? ` (+${Math.round((top as any).delta_pct)}% vs your avg)` : "";
+            const hookTxt = (top as any).top_hook ? `\nA past high-performing opener for this pattern: "${(top as any).top_hook}". Use it as inspiration only — do not copy verbatim.` : "";
+            insightNote = `\n\nPERFORMANCE LEARNING: Your past ${condKey} posts at ${tod} perform best with a ${(top as any).tone.toUpperCase()} tone${deltaTxt}. Lean into that voice.${hookTxt}`;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("[generate-caption] insight lookup failed:", e);
+    }
+
     const userPrompt = `NOW USE THESE INPUTS TO WRITE TODAY'S CAPTION:
 
 city: ${city}
@@ -193,7 +237,7 @@ extra_note: ${body.extra_note ?? body.extraNote ?? ""}${extremeNote}${styleNote}
 
 ${buildVerifiedLandmarksBlock(city)}
 
-${styleAddendum}`;
+${styleAddendum}${insightNote}`;
 
     const systemPrompt = `${SKYBRIEF_SYSTEM_PROMPT}\n\n${LOCATION_ACCURACY_RULES}`;
 
@@ -262,7 +306,7 @@ ${styleAddendum}`;
     caption = stripUnverifiedReferences(caption, city);
 
     return new Response(
-      JSON.stringify({ caption }),
+      JSON.stringify({ caption, ai_optimized: aiOptimized }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {

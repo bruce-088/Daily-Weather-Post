@@ -106,6 +106,54 @@ export type Database = {
         }
         Relationships: []
       }
+      content_insights: {
+        Row: {
+          avg_engagement: number
+          avg_views: number
+          computed_at: string
+          condition: string
+          created_at: string
+          delta_pct: number | null
+          id: string
+          rank: number
+          sample_size: number
+          time_of_day: string
+          tone: string
+          top_hook: string | null
+          user_id: string
+        }
+        Insert: {
+          avg_engagement?: number
+          avg_views?: number
+          computed_at?: string
+          condition: string
+          created_at?: string
+          delta_pct?: number | null
+          id?: string
+          rank?: number
+          sample_size?: number
+          time_of_day: string
+          tone: string
+          top_hook?: string | null
+          user_id: string
+        }
+        Update: {
+          avg_engagement?: number
+          avg_views?: number
+          computed_at?: string
+          condition?: string
+          created_at?: string
+          delta_pct?: number | null
+          id?: string
+          rank?: number
+          sample_size?: number
+          time_of_day?: string
+          tone?: string
+          top_hook?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       jobs: {
         Row: {
           attempts: number
@@ -211,37 +259,55 @@ export type Database = {
       post_analytics: {
         Row: {
           comments: number
+          condition: string | null
           created_at: string
+          external_id: string | null
           fetched_at: string
+          has_local_reference: boolean
+          has_voiceover: boolean
           id: string
           likes: number
           platform: string
           post_id: string | null
           shares: number
+          time_of_day: string | null
+          tone: string | null
           user_id: string
           views: number
         }
         Insert: {
           comments?: number
+          condition?: string | null
           created_at?: string
+          external_id?: string | null
           fetched_at?: string
+          has_local_reference?: boolean
+          has_voiceover?: boolean
           id?: string
           likes?: number
           platform: string
           post_id?: string | null
           shares?: number
+          time_of_day?: string | null
+          tone?: string | null
           user_id: string
           views?: number
         }
         Update: {
           comments?: number
+          condition?: string | null
           created_at?: string
+          external_id?: string | null
           fetched_at?: string
+          has_local_reference?: boolean
+          has_voiceover?: boolean
           id?: string
           likes?: number
           platform?: string
           post_id?: string | null
           shares?: number
+          time_of_day?: string | null
+          tone?: string | null
           user_id?: string
           views?: number
         }
@@ -616,6 +682,7 @@ export type Database = {
           twitter_user_id: string | null
           updated_at: string
           use_jobs_pipeline: boolean
+          use_performance_learning: boolean
           user_id: string | null
           voiceover_similarity: number
           voiceover_speed: number
@@ -665,6 +732,7 @@ export type Database = {
           twitter_user_id?: string | null
           updated_at?: string
           use_jobs_pipeline?: boolean
+          use_performance_learning?: boolean
           user_id?: string | null
           voiceover_similarity?: number
           voiceover_speed?: number
@@ -714,6 +782,7 @@ export type Database = {
           twitter_user_id?: string | null
           updated_at?: string
           use_jobs_pipeline?: boolean
+          use_performance_learning?: boolean
           user_id?: string | null
           voiceover_similarity?: number
           voiceover_speed?: number

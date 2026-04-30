@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { setSkipToday } from "@/lib/api";
 import { SystemHealthCard } from "@/components/SystemHealthCard";
 import { JobPipelineToggle } from "@/components/JobPipelineToggle";
+import { PerformanceLearningToggle } from "@/components/PerformanceLearningToggle";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { CollapsibleCardHeader } from "@/components/CollapsibleCardHeader";
 
@@ -884,6 +885,7 @@ export function SettingsPanel({
         </Card>
       )}
 
+      <PerformanceLearningToggle />
       <JobPipelineToggle />
       <SystemHealthCard />
 

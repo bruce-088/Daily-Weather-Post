@@ -41,6 +41,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PostHistoryList } from "@/components/PostHistoryList";
 import { AnalyticsPanel } from "@/components/AnalyticsPanel";
+import { SmartInsightsCard } from "@/components/SmartInsightsCard";
 import { VideoPreviewDialog } from "@/components/VideoPreviewDialog";
 import { SchedulePostForm } from "@/components/SchedulePostForm";
 import { ScheduledPostsList } from "@/components/ScheduledPostsList";
@@ -941,10 +942,11 @@ const Index = () => {
 
           {/* ANALYTICS TAB */}
           <TabsContent value="analytics">
-            <div className="max-w-3xl mx-auto">
-              <div className="flex items-center justify-between mb-4">
+            <div className="max-w-3xl mx-auto space-y-4">
+              <div className="flex items-center justify-between">
                 <h2 className="text-lg font-semibold text-foreground">Performance & Insights</h2>
               </div>
+              <SmartInsightsCard />
               <AnalyticsPanel />
             </div>
           </TabsContent>

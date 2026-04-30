@@ -1895,12 +1895,32 @@ Deno.serve(async (req) => {
           console.log(`[process] post_history row created for ${post.id} (${post.platform}, ${historyStatus})`);
 
           // Seed post_analytics rows so the Analytics tab shows the post immediately.
-          // One row per platform that successfully published.
+          // One row per platform that successfully published. Includes context
+          // fields used by the AI learning analyzer (tone, condition, time-of-day,
+          // voiceover flag, local-reference detection).
           if (postStatus === "posted" && historyRow?.id && Object.keys(platformExternalIds).length > 0) {
+            const hourLocal = new Date().getHours();
+            const timeOfDay =
+              hourLocal < 11 ? "morning" :
+              hourLocal < 16 ? "afternoon" :
+              hourLocal < 21 ? "evening" : "night";
+            // Heuristic: caption mentions a local landmark / city-specific name beyond just the city itself.
+            const captionLower = (caption || "").toLowerCase();
+            const cityLower = (weather.city || "").toLowerCase();
+            const localKeywords = ["downtown", "park", "river", "bay", "beach", "neighborhood", "ave", "street", "blvd"];
+            const hasLocalReference =
+              (cityLower && captionLower.includes(cityLower)) ||
+              localKeywords.some((k) => captionLower.includes(k));
             const analyticsRows = Object.keys(platformExternalIds).map((plat) => ({
               user_id: post.user_id,
               post_id: historyRow.id,
               platform: plat,
+              external_id: platformExternalIds[plat],
+              tone: captionTone || null,
+              condition: weather.condition || null,
+              time_of_day: timeOfDay,
+              has_voiceover: !!voiceUrl,
+              has_local_reference: hasLocalReference,
               views: 0,
               likes: 0,
               comments: 0,
