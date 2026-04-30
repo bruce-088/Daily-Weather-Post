@@ -19,12 +19,21 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { action, code, redirect_uri } = body;
+    const { action, code, redirect_uri, state } = body;
     console.log("YouTube auth action:", action);
 
     // get_auth_url doesn't need auth
     if (action === "get_auth_url") {
-      const csrfState = crypto.randomUUID();
+      const auth = await verifyUser(req);
+      if (auth.response) return auth.response;
+
+      const statePayload = {
+        nonce: crypto.randomUUID(),
+        user_id: auth.userId,
+        redirect_uri,
+        exp: Date.now() + 10 * 60 * 1000,
+      };
+      const csrfState = btoa(JSON.stringify(statePayload));
       const params = new URLSearchParams({
         client_id: YOUTUBE_CLIENT_ID,
         redirect_uri: redirect_uri,
@@ -50,9 +59,31 @@ Deno.serve(async (req) => {
     const userId = auth.userId;
 
     if (action === "exchange_code") {
-      if (!code || !redirect_uri) {
+      if (!code || !redirect_uri || !state) {
         return new Response(
-          JSON.stringify({ error: "Missing code or redirect_uri" }),
+          JSON.stringify({ error: "Missing code, redirect_uri, or state" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      let statePayload: { user_id?: string; redirect_uri?: string; exp?: number } = {};
+      try {
+        statePayload = JSON.parse(atob(state));
+      } catch {
+        return new Response(
+          JSON.stringify({ error: "Invalid OAuth state" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      if (
+        statePayload.user_id !== userId ||
+        statePayload.redirect_uri !== redirect_uri ||
+        !statePayload.exp ||
+        statePayload.exp < Date.now()
+      ) {
+        return new Response(
+          JSON.stringify({ error: "Invalid or expired OAuth state" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
