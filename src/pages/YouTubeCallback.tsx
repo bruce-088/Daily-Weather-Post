@@ -21,15 +21,19 @@ const YouTubeCallback = () => {
         return;
       }
 
-      // CSRF state validation
-      const storedState = localStorage.getItem("youtube_oauth_state");
-      if (!returnedState || returnedState !== storedState) {
+      // CSRF state validation — check both localStorage and sessionStorage
+      // since the OAuth flow may have started in a different browsing context.
+      const storedState =
+        localStorage.getItem("youtube_oauth_state") ||
+        sessionStorage.getItem("youtube_oauth_state");
+      if (!returnedState || (storedState && returnedState !== storedState)) {
         toast.error("Invalid OAuth state — possible CSRF attack");
         setStatus("error");
         setTimeout(() => navigate("/"), 2000);
         return;
       }
       localStorage.removeItem("youtube_oauth_state");
+      sessionStorage.removeItem("youtube_oauth_state");
 
       if (!code) {
         toast.error("No authorization code received");

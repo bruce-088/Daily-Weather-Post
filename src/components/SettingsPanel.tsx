@@ -269,16 +269,20 @@ export function SettingsPanel({
       return;
     }
 
-    localStorage.setItem("youtube_oauth_state", data.state);
-    const popup = window.open(data.url, "_blank", "noopener,noreferrer");
-    if (!popup || popup.closed || typeof popup.closed === "undefined") {
-      // Popup blocked — fall back to top-level navigation so Google doesn't render in the iframe
-      toast.error("Popup blocked. Redirecting to Google in this tab…");
-      try {
-        (window.top ?? window).location.href = data.url;
-      } catch {
-        window.location.href = data.url;
-      }
+    // Persist state in BOTH the iframe origin and the top-window origin so
+    // the callback (which lands on the top origin) can validate it.
+    try {
+      localStorage.setItem("youtube_oauth_state", data.state);
+      sessionStorage.setItem("youtube_oauth_state", data.state);
+    } catch {}
+
+    // Always navigate the TOP window so the callback returns to the same
+    // origin where we stored the state (avoids cross-origin localStorage
+    // mismatch that triggers "Invalid OAuth state").
+    try {
+      (window.top ?? window).location.href = data.url;
+    } catch {
+      window.location.href = data.url;
     }
   };
 
