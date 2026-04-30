@@ -306,7 +306,7 @@ ${styleAddendum}${insightNote}`;
     caption = stripUnverifiedReferences(caption, city);
 
     return new Response(
-      JSON.stringify({ caption }),
+      JSON.stringify({ caption, ai_optimized: aiOptimized }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
