@@ -588,7 +588,32 @@ async function storeVoiceAudio(
   return { signedUrl: signed.signedUrl, storagePath: path };
 }
 
-function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | null, timePeriod?: string | null, voiceUrl?: string | null): object {
+/**
+ * Estimate the duration (seconds) of an MP3 buffer produced by ElevenLabs.
+ * We request `mp3_44100_128` (CBR 128 kbps) so duration ≈ bytes / (128_000/8) = bytes / 16000.
+ */
+function estimateMp3DurationSeconds(byteLength: number | null | undefined): number | null {
+  if (!byteLength || byteLength <= 0) return null;
+  const seconds = byteLength / 16000;
+  if (!isFinite(seconds) || seconds <= 0) return null;
+  return seconds;
+}
+
+/**
+ * Compute the final composition duration so the voiceover (which starts at t=0.5s)
+ * always finishes with at least `VOICE_TAIL_PAD` seconds of silent video at the end.
+ */
+const VOICE_START = 0.5;        // seconds — when voice element starts
+const VOICE_TAIL_PAD = 1.5;     // seconds — silence held after voice ends
+const MIN_VIDEO_DURATION = 10;  // seconds — hard floor
+
+function computeVideoDuration(audioDurationSec: number | null | undefined): number {
+  const audio = typeof audioDurationSec === "number" && isFinite(audioDurationSec) && audioDurationSec > 0 ? audioDurationSec : 0;
+  const target = audio > 0 ? VOICE_START + audio + VOICE_TAIL_PAD : MIN_VIDEO_DURATION;
+  return Math.max(target, MIN_VIDEO_DURATION);
+}
+
+function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | null, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null): object {
   const now = new Date();
   const dateStr = now.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
   const theme = getWeatherTheme(weather.condition);
@@ -602,6 +627,12 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
   const windSpeed = weather.windInfo.split(" ")[0] + " mph";
   let t = 0;
   const nt = () => ++t;
+  // Dynamic composition length — extends to accommodate full voiceover + tail padding.
+  const D = computeVideoDuration(audioDurationSec);
+  // Helper: original durations were authored as `10 - time` (so element runs to end).
+  // Translate them so each element still runs from `time` to `D`.
+  const dur = (originalRemainder: number) => Math.max(0.1, D - (10 - originalRemainder));
+
   const txtShadow = "0px 2px 6px rgba(0,0,0,0.5)";
 
   // Determine time period label
@@ -629,90 +660,90 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
   const elements: any[] = [
     // === BACKGROUND ===
     ...(videoUrl ? [
-      { type: "video", track: nt(), time: 0, duration: 10, source: videoUrl, width: "100%", height: "100%", x: "50%", y: "50%", fit: "cover" },
+      { type: "video", track: nt(), time: 0, duration: dur(10.0), source: videoUrl, width: "100%", height: "100%", x: "50%", y: "50%", fit: "cover" },
     ] : [
-      { type: "shape", track: nt(), time: 0, duration: 10, shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%", fill_color: bgGradient },
+      { type: "shape", track: nt(), time: 0, duration: dur(10.0), shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%", fill_color: bgGradient },
     ]),
 
     // === 3-ZONE GRADIENT OVERLAY (stronger for readability) ===
-    { type: "shape", track: nt(), time: 0, duration: 10, shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%",
+    { type: "shape", track: nt(), time: 0, duration: dur(10.0), shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%",
       fill_color: "linear-gradient(180deg, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.30) 35%, rgba(0,0,0,0.30) 55%, rgba(0,0,0,0.55) 100%)" },
 
     // Subtle glow
-    { type: "shape", track: nt(), time: 0, duration: 10, shape_type: "ellipse", width: 1800, height: 1800, x: "75%", y: "30%", fill_color: theme.glow1,
-      animations: [{ type: "scale", start_scale: "95%", end_scale: "108%", duration: 10, easing: "linear" }] },
+    { type: "shape", track: nt(), time: 0, duration: dur(10.0), shape_type: "ellipse", width: 1800, height: 1800, x: "75%", y: "30%", fill_color: theme.glow1,
+      animations: [{ type: "scale", start_scale: "95%", end_scale: "108%", duration: dur(10.0), easing: "linear" }] },
 
     // === SKYBRIEF LOGO (icon image) ===
-    { type: "image", track: nt(), time: 0, duration: 10, source: logoUrl, width: 100, height: 100,
+    { type: "image", track: nt(), time: 0, duration: dur(10.0), source: logoUrl, width: 100, height: 100,
       x: "44%", y: "5.5%", x_alignment: "50%", y_alignment: "50%",
       enter: { type: "fade", duration: 0.5 } },
 
     // === BRAND TEXT ===
-    { type: "text", track: nt(), time: 0, duration: 10, text: "SKYBRIEF", font_family: "Inter", font_weight: "800", font_size: "56", fill_color: "#ffffff", letter_spacing: "18%",
+    { type: "text", track: nt(), time: 0, duration: dur(10.0), text: "SKYBRIEF", font_family: "Inter", font_weight: "800", font_size: "56", fill_color: "#ffffff", letter_spacing: "18%",
       x: "56%", y: "5.5%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.5 } },
-    { type: "shape", track: nt(), time: 0.2, duration: 9.8, shape_type: "rectangle", width: 80, height: 4, x: "50%", y: "8%", fill_color: theme.accent, border_radius: "2",
+    { type: "shape", track: nt(), time: 0.2, duration: dur(9.8), shape_type: "rectangle", width: 80, height: 4, x: "50%", y: "8%", fill_color: theme.accent, border_radius: "2",
       enter: { type: "scale", start_scale: "0%", duration: 0.6 } },
 
     // === TIME PERIOD BADGE ===
-    { type: "shape", track: nt(), time: 0.3, duration: 9.7, shape_type: "rectangle", width: 520, height: 60, x: "50%", y: "11%",
+    { type: "shape", track: nt(), time: 0.3, duration: dur(9.7), shape_type: "rectangle", width: 520, height: 60, x: "50%", y: "11%",
       fill_color: "rgba(255,255,255,0.12)", border_radius: "30",
       enter: { type: "fade", duration: 0.4 } },
-    { type: "text", track: nt(), time: 0.3, duration: 9.7, text: periodLabel, font_family: "Inter", font_weight: "700", font_size: "34", fill_color: theme.accent, letter_spacing: "4%",
+    { type: "text", track: nt(), time: 0.3, duration: dur(9.7), text: periodLabel, font_family: "Inter", font_weight: "700", font_size: "34", fill_color: theme.accent, letter_spacing: "4%",
       x: "50%", y: "11%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.4 } },
 
     // === CITY HEADER GLASS PANEL (stronger backdrop) ===
-    { type: "shape", track: nt(), time: 0.2, duration: 9.8, shape_type: "rectangle", width: 1100, height: 280, x: "50%", y: "17%",
+    { type: "shape", track: nt(), time: 0.2, duration: dur(9.8), shape_type: "rectangle", width: 1100, height: 280, x: "50%", y: "17%",
       fill_color: "rgba(0,0,0,0.45)", border_radius: "16",
       enter: { type: "fade", duration: 0.4 } },
 
     // === CITY + DATE ===
-    { type: "text", track: nt(), time: 0.3, duration: 9.7, text: cityUpper, font_family: "Inter", font_weight: "800", font_size: "96", fill_color: "#ffffff",
+    { type: "text", track: nt(), time: 0.3, duration: dur(9.7), text: cityUpper, font_family: "Inter", font_weight: "800", font_size: "96", fill_color: "#ffffff",
       x: "50%", y: "15%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "slide", direction: "up", duration: 0.5 } },
-    { type: "text", track: nt(), time: 0.5, duration: 9.5, text: regionDate, font_family: "Inter", font_weight: "600", font_size: "40", fill_color: "rgba(255,255,255,0.70)",
+    { type: "text", track: nt(), time: 0.5, duration: dur(9.5), text: regionDate, font_family: "Inter", font_weight: "600", font_size: "40", fill_color: "rgba(255,255,255,0.70)",
       x: "50%", y: "20%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.5 } },
 
     // === HERO TEMPERATURE ===
-    { type: "text", track: nt(), time: 0.6, duration: 9.4, text: theme.emoji, font_size: "100",
+    { type: "text", track: nt(), time: 0.6, duration: dur(9.4), text: theme.emoji, font_size: "100",
       x: "50%", y: "29%", x_alignment: "50%", y_alignment: "50%", enter: { type: "scale", start_scale: "50%", duration: 0.6 } },
-    { type: "text", track: nt(), time: 0.7, duration: 9.3, text: tempStr, font_family: "Inter", font_weight: "900", font_size: "220", fill_color: "#ffffff",
+    { type: "text", track: nt(), time: 0.7, duration: dur(9.3), text: tempStr, font_family: "Inter", font_weight: "900", font_size: "220", fill_color: "#ffffff",
       x: "50%", y: "41%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "scale", start_scale: "60%", duration: 0.6 } },
-    { type: "text", track: nt(), time: 0.9, duration: 9.1, text: condStr,
+    { type: "text", track: nt(), time: 0.9, duration: dur(9.1), text: condStr,
       font_family: "Inter", font_weight: "600", font_size: "48", fill_color: theme.accent,
       x: "50%", y: "50%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.5 } },
 
     // === DETAIL CARD (stronger frosted glass) ===
-    { type: "shape", track: nt(), time: 1.3, duration: 8.7, shape_type: "rectangle", width: 1250, height: 340, x: "50%", y: "63%",
+    { type: "shape", track: nt(), time: 1.3, duration: dur(8.7), shape_type: "rectangle", width: 1250, height: 340, x: "50%", y: "63%",
       fill_color: "rgba(10,15,30,0.75)", border_radius: "18", border_width: 1, border_color: "rgba(255,255,255,0.12)",
       shadow: "inset 0 1px 0 rgba(255,255,255,0.06)",
       enter: { type: "scale", start_scale: "92%", duration: 0.5 } },
     // Labels
-    { type: "text", track: nt(), time: 1.5, duration: 8.5, text: "HIGH", font_family: "Inter", font_weight: "600", font_size: "28", fill_color: "rgba(255,255,255,0.50)", letter_spacing: "6%",
+    { type: "text", track: nt(), time: 1.5, duration: dur(8.5), text: "HIGH", font_family: "Inter", font_weight: "600", font_size: "28", fill_color: "rgba(255,255,255,0.50)", letter_spacing: "6%",
       x: "17%", y: "58%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.3 } },
-    { type: "text", track: nt(), time: 1.5, duration: 8.5, text: "LOW", font_family: "Inter", font_weight: "600", font_size: "28", fill_color: "rgba(255,255,255,0.50)", letter_spacing: "6%",
+    { type: "text", track: nt(), time: 1.5, duration: dur(8.5), text: "LOW", font_family: "Inter", font_weight: "600", font_size: "28", fill_color: "rgba(255,255,255,0.50)", letter_spacing: "6%",
       x: "39%", y: "58%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.3 } },
-    { type: "text", track: nt(), time: 1.5, duration: 8.5, text: "RAIN", font_family: "Inter", font_weight: "600", font_size: "28", fill_color: "rgba(255,255,255,0.50)", letter_spacing: "6%",
+    { type: "text", track: nt(), time: 1.5, duration: dur(8.5), text: "RAIN", font_family: "Inter", font_weight: "600", font_size: "28", fill_color: "rgba(255,255,255,0.50)", letter_spacing: "6%",
       x: "61%", y: "58%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.3 } },
-    { type: "text", track: nt(), time: 1.5, duration: 8.5, text: "WIND", font_family: "Inter", font_weight: "600", font_size: "28", fill_color: "rgba(255,255,255,0.50)", letter_spacing: "6%",
+    { type: "text", track: nt(), time: 1.5, duration: dur(8.5), text: "WIND", font_family: "Inter", font_weight: "600", font_size: "28", fill_color: "rgba(255,255,255,0.50)", letter_spacing: "6%",
       x: "83%", y: "58%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.3 } },
     // Values
-    { type: "text", track: nt(), time: 1.7, duration: 8.3, text: hiStr, font_family: "Inter", font_weight: "700", font_size: "56", fill_color: "#ffffff",
+    { type: "text", track: nt(), time: 1.7, duration: dur(8.3), text: hiStr, font_family: "Inter", font_weight: "700", font_size: "56", fill_color: "#ffffff",
       x: "17%", y: "64%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "slide", direction: "up", duration: 0.4 } },
-    { type: "text", track: nt(), time: 1.8, duration: 8.2, text: loStr, font_family: "Inter", font_weight: "700", font_size: "56", fill_color: "#ffffff",
+    { type: "text", track: nt(), time: 1.8, duration: dur(8.2), text: loStr, font_family: "Inter", font_weight: "700", font_size: "56", fill_color: "#ffffff",
       x: "39%", y: "64%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "slide", direction: "up", duration: 0.4 } },
-    { type: "text", track: nt(), time: 1.9, duration: 8.1, text: rainStr, font_family: "Inter", font_weight: "700", font_size: "56", fill_color: "#ffffff",
+    { type: "text", track: nt(), time: 1.9, duration: dur(8.1), text: rainStr, font_family: "Inter", font_weight: "700", font_size: "56", fill_color: "#ffffff",
       x: "61%", y: "64%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "slide", direction: "up", duration: 0.4 } },
-    { type: "text", track: nt(), time: 2.0, duration: 8.0, text: windSpeed, font_family: "Inter", font_weight: "700", font_size: "56", fill_color: "#ffffff",
+    { type: "text", track: nt(), time: 2.0, duration: dur(8.0), text: windSpeed, font_family: "Inter", font_weight: "700", font_size: "56", fill_color: "#ffffff",
       x: "83%", y: "64%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "slide", direction: "up", duration: 0.4 } },
     // Dividers
-    { type: "shape", track: nt(), time: 1.6, duration: 8.4, shape_type: "rectangle", width: 1, height: 100, x: "28%", y: "61.5%", fill_color: "rgba(255,255,255,0.10)", enter: { type: "fade", duration: 0.3 } },
-    { type: "shape", track: nt(), time: 1.6, duration: 8.4, shape_type: "rectangle", width: 1, height: 100, x: "50%", y: "61.5%", fill_color: "rgba(255,255,255,0.10)", enter: { type: "fade", duration: 0.3 } },
-    { type: "shape", track: nt(), time: 1.6, duration: 8.4, shape_type: "rectangle", width: 1, height: 100, x: "72%", y: "61.5%", fill_color: "rgba(255,255,255,0.10)", enter: { type: "fade", duration: 0.3 } },
+    { type: "shape", track: nt(), time: 1.6, duration: dur(8.4), shape_type: "rectangle", width: 1, height: 100, x: "28%", y: "61.5%", fill_color: "rgba(255,255,255,0.10)", enter: { type: "fade", duration: 0.3 } },
+    { type: "shape", track: nt(), time: 1.6, duration: dur(8.4), shape_type: "rectangle", width: 1, height: 100, x: "50%", y: "61.5%", fill_color: "rgba(255,255,255,0.10)", enter: { type: "fade", duration: 0.3 } },
+    { type: "shape", track: nt(), time: 1.6, duration: dur(8.4), shape_type: "rectangle", width: 1, height: 100, x: "72%", y: "61.5%", fill_color: "rgba(255,255,255,0.10)", enter: { type: "fade", duration: 0.3 } },
   ];
 
   // === OPTIONAL ALERT LINE (soft yellow accent) ===
   if (alertLine) {
     elements.push(
-      { type: "text", track: nt(), time: 2.2, duration: 7.8, text: alertLine, font_family: "Inter", font_weight: "700", font_size: "38", fill_color: "#fbbf24",
+      { type: "text", track: nt(), time: 2.2, duration: dur(7.8), text: alertLine, font_family: "Inter", font_weight: "700", font_size: "38", fill_color: "#fbbf24",
         x: "50%", y: "73%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.5 } }
     );
   }
@@ -720,14 +751,14 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
   // === TAKEAWAY ===
   const takeawayY = alertLine ? "77%" : "74%";
   elements.push(
-    { type: "text", track: nt(), time: 2.5, duration: 7.5, text: takeaway, font_family: "Inter", font_weight: "600", font_size: "42", fill_color: "#ffffff",
+    { type: "text", track: nt(), time: 2.5, duration: dur(7.5), text: takeaway, font_family: "Inter", font_weight: "600", font_size: "42", fill_color: "#ffffff",
       x: "50%", y: takeawayY, x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.6 } }
   );
 
   // === TOMORROW PREVIEW ===
   const tomorrowY = alertLine ? "81%" : "78.5%";
   elements.push(
-    { type: "text", track: nt(), time: 3.0, duration: 7.0, text: tomorrowPreview, font_family: "Inter", font_weight: "600", font_size: "36", fill_color: "rgba(255,255,255,0.65)",
+    { type: "text", track: nt(), time: 3.0, duration: dur(7.0), text: tomorrowPreview, font_family: "Inter", font_weight: "600", font_size: "36", fill_color: "rgba(255,255,255,0.65)",
       x: "50%", y: tomorrowY, x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.5 } }
   );
 
@@ -735,44 +766,51 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
   const ctaPanelY = alertLine ? "88%" : "86%";
   const ctaTextY = alertLine ? "88%" : "86%";
   elements.push(
-    { type: "shape", track: nt(), time: 3.3, duration: 6.7, shape_type: "rectangle", width: 1000, height: 100, x: "50%", y: ctaPanelY,
+    { type: "shape", track: nt(), time: 3.3, duration: dur(6.7), shape_type: "rectangle", width: 1000, height: 100, x: "50%", y: ctaPanelY,
       fill_color: "rgba(0,0,0,0.55)", border_radius: "14",
       enter: { type: "fade", duration: 0.4 } },
-    { type: "text", track: nt(), time: 3.8, duration: 6.2, text: habitCTA, font_family: "Inter", font_weight: "600", font_size: "40", fill_color: "rgba(255,255,255,0.75)",
+    { type: "text", track: nt(), time: 3.8, duration: dur(6.2), text: habitCTA, font_family: "Inter", font_weight: "600", font_size: "40", fill_color: "rgba(255,255,255,0.75)",
       x: "50%", y: ctaTextY, x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.6 } },
   );
 
   // === AI VOICE NARRATION TRACK ===
-  // Voice plays from t=0.5s. If existing background music is added later, it should
-  // be added on its own track at a reduced volume (e.g. 25%) to duck under the voice.
+  // Voice plays from t=VOICE_START. We do NOT trim the audio track — its duration mirrors
+  // the real audio length so the CTA always finishes. Composition (D) leaves
+  // VOICE_TAIL_PAD seconds of silent video after the voice ends. Background music (if
+  // added later) should be on its own track at reduced volume to duck under the voice.
   if (voiceUrl) {
+    const audioLen = typeof audioDurationSec === "number" && isFinite(audioDurationSec) && audioDurationSec > 0
+      ? audioDurationSec
+      : Math.max(0.1, D - VOICE_START); // fallback: play to end of composition
     elements.push({
       type: "audio",
       track: nt(),
-      time: 0.5,
-      duration: 9.5,
+      time: VOICE_START,
+      duration: audioLen,
       source: voiceUrl,
       volume: "100%",
+      // Explicitly do not fade out — keep audio crisp through the CTA.
     });
   }
 
   return {
-    width: 1440, height: 2560, duration: 10, frame_rate: 30, fill_color: theme.bg1,
+    width: 1440, height: 2560, duration: D, frame_rate: 30, fill_color: theme.bg1,
     elements,
   };
 }
 
-async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: string | null, voiceUrl?: string | null): Promise<{ data: Uint8Array; mimeType: string } | null> {
+async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null): Promise<{ data: Uint8Array; mimeType: string } | null> {
   const apiKey = Deno.env.get("CREATOMATE_API_KEY");
   if (!apiKey) {
     console.error("CREATOMATE_API_KEY not configured");
     return null;
   }
 
-  console.log("Starting Creatomate render for", weather.city, voiceUrl ? "(with voiceover)" : "(no voice)");
+  const compDuration = computeVideoDuration(audioDurationSec);
+  console.log(`Starting Creatomate render for ${weather.city} ${voiceUrl ? "(with voiceover)" : "(no voice)"} — composition ${compDuration.toFixed(2)}s (audio=${audioDurationSec ?? "n/a"}s)`);
   const theme = getWeatherTheme(weather.condition);
   const videoUrl = await fetchPexelsVideoUrl(theme.videoKeyword, weather.city, weather.stateOrRegion);
-  const source = buildCreatomateSource(weather, videoUrl, timePeriod, voiceUrl);
+  const source = buildCreatomateSource(weather, videoUrl, timePeriod, voiceUrl, audioDurationSec);
 
 
   const requestBody = JSON.stringify({ output_format: "mp4", ...source });
@@ -1231,12 +1269,17 @@ Deno.serve(async (req) => {
     let voiceUrl: string | null = null;
     let voiceStoragePath: string | null = null;
     let voiceScript: string | null = null;
+    // Estimated voiceover audio duration (seconds). Drives the dynamic composition length
+    // so the full voiceover + CTA is never cut off. null = no voiceover (use 10s minimum).
+    let voiceAudioDurationSec: number | null = null;
     if (voiceOpts.enabled && userId) {
       console.log("Voice enabled — generating script + TTS audio");
       voiceScript = await generateVoiceScript(weather, voiceOpts.tone, selectedPlatforms);
       console.log("Voice script:", voiceScript);
       const audioBytes = await generateVoiceAudio(voiceScript, voiceOpts);
       if (audioBytes) {
+        voiceAudioDurationSec = estimateMp3DurationSeconds(audioBytes.length);
+        console.log(`Voice audio estimated duration: ${voiceAudioDurationSec?.toFixed(2) ?? "n/a"}s (${audioBytes.length} bytes)`);
         const stored = await storeVoiceAudio(supabase, userId, audioBytes);
         if (stored) {
           voiceUrl = stored.signedUrl;
@@ -1248,8 +1291,9 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Generate video (with voice baked in if available)
-    const video = await generateWeatherVideo(weather, timePeriod, voiceUrl);
+    // Generate video (with voice baked in if available). Composition length is sized
+    // dynamically from the audio duration so the voiceover + CTA always finish in full.
+    const video = await generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec);
 
 
     // === PREVIEW MODE ===
