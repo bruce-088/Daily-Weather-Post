@@ -490,88 +490,88 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
 
   const elements: any[] = [
     ...(videoUrl ? [
-      { type: "video", track: nt(), time: 0, duration: 10, source: videoUrl, width: "100%", height: "100%", x: "50%", y: "50%", fit: "cover" },
+      { type: "video", track: nt(), time: 0, duration: dur(10.0), source: videoUrl, width: "100%", height: "100%", x: "50%", y: "50%", fit: "cover" },
     ] : [
-      { type: "shape", track: nt(), time: 0, duration: 10, shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%", fill_color: `linear-gradient(170deg, ${theme.bg1} 0%, ${theme.bg2} 50%, ${theme.bg1} 100%)` },
+      { type: "shape", track: nt(), time: 0, duration: dur(10.0), shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%", fill_color: `linear-gradient(170deg, ${theme.bg1} 0%, ${theme.bg2} 50%, ${theme.bg1} 100%)` },
     ]),
-    { type: "shape", track: nt(), time: 0, duration: 10, shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%",
+    { type: "shape", track: nt(), time: 0, duration: dur(10.0), shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%",
       fill_color: "linear-gradient(180deg, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.25) 40%, rgba(0,0,0,0.25) 60%, rgba(0,0,0,0.45) 100%)" },
-    { type: "shape", track: nt(), time: 0, duration: 10, shape_type: "ellipse", width: 1400, height: 1400, x: "75%", y: "30%", fill_color: theme.glow1,
-      animations: [{ type: "scale", start_scale: "95%", end_scale: "108%", duration: 10, easing: "linear" }] },
-    { type: "text", track: nt(), time: 0, duration: 10, text: "SKYBRIEF", font_family: "Inter", font_weight: "700", font_size: "42", fill_color: "#ffffff", letter_spacing: "18%",
+    { type: "shape", track: nt(), time: 0, duration: dur(10.0), shape_type: "ellipse", width: 1400, height: 1400, x: "75%", y: "30%", fill_color: theme.glow1,
+      animations: [{ type: "scale", start_scale: "95%", end_scale: "108%", duration: dur(10.0), easing: "linear" }] },
+    { type: "text", track: nt(), time: 0, duration: dur(10.0), text: "SKYBRIEF", font_family: "Inter", font_weight: "700", font_size: "42", fill_color: "#ffffff", letter_spacing: "18%",
       x: "50%", y: "7%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.5 } },
-    { type: "shape", track: nt(), time: 0.2, duration: 9.8, shape_type: "rectangle", width: 60, height: 3, x: "50%", y: "9.5%", fill_color: theme.accent, border_radius: "2",
+    { type: "shape", track: nt(), time: 0.2, duration: dur(9.8), shape_type: "rectangle", width: 60, height: 3, x: "50%", y: "9.5%", fill_color: theme.accent, border_radius: "2",
       enter: { type: "scale", start_scale: "0%", duration: 0.6 } },
 
     // === TIME PERIOD BADGE ===
-    { type: "shape", track: nt(), time: 0.3, duration: 9.7, shape_type: "rectangle", width: 420, height: 50, x: "50%", y: "12%",
+    { type: "shape", track: nt(), time: 0.3, duration: dur(9.7), shape_type: "rectangle", width: 420, height: 50, x: "50%", y: "12%",
       fill_color: "rgba(255,255,255,0.12)", border_radius: "25",
       enter: { type: "fade", duration: 0.4 } },
-    { type: "text", track: nt(), time: 0.3, duration: 9.7, text: periodLabel, font_family: "Inter", font_weight: "700", font_size: "28", fill_color: theme.accent, letter_spacing: "4%",
+    { type: "text", track: nt(), time: 0.3, duration: dur(9.7), text: periodLabel, font_family: "Inter", font_weight: "700", font_size: "28", fill_color: theme.accent, letter_spacing: "4%",
       x: "50%", y: "12%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.4 } },
 
-    { type: "shape", track: nt(), time: 0.2, duration: 9.8, shape_type: "rectangle", width: 800, height: 200, x: "50%", y: "18%",
+    { type: "shape", track: nt(), time: 0.2, duration: dur(9.8), shape_type: "rectangle", width: 800, height: 200, x: "50%", y: "18%",
       fill_color: "rgba(0,0,0,0.35)", border_radius: "14", enter: { type: "fade", duration: 0.4 } },
-    { type: "text", track: nt(), time: 0.3, duration: 9.7, text: weather.city.toUpperCase(), font_family: "Inter", font_weight: "800", font_size: "76", fill_color: "#ffffff",
+    { type: "text", track: nt(), time: 0.3, duration: dur(9.7), text: weather.city.toUpperCase(), font_family: "Inter", font_weight: "800", font_size: "76", fill_color: "#ffffff",
       x: "50%", y: "16%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "slide", direction: "up", duration: 0.5 } },
-    { type: "text", track: nt(), time: 0.5, duration: 9.5, text: `${weather.stateOrRegion}  ·  ${dateStr}`, font_family: "Inter", font_weight: "500", font_size: "30", fill_color: "rgba(255,255,255,0.65)",
+    { type: "text", track: nt(), time: 0.5, duration: dur(9.5), text: `${weather.stateOrRegion}  ·  ${dateStr}`, font_family: "Inter", font_weight: "500", font_size: "30", fill_color: "rgba(255,255,255,0.65)",
       x: "50%", y: "21%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.5 } },
-    { type: "text", track: nt(), time: 0.6, duration: 9.4, text: theme.emoji, font_size: "80",
+    { type: "text", track: nt(), time: 0.6, duration: dur(9.4), text: theme.emoji, font_size: "80",
       x: "50%", y: "30%", x_alignment: "50%", y_alignment: "50%", enter: { type: "scale", start_scale: "50%", duration: 0.6 } },
-    { type: "text", track: nt(), time: 0.7, duration: 9.3, text: `${weather.temperature}°`, font_family: "Inter", font_weight: "900", font_size: "180", fill_color: "#ffffff",
+    { type: "text", track: nt(), time: 0.7, duration: dur(9.3), text: `${weather.temperature}°`, font_family: "Inter", font_weight: "900", font_size: "180", fill_color: "#ffffff",
       x: "50%", y: "42%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "scale", start_scale: "60%", duration: 0.6 } },
-    { type: "text", track: nt(), time: 0.9, duration: 9.1, text: weather.description.charAt(0).toUpperCase() + weather.description.slice(1),
+    { type: "text", track: nt(), time: 0.9, duration: dur(9.1), text: weather.description.charAt(0).toUpperCase() + weather.description.slice(1),
       font_family: "Inter", font_weight: "600", font_size: "38", fill_color: theme.accent,
       x: "50%", y: "51%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.5 } },
-    { type: "shape", track: nt(), time: 1.3, duration: 8.7, shape_type: "rectangle", width: 920, height: 260, x: "50%", y: "63%",
+    { type: "shape", track: nt(), time: 1.3, duration: dur(8.7), shape_type: "rectangle", width: 920, height: 260, x: "50%", y: "63%",
       fill_color: "rgba(10,15,30,0.65)", border_radius: "28", border_width: 1, border_color: "rgba(255,255,255,0.10)",
       shadow: "inset 0 1px 0 rgba(255,255,255,0.05)", enter: { type: "scale", start_scale: "92%", duration: 0.5 } },
-    { type: "text", track: nt(), time: 1.5, duration: 8.5, text: "HIGH", font_family: "Inter", font_weight: "600", font_size: "22", fill_color: "rgba(255,255,255,0.45)", letter_spacing: "6%",
+    { type: "text", track: nt(), time: 1.5, duration: dur(8.5), text: "HIGH", font_family: "Inter", font_weight: "600", font_size: "22", fill_color: "rgba(255,255,255,0.45)", letter_spacing: "6%",
       x: "17%", y: "58.5%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.3 } },
-    { type: "text", track: nt(), time: 1.5, duration: 8.5, text: "LOW", font_family: "Inter", font_weight: "600", font_size: "22", fill_color: "rgba(255,255,255,0.45)", letter_spacing: "6%",
+    { type: "text", track: nt(), time: 1.5, duration: dur(8.5), text: "LOW", font_family: "Inter", font_weight: "600", font_size: "22", fill_color: "rgba(255,255,255,0.45)", letter_spacing: "6%",
       x: "39%", y: "58.5%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.3 } },
-    { type: "text", track: nt(), time: 1.5, duration: 8.5, text: "RAIN", font_family: "Inter", font_weight: "600", font_size: "22", fill_color: "rgba(255,255,255,0.45)", letter_spacing: "6%",
+    { type: "text", track: nt(), time: 1.5, duration: dur(8.5), text: "RAIN", font_family: "Inter", font_weight: "600", font_size: "22", fill_color: "rgba(255,255,255,0.45)", letter_spacing: "6%",
       x: "61%", y: "58.5%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.3 } },
-    { type: "text", track: nt(), time: 1.5, duration: 8.5, text: "WIND", font_family: "Inter", font_weight: "600", font_size: "22", fill_color: "rgba(255,255,255,0.45)", letter_spacing: "6%",
+    { type: "text", track: nt(), time: 1.5, duration: dur(8.5), text: "WIND", font_family: "Inter", font_weight: "600", font_size: "22", fill_color: "rgba(255,255,255,0.45)", letter_spacing: "6%",
       x: "83%", y: "58.5%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.3 } },
-    { type: "text", track: nt(), time: 1.7, duration: 8.3, text: `${hi}°`, font_family: "Inter", font_weight: "700", font_size: "44", fill_color: "#ffffff",
+    { type: "text", track: nt(), time: 1.7, duration: dur(8.3), text: `${hi}°`, font_family: "Inter", font_weight: "700", font_size: "44", fill_color: "#ffffff",
       x: "17%", y: "63.5%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "slide", direction: "up", duration: 0.4 } },
-    { type: "text", track: nt(), time: 1.8, duration: 8.2, text: `${lo}°`, font_family: "Inter", font_weight: "700", font_size: "44", fill_color: "#ffffff",
+    { type: "text", track: nt(), time: 1.8, duration: dur(8.2), text: `${lo}°`, font_family: "Inter", font_weight: "700", font_size: "44", fill_color: "#ffffff",
       x: "39%", y: "63.5%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "slide", direction: "up", duration: 0.4 } },
-    { type: "text", track: nt(), time: 1.9, duration: 8.1, text: `${weather.rainChance}%`, font_family: "Inter", font_weight: "700", font_size: "44", fill_color: "#ffffff",
+    { type: "text", track: nt(), time: 1.9, duration: dur(8.1), text: `${weather.rainChance}%`, font_family: "Inter", font_weight: "700", font_size: "44", fill_color: "#ffffff",
       x: "61%", y: "63.5%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "slide", direction: "up", duration: 0.4 } },
-    { type: "text", track: nt(), time: 2.0, duration: 8.0, text: windSpeed, font_family: "Inter", font_weight: "700", font_size: "44", fill_color: "#ffffff",
+    { type: "text", track: nt(), time: 2.0, duration: dur(8.0), text: windSpeed, font_family: "Inter", font_weight: "700", font_size: "44", fill_color: "#ffffff",
       x: "83%", y: "63.5%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "slide", direction: "up", duration: 0.4 } },
-    { type: "shape", track: nt(), time: 1.6, duration: 8.4, shape_type: "rectangle", width: 1, height: 80, x: "28%", y: "61.5%", fill_color: "rgba(255,255,255,0.08)", enter: { type: "fade", duration: 0.3 } },
-    { type: "shape", track: nt(), time: 1.6, duration: 8.4, shape_type: "rectangle", width: 1, height: 80, x: "50%", y: "61.5%", fill_color: "rgba(255,255,255,0.08)", enter: { type: "fade", duration: 0.3 } },
-    { type: "shape", track: nt(), time: 1.6, duration: 8.4, shape_type: "rectangle", width: 1, height: 80, x: "72%", y: "61.5%", fill_color: "rgba(255,255,255,0.08)", enter: { type: "fade", duration: 0.3 } },
+    { type: "shape", track: nt(), time: 1.6, duration: dur(8.4), shape_type: "rectangle", width: 1, height: 80, x: "28%", y: "61.5%", fill_color: "rgba(255,255,255,0.08)", enter: { type: "fade", duration: 0.3 } },
+    { type: "shape", track: nt(), time: 1.6, duration: dur(8.4), shape_type: "rectangle", width: 1, height: 80, x: "50%", y: "61.5%", fill_color: "rgba(255,255,255,0.08)", enter: { type: "fade", duration: 0.3 } },
+    { type: "shape", track: nt(), time: 1.6, duration: dur(8.4), shape_type: "rectangle", width: 1, height: 80, x: "72%", y: "61.5%", fill_color: "rgba(255,255,255,0.08)", enter: { type: "fade", duration: 0.3 } },
   ];
 
   if (alertLine) {
     elements.push(
-      { type: "text", track: nt(), time: 2.2, duration: 7.8, text: alertLine, font_family: "Inter", font_weight: "700", font_size: "30", fill_color: "#fbbf24",
+      { type: "text", track: nt(), time: 2.2, duration: dur(7.8), text: alertLine, font_family: "Inter", font_weight: "700", font_size: "30", fill_color: "#fbbf24",
         x: "50%", y: "73%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.5 } }
     );
   }
 
   const takeawayY = alertLine ? "77%" : "74%";
   elements.push(
-    { type: "text", track: nt(), time: 2.5, duration: 7.5, text: takeaway, font_family: "Inter", font_weight: "600", font_size: "32", fill_color: "#ffffff",
+    { type: "text", track: nt(), time: 2.5, duration: dur(7.5), text: takeaway, font_family: "Inter", font_weight: "600", font_size: "32", fill_color: "#ffffff",
       x: "50%", y: takeawayY, x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.6 } }
   );
 
   const tomorrowY = alertLine ? "81%" : "78.5%";
   elements.push(
-    { type: "text", track: nt(), time: 3.0, duration: 7.0, text: tomorrowPreview, font_family: "Inter", font_weight: "500", font_size: "28", fill_color: "rgba(255,255,255,0.6)",
+    { type: "text", track: nt(), time: 3.0, duration: dur(7.0), text: tomorrowPreview, font_family: "Inter", font_weight: "500", font_size: "28", fill_color: "rgba(255,255,255,0.6)",
       x: "50%", y: tomorrowY, x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.5 } }
   );
 
   const ctaDivY = alertLine ? "86%" : "84%";
   const ctaTextY = alertLine ? "90%" : "88%";
   elements.push(
-    { type: "shape", track: nt(), time: 3.5, duration: 6.5, shape_type: "rectangle", width: 80, height: 2, x: "50%", y: ctaDivY, fill_color: theme.accent, border_radius: "1",
+    { type: "shape", track: nt(), time: 3.5, duration: dur(6.5), shape_type: "rectangle", width: 80, height: 2, x: "50%", y: ctaDivY, fill_color: theme.accent, border_radius: "1",
       enter: { type: "scale", start_scale: "0%", duration: 0.5 } },
-    { type: "text", track: nt(), time: 3.8, duration: 6.2, text: habitCTA, font_family: "Inter", font_weight: "500", font_size: "28", fill_color: "rgba(255,255,255,0.55)",
+    { type: "text", track: nt(), time: 3.8, duration: dur(6.2), text: habitCTA, font_family: "Inter", font_weight: "500", font_size: "28", fill_color: "rgba(255,255,255,0.55)",
       x: "50%", y: ctaTextY, x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.6 } },
   );
 
@@ -582,14 +582,14 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
       type: "audio",
       track: nt(),
       time: 0.5,
-      duration: 9.5,
+      duration: dur(9.5),
       source: voiceUrl,
       volume: "100%",
     });
   }
 
   return {
-    width: 1080, height: 1920, duration: 10, frame_rate: 30, fill_color: theme.bg1,
+    width: 1080, height: 1920, duration: dur(10.0), frame_rate: 30, fill_color: theme.bg1,
     elements,
   };
 }
