@@ -56,46 +56,58 @@ export function JobPipelineToggle() {
 
   return (
     <Card className="border-border/50 bg-card/80 backdrop-blur">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2">
-          <GitBranch size={16} className="text-primary" />
-          Job Pipeline
-          <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-400 px-1.5 py-0 h-4">
-            Experimental
-          </Badge>
-        </CardTitle>
-        <CardDescription className="text-xs">
-          Run scheduled posts through a durable, retryable, observable 4-step workflow
-          (content → voice → render → publish). Existing pipeline keeps running as fallback.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <Label htmlFor="use-jobs-pipeline" className="text-sm cursor-pointer">
-            Use job-based pipeline
-          </Label>
-          <Switch
-            id="use-jobs-pipeline"
-            checked={!!enabled}
-            disabled={enabled === null || saving}
-            onCheckedChange={onToggle}
-          />
-        </div>
-        {enabled && (
-          <div className="text-[11px] text-amber-400/80 flex items-start gap-1.5 p-2 rounded bg-amber-500/5 border border-amber-500/20">
-            <AlertTriangle size={12} className="mt-0.5 shrink-0" />
-            <span>
-              New posts will be queued as jobs. Each step retries automatically with
-              exponential backoff (up to 2 attempts). Inspect runs in the dashboard.
-            </span>
-          </div>
-        )}
-        <Button asChild variant="outline" size="sm" className="w-full gap-1.5">
-          <Link to="/jobs">
-            <ExternalLink size={12} /> Open Job Dashboard
-          </Link>
-        </Button>
-      </CardContent>
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <CollapsibleCardHeader
+          open={open}
+          icon={<GitBranch size={16} className="text-primary" />}
+          title={
+            <>
+              Job Pipeline
+              <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-400 px-1.5 py-0 h-4">
+                Experimental
+              </Badge>
+            </>
+          }
+          description="Run scheduled posts through a durable, retryable, observable 4-step workflow (content → voice → render → publish)."
+          collapsedHint={
+            <Badge
+              variant="outline"
+              className={`text-[10px] ${enabled ? "bg-green-500/15 text-green-500 border-green-500/30" : "text-muted-foreground"}`}
+            >
+              {enabled ? "On" : "Off"}
+            </Badge>
+          }
+        />
+        <CollapsibleContent>
+          <CardContent className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <Label htmlFor="use-jobs-pipeline" className="text-sm cursor-pointer">
+                Use job-based pipeline
+              </Label>
+              <Switch
+                id="use-jobs-pipeline"
+                checked={!!enabled}
+                disabled={enabled === null || saving}
+                onCheckedChange={onToggle}
+              />
+            </div>
+            {enabled && (
+              <div className="text-[11px] text-amber-400/80 flex items-start gap-1.5 p-2 rounded bg-amber-500/5 border border-amber-500/20">
+                <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+                <span>
+                  New posts will be queued as jobs. Each step retries automatically with
+                  exponential backoff (up to 2 attempts). Inspect runs in the dashboard.
+                </span>
+              </div>
+            )}
+            <Button asChild variant="outline" size="sm" className="w-full gap-1.5">
+              <Link to="/jobs">
+                <ExternalLink size={12} /> Open Job Dashboard
+              </Link>
+            </Button>
+          </CardContent>
+        </CollapsibleContent>
+      </Collapsible>
     </Card>
   );
 }
