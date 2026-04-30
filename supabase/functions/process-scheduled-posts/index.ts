@@ -1273,6 +1273,40 @@ Deno.serve(async (req) => {
       let voiceAttemptsCount = 0;
       let debugTraceEnabled = false;
 
+      // ── FAILURE NOTIFIER ──
+      // Single helper so every silent failure (render, upload, fallback)
+      // produces both a user-facing notification AND a system_logs row.
+      // Call sites pass a short stage label and the raw error/status detail.
+      const notifyFailure = async (
+        stage: "voice" | "render" | "upload" | "fallback_image" | "platform",
+        title: string,
+        detail: string,
+        context: Record<string, unknown> = {},
+      ) => {
+        const safeDetail = (detail || "unknown error").slice(0, 500);
+        try {
+          await supabase.from("notifications").insert({
+            user_id: post.user_id,
+            title: `❌ ${title}`,
+            message: safeDetail,
+            type: "error",
+          });
+        } catch (e) {
+          console.error(`[process] post ${post.id}: failed to write notification (${stage}):`, e);
+        }
+        try {
+          await supabase.from("system_logs").insert({
+            user_id: post.user_id,
+            type: `post_${stage}_failed`,
+            message: `${title}: ${safeDetail}`,
+            platform: post.platform,
+            context: { scheduled_post_id: post.id, stage, ...context },
+          });
+        } catch (e) {
+          console.error(`[process] post ${post.id}: failed to write system_logs (${stage}):`, e);
+        }
+      };
+
       try {
         const scopedCity = await resolveScheduledCity(supabase, post);
         console.log(`CITY CONFIRMED: ${scopedCity.city}${scopedCity.state ? ", " + scopedCity.state : ""} (city_id=${scopedCity.cityId || "legacy"})`);
