@@ -208,6 +208,32 @@ Deno.serve(async (req) => {
             insightNote = `\n\nPERFORMANCE LEARNING: Your past ${condKey} posts at ${tod} perform best with a ${(top as any).tone.toUpperCase()} tone${deltaTxt}. Lean into that voice.${hookTxt}`;
           }
         }
+
+        // ---- Auto-Growth signals: top hooks + opener avoidance + tone variety ----
+        const { data: rec } = await svc
+          .from("growth_recommendations")
+          .select("top_hooks, recent_openers, recent_tones, variety_score")
+          .eq("user_id", auth.userId)
+          .maybeSingle();
+        if (rec) {
+          const topHooks: string[] = Array.isArray((rec as any).top_hooks) ? (rec as any).top_hooks : [];
+          const recentOpeners: string[] = Array.isArray((rec as any).recent_openers) ? (rec as any).recent_openers : [];
+          const recentTones: string[] = Array.isArray((rec as any).recent_tones) ? (rec as any).recent_tones : [];
+          const varietyScore: number = Number((rec as any).variety_score ?? 100);
+
+          if (topHooks.length > 0) {
+            // Hard rotation: pick one of the top 3
+            const chosen = topHooks[Math.floor(Math.random() * Math.min(3, topHooks.length))];
+            insightNote += `\n\nHOOK ROTATION: Use this proven high-performing hook as inspiration for your opening line: "${chosen}". Adapt it to today's actual weather — do not copy verbatim if it doesn't fit.`;
+            aiOptimized = true;
+          }
+          if (recentOpeners[0]) {
+            insightNote += `\n\nVARIETY: Your last post opened with "${recentOpeners[0]}". Do NOT start with the same words this time.`;
+          }
+          if (varietyScore < 60 && recentTones[0]) {
+            insightNote += `\n\nTONE NUDGE: Your last several posts were ${recentTones[0]}. Consider a different tone today for variety (the user-selected tone still wins).`;
+          }
+        }
       }
     } catch (e) {
       console.warn("[generate-caption] insight lookup failed:", e);
