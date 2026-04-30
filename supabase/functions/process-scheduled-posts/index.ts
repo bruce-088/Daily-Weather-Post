@@ -1669,13 +1669,20 @@ Deno.serve(async (req) => {
 
         const isFailureFlow = postStatus !== "posted";
         const currentRetryCount = (post as any).retry_count ?? 0;
-        if (isFailureFlow && currentRetryCount < 1) {
-          const nextRetryAt = new Date(Date.now() + 60 * 1000).toISOString();
+        // Retry policy: up to 2 retries, 2 minutes apart. The retry re-runs
+        // the entire pipeline (caption → voice → render → upload) because the
+        // scheduler picks the row up again from scratch via the
+        // status="retrying" + next_retry_at branch of the fetch query.
+        const MAX_RETRIES = 2;
+        const RETRY_DELAY_MS = 2 * 60 * 1000;
+        if (isFailureFlow && currentRetryCount < MAX_RETRIES) {
+          const nextRetryAt = new Date(Date.now() + RETRY_DELAY_MS).toISOString();
           await supabase.from("scheduled_posts").update({
             status: "retrying",
             error_message: errorMessage,
             retry_count: currentRetryCount + 1,
             next_retry_at: nextRetryAt,
+            last_attempt_at: new Date().toISOString(),
             voice_status: voiceStatus,
             voice_error: voiceError,
             voice_attempts: voiceAttemptsCount,
@@ -1684,7 +1691,7 @@ Deno.serve(async (req) => {
           await supabase.from("system_logs").insert({
             user_id: post.user_id,
             type: "post_retry_scheduled",
-            message: `Scheduled post failed, retrying in 60s: ${errorMessage}`,
+            message: `Scheduled post failed, retrying in 2 minutes (attempt ${currentRetryCount + 1}/${MAX_RETRIES}): ${errorMessage}`,
             platform: post.platform,
             context: { scheduled_post_id: post.id, retry_count: currentRetryCount + 1 },
           });
@@ -1721,46 +1728,53 @@ Deno.serve(async (req) => {
 
         await supabase.from("notifications").insert({
           user_id: post.user_id,
-          title: postStatus === "posted" ? "Post Published" : (currentRetryCount < 1 && isFailureFlow ? "Post Retrying" : "Post Failed"),
+          title: postStatus === "posted" ? "Post Published" : (currentRetryCount < MAX_RETRIES && isFailureFlow ? "Post Retrying" : "Post Failed"),
           message: postStatus === "posted"
             ? `Your weather post for ${weather.city} was processed on ${post.platform}.`
-            : (currentRetryCount < 1 && isFailureFlow
-                ? `Post for ${weather.city} failed — retrying in 60 seconds.`
+            : (currentRetryCount < MAX_RETRIES && isFailureFlow
+                ? `Post for ${weather.city} failed — retrying in 2 minutes (attempt ${currentRetryCount + 1}/${MAX_RETRIES}).`
                 : `Your scheduled post for ${weather.city} failed: ${errorMessage}`),
-          type: postStatus === "posted" ? "success" : (currentRetryCount < 1 && isFailureFlow ? "info" : "error"),
+          type: postStatus === "posted" ? "success" : (currentRetryCount < MAX_RETRIES && isFailureFlow ? "info" : "error"),
         });
 
         processed++;
       } catch (postError) {
         const errMsg = postError instanceof Error ? postError.message : "Processing failed";
         const currentRetryCount = (post as any).retry_count ?? 0;
-        if (currentRetryCount < 1) {
-          const nextRetryAt = new Date(Date.now() + 60 * 1000).toISOString();
+        const MAX_RETRIES = 2;
+        const RETRY_DELAY_MS = 2 * 60 * 1000;
+        if (currentRetryCount < MAX_RETRIES) {
+          const nextRetryAt = new Date(Date.now() + RETRY_DELAY_MS).toISOString();
           await supabase.from("scheduled_posts").update({
             status: "retrying",
             error_message: errMsg,
             retry_count: currentRetryCount + 1,
             next_retry_at: nextRetryAt,
+            last_attempt_at: new Date().toISOString(),
           }).eq("id", post.id);
           await supabase.from("system_logs").insert({
             user_id: post.user_id,
             type: "post_retry_scheduled",
-            message: `Processing threw, retrying in 60s: ${errMsg}`,
+            message: `Processing threw, retrying in 2 minutes (attempt ${currentRetryCount + 1}/${MAX_RETRIES}): ${errMsg}`,
             platform: post.platform,
             context: { scheduled_post_id: post.id, retry_count: currentRetryCount + 1 },
           });
           await supabase.from("notifications").insert({
             user_id: post.user_id,
             title: "Post Retrying",
-            message: `Post for ${post.city} hit an error — retrying in 60 seconds.`,
+            message: `Post for ${post.city} hit an error — retrying in 2 minutes (attempt ${currentRetryCount + 1}/${MAX_RETRIES}).`,
             type: "info",
           });
         } else {
-          await supabase.from("scheduled_posts").update({ status: "failed", error_message: errMsg }).eq("id", post.id);
+          await supabase.from("scheduled_posts").update({
+            status: "failed",
+            error_message: errMsg,
+            last_attempt_at: new Date().toISOString(),
+          }).eq("id", post.id);
           await supabase.from("system_logs").insert({
             user_id: post.user_id,
             type: "post_error",
-            message: `Scheduled post failed permanently: ${errMsg}`,
+            message: `Scheduled post failed permanently after ${MAX_RETRIES} retries: ${errMsg}`,
             platform: post.platform,
             context: { scheduled_post_id: post.id, retry_count: currentRetryCount },
           });
