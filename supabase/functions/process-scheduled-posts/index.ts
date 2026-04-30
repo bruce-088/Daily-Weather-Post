@@ -1705,6 +1705,7 @@ Deno.serve(async (req) => {
               }
             } else {
               errorMessage = result.error || `${platformName} upload failed`;
+              await notifyFailure("upload", `${platformName} upload failed`, errorMessage, { platform: platformName });
             }
           }
         } else {
