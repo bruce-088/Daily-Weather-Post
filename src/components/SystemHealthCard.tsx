@@ -452,6 +452,8 @@ export function SystemHealthCard() {
           </div>
         )}
       </CardContent>
+        </CollapsibleContent>
+      </Collapsible>
     </Card>
   );
 }
