@@ -270,7 +270,16 @@ export function SettingsPanel({
     }
 
     localStorage.setItem("youtube_oauth_state", data.state);
-    window.open(data.url, "_blank");
+    const popup = window.open(data.url, "_blank", "noopener,noreferrer");
+    if (!popup || popup.closed || typeof popup.closed === "undefined") {
+      // Popup blocked — fall back to top-level navigation so Google doesn't render in the iframe
+      toast.error("Popup blocked. Redirecting to Google in this tab…");
+      try {
+        (window.top ?? window).location.href = data.url;
+      } catch {
+        window.location.href = data.url;
+      }
+    }
   };
 
   const handleConnectTwitter = async () => {
