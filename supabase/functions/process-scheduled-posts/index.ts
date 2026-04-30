@@ -469,7 +469,12 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
   const windSpeed = weather.windInfo.split(" ")[0] + " mph";
   let t = 0;
   const nt = () => ++t;
-  const txtShadow = "0px 1px 4px rgba(0,0,0,0.4)";
+  // Dynamic composition length — extends to accommodate full voiceover + tail padding.
+  const D = computeVideoDuration(audioDurationSec);
+  // Helper: translate "original duration relative to a 10s composition" → actual duration.
+  // Original offsets were authored as `10 - time` (so element runs to end). Preserve that.
+  const dur = (originalRemainder: number) => Math.max(0.1, D - (10 - originalRemainder));
+
 
   // Determine time period label
   let periodLabel: string;
