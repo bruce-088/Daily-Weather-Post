@@ -7,6 +7,50 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+
+function base64UrlEncode(bytes: Uint8Array) {
+  let binary = "";
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function base64UrlDecode(value: string) {
+  const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "=");
+  const binary = atob(padded);
+  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+}
+
+async function signStatePayload(payload: string, secret: string) {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
+  return base64UrlEncode(new Uint8Array(signature));
+}
+
+async function createSignedState(payload: Record<string, unknown>, secret: string) {
+  const encodedPayload = base64UrlEncode(encoder.encode(JSON.stringify(payload)));
+  const signature = await signStatePayload(encodedPayload, secret);
+  return `${encodedPayload}.${signature}`;
+}
+
+async function readSignedState(state: string, secret: string) {
+  const [encodedPayload, signature] = state.split(".");
+  if (!encodedPayload || !signature) throw new Error("Malformed state");
+  const expectedSignature = await signStatePayload(encodedPayload, secret);
+  if (signature !== expectedSignature) throw new Error("Invalid signature");
+  return JSON.parse(decoder.decode(base64UrlDecode(encodedPayload)));
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
