@@ -105,6 +105,9 @@ export function SettingsPanel({
     onUpdate({ ...settings, [key]: value } as AutomationSettings);
   };
 
+  const [locationOpen, setLocationOpen] = useState(false);
+  const [connectionsOpen, setConnectionsOpen] = useState(false);
+
   // ---- Voice preview state (no persistence — this just plays a sample) ----
   const [previewLoading, setPreviewLoading] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
