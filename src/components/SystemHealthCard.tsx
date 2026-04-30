@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Activity, RefreshCw, Beaker, CheckCircle2, XCircle, Mic, AlertTriangle, Bug, Copy } from "lucide-react";
+import { Activity, RefreshCw, Beaker, CheckCircle2, XCircle, Mic, AlertTriangle, Bug, Copy, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { copyDebugSnapshot } from "@/lib/debugSnapshot";
