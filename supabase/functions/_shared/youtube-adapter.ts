@@ -219,69 +219,108 @@ export class YouTubeAdapter implements PlatformAdapter {
   }
 }
 
-// --- Dynamic YouTube tag builder ---
-// Tags are derived from the title + description text so we don't need to change
-// the PlatformAdapter signature or any caller in the posting pipeline. Includes
-// a base set of evergreen weather tags plus condition-specific additions and
-// a city tag extracted from the title (city is always present in hook titles).
+// --- Dynamic YouTube tag builder (SEO-optimized for Shorts discovery) ---
+// Tags are derived from title + description text so we don't need to change
+// the PlatformAdapter signature or any caller in the posting pipeline.
+// Strategy: evergreen base tags + city + regional + condition + time-of-day,
+// targeting 15–20 tags within YouTube's 500-char combined limit.
 function buildYouTubeTags(title: string, description: string): string[] {
   const text = `${title}\n${description}`.toLowerCase();
+  const hour = new Date().getHours();
 
-  const base = [
-    "weather today",
-    "weather forecast",
-    "daily weather update",
+  // City extraction from hook title (city is always present, properly cased).
+  const skipWords = new Set(["good", "hot", "cold", "cool", "warm", "rain", "storms", "storm",
+    "bundle", "calm", "cloudy", "foggy", "grab", "gray", "heads", "tonight",
+    "today", "beautiful", "feels", "you", "wet", "snowy", "drive", "crank",
+    "chilly", "mild", "sun", "sunny", "tonights", "afternoon", "morning", "evening"]);
+  let city = "";
+  const matches = title.match(/\b[A-Z][a-z]+(?:\s[A-Z][a-z]+)?\b/g) || [];
+  for (const m of matches) {
+    const first = m.split(" ")[0].toLowerCase();
+    if (!skipWords.has(first)) { city = m; break; }
+  }
+  const cityLc = city.toLowerCase();
+
+  // Detect region (Florida default for SkyBriefGNV and FL cities)
+  const isFlorida = /gainesville|florida|miami|orlando|tampa|jacksonville|tallahassee|ocala/
+    .test(text);
+
+  // 1. Base tags — always include
+  const base: string[] = [
+    "weather update",
+    "daily forecast",
     "weather shorts",
     "local weather",
+    "#Shorts",
   ];
-
-  // City extraction: hook titles always contain the city name. Try to pull a
-  // proper-case word/phrase from the original title.
-  const cityMatch = title.match(/\b([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)\b/);
-  const cityTags: string[] = [];
-  if (cityMatch?.[1]) {
-    const city = cityMatch[1].toLowerCase();
-    // Skip filler words that may capitalize at sentence start
-    const skip = new Set(["good", "hot", "cold", "cool", "warm", "rain", "storms", "storm",
-      "bundle", "calm", "cloudy", "foggy", "grab", "gray", "heads", "tonight",
-      "today", "beautiful", "feels", "you", "wet", "snowy", "drive", "crank",
-      "chilly", "mild", "sun", "sunny"]);
-    if (!skip.has(city)) {
-      cityTags.push(`${city} weather`, `${city} forecast`, `weather ${city}`);
-    }
+  if (cityLc) {
+    base.unshift(`${cityLc} weather`);
+    if (isFlorida) base.unshift(`${cityLc} florida`);
   }
+  if (isFlorida) base.push("florida weather today");
 
-  // Florida defaults (matches the channel's primary market) — kept light so
-  // they don't dominate when posting from other regions.
-  const regional: string[] = [];
-  if (/gainesville|florida|miami|orlando|tampa|jacksonville/.test(text)) {
-    regional.push("florida weather", "local weather florida");
-  }
-
-  // Condition-specific
+  // 2. Condition tags
   const cond: string[] = [];
-  if (/rain|🌧|☔|drizzle|shower/.test(text)) cond.push("rain forecast", "rainy weather");
-  if (/storm|⛈|thunder|tornado|hurricane/.test(text)) cond.push("storm update", "severe weather");
-  if (/snow|❄️|sleet|blizzard/.test(text)) cond.push("snow forecast", "winter weather");
-  if (/fog|🌫|mist|haze/.test(text)) cond.push("foggy weather");
-  if (/hot|🔥|heat|🌞/.test(text)) cond.push("heat wave", "hot weather");
-  if (/cold|🥶|chilly|🧥|cold front/.test(text)) cond.push("cold front", "chilly weather");
-  if (/clear|☀️|sunny|beautiful/.test(text)) cond.push("sunny weather", "clear skies");
-  if (/cloud|☁️|🌤|gray skies/.test(text)) cond.push("cloudy weather");
+  if (/clear|☀️|sunny|beautiful/.test(text)) {
+    cond.push("sunny weather", "clear skies", "beautiful day");
+  }
+  if (/cloud|☁️|🌤|gray skies|overcast/.test(text)) {
+    cond.push("cloudy forecast", "overcast skies");
+  }
+  if (/rain|🌧|☔|drizzle|shower/.test(text)) {
+    cond.push("rain forecast", isFlorida ? "rainy day florida" : "rainy day", "storm update");
+  }
+  if (/storm|⛈|thunder|tornado|hurricane/.test(text)) {
+    cond.push("storm update", "severe weather");
+  }
+  if (/snow|❄️|sleet|blizzard/.test(text)) {
+    cond.push("snow forecast", "winter weather");
+  }
+  if (/fog|🌫|mist|haze/.test(text)) {
+    cond.push("foggy weather");
+  }
 
-  // Dedupe while preserving order, cap to ~15 tags and 500 chars total
-  // (YouTube limit is 500 chars combined including separators).
+  // Temperature-based (parse from title — hook titles include "84°" style)
+  const tempMatch = title.match(/(\d{1,3})°/);
+  const temp = tempMatch ? parseInt(tempMatch[1], 10) : NaN;
+  if (!isNaN(temp)) {
+    if (temp > 85) {
+      cond.push("heat wave", isFlorida ? "hot weather florida" : "hot weather", "summer heat");
+    } else if (temp < 55) {
+      cond.push("cold front", "chilly weather", isFlorida ? "florida cold" : "cold weather");
+    }
+  } else {
+    // Fallback to keyword match if no temp present
+    if (/hot|🔥|heat|🌞/.test(text)) cond.push("heat wave", "hot weather");
+    if (/cold|🥶|chilly|🧥|cold front/.test(text)) cond.push("cold front", "chilly weather");
+  }
+
+  // 3. Time-of-day tags
+  const tod: string[] = [];
+  if (hour >= 4 && hour < 11) {
+    tod.push("morning weather", "today's forecast");
+  } else if (hour >= 11 && hour < 17) {
+    tod.push("afternoon update", "midday weather");
+  } else {
+    tod.push("tonight's weather", "evening forecast");
+  }
+
+  // Compose, dedupe (preserve order), cap at 20 tags and stay under YouTube's
+  // 500-char combined limit. YouTube counts ~ tag length + 2 (quotes/comma).
   const seen = new Set<string>();
   const out: string[] = [];
   let charCount = 0;
-  for (const tag of [...base, ...cityTags, ...regional, ...cond]) {
+  const MAX_TAGS = 20;
+  const MAX_CHARS = 480;
+  for (const tag of [...base, ...cond, ...tod]) {
     const t = tag.trim();
-    if (!t || seen.has(t)) continue;
-    if (charCount + t.length + 2 > 480) break;
-    seen.add(t);
+    if (!t || seen.has(t.toLowerCase())) continue;
+    const cost = t.length + (t.includes(" ") ? 4 : 2); // quotes if multi-word
+    if (charCount + cost > MAX_CHARS) break;
+    seen.add(t.toLowerCase());
     out.push(t);
-    charCount += t.length + 2;
-    if (out.length >= 15) break;
+    charCount += cost;
+    if (out.length >= MAX_TAGS) break;
   }
   return out;
 }
