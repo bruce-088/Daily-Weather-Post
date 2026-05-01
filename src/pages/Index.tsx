@@ -307,13 +307,32 @@ const Index = () => {
     });
   }, []);
 
-  // Load post history
+  // Load post history (paginated / infinite scroll)
+  const PAGE_SIZE = 10;
+  const [hasMorePosts, setHasMorePosts] = useState(true);
+  const [loadingMorePosts, setLoadingMorePosts] = useState(false);
+
   const loadHistory = useCallback(async () => {
     setPostsLoading(true);
-    const data = await fetchPostHistory();
+    const data = await fetchPostHistory(PAGE_SIZE, 0);
     setPosts(data);
+    setHasMorePosts(data.length === PAGE_SIZE);
     setPostsLoading(false);
   }, []);
+
+  const loadMorePosts = useCallback(async () => {
+    if (loadingMorePosts || !hasMorePosts) return;
+    setLoadingMorePosts(true);
+    const data = await fetchPostHistory(PAGE_SIZE, posts.length);
+    setPosts((prev) => {
+      const seen = new Set(prev.map((p) => p.id));
+      const next = [...prev];
+      for (const row of data) if (!seen.has(row.id)) next.push(row);
+      return next;
+    });
+    setHasMorePosts(data.length === PAGE_SIZE);
+    setLoadingMorePosts(false);
+  }, [posts.length, loadingMorePosts, hasMorePosts]);
 
   const loadScheduled = useCallback(async () => {
     setScheduledLoading(true);
