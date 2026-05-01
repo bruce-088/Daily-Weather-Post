@@ -78,6 +78,26 @@ export class YouTubeAdapter implements PlatformAdapter {
       })
       .eq("user_id", userId);
 
+    const { data: socialRows } = await supabase
+      .from("social_accounts")
+      .update({
+        access_token: refreshData.access_token,
+        token_expires_at: newExpiresAt,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("user_id", userId)
+      .eq("platform", "youtube")
+      .select("id");
+    if (!socialRows?.length) {
+      await supabase.from("social_accounts").insert({
+        user_id: userId,
+        platform: "youtube",
+        access_token: refreshData.access_token,
+        refresh_token: settings.youtube_refresh_token,
+        token_expires_at: newExpiresAt,
+      });
+    }
+
     console.log("YouTube token refreshed successfully");
     return refreshData.access_token;
   }
