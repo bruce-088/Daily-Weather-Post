@@ -122,6 +122,7 @@ export function SettingsPanel({
 
   const [locationOpen, setLocationOpen] = useState(false);
   const [connectionsOpen, setConnectionsOpen] = useState(false);
+  const [voiceoverOpen, setVoiceoverOpen] = useState(false);
 
   // ---- Voice preview state (no persistence — this just plays a sample) ----
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -764,130 +765,136 @@ export function SettingsPanel({
 
       {voiceoverVisible && (
         <Card className="border-border/50 bg-card/80 backdrop-blur">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Lightbulb size={16} className="text-primary" />
-              AI Voiceover
-            </CardTitle>
-            <CardDescription className="text-xs">
-              Add a short narrated weather brief to auto-posted videos. Applies to YouTube, TikTok, and Instagram only.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <Label htmlFor="enable-voiceover" className="text-sm cursor-pointer">
-                Enable voiceover for auto-posts
-              </Label>
-              <Switch
-                id="enable-voiceover"
-                checked={!!settings.enableVoiceover}
-                onCheckedChange={(v) => update("enableVoiceover", v)}
-              />
-            </div>
-            {settings.enableVoiceover && (
-              <div className="space-y-4">
-                {/* Voice selector */}
-                <div className="space-y-1.5">
-                  <Label htmlFor="voiceover-voice" className="text-xs text-muted-foreground">
-                    Voice
+          <Collapsible open={voiceoverOpen} onOpenChange={setVoiceoverOpen}>
+            <CollapsibleCardHeader
+              open={voiceoverOpen}
+              icon={<Lightbulb size={16} className="text-primary" />}
+              title="AI Voiceover"
+              description="Add a short narrated weather brief to auto-posted videos. Applies to YouTube, TikTok, and Instagram only."
+              collapsedHint={
+                <Badge variant="outline" className="text-[10px]">
+                  {settings.enableVoiceover ? "On" : "Off"}
+                </Badge>
+              }
+            />
+            <CollapsibleContent>
+              <CardContent className="space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <Label htmlFor="enable-voiceover" className="text-sm cursor-pointer">
+                    Enable voiceover for auto-posts
                   </Label>
-                  <Select
-                    value={settings.voiceoverVoiceId || "female"}
-                    onValueChange={(v) => update("voiceoverVoiceId", v)}
-                  >
-                    <SelectTrigger id="voiceover-voice" className="h-9">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="anchor">News Anchor (Daniel — authoritative)</SelectItem>
-                      <SelectItem value="female">Sarah (warm, conversational)</SelectItem>
-                      <SelectItem value="male">George (confident, news-style)</SelectItem>
-                      <SelectItem value="cheerful">Cheerful Weather Girl (Alice — bright)</SelectItem>
-                      <SelectItem value="calm">Calm Briefing (Jessica — soothing)</SelectItem>
-                      <SelectItem value="deep">Deep Voice (Brian — resonant)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Playback speed */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs text-muted-foreground">Playback speed</Label>
-                    <span className="text-xs font-mono text-foreground">
-                      {(settings.voiceoverSpeed ?? 1.0).toFixed(2)}×
-                    </span>
-                  </div>
-                  <Slider
-                    min={0.8}
-                    max={1.2}
-                    step={0.05}
-                    value={[settings.voiceoverSpeed ?? 1.0]}
-                    onValueChange={([v]) => update("voiceoverSpeed", v)}
+                  <Switch
+                    id="enable-voiceover"
+                    checked={!!settings.enableVoiceover}
+                    onCheckedChange={(v) => update("enableVoiceover", v)}
                   />
-                  <p className="text-[10px] text-muted-foreground">
-                    Slower (0.8×) for clearer briefs · Faster (1.2×) for energetic delivery.
-                  </p>
                 </div>
+                {settings.enableVoiceover && (
+                  <div className="space-y-4">
+                    {/* Voice selector */}
+                    <div className="space-y-1.5">
+                      <Label htmlFor="voiceover-voice" className="text-xs text-muted-foreground">
+                        Voice
+                      </Label>
+                      <Select
+                        value={settings.voiceoverVoiceId || "female"}
+                        onValueChange={(v) => update("voiceoverVoiceId", v)}
+                      >
+                        <SelectTrigger id="voiceover-voice" className="h-9">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="anchor">News Anchor (Daniel — authoritative)</SelectItem>
+                          <SelectItem value="female">Sarah (warm, conversational)</SelectItem>
+                          <SelectItem value="male">George (confident, news-style)</SelectItem>
+                          <SelectItem value="cheerful">Cheerful Weather Girl (Alice — bright)</SelectItem>
+                          <SelectItem value="calm">Calm Briefing (Jessica — soothing)</SelectItem>
+                          <SelectItem value="deep">Deep Voice (Brian — resonant)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                {/* Stability — tone (human ↔ stable) */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs text-muted-foreground">Stability (tone)</Label>
-                    <span className="text-xs font-mono text-foreground">
-                      {(settings.voiceoverStability ?? 0.55).toFixed(2)}
-                    </span>
+                    {/* Playback speed */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-muted-foreground">Playback speed</Label>
+                        <span className="text-xs font-mono text-foreground">
+                          {(settings.voiceoverSpeed ?? 1.0).toFixed(2)}×
+                        </span>
+                      </div>
+                      <Slider
+                        min={0.8}
+                        max={1.2}
+                        step={0.05}
+                        value={[settings.voiceoverSpeed ?? 1.0]}
+                        onValueChange={([v]) => update("voiceoverSpeed", v)}
+                      />
+                      <p className="text-[10px] text-muted-foreground">
+                        Slower (0.8×) for clearer briefs · Faster (1.2×) for energetic delivery.
+                      </p>
+                    </div>
+
+                    {/* Stability — tone (human ↔ stable) */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-muted-foreground">Stability (tone)</Label>
+                        <span className="text-xs font-mono text-foreground">
+                          {(settings.voiceoverStability ?? 0.55).toFixed(2)}
+                        </span>
+                      </div>
+                      <Slider
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={[settings.voiceoverStability ?? 0.55]}
+                        onValueChange={([v]) => update("voiceoverStability", v)}
+                      />
+                      <p className="text-[10px] text-muted-foreground">
+                        Lower = more expressive & human · Higher = steadier & more robotic.
+                      </p>
+                    </div>
+
+                    {/* Similarity boost */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-muted-foreground">Similarity</Label>
+                        <span className="text-xs font-mono text-foreground">
+                          {(settings.voiceoverSimilarity ?? 0.78).toFixed(2)}
+                        </span>
+                      </div>
+                      <Slider
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={[settings.voiceoverSimilarity ?? 0.78]}
+                        onValueChange={([v]) => update("voiceoverSimilarity", v)}
+                      />
+                      <p className="text-[10px] text-muted-foreground">
+                        How closely the output matches the original voice's character.
+                      </p>
+                    </div>
+
+                    {/* Test Voice */}
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="w-full gap-2"
+                      onClick={handleTestVoice}
+                      disabled={previewLoading}
+                    >
+                      {previewLoading ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+                      {previewLoading ? "Generating sample..." : "Test Voice"}
+                    </Button>
+
+                    <p className="text-[10px] text-muted-foreground italic">
+                      If voice generation fails for any post, that video falls back to silent so the schedule is never blocked.
+                    </p>
                   </div>
-                  <Slider
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    value={[settings.voiceoverStability ?? 0.55]}
-                    onValueChange={([v]) => update("voiceoverStability", v)}
-                  />
-                  <p className="text-[10px] text-muted-foreground">
-                    Lower = more expressive & human · Higher = steadier & more robotic.
-                  </p>
-                </div>
-
-                {/* Similarity boost */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs text-muted-foreground">Similarity</Label>
-                    <span className="text-xs font-mono text-foreground">
-                      {(settings.voiceoverSimilarity ?? 0.78).toFixed(2)}
-                    </span>
-                  </div>
-                  <Slider
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    value={[settings.voiceoverSimilarity ?? 0.78]}
-                    onValueChange={([v]) => update("voiceoverSimilarity", v)}
-                  />
-                  <p className="text-[10px] text-muted-foreground">
-                    How closely the output matches the original voice's character.
-                  </p>
-                </div>
-
-                {/* Test Voice */}
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  className="w-full gap-2"
-                  onClick={handleTestVoice}
-                  disabled={previewLoading}
-                >
-                  {previewLoading ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
-                  {previewLoading ? "Generating sample..." : "Test Voice"}
-                </Button>
-
-                <p className="text-[10px] text-muted-foreground italic">
-                  If voice generation fails for any post, that video falls back to silent so the schedule is never blocked.
-                </p>
-              </div>
-            )}
-          </CardContent>
+                )}
+              </CardContent>
+            </CollapsibleContent>
+          </Collapsible>
         </Card>
       )}
 
