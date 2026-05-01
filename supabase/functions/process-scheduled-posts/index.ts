@@ -140,7 +140,7 @@ async function fetchWeatherData(city: string, apiKey: string, state?: string | n
 async function resolveScheduledCity(supabase: any, post: any): Promise<{ city: string; state: string | null; cityId: string | null; automationId: string | null }> {
   let cityId = post.city_id || null;
   const automationId = post.automation_id || null;
-  const isAutoPost = typeof post.caption === "string" && /^\s*\[auto:[a-z]+\]\s*$/i.test(post.caption);
+  const isAutoPost = typeof post.caption === "string" && /^\s*\[(auto|manual):[a-z]+\]\s*$/i.test(post.caption);
 
   if (isAutoPost && !cityId && !automationId) {
     throw new Error("Auto-post is missing city_id/automation_id; refusing to render without strict city scope");
