@@ -1630,7 +1630,7 @@ Deno.serve(async (req) => {
 
         // Extract slot (morning/afternoon/evening) from auto-post marker if present, so the
         // video header shows the correct period badge for auto-posts.
-        const slotMatch = rawCaption ? /\[auto:([a-z]+)\]/i.exec(rawCaption) : null;
+        const slotMatch = rawCaption ? /\[(?:auto|manual):([a-z]+)\]/i.exec(rawCaption) : null;
         const timePeriod = slotMatch ? slotMatch[1].toLowerCase() : null;
         trace("platforms_resolved", { platforms: platformsToPost, slot: timePeriod, automated: isAutoMarker });
 
