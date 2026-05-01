@@ -475,6 +475,8 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
   // Original offsets were authored as `10 - time` (so element runs to end). Preserve that.
   const dur = (originalRemainder: number) => Math.max(0.1, D - (10 - originalRemainder));
 
+  // Shared text shadow used across all overlay text elements
+  const txtShadow = "0px 2px 6px rgba(0,0,0,0.5)";
 
   // Determine time period label
   let periodLabel: string;

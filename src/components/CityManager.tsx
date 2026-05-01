@@ -245,7 +245,9 @@ export function CityManager({ activeCityId, onActiveCityChange, onCitiesChange, 
         .maybeSingle();
       const voiceoverEnabled = (ws as any)?.enable_voiceover === true;
       const VIDEO_PLATFORMS = new Set(["youtube", "tiktok", "instagram"]);
-      const scheduledAt = new Date(Date.now() + 30_000).toISOString();
+      // 1s in the future — passes the validate_scheduled_at trigger but is
+      // immediately within the worker's due window when we invoke it directly.
+      const scheduledAt = new Date(Date.now() + 1_000).toISOString();
       const rows = platforms.map((platform) => ({
         user_id: user.id,
         city: cityLabel,
@@ -257,15 +259,37 @@ export function CityManager({ activeCityId, onActiveCityChange, onCitiesChange, 
         caption: `[manual:${slot}]`,
         include_voiceover: voiceoverEnabled && VIDEO_PLATFORMS.has(platform),
       }));
-      const { error: insErr } = await supabase.from("scheduled_posts").insert(rows);
+      const { data: inserted, error: insErr } = await supabase
+        .from("scheduled_posts")
+        .insert(rows)
+        .select("id, platform");
       if (insErr) {
         console.error("[runNow] insert failed:", insErr);
         toast.error(insErr.message || "Failed to queue test post");
         return;
       }
       toast.success(
-        `Queued ${slot} test for ${activeCity.name} → ${platforms.join(", ")}. Worker runs within ~1 min.`,
+        `Queued ${slot} for ${activeCity.name} → ${platforms.join(", ")}. Triggering worker…`,
       );
+      // Kick the worker right now so we don't wait for the cron tick.
+      // Process each inserted post sequentially and surface any error code.
+      for (const row of inserted || []) {
+        try {
+          const { data: res, error: invErr } = await supabase.functions.invoke(
+            "process-scheduled-posts",
+            { body: { scheduled_post_id: (row as any).id, source: "manual_run_slot" } },
+          );
+          if (invErr) {
+            toast.error(`${(row as any).platform} failed: ${invErr.message}`);
+          } else if (res && (res as any).error) {
+            toast.error(`${(row as any).platform} failed: ${(res as any).error}`);
+          } else {
+            toast.success(`${(row as any).platform}: render started`);
+          }
+        } catch (e: any) {
+          toast.error(`${(row as any).platform} failed: ${e?.message || "unknown error"}`);
+        }
+      }
     } finally {
       setRunningSlot(null);
     }
