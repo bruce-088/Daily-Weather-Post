@@ -49,6 +49,17 @@ export class YouTubeAdapter implements PlatformAdapter {
     const refreshData = await refreshRes.json();
     if (!refreshData.access_token) {
       console.error("YouTube token refresh failed:", JSON.stringify(refreshData));
+      // If Google says the refresh_token is permanently invalid (revoked/expired),
+      // clear it so the UI flips from "Connected" → "Reconnect Required" instead
+      // of silently failing every auto-post.
+      const errorCode = (refreshData?.error || "").toString();
+      if (errorCode === "invalid_grant" || errorCode === "invalid_token") {
+        await supabase
+          .from("weather_settings")
+          .update({ youtube_refresh_token: null })
+          .eq("user_id", userId);
+        console.warn("YouTube refresh_token cleared due to invalid_grant — user must reconnect");
+      }
       return null;
     }
 

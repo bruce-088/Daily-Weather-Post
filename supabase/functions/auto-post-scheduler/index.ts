@@ -130,7 +130,7 @@ Deno.serve(async (req) => {
     ];
 
     const now = new Date();
-    const POST_WINDOW_MINUTES = 10;
+    const POST_WINDOW_MINUTES = 15;
     const DUPLICATE_GUARD_MINUTES = 30;
 
     // Get the current wall-clock hour/minute in a given IANA timezone.

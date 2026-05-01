@@ -87,6 +87,7 @@ interface SettingsPanelProps {
   saving: boolean;
   tiktokConnected?: boolean;
   youtubeConnected?: boolean;
+  youtubeExpired?: boolean;
   twitterConnected?: boolean;
   linkedinConnected?: boolean;
   onDisconnect?: (platform: string) => void;
@@ -104,6 +105,7 @@ export function SettingsPanel({
   saving,
   tiktokConnected,
   youtubeConnected,
+  youtubeExpired,
   twitterConnected,
   linkedinConnected,
   onDisconnect,
@@ -530,15 +532,28 @@ export function SettingsPanel({
               <div>
                 <p className="text-sm font-medium">YouTube Shorts</p>
                 <p className="text-xs text-muted-foreground">
-                  {youtubeConnected ? "Connected" : "Not connected"}
+                  {youtubeConnected
+                    ? (youtubeExpired ? "Reconnect required — token expired" : "Connected")
+                    : "Not connected"}
                 </p>
               </div>
             </div>
             {youtubeConnected ? (
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className="gap-1 text-xs border-primary/30 text-primary">
-                  <CheckCircle size={12} /> Connected
-                </Badge>
+                {youtubeExpired ? (
+                  <>
+                    <Badge variant="outline" className="gap-1 text-xs border-yellow-500/40 text-yellow-500 bg-yellow-500/10">
+                      ⚠️ Reconnect Required
+                    </Badge>
+                    <Button size="sm" variant="outline" onClick={handleConnectYouTube} className="gap-1.5 border-yellow-500/40 text-yellow-500 hover:text-yellow-400">
+                      <ExternalLink size={12} /> Reconnect
+                    </Button>
+                  </>
+                ) : (
+                  <Badge variant="outline" className="gap-1 text-xs border-primary/30 text-primary">
+                    <CheckCircle size={12} /> Connected
+                  </Badge>
+                )}
                 <Button size="sm" variant="ghost" onClick={() => onDisconnect?.("youtube")} className="gap-1 text-xs text-destructive hover:text-destructive h-7 px-2">
                   <Unlink size={12} /> Disconnect
                 </Button>

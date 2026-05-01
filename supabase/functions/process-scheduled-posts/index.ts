@@ -1778,7 +1778,27 @@ Deno.serve(async (req) => {
               }
             } else {
               errorMessage = result.error || `${platformName} upload failed`;
-              await notifyFailure("upload", `${platformName} upload failed`, errorMessage, { platform: platformName });
+              // Detect expired/invalid YouTube auth (token refresh failed) and surface
+              // a clear, actionable in-app notification so users know to reconnect.
+              const errLower = (errorMessage || "").toLowerCase();
+              const isYoutubeAuth =
+                platformName === "youtube" &&
+                (errLower.includes("token") ||
+                  errLower.includes("auth") ||
+                  errLower.includes("invalid_grant") ||
+                  errLower.includes("unauthorized") ||
+                  errLower.includes("401") ||
+                  errLower.includes("could not get valid token"));
+              if (isYoutubeAuth) {
+                await notifyFailure(
+                  "upload",
+                  "Post Failed: YouTube login expired",
+                  "Please reconnect in settings.",
+                  { platform: "youtube", reason: "auth_expired" },
+                );
+              } else {
+                await notifyFailure("upload", `${platformName} upload failed`, errorMessage, { platform: platformName });
+              }
             }
           }
         } else {
