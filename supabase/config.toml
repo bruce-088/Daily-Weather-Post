@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.linkedin-auth]
 verify_jwt = false
+
+[functions.sync-youtube-metrics]
+verify_jwt = false
