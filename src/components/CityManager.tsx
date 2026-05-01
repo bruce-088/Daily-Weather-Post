@@ -170,20 +170,33 @@ export function CityManager({ activeCityId, onActiveCityChange, onCitiesChange, 
     setSavingAuto(true);
     const saved = await saveAutomation(activeCityId, patch);
     setSavingAuto(false);
-    if (!saved) toast.error("Couldn't save automation");
-    else {
-      setAutomation(saved);
-      // Recompute badge for this city
-      setPlatformStatus((prev) => ({
-        ...prev,
-        [activeCityId]: {
-          enabled: saved.enabled,
-          hasPlatforms:
-            (saved.morning_platforms?.length ?? 0) +
-              (saved.afternoon_platforms?.length ?? 0) +
-              (saved.evening_platforms?.length ?? 0) > 0,
-        },
-      }));
+    if (!saved) {
+      toast.error("Couldn't save automation");
+      return;
+    }
+    setAutomation(saved);
+    // Recompute badge for this city
+    setPlatformStatus((prev) => ({
+      ...prev,
+      [activeCityId]: {
+        enabled: saved.enabled,
+        hasPlatforms:
+          (saved.morning_platforms?.length ?? 0) +
+            (saved.afternoon_platforms?.length ?? 0) +
+            (saved.evening_platforms?.length ?? 0) > 0,
+      },
+    }));
+    // Surface a confirmation when platforms change, so the user knows the
+    // database write actually persisted (this was previously silent).
+    const platformPatch =
+      patch.morning_platforms || patch.afternoon_platforms || patch.evening_platforms;
+    if (platformPatch) {
+      const cityName = cities.find((c) => c.id === activeCityId)?.name || "city";
+      const total =
+        (saved.morning_platforms?.length ?? 0) +
+        (saved.afternoon_platforms?.length ?? 0) +
+        (saved.evening_platforms?.length ?? 0);
+      toast.success(`Saved · ${cityName} now has ${total} platform slot${total === 1 ? "" : "s"}`);
     }
   };
 
