@@ -287,6 +287,26 @@ Deno.serve(async (req) => {
         })
         .eq("user_id", userId);
 
+      const { data: socialRows } = await supabaseAdmin
+        .from("social_accounts")
+        .update({
+          access_token: refreshData.access_token,
+          token_expires_at: expiresAt,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("user_id", userId)
+        .eq("platform", "youtube")
+        .select("id");
+      if (!socialRows?.length) {
+        await supabaseAdmin.from("social_accounts").insert({
+          user_id: userId,
+          platform: "youtube",
+          access_token: refreshData.access_token,
+          refresh_token: settings.youtube_refresh_token,
+          token_expires_at: expiresAt,
+        });
+      }
+
       return new Response(
         JSON.stringify({ success: true }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
