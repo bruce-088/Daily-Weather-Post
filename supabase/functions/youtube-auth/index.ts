@@ -99,9 +99,9 @@ Deno.serve(async (req) => {
     }
 
     if (action === "exchange_code") {
-      if (!code || !redirect_uri || !state) {
+      if (!code || !state) {
         return new Response(
-          JSON.stringify({ error: "Missing code, redirect_uri, or state" }),
+          JSON.stringify({ error: "Missing code or state" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -118,7 +118,7 @@ Deno.serve(async (req) => {
 
       if (
         !statePayload.user_id ||
-        statePayload.redirect_uri !== redirect_uri ||
+        !statePayload.redirect_uri ||
         !statePayload.exp ||
         statePayload.exp < Date.now()
       ) {
@@ -128,6 +128,7 @@ Deno.serve(async (req) => {
         );
       }
       const userId = statePayload.user_id;
+      const effectiveRedirectUri = statePayload.redirect_uri;
 
       const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
@@ -137,7 +138,7 @@ Deno.serve(async (req) => {
           client_secret: YOUTUBE_CLIENT_SECRET,
           code: code,
           grant_type: "authorization_code",
-          redirect_uri: redirect_uri,
+          redirect_uri: effectiveRedirectUri,
         }),
       });
 
