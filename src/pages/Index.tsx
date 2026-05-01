@@ -307,13 +307,32 @@ const Index = () => {
     });
   }, []);
 
-  // Load post history
+  // Load post history (paginated / infinite scroll)
+  const PAGE_SIZE = 10;
+  const [hasMorePosts, setHasMorePosts] = useState(true);
+  const [loadingMorePosts, setLoadingMorePosts] = useState(false);
+
   const loadHistory = useCallback(async () => {
     setPostsLoading(true);
-    const data = await fetchPostHistory();
+    const data = await fetchPostHistory(PAGE_SIZE, 0);
     setPosts(data);
+    setHasMorePosts(data.length === PAGE_SIZE);
     setPostsLoading(false);
   }, []);
+
+  const loadMorePosts = useCallback(async () => {
+    if (loadingMorePosts || !hasMorePosts) return;
+    setLoadingMorePosts(true);
+    const data = await fetchPostHistory(PAGE_SIZE, posts.length);
+    setPosts((prev) => {
+      const seen = new Set(prev.map((p) => p.id));
+      const next = [...prev];
+      for (const row of data) if (!seen.has(row.id)) next.push(row);
+      return next;
+    });
+    setHasMorePosts(data.length === PAGE_SIZE);
+    setLoadingMorePosts(false);
+  }, [posts.length, loadingMorePosts, hasMorePosts]);
 
   const loadScheduled = useCallback(async () => {
     setScheduledLoading(true);
@@ -944,6 +963,31 @@ const Index = () => {
                   onReuse={handleReusePost}
                   onChanged={loadHistory}
                 />
+                {hasMorePosts && (
+                  <div
+                    ref={(el) => {
+                      if (!el) return;
+                      const obs = new IntersectionObserver(
+                        (entries) => {
+                          if (entries[0]?.isIntersecting) loadMorePosts();
+                        },
+                        { root: el.parentElement, rootMargin: "200px" },
+                      );
+                      obs.observe(el);
+                      // Cleanup when element unmounts
+                      (el as any).__obs?.disconnect?.();
+                      (el as any).__obs = obs;
+                    }}
+                    className="py-4 text-center text-xs text-muted-foreground"
+                  >
+                    {loadingMorePosts ? "Loading more…" : "Scroll to load more"}
+                  </div>
+                )}
+                {!hasMorePosts && posts.length > 0 && (
+                  <div className="py-4 text-center text-xs text-muted-foreground">
+                    No more posts
+                  </div>
+                )}
               </div>
             </div>
           </TabsContent>

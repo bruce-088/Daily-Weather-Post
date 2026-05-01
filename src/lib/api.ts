@@ -241,12 +241,12 @@ export interface PostHistoryItem {
   debug_trace?: { steps?: Array<{ ts: string; step: string; detail?: any }>; captured_at?: string } | null;
 }
 
-export async function fetchPostHistory(limit = 10): Promise<PostHistoryItem[]> {
+export async function fetchPostHistory(limit = 10, offset = 0): Promise<PostHistoryItem[]> {
   const { data, error } = await supabase
     .from("post_history")
     .select("*")
     .order("created_at", { ascending: false })
-    .limit(limit);
+    .range(offset, offset + limit - 1);
 
   if (error) return [];
   return (data || []) as unknown as PostHistoryItem[];
