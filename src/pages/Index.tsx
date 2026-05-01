@@ -937,12 +937,14 @@ const Index = () => {
                   <History size={14} /> Refresh
                 </Button>
               </div>
-              <PostHistoryList
-                posts={posts}
-                loading={postsLoading}
-                onReuse={handleReusePost}
-                onChanged={loadHistory}
-              />
+              <div className="overflow-y-auto max-h-[70vh] pr-2 -mr-2">
+                <PostHistoryList
+                  posts={posts}
+                  loading={postsLoading}
+                  onReuse={handleReusePost}
+                  onChanged={loadHistory}
+                />
+              </div>
             </div>
           </TabsContent>
 
