@@ -311,13 +311,17 @@ const Index = () => {
   const PAGE_SIZE = 10;
   const [hasMorePosts, setHasMorePosts] = useState(true);
   const [loadingMorePosts, setLoadingMorePosts] = useState(false);
+  const historyScrollRef = useRef<HTMLDivElement | null>(null);
 
   const loadHistory = useCallback(async () => {
     setPostsLoading(true);
+    setHasMorePosts(true);
     const data = await fetchPostHistory(PAGE_SIZE, 0);
     setPosts(data);
     setHasMorePosts(data.length === PAGE_SIZE);
     setPostsLoading(false);
+    // Reset scroll back to the top of the list
+    historyScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
   const loadMorePosts = useCallback(async () => {
