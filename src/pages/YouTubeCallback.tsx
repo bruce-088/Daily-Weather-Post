@@ -12,6 +12,19 @@ const getOAuthRedirectOrigin = () => {
   return origin;
 };
 
+const getFunctionErrorMessage = async (error: unknown) => {
+  const fallback = error instanceof Error ? error.message : "Failed to connect YouTube";
+  const response = (error as { context?: Response })?.context;
+  if (!response) return fallback;
+
+  try {
+    const body = await response.clone().json();
+    return body?.error || fallback;
+  } catch {
+    return fallback;
+  }
+};
+
 const YouTubeCallback = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -58,13 +71,14 @@ const YouTubeCallback = () => {
         body: {
           action: "exchange_code",
           code,
-            redirect_uri: `${getOAuthRedirectOrigin()}/youtube/callback`,
-            state: returnedState,
+          state: returnedState,
         },
       });
 
       if (fnError || data?.error) {
-        toast.error(data?.error || fnError?.message || "Failed to connect YouTube");
+        const errorMessage = data?.error || (fnError ? await getFunctionErrorMessage(fnError) : "Failed to connect YouTube");
+        console.error("YouTube connection failed:", errorMessage, fnError || data);
+        toast.error(errorMessage);
         setStatus("error");
       } else {
         toast.success("YouTube connected successfully!");
