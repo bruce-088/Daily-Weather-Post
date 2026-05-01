@@ -337,6 +337,19 @@ export function CityManager({ activeCityId, onActiveCityChange, onCitiesChange, 
                       </Badge>
                     )}
                   </button>
+                  {platformStatus[c.id]?.enabled && !platformStatus[c.id]?.hasPlatforms && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        quickFixCity(c.id);
+                      }}
+                      className="mr-2 inline-flex items-center gap-0.5 rounded-md border border-destructive/50 bg-destructive/10 px-1.5 py-0.5 text-[9px] font-medium text-destructive hover:bg-destructive/20 transition-colors"
+                      title="Automation is on but no platforms are selected. Click to fix."
+                    >
+                      <AlertTriangle size={9} /> No platforms — click to fix
+                    </button>
+                  )}
                   <div className="flex items-center gap-1">
                     {!c.is_primary && (
                       <Button
