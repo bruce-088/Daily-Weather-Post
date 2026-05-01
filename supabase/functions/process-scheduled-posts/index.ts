@@ -843,7 +843,15 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
   }
   const source = buildCreatomateSource(weather, videoUrl, timePeriod, voiceUrl, audioDurationSec);
 
-  const requestBody = JSON.stringify({ output_format: "mp4", ...source });
+  // Medium-quality render: 0.75 scale (810x1440 from a 1080x1920 source)
+  // dramatically cuts Creatomate render time so we stay inside the worker
+  // window. Visually indistinguishable for vertical mobile playback.
+  const requestBody = JSON.stringify({
+    output_format: "mp4",
+    render_scale: 0.75,
+    frame_rate: 30,
+    ...source,
+  });
   console.log("Creatomate request body (first 300 chars):", requestBody.substring(0, 300));
   
   const renderRes = await fetch("https://api.creatomate.com/v2/renders", {
