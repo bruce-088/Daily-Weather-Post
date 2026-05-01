@@ -189,6 +189,75 @@ export function CityManager({ activeCityId, onActiveCityChange, onCitiesChange, 
 
   const activeCity = cities.find((c) => c.id === activeCityId);
 
+  /** Activate a city and scroll the per-city editor into view (used by quick-fix badge). */
+  const quickFixCity = (cityId: string) => {
+    onActiveCityChange(cityId);
+    setActiveCityId(cityId);
+    setTimeout(() => {
+      slotEditorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 60);
+  };
+
+  /**
+   * Trigger a single slot immediately for the active city by inserting one
+   * scheduled_posts row per selected platform with scheduled_at = now+30s.
+   * The existing process-scheduled-posts worker runs every minute and will
+   * pick these up — bypassing the 15-minute auto-post-scheduler window.
+   */
+  const handleRunSlotNow = async (slot: "morning" | "afternoon" | "evening") => {
+    if (!activeCity || !automation) return;
+    const platsKey =
+      slot === "morning" ? "morning_platforms" : slot === "afternoon" ? "afternoon_platforms" : "evening_platforms";
+    const platforms = ((automation as any)[platsKey] as string[]) || [];
+    if (platforms.length === 0) {
+      toast.error(`Pick at least one platform for ${slot} first`);
+      return;
+    }
+    const slotKey = `${activeCity.id}:${slot}`;
+    setRunningSlot(slotKey);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("Not signed in");
+        return;
+      }
+      const cityLabel = `${activeCity.name}${activeCity.state ? ", " + activeCity.state : ""}`;
+      // include_voiceover comes from the user-level voiceover toggle (saved in
+      // weather_settings) and only applies to video platforms.
+      const { data: ws } = await supabase
+        .from("weather_settings")
+        .select("enable_voiceover")
+        .eq("user_id", user.id)
+        .limit(1)
+        .maybeSingle();
+      const voiceoverEnabled = (ws as any)?.enable_voiceover === true;
+      const VIDEO_PLATFORMS = new Set(["youtube", "tiktok", "instagram"]);
+      const scheduledAt = new Date(Date.now() + 30_000).toISOString();
+      const rows = platforms.map((platform) => ({
+        user_id: user.id,
+        city: cityLabel,
+        city_id: activeCity.id,
+        automation_id: automation.id || null,
+        platform,
+        scheduled_at: scheduledAt,
+        status: "pending",
+        caption: `[manual:${slot}]`,
+        include_voiceover: voiceoverEnabled && VIDEO_PLATFORMS.has(platform),
+      }));
+      const { error: insErr } = await supabase.from("scheduled_posts").insert(rows);
+      if (insErr) {
+        console.error("[runNow] insert failed:", insErr);
+        toast.error(insErr.message || "Failed to queue test post");
+        return;
+      }
+      toast.success(
+        `Queued ${slot} test for ${activeCity.name} → ${platforms.join(", ")}. Worker runs within ~1 min.`,
+      );
+    } finally {
+      setRunningSlot(null);
+    }
+  };
+
   return (
     <Card className="border-border/50 bg-card/80 backdrop-blur">
       <CardHeader className="pb-3">
