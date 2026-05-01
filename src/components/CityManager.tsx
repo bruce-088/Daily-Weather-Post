@@ -410,7 +410,7 @@ export function CityManager({ activeCityId, onActiveCityChange, onCitiesChange, 
 
         {/* Per-city automation editor */}
         {activeCity && automation && (
-          <div className="space-y-3 rounded-lg border border-border/30 bg-secondary/10 p-3">
+          <div ref={slotEditorRef} className="space-y-3 rounded-lg border border-border/30 bg-secondary/10 p-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Clock size={14} className="text-primary" />
