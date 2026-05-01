@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { MapPin, Plus, Star, Trash2, Loader2, Clock, AlertTriangle, Youtube, Twitter, Linkedin, Video } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { MapPin, Plus, Star, Trash2, Loader2, Clock, AlertTriangle, Youtube, Twitter, Linkedin, Video, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
