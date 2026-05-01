@@ -887,8 +887,11 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
 
   console.log("Creatomate render started, ID:", renderId);
 
-  for (let i = 0; i < 36; i++) {
-    await new Promise((r) => setTimeout(r, 5000));
+  // Poll budget: 18 ticks × 2.5s = 45s. Combined with the medium-quality
+  // render (render_scale 0.75) this keeps us well inside the worker window
+  // and surfaces a clean failure on slow renders instead of a stuck row.
+  for (let i = 0; i < 18; i++) {
+    await new Promise((r) => setTimeout(r, 2500));
 
     const statusRes = await fetch(`https://api.creatomate.com/v2/renders/${renderId}`, {
       headers: { Authorization: `Bearer ${apiKey}` },
@@ -920,7 +923,7 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
     }
   }
 
-  console.error("Creatomate render timed out after 3 minutes");
+  console.error("Creatomate render timed out after 45 seconds (medium-quality budget)");
   return null;
 }
 
