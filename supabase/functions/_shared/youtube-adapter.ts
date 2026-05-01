@@ -149,6 +149,7 @@ export class YouTubeAdapter implements PlatformAdapter {
             title: shortTitle,
             description: safeDescription,
             categoryId: "22",
+            tags: buildYouTubeTags(shortTitle, safeDescription),
           },
           status: {
             privacyStatus: "public",
