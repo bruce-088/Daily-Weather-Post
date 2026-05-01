@@ -313,29 +313,6 @@ export function CityManager({ activeCityId, onActiveCityChange, onCitiesChange, 
                         <Star size={9} /> Primary
                       </Badge>
                     )}
-                    {platformStatus[c.id]?.enabled && !platformStatus[c.id]?.hasPlatforms && (
-                      <Badge
-                        variant="outline"
-                        role="button"
-                        tabIndex={0}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          e.preventDefault();
-                          quickFixCity(c.id);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            quickFixCity(c.id);
-                          }
-                        }}
-                        className="text-[9px] gap-0.5 border-destructive/50 text-destructive cursor-pointer hover:bg-destructive/10"
-                        title="Automation is on but no platforms are selected. Click to fix."
-                      >
-                        <AlertTriangle size={9} /> No platforms — click to fix
-                      </Badge>
-                    )}
                   </button>
                   {platformStatus[c.id]?.enabled && !platformStatus[c.id]?.hasPlatforms && (
                     <button
