@@ -109,7 +109,7 @@ export class YouTubeAdapter implements PlatformAdapter {
     description: string,
     mimeType = "video/mp4",
   ): Promise<UploadResult | null> {
-    const shortTitle = title.length > 100 ? title.substring(0, 100) : title;
+    const shortTitle = appendTitleHashtags(title);
 
     // Append permanent YouTube subscribe + notifications CTA to every Shorts
     // description. Centralized here so it applies uniformly to manual posts,
@@ -124,7 +124,12 @@ export class YouTubeAdapter implements PlatformAdapter {
     baseDescription = baseDescription
       .replace(/\n*👉[^\n]*@SkyBriefGNV\?sub_confirmation=1[^\n]*$/u, "")
       .trimEnd();
-    const finalDescription = `${baseDescription}\n\n${YT_CTA}`;
+    // Strip any previously-appended hashtag block so we never stack duplicates.
+    baseDescription = baseDescription
+      .replace(/\n+#[A-Za-z0-9]+(?:\s+#[A-Za-z0-9]+)*\s*$/u, "")
+      .trimEnd();
+    const hashtagBlock = buildDescriptionHashtags(title, baseDescription);
+    const finalDescription = `${baseDescription}\n\n${YT_CTA}\n\n${hashtagBlock}`;
     // YouTube caps description at 5000 chars.
     const safeDescription = finalDescription.length > 5000
       ? finalDescription.substring(0, 5000)
