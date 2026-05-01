@@ -633,8 +633,6 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
   // Translate them so each element still runs from `time` to `D`.
   const dur = (originalRemainder: number) => Math.max(0.1, D - (10 - originalRemainder));
 
-  const txtShadow = "0px 2px 6px rgba(0,0,0,0.5)";
-
   // Determine time period label
   let periodLabel: string;
   if (timePeriod === "morning") periodLabel = "☀️  MORNING UPDATE";
@@ -680,7 +678,7 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
 
     // === BRAND TEXT ===
     { type: "text", track: nt(), time: 0, duration: dur(10.0), text: "SKYBRIEF", font_family: "Inter", font_weight: "800", font_size: "56", fill_color: "#ffffff", letter_spacing: "18%",
-      x: "56%", y: "5.5%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.5 } },
+      x: "56%", y: "5.5%", x_alignment: "50%", y_alignment: "50%", shadow: "0px 2px 4px rgba(0,0,0,0.5)", enter: { type: "fade", duration: 0.5 } },
     { type: "shape", track: nt(), time: 0.2, duration: dur(9.8), shape_type: "rectangle", width: 80, height: 4, x: "50%", y: "8%", fill_color: theme.accent, border_radius: "2",
       enter: { type: "scale", start_scale: "0%", duration: 0.6 } },
 
@@ -689,7 +687,7 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
       fill_color: "rgba(255,255,255,0.12)", border_radius: "30",
       enter: { type: "fade", duration: 0.4 } },
     { type: "text", track: nt(), time: 0.3, duration: dur(9.7), text: periodLabel, font_family: "Inter", font_weight: "700", font_size: "34", fill_color: theme.accent, letter_spacing: "4%",
-      x: "50%", y: "11%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.4 } },
+      x: "50%", y: "11%", x_alignment: "50%", y_alignment: "50%", shadow: "0px 2px 4px rgba(0,0,0,0.5)", enter: { type: "fade", duration: 0.4 } },
 
     // === CITY HEADER GLASS PANEL (stronger backdrop) ===
     { type: "shape", track: nt(), time: 0.2, duration: dur(9.8), shape_type: "rectangle", width: 1100, height: 280, x: "50%", y: "17%",
@@ -698,18 +696,18 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
 
     // === CITY + DATE ===
     { type: "text", track: nt(), time: 0.3, duration: dur(9.7), text: cityUpper, font_family: "Inter", font_weight: "800", font_size: "96", fill_color: "#ffffff",
-      x: "50%", y: "15%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "slide", direction: "up", duration: 0.5 } },
+      x: "50%", y: "15%", x_alignment: "50%", y_alignment: "50%", shadow: "0px 2px 4px rgba(0,0,0,0.5)", enter: { type: "slide", direction: "up", duration: 0.5 } },
     { type: "text", track: nt(), time: 0.5, duration: dur(9.5), text: regionDate, font_family: "Inter", font_weight: "600", font_size: "40", fill_color: "rgba(255,255,255,0.70)",
-      x: "50%", y: "20%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.5 } },
+      x: "50%", y: "20%", x_alignment: "50%", y_alignment: "50%", shadow: "0px 2px 4px rgba(0,0,0,0.5)", enter: { type: "fade", duration: 0.5 } },
 
     // === HERO TEMPERATURE ===
     { type: "text", track: nt(), time: 0.6, duration: dur(9.4), text: theme.emoji, font_size: "100",
       x: "50%", y: "29%", x_alignment: "50%", y_alignment: "50%", enter: { type: "scale", start_scale: "50%", duration: 0.6 } },
     { type: "text", track: nt(), time: 0.7, duration: dur(9.3), text: tempStr, font_family: "Inter", font_weight: "900", font_size: "220", fill_color: "#ffffff",
-      x: "50%", y: "41%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "scale", start_scale: "60%", duration: 0.6 } },
+      x: "50%", y: "41%", x_alignment: "50%", y_alignment: "50%", shadow: "0px 2px 4px rgba(0,0,0,0.5)", enter: { type: "scale", start_scale: "60%", duration: 0.6 } },
     { type: "text", track: nt(), time: 0.9, duration: dur(9.1), text: condStr,
       font_family: "Inter", font_weight: "600", font_size: "48", fill_color: theme.accent,
-      x: "50%", y: "50%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.5 } },
+      x: "50%", y: "50%", x_alignment: "50%", y_alignment: "50%", shadow: "0px 2px 4px rgba(0,0,0,0.5)", enter: { type: "fade", duration: 0.5 } },
 
     // === DETAIL CARD (stronger frosted glass) ===
     { type: "shape", track: nt(), time: 1.3, duration: dur(8.7), shape_type: "rectangle", width: 1250, height: 340, x: "50%", y: "63%",
@@ -718,22 +716,22 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
       enter: { type: "scale", start_scale: "92%", duration: 0.5 } },
     // Labels
     { type: "text", track: nt(), time: 1.5, duration: dur(8.5), text: "HIGH", font_family: "Inter", font_weight: "600", font_size: "28", fill_color: "rgba(255,255,255,0.50)", letter_spacing: "6%",
-      x: "17%", y: "58%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.3 } },
+      x: "17%", y: "58%", x_alignment: "50%", y_alignment: "50%", shadow: "0px 2px 4px rgba(0,0,0,0.5)", enter: { type: "fade", duration: 0.3 } },
     { type: "text", track: nt(), time: 1.5, duration: dur(8.5), text: "LOW", font_family: "Inter", font_weight: "600", font_size: "28", fill_color: "rgba(255,255,255,0.50)", letter_spacing: "6%",
-      x: "39%", y: "58%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.3 } },
+      x: "39%", y: "58%", x_alignment: "50%", y_alignment: "50%", shadow: "0px 2px 4px rgba(0,0,0,0.5)", enter: { type: "fade", duration: 0.3 } },
     { type: "text", track: nt(), time: 1.5, duration: dur(8.5), text: "RAIN", font_family: "Inter", font_weight: "600", font_size: "28", fill_color: "rgba(255,255,255,0.50)", letter_spacing: "6%",
-      x: "61%", y: "58%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.3 } },
+      x: "61%", y: "58%", x_alignment: "50%", y_alignment: "50%", shadow: "0px 2px 4px rgba(0,0,0,0.5)", enter: { type: "fade", duration: 0.3 } },
     { type: "text", track: nt(), time: 1.5, duration: dur(8.5), text: "WIND", font_family: "Inter", font_weight: "600", font_size: "28", fill_color: "rgba(255,255,255,0.50)", letter_spacing: "6%",
-      x: "83%", y: "58%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.3 } },
+      x: "83%", y: "58%", x_alignment: "50%", y_alignment: "50%", shadow: "0px 2px 4px rgba(0,0,0,0.5)", enter: { type: "fade", duration: 0.3 } },
     // Values
     { type: "text", track: nt(), time: 1.7, duration: dur(8.3), text: hiStr, font_family: "Inter", font_weight: "700", font_size: "56", fill_color: "#ffffff",
-      x: "17%", y: "64%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "slide", direction: "up", duration: 0.4 } },
+      x: "17%", y: "64%", x_alignment: "50%", y_alignment: "50%", shadow: "0px 2px 4px rgba(0,0,0,0.5)", enter: { type: "slide", direction: "up", duration: 0.4 } },
     { type: "text", track: nt(), time: 1.8, duration: dur(8.2), text: loStr, font_family: "Inter", font_weight: "700", font_size: "56", fill_color: "#ffffff",
-      x: "39%", y: "64%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "slide", direction: "up", duration: 0.4 } },
+      x: "39%", y: "64%", x_alignment: "50%", y_alignment: "50%", shadow: "0px 2px 4px rgba(0,0,0,0.5)", enter: { type: "slide", direction: "up", duration: 0.4 } },
     { type: "text", track: nt(), time: 1.9, duration: dur(8.1), text: rainStr, font_family: "Inter", font_weight: "700", font_size: "56", fill_color: "#ffffff",
-      x: "61%", y: "64%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "slide", direction: "up", duration: 0.4 } },
+      x: "61%", y: "64%", x_alignment: "50%", y_alignment: "50%", shadow: "0px 2px 4px rgba(0,0,0,0.5)", enter: { type: "slide", direction: "up", duration: 0.4 } },
     { type: "text", track: nt(), time: 2.0, duration: dur(8.0), text: windSpeed, font_family: "Inter", font_weight: "700", font_size: "56", fill_color: "#ffffff",
-      x: "83%", y: "64%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "slide", direction: "up", duration: 0.4 } },
+      x: "83%", y: "64%", x_alignment: "50%", y_alignment: "50%", shadow: "0px 2px 4px rgba(0,0,0,0.5)", enter: { type: "slide", direction: "up", duration: 0.4 } },
     // Dividers
     { type: "shape", track: nt(), time: 1.6, duration: dur(8.4), shape_type: "rectangle", width: 1, height: 100, x: "28%", y: "61.5%", fill_color: "rgba(255,255,255,0.10)", enter: { type: "fade", duration: 0.3 } },
     { type: "shape", track: nt(), time: 1.6, duration: dur(8.4), shape_type: "rectangle", width: 1, height: 100, x: "50%", y: "61.5%", fill_color: "rgba(255,255,255,0.10)", enter: { type: "fade", duration: 0.3 } },
@@ -744,7 +742,7 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
   if (alertLine) {
     elements.push(
       { type: "text", track: nt(), time: 2.2, duration: dur(7.8), text: alertLine, font_family: "Inter", font_weight: "700", font_size: "38", fill_color: "#fbbf24",
-        x: "50%", y: "73%", x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.5 } }
+        x: "50%", y: "73%", x_alignment: "50%", y_alignment: "50%", shadow: "0px 2px 4px rgba(0,0,0,0.5)", enter: { type: "fade", duration: 0.5 } }
     );
   }
 
@@ -752,14 +750,14 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
   const takeawayY = alertLine ? "77%" : "74%";
   elements.push(
     { type: "text", track: nt(), time: 2.5, duration: dur(7.5), text: takeaway, font_family: "Inter", font_weight: "600", font_size: "42", fill_color: "#ffffff",
-      x: "50%", y: takeawayY, x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.6 } }
+      x: "50%", y: takeawayY, x_alignment: "50%", y_alignment: "50%", shadow: "0px 2px 4px rgba(0,0,0,0.5)", enter: { type: "fade", duration: 0.6 } }
   );
 
   // === TOMORROW PREVIEW ===
   const tomorrowY = alertLine ? "81%" : "78.5%";
   elements.push(
     { type: "text", track: nt(), time: 3.0, duration: dur(7.0), text: tomorrowPreview, font_family: "Inter", font_weight: "600", font_size: "36", fill_color: "rgba(255,255,255,0.65)",
-      x: "50%", y: tomorrowY, x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.5 } }
+      x: "50%", y: tomorrowY, x_alignment: "50%", y_alignment: "50%", shadow: "0px 2px 4px rgba(0,0,0,0.5)", enter: { type: "fade", duration: 0.5 } }
   );
 
   // === CTA PANEL (stronger backdrop) ===
@@ -770,7 +768,7 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
       fill_color: "rgba(0,0,0,0.55)", border_radius: "14",
       enter: { type: "fade", duration: 0.4 } },
     { type: "text", track: nt(), time: 3.8, duration: dur(6.2), text: habitCTA, font_family: "Inter", font_weight: "600", font_size: "40", fill_color: "rgba(255,255,255,0.75)",
-      x: "50%", y: ctaTextY, x_alignment: "50%", y_alignment: "50%", shadow: txtShadow, enter: { type: "fade", duration: 0.6 } },
+      x: "50%", y: ctaTextY, x_alignment: "50%", y_alignment: "50%", shadow: "0px 2px 4px rgba(0,0,0,0.5)", enter: { type: "fade", duration: 0.6 } },
   );
 
   // === AI VOICE NARRATION TRACK ===
