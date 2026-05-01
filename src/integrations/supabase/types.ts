@@ -507,6 +507,7 @@ export type Database = {
           error_message: string | null
           id: string
           include_voiceover: boolean
+          last_attempt_at: string | null
           next_retry_at: string | null
           platform: string
           retry_count: number
@@ -528,6 +529,7 @@ export type Database = {
           error_message?: string | null
           id?: string
           include_voiceover?: boolean
+          last_attempt_at?: string | null
           next_retry_at?: string | null
           platform?: string
           retry_count?: number
@@ -549,6 +551,7 @@ export type Database = {
           error_message?: string | null
           id?: string
           include_voiceover?: boolean
+          last_attempt_at?: string | null
           next_retry_at?: string | null
           platform?: string
           retry_count?: number

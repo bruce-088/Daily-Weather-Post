@@ -843,7 +843,15 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
   }
   const source = buildCreatomateSource(weather, videoUrl, timePeriod, voiceUrl, audioDurationSec);
 
-  const requestBody = JSON.stringify({ output_format: "mp4", ...source });
+  // Medium-quality render: 0.75 scale (810x1440 from a 1080x1920 source)
+  // dramatically cuts Creatomate render time so we stay inside the worker
+  // window. Visually indistinguishable for vertical mobile playback.
+  const requestBody = JSON.stringify({
+    output_format: "mp4",
+    render_scale: 0.75,
+    frame_rate: 30,
+    ...source,
+  });
   console.log("Creatomate request body (first 300 chars):", requestBody.substring(0, 300));
   
   const renderRes = await fetch("https://api.creatomate.com/v2/renders", {
@@ -879,8 +887,11 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
 
   console.log("Creatomate render started, ID:", renderId);
 
-  for (let i = 0; i < 36; i++) {
-    await new Promise((r) => setTimeout(r, 5000));
+  // Poll budget: 18 ticks × 2.5s = 45s. Combined with the medium-quality
+  // render (render_scale 0.75) this keeps us well inside the worker window
+  // and surfaces a clean failure on slow renders instead of a stuck row.
+  for (let i = 0; i < 18; i++) {
+    await new Promise((r) => setTimeout(r, 2500));
 
     const statusRes = await fetch(`https://api.creatomate.com/v2/renders/${renderId}`, {
       headers: { Authorization: `Bearer ${apiKey}` },
@@ -912,7 +923,7 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
     }
   }
 
-  console.error("Creatomate render timed out after 3 minutes");
+  console.error("Creatomate render timed out after 45 seconds (medium-quality budget)");
   return null;
 }
 
