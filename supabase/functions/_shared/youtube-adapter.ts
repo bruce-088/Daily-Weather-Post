@@ -329,3 +329,78 @@ function buildYouTubeTags(title: string, description: string): string[] {
   }
   return out;
 }
+
+// --- City extraction helper (shared by title + description hashtags) ---
+const TITLE_SKIP_WORDS = new Set([
+  "good", "hot", "cold", "cool", "warm", "rain", "storms", "storm",
+  "bundle", "calm", "cloudy", "foggy", "grab", "gray", "heads", "tonight",
+  "today", "beautiful", "feels", "you", "wet", "snowy", "drive", "crank",
+  "chilly", "mild", "sun", "sunny", "tonights", "afternoon", "morning", "evening",
+  "don't", "dont", "wake", "rise", "shine",
+]);
+
+function extractCityFromTitle(title: string): string {
+  const matches = title.match(/\b[A-Z][a-z]+(?:\s[A-Z][a-z]+)?\b/g) || [];
+  for (const m of matches) {
+    const first = m.split(" ")[0].toLowerCase();
+    if (!TITLE_SKIP_WORDS.has(first)) return m;
+  }
+  return "";
+}
+
+// --- Title hashtag suffix ---
+// Appends exactly two hashtags ("#<City> #Shorts") to the end of the title.
+// If the resulting title would exceed YouTube's 100-char limit, the weather
+// detail text in the original title is trimmed first so the hashtags ALWAYS
+// fit. The leading hook is preserved at all costs.
+function appendTitleHashtags(rawTitle: string): string {
+  const MAX = 100;
+  const city = extractCityFromTitle(rawTitle).replace(/\s+/g, "") || "Weather";
+  const suffix = ` #${city} #Shorts`;
+
+  // Strip any pre-existing trailing hashtags so we don't double up.
+  let core = rawTitle.replace(/(?:\s+#[A-Za-z0-9]+){1,4}\s*$/u, "").trim();
+
+  const budget = MAX - suffix.length;
+  if (core.length > budget) {
+    const cut = budget - 1; // leave room for "…"
+    core = core.substring(0, Math.max(0, cut)).trimEnd() + "…";
+  }
+  const out = `${core}${suffix}`;
+  return out.length > MAX ? out.substring(0, MAX) : out;
+}
+
+// --- Description hashtag block ---
+// Aggressive hashtag block appended to the description for SEO.
+// Format: #<City>Weather #<Condition> #FloridaWeather #WeatherUpdate #DailyShorts
+function buildDescriptionHashtags(title: string, description: string): string {
+  const text = `${title}\n${description}`.toLowerCase();
+  const city = extractCityFromTitle(title).replace(/\s+/g, "");
+  const isFlorida = /gainesville|florida|miami|orlando|tampa|jacksonville|tallahassee|ocala/
+    .test(text);
+
+  // Pick a single dominant condition hashtag
+  let condition = "Weather";
+  if (/storm|⛈|thunder|tornado|hurricane/.test(text)) condition = "Storm";
+  else if (/rain|🌧|☔|drizzle|shower/.test(text)) condition = "Rain";
+  else if (/snow|❄️|sleet|blizzard/.test(text)) condition = "Snow";
+  else if (/fog|🌫|mist|haze/.test(text)) condition = "Fog";
+  else if (/heat wave|🔥|hot weather|🌞/.test(text) || /\b(8[5-9]|9\d|1\d{2})°/.test(title)) condition = "HeatWave";
+  else if (/cold front|🥶|chilly|🧥/.test(text)) condition = "ColdFront";
+  else if (/cloud|☁️|🌤|gray skies|overcast/.test(text)) condition = "Cloudy";
+  else if (/clear|☀️|sunny|beautiful/.test(text)) condition = "Sunny";
+
+  const tags: string[] = [];
+  if (city) tags.push(`#${city}Weather`);
+  tags.push(`#${condition}`);
+  if (isFlorida) tags.push("#FloridaWeather");
+  tags.push("#WeatherUpdate", "#DailyShorts");
+
+  const seen = new Set<string>();
+  return tags.filter(t => {
+    const k = t.toLowerCase();
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  }).join(" ");
+}
