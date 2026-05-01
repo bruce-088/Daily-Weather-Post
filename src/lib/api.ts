@@ -1,7 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { AutomationSettings, WeatherData } from "@/types/weather";
 
-export async function loadSettings(): Promise<{ settings: AutomationSettings; tiktokConnected: boolean; youtubeConnected: boolean; twitterConnected: boolean; linkedinConnected: boolean } | null> {
+export async function loadSettings(): Promise<{ settings: AutomationSettings; tiktokConnected: boolean; youtubeConnected: boolean; youtubeExpired: boolean; twitterConnected: boolean; linkedinConnected: boolean } | null> {
   const { data, error } = await supabase
     .from("weather_settings")
     .select("*")
@@ -40,6 +40,21 @@ export async function loadSettings(): Promise<{ settings: AutomationSettings; ti
     },
     tiktokConnected: !!(data as any).tiktok_access_token,
     youtubeConnected: !!(data as any).youtube_access_token,
+    // Token is "expired" (needs reconnect) when:
+    //   - access token exists, AND
+    //   - expires_at is in the past, AND
+    //   - no refresh_token is stored (worker can't auto-heal)
+    // If a refresh_token exists, the worker will refresh it transparently
+    // and we keep showing "Connected".
+    youtubeExpired: (() => {
+      const accessToken = (data as any).youtube_access_token;
+      const refreshToken = (data as any).youtube_refresh_token;
+      const expiresAt = (data as any).youtube_token_expires_at;
+      if (!accessToken) return false;
+      if (refreshToken) return false;
+      if (!expiresAt) return false;
+      return new Date(expiresAt).getTime() < Date.now();
+    })(),
     twitterConnected: !!(data as any).twitter_access_token,
     linkedinConnected: !!(data as any).linkedin_access_token,
   };
