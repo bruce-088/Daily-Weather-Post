@@ -1791,13 +1791,13 @@ Deno.serve(async (req) => {
                   errLower.includes("could not get valid token"));
               if (isYoutubeAuth) {
                 await notifyFailure(
-                  "auth_expired",
+                  "upload",
                   "Post Failed: YouTube login expired",
                   "Please reconnect in settings.",
-                  { platform: "youtube" },
+                  { platform: "youtube", reason: "auth_expired" },
                 );
               } else {
-                await notifyFailure(`${platformName} upload failed`, `${platformName} upload failed`, errorMessage, { platform: platformName });
+                await notifyFailure("upload", `${platformName} upload failed`, errorMessage, { platform: platformName });
               }
             }
           }
