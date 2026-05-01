@@ -44,6 +44,8 @@ export function CityManager({ activeCityId, onActiveCityChange, onCitiesChange, 
   const [savingAuto, setSavingAuto] = useState(false);
   // Map of cityId -> "has at least one platform across any slot when enabled"
   const [platformStatus, setPlatformStatus] = useState<Record<string, { enabled: boolean; hasPlatforms: boolean }>>({});
+  const [runningSlot, setRunningSlot] = useState<string | null>(null);
+  const slotEditorRef = useRef<HTMLDivElement | null>(null);
 
   const loadCities = async () => {
     setLoading(true);
