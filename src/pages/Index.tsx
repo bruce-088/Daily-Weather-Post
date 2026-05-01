@@ -91,6 +91,7 @@ const Index = () => {
   const [settings, setSettings] = useState<AutomationSettings>(DEFAULT_SETTINGS);
   const [tiktokConnected, setTiktokConnected] = useState(false);
   const [youtubeConnected, setYoutubeConnected] = useState(false);
+  const [youtubeExpired, setYoutubeExpired] = useState(false);
   const [twitterConnected, setTwitterConnected] = useState(false);
   const [linkedinConnected, setLinkedinConnected] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -298,6 +299,7 @@ const Index = () => {
         setSettings(result.settings);
         setTiktokConnected(result.tiktokConnected);
         setYoutubeConnected(result.youtubeConnected);
+        setYoutubeExpired(result.youtubeExpired);
         setTwitterConnected(result.twitterConnected);
         setLinkedinConnected(result.linkedinConnected);
       }
@@ -979,6 +981,7 @@ const Index = () => {
                 saving={saving}
                 tiktokConnected={tiktokConnected}
                 youtubeConnected={youtubeConnected}
+                youtubeExpired={youtubeExpired}
                 twitterConnected={twitterConnected}
                 linkedinConnected={linkedinConnected}
                 onDisconnect={handleDisconnect}
