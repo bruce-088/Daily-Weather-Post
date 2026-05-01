@@ -245,9 +245,9 @@ export function CityManager({ activeCityId, onActiveCityChange, onCitiesChange, 
         .maybeSingle();
       const voiceoverEnabled = (ws as any)?.enable_voiceover === true;
       const VIDEO_PLATFORMS = new Set(["youtube", "tiktok", "instagram"]);
-      // Schedule slightly in the past so the worker treats it as immediately due
-      // and bypasses the 15-minute look-ahead window.
-      const scheduledAt = new Date(Date.now() - 5_000).toISOString();
+      // 1s in the future — passes the validate_scheduled_at trigger but is
+      // immediately within the worker's due window when we invoke it directly.
+      const scheduledAt = new Date(Date.now() + 1_000).toISOString();
       const rows = platforms.map((platform) => ({
         user_id: user.id,
         city: cityLabel,
