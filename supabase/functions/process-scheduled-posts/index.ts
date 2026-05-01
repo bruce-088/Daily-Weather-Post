@@ -2099,6 +2099,22 @@ Deno.serve(async (req) => {
           type: postStatus === "posted" ? "success" : (currentRetryCount < MAX_RETRIES && isFailureFlow ? "info" : "error"),
         });
 
+        // Clear "ghost" Post Retrying notifications once we've successfully published
+        // for the same user + city. Keeps the Notifications panel clean and avoids
+        // showing a stale "still retrying" alert next to a "Published" success.
+        if (postStatus === "posted" && post.user_id) {
+          try {
+            await supabase
+              .from("notifications")
+              .delete()
+              .eq("user_id", post.user_id)
+              .eq("title", "Post Retrying")
+              .ilike("message", `%${weather.city}%`);
+          } catch (clearErr) {
+            console.warn(`[notifications] failed to clear retry alerts for ${weather.city}:`, clearErr);
+          }
+        }
+
         processed++;
       } catch (postError) {
         const errMsg = postError instanceof Error ? postError.message : "Processing failed";
