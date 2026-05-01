@@ -4,7 +4,11 @@ export class YouTubeAdapter implements PlatformAdapter {
   name = "youtube";
 
   isConnected(settings: Record<string, unknown>): boolean {
-    return !!settings.youtube_access_token;
+    const expiresAt = settings.youtube_token_expires_at
+      ? new Date(String(settings.youtube_token_expires_at)).getTime()
+      : 0;
+    const hasUsableAccessToken = !!settings.youtube_access_token && expiresAt > Date.now() + 5 * 60 * 1000;
+    return hasUsableAccessToken || !!settings.youtube_refresh_token;
   }
 
   async getValidToken(supabase: any, userId: string): Promise<string | null> {
@@ -14,12 +18,12 @@ export class YouTubeAdapter implements PlatformAdapter {
       .eq("user_id", userId)
       .single();
 
-    if (!settings?.youtube_access_token) return null;
+    if (!settings?.youtube_access_token && !settings?.youtube_refresh_token) return null;
 
     const expiresAt = settings.youtube_token_expires_at
       ? new Date(settings.youtube_token_expires_at)
       : null;
-    if (expiresAt && expiresAt.getTime() > Date.now() + 5 * 60 * 1000) {
+    if (settings.youtube_access_token && expiresAt && expiresAt.getTime() > Date.now() + 5 * 60 * 1000) {
       return settings.youtube_access_token;
     }
 
