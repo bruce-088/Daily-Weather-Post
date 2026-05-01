@@ -357,7 +357,7 @@ export function AnalyticsPanel() {
           <Trophy size={16} className="text-muted-foreground" />
           <h3 className="font-display text-sm uppercase tracking-wider">Per-post breakdown</h3>
         </div>
-        <div className="overflow-x-auto">
+        <div className="overflow-auto max-h-[28rem] rounded-md border border-border/30">
           <Table>
             <TableHeader>
               <TableRow>
