@@ -986,6 +986,7 @@ const Index = () => {
                 linkedinConnected={linkedinConnected}
                 onDisconnect={handleDisconnect}
                 showAutomation={false}
+                showVoiceover={true}
               />
             </div>
           </TabsContent>
