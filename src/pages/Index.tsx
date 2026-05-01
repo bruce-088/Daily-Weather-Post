@@ -963,6 +963,31 @@ const Index = () => {
                   onReuse={handleReusePost}
                   onChanged={loadHistory}
                 />
+                {hasMorePosts && (
+                  <div
+                    ref={(el) => {
+                      if (!el) return;
+                      const obs = new IntersectionObserver(
+                        (entries) => {
+                          if (entries[0]?.isIntersecting) loadMorePosts();
+                        },
+                        { root: el.parentElement, rootMargin: "200px" },
+                      );
+                      obs.observe(el);
+                      // Cleanup when element unmounts
+                      (el as any).__obs?.disconnect?.();
+                      (el as any).__obs = obs;
+                    }}
+                    className="py-4 text-center text-xs text-muted-foreground"
+                  >
+                    {loadingMorePosts ? "Loading more…" : "Scroll to load more"}
+                  </div>
+                )}
+                {!hasMorePosts && posts.length > 0 && (
+                  <div className="py-4 text-center text-xs text-muted-foreground">
+                    No more posts
+                  </div>
+                )}
               </div>
             </div>
           </TabsContent>
