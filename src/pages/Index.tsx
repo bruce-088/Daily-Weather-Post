@@ -956,11 +956,18 @@ const Index = () => {
             <div className="max-w-2xl mx-auto">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-foreground">Recent Posts</h2>
-                <Button size="sm" variant="outline" onClick={loadHistory} className="text-xs gap-1.5">
-                  <History size={14} /> Refresh
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={loadHistory}
+                  disabled={postsLoading}
+                  className="text-xs gap-1.5"
+                >
+                  <RefreshCw size={14} className={postsLoading ? "animate-spin" : ""} />
+                  Refresh
                 </Button>
               </div>
-              <div className="overflow-y-auto max-h-[70vh] pr-2 -mr-2">
+              <div ref={historyScrollRef} className="overflow-y-auto max-h-[70vh] pr-2 -mr-2">
                 <PostHistoryList
                   posts={posts}
                   loading={postsLoading}
