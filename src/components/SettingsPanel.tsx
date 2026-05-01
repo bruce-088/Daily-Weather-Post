@@ -94,6 +94,7 @@ interface SettingsPanelProps {
   showLocation?: boolean;
   showConnections?: boolean;
   showAutomation?: boolean;
+  showVoiceover?: boolean;
 }
 
 export function SettingsPanel({
@@ -112,7 +113,9 @@ export function SettingsPanel({
   showLocation = true,
   showConnections = true,
   showAutomation = true,
+  showVoiceover,
 }: SettingsPanelProps) {
+  const voiceoverVisible = showVoiceover ?? showAutomation;
   const update = (key: keyof AutomationSettings, value: string | boolean | string[] | number) => {
     onUpdate({ ...settings, [key]: value } as AutomationSettings);
   };
@@ -759,7 +762,7 @@ export function SettingsPanel({
         </Card>
       )}
 
-      {showAutomation && (
+      {voiceoverVisible && (
         <Card className="border-border/50 bg-card/80 backdrop-blur">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
