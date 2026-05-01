@@ -168,6 +168,7 @@ Deno.serve(async (req) => {
 
       const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
       const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000).toISOString();
+      const refreshToken = tokenData.refresh_token || null;
 
       const { data: existing } = await supabaseAdmin
         .from("weather_settings")
@@ -181,7 +182,7 @@ Deno.serve(async (req) => {
           .from("weather_settings")
           .update({
             youtube_access_token: tokenData.access_token,
-            youtube_refresh_token: tokenData.refresh_token || null,
+            youtube_refresh_token: refreshToken,
             youtube_channel_id: channelId,
             youtube_token_expires_at: expiresAt,
           })
@@ -193,7 +194,7 @@ Deno.serve(async (req) => {
           .insert({
             user_id: userId,
             youtube_access_token: tokenData.access_token,
-            youtube_refresh_token: tokenData.refresh_token || null,
+            youtube_refresh_token: refreshToken,
             youtube_channel_id: channelId,
             youtube_token_expires_at: expiresAt,
           });
@@ -206,6 +207,29 @@ Deno.serve(async (req) => {
           JSON.stringify({ error: "Failed to save tokens" }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
+      }
+
+      const { data: socialRows } = await supabaseAdmin
+        .from("social_accounts")
+        .update({
+          account_external_id: channelId,
+          access_token: tokenData.access_token,
+          refresh_token: refreshToken,
+          token_expires_at: expiresAt,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("user_id", userId)
+        .eq("platform", "youtube")
+        .select("id");
+      if (!socialRows?.length) {
+        await supabaseAdmin.from("social_accounts").insert({
+          user_id: userId,
+          platform: "youtube",
+          account_external_id: channelId,
+          access_token: tokenData.access_token,
+          refresh_token: refreshToken,
+          token_expires_at: expiresAt,
+        });
       }
 
       return new Response(
