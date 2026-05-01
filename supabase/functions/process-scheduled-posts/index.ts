@@ -140,7 +140,7 @@ async function fetchWeatherData(city: string, apiKey: string, state?: string | n
 async function resolveScheduledCity(supabase: any, post: any): Promise<{ city: string; state: string | null; cityId: string | null; automationId: string | null }> {
   let cityId = post.city_id || null;
   const automationId = post.automation_id || null;
-  const isAutoPost = typeof post.caption === "string" && /^\s*\[auto:[a-z]+\]\s*$/i.test(post.caption);
+  const isAutoPost = typeof post.caption === "string" && /^\s*\[(auto|manual):[a-z]+\]\s*$/i.test(post.caption);
 
   if (isAutoPost && !cityId && !automationId) {
     throw new Error("Auto-post is missing city_id/automation_id; refusing to render without strict city scope");
@@ -1293,6 +1293,45 @@ Deno.serve(async (req) => {
       // Reflect the claim locally so downstream code sees the right status.
       post.status = "processing";
 
+      // === DEDUPLICATION GUARD ===
+      // Prevent "burst" double-posts: if we already published a successful row to
+      // this same (user, city, platform) within the last 60 minutes, skip this one.
+      // Marks the duplicate as `posted` (with a clear error_message) so it leaves
+      // the Pending list and the Schedule tab stays in sync. We compare per
+      // platform string — exact match is fine because the scheduler always
+      // writes the same canonical platform string for a given slot.
+      try {
+        const sixtyMinAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+        const { data: recent } = await supabase
+          .from("post_history")
+          .select("id, created_at, platform")
+          .eq("user_id", post.user_id)
+          .eq("city", post.city)
+          .eq("platform", post.platform)
+          .eq("status", "success")
+          .gte("created_at", sixtyMinAgo)
+          .limit(1);
+        if (recent && recent.length > 0) {
+          console.log(`[dedupe] post ${post.id} skipped — duplicate of ${recent[0].id} (${post.city}/${post.platform}) posted ${recent[0].created_at}`);
+          await supabase.from("scheduled_posts").update({
+            status: "posted",
+            error_message: "[DEDUPED] Skipped — a successful post for this city/platform already exists within the last 60 minutes.",
+            last_attempt_at: new Date().toISOString(),
+          }).eq("id", post.id);
+          await supabase.from("system_logs").insert({
+            user_id: post.user_id,
+            type: "post_deduped",
+            message: `Skipped duplicate post for ${post.city} (${post.platform}); recent success at ${recent[0].created_at}`,
+            platform: post.platform,
+            context: { scheduled_post_id: post.id, duplicate_of: recent[0].id },
+          });
+          processed++;
+          continue;
+        }
+      } catch (dedupErr) {
+        console.warn(`[dedupe] check failed for ${post.id} (continuing):`, dedupErr);
+      }
+
       // === DEBUG TRACE COLLECTOR ===
       // Always built (cheap), persisted to scheduled_posts/post_history when the
       // user has flipped on enable_debug_trace in weather_settings (one-shot flag).
@@ -1497,11 +1536,13 @@ Deno.serve(async (req) => {
         // as the caption (for duplicate detection). Treat those as empty so we
         // generate a real AI caption here.
         const rawCaption: string | null = post.caption || null;
-        const isAutoMarker = !!rawCaption && /^\s*\[auto:[a-z]+\]\s*$/i.test(rawCaption);
+        // Treat both [auto:slot] and [manual:slot] markers as "no real caption"
+        // so we always generate (and persist) a real AI caption to post_history.
+        const isAutoMarker = !!rawCaption && /^\s*\[(auto|manual):[a-z]+\]\s*$/i.test(rawCaption);
         let caption: string | null = isAutoMarker ? null : rawCaption;
 
         // Resolve time period early so it can feed both the caption AND the video
-        const earlySlotMatch = rawCaption ? /\[auto:([a-z]+)\]/i.exec(rawCaption) : null;
+        const earlySlotMatch = rawCaption ? /\[(?:auto|manual):([a-z]+)\]/i.exec(rawCaption) : null;
         const earlyTimePeriod = earlySlotMatch ? earlySlotMatch[1].toLowerCase() : null;
 
         // Look up the user's caption tone preference
@@ -1589,7 +1630,7 @@ Deno.serve(async (req) => {
 
         // Extract slot (morning/afternoon/evening) from auto-post marker if present, so the
         // video header shows the correct period badge for auto-posts.
-        const slotMatch = rawCaption ? /\[auto:([a-z]+)\]/i.exec(rawCaption) : null;
+        const slotMatch = rawCaption ? /\[(?:auto|manual):([a-z]+)\]/i.exec(rawCaption) : null;
         const timePeriod = slotMatch ? slotMatch[1].toLowerCase() : null;
         trace("platforms_resolved", { platforms: platformsToPost, slot: timePeriod, automated: isAutoMarker });
 
@@ -2057,6 +2098,22 @@ Deno.serve(async (req) => {
                 : `Your scheduled post for ${weather.city} failed: ${errorMessage}`),
           type: postStatus === "posted" ? "success" : (currentRetryCount < MAX_RETRIES && isFailureFlow ? "info" : "error"),
         });
+
+        // Clear "ghost" Post Retrying notifications once we've successfully published
+        // for the same user + city. Keeps the Notifications panel clean and avoids
+        // showing a stale "still retrying" alert next to a "Published" success.
+        if (postStatus === "posted" && post.user_id) {
+          try {
+            await supabase
+              .from("notifications")
+              .delete()
+              .eq("user_id", post.user_id)
+              .eq("title", "Post Retrying")
+              .ilike("message", `%${weather.city}%`);
+          } catch (clearErr) {
+            console.warn(`[notifications] failed to clear retry alerts for ${weather.city}:`, clearErr);
+          }
+        }
 
         processed++;
       } catch (postError) {
