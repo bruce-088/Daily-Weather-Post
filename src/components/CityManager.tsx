@@ -518,6 +518,31 @@ export function CityManager({ activeCityId, onActiveCityChange, onCitiesChange, 
                             })}
                           </div>
                         )}
+                        <div className="flex items-center justify-between pt-1">
+                          <span className="text-[9px] text-muted-foreground italic">
+                            Bypasses the 15-min auto window — fires within ~1 min.
+                          </span>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={
+                              !automation.enabled ||
+                              selected.length === 0 ||
+                              runningSlot === `${activeCity?.id}:${slot}`
+                            }
+                            onClick={() => handleRunSlotNow(slot)}
+                            className="h-7 text-[10px] gap-1 border-primary/40 text-primary hover:bg-primary/10"
+                            title={`Queue a one-off ${slot} test post for ${activeCity?.name} now`}
+                          >
+                            {runningSlot === `${activeCity?.id}:${slot}` ? (
+                              <Loader2 size={11} className="animate-spin" />
+                            ) : (
+                              <Zap size={11} />
+                            )}
+                            Run This Slot Now
+                          </Button>
+                        </div>
                       </div>
                     );
                   })}
