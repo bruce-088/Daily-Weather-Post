@@ -149,6 +149,7 @@ export class YouTubeAdapter implements PlatformAdapter {
             title: shortTitle,
             description: safeDescription,
             categoryId: "22",
+            tags: buildYouTubeTags(shortTitle, safeDescription),
           },
           status: {
             privacyStatus: "public",
@@ -216,4 +217,71 @@ export class YouTubeAdapter implements PlatformAdapter {
     console.log("YouTube upload success! Video ID:", result.id);
     return { id: result.id };
   }
+}
+
+// --- Dynamic YouTube tag builder ---
+// Tags are derived from the title + description text so we don't need to change
+// the PlatformAdapter signature or any caller in the posting pipeline. Includes
+// a base set of evergreen weather tags plus condition-specific additions and
+// a city tag extracted from the title (city is always present in hook titles).
+function buildYouTubeTags(title: string, description: string): string[] {
+  const text = `${title}\n${description}`.toLowerCase();
+
+  const base = [
+    "weather today",
+    "weather forecast",
+    "daily weather update",
+    "weather shorts",
+    "local weather",
+  ];
+
+  // City extraction: hook titles always contain the city name. Try to pull a
+  // proper-case word/phrase from the original title.
+  const cityMatch = title.match(/\b([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)\b/);
+  const cityTags: string[] = [];
+  if (cityMatch?.[1]) {
+    const city = cityMatch[1].toLowerCase();
+    // Skip filler words that may capitalize at sentence start
+    const skip = new Set(["good", "hot", "cold", "cool", "warm", "rain", "storms", "storm",
+      "bundle", "calm", "cloudy", "foggy", "grab", "gray", "heads", "tonight",
+      "today", "beautiful", "feels", "you", "wet", "snowy", "drive", "crank",
+      "chilly", "mild", "sun", "sunny"]);
+    if (!skip.has(city)) {
+      cityTags.push(`${city} weather`, `${city} forecast`, `weather ${city}`);
+    }
+  }
+
+  // Florida defaults (matches the channel's primary market) — kept light so
+  // they don't dominate when posting from other regions.
+  const regional: string[] = [];
+  if (/gainesville|florida|miami|orlando|tampa|jacksonville/.test(text)) {
+    regional.push("florida weather", "local weather florida");
+  }
+
+  // Condition-specific
+  const cond: string[] = [];
+  if (/rain|🌧|☔|drizzle|shower/.test(text)) cond.push("rain forecast", "rainy weather");
+  if (/storm|⛈|thunder|tornado|hurricane/.test(text)) cond.push("storm update", "severe weather");
+  if (/snow|❄️|sleet|blizzard/.test(text)) cond.push("snow forecast", "winter weather");
+  if (/fog|🌫|mist|haze/.test(text)) cond.push("foggy weather");
+  if (/hot|🔥|heat|🌞/.test(text)) cond.push("heat wave", "hot weather");
+  if (/cold|🥶|chilly|🧥|cold front/.test(text)) cond.push("cold front", "chilly weather");
+  if (/clear|☀️|sunny|beautiful/.test(text)) cond.push("sunny weather", "clear skies");
+  if (/cloud|☁️|🌤|gray skies/.test(text)) cond.push("cloudy weather");
+
+  // Dedupe while preserving order, cap to ~15 tags and 500 chars total
+  // (YouTube limit is 500 chars combined including separators).
+  const seen = new Set<string>();
+  const out: string[] = [];
+  let charCount = 0;
+  for (const tag of [...base, ...cityTags, ...regional, ...cond]) {
+    const t = tag.trim();
+    if (!t || seen.has(t)) continue;
+    if (charCount + t.length + 2 > 480) break;
+    seen.add(t);
+    out.push(t);
+    charCount += t.length + 2;
+    if (out.length >= 15) break;
+  }
+  return out;
 }

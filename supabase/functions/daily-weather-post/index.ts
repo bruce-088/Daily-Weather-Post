@@ -155,22 +155,89 @@ function getWeatherEmoji(condition: string): string {
 }
 
 function generateSkyBriefTitle(city: string, temp: number, condition: string, rainChance?: number): string {
+  return buildHookTitle(city, temp, condition, rainChance);
+}
+
+// --- Hook-based YouTube title generator ---
+// Format: [Hook] + City + Weather Detail + Emoji. Drives CTR via curiosity + specificity.
+function buildHookTitle(city: string, temp: number, condition: string, rainChance?: number): string {
   const emoji = getWeatherEmoji(condition);
-  const isStorm = /thunder|storm|tornado|hurricane/i.test(condition);
+  const c = (condition || "").toLowerCase();
+  const t = Math.round(temp);
+  const hour = new Date().getHours();
+  const isMorning = hour >= 4 && hour < 11;
+  const isEvening = hour >= 17 || hour < 4;
+  const isStorm = /thunder|storm|tornado|hurricane/i.test(c);
+  const isRain = /rain|drizzle|shower/.test(c);
+  const isSnow = /snow|sleet|blizzard/.test(c);
+  const isFog = /fog|mist|haze/.test(c);
+  const isCloudy = /cloud|overcast/.test(c);
+  const isPartly = /partly|scatter/.test(c);
+  const isClear = /clear|sun/.test(c) || (!isCloudy && !isRain && !isStorm && !isSnow && !isFog && !isPartly);
 
-  if (rainChance != null && rainChance >= 60 && isStorm) {
-    return `Storms in ${city}? ⛈ Weather Update`;
+  const pool: string[] = [];
+
+  if (isStorm || (rainChance != null && rainChance >= 70)) {
+    pool.push(`Storms Rolling Into ${city} ⛈ ${t}° Today`);
+    pool.push(`Heads Up ${city} — Storms On The Way ⛈ Forecast`);
+    pool.push(`Don't Skip The Umbrella Today ☔ ${city} Weather`);
+  } else if (isRain || (rainChance != null && rainChance >= 50)) {
+    pool.push(`Grab An Umbrella ☔ ${city} Weather Today`);
+    pool.push(`Wet Day Ahead In ${city} 🌧 ${t}° Forecast`);
+    pool.push(`Rain On The Radar 🌧 ${city} Weather Update`);
+  } else if (isSnow) {
+    pool.push(`Bundle Up ${city} ❄️ ${t}° And Snowy`);
+    pool.push(`Snowy Skies Ahead ❄️ ${city} Forecast Today`);
+  } else if (isFog) {
+    pool.push(`Foggy Start In ${city} 🌫 ${t}° Today`);
+    pool.push(`Drive Slow This Morning 🌫 ${city} Forecast`);
   }
 
-  const variant = new Date().getDay() % 3;
-  let title: string;
-  switch (variant) {
-    case 0: title = `${city} Weather Today ${emoji} | ${temp}° ${condition}`; break;
-    case 1: title = `Today's Weather in ${city} ${emoji} Quick Forecast`; break;
-    default: title = `${city} Forecast Today ${emoji} Weather Update`; break;
+  if (t >= 90) {
+    pool.push(`Hot Day Ahead 🔥 ${city} Hits ${t}° Today`);
+    pool.push(`Crank The AC ${city} 🔥 ${t}° Incoming`);
+  } else if (t >= 85) {
+    pool.push(`Feels Like Summer Already In ${city} ☀️ ${t}° Today`);
+    pool.push(`Warm One Coming Up 🌞 ${city} Hits ${t}°`);
+  } else if (t >= 70 && (isClear || isPartly)) {
+    pool.push(`Beautiful Day In ${city} ${emoji} ${t}° And Comfortable`);
+    pool.push(`You Might Not Need A Jacket Today 👀 ${city} Forecast`);
+  } else if (t >= 55 && t < 70) {
+    pool.push(`Mild & Comfy In ${city} ${emoji} ${t}° Today`);
+    pool.push(`Cool Start, Nice Finish ${emoji} ${city} Weather Today`);
+  } else if (t >= 40 && t < 55) {
+    pool.push(`Chilly Morning In ${city} 🧥 ${t}° Today`);
+    pool.push(`Grab A Jacket ${city} 🧥 ${t}° Forecast`);
+  } else if (t < 40) {
+    pool.push(`Cold Front Hits ${city} 🥶 Just ${t}° Today`);
+    pool.push(`Bundle Up ${city} 🥶 ${t}° And Chilly`);
   }
 
-  return title.length > 60 ? title.substring(0, 57) + "..." : title;
+  if (isCloudy && !isRain && !isStorm) {
+    pool.push(`Gray Skies But Comfortable ☁️ ${city} Weather Today`);
+    pool.push(`Cloudy Start, Warm Finish 🌤 ${city} Weather Today`);
+  }
+  if (isClear && !pool.length) {
+    pool.push(`Beautiful Clear Skies ☀️ ${city} Forecast Today`);
+  }
+  if (isPartly) {
+    pool.push(`Sun & Clouds Mix 🌤 ${city} Weather Today`);
+  }
+
+  if (isEvening) {
+    pool.push(`Tonight's Weather Update 🌙 ${city} Forecast`);
+    pool.push(`Calm & Clear Skies Ahead 🌙 ${city} Evening Weather`);
+  } else if (isMorning) {
+    pool.push(`Good Morning ${city} ☕ ${t}° To Start The Day`);
+  }
+
+  if (!pool.length) {
+    pool.push(`${city} Weather Today ${emoji} ${t}° ${condition}`);
+  }
+
+  const seed = new Date().getDate() * 24 + hour;
+  const title = pool[seed % pool.length];
+  return title.length > 95 ? title.substring(0, 92) + "..." : title;
 }
 
 // --- Dynamic Handle System ---
