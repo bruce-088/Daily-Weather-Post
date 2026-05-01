@@ -1293,6 +1293,45 @@ Deno.serve(async (req) => {
       // Reflect the claim locally so downstream code sees the right status.
       post.status = "processing";
 
+      // === DEDUPLICATION GUARD ===
+      // Prevent "burst" double-posts: if we already published a successful row to
+      // this same (user, city, platform) within the last 60 minutes, skip this one.
+      // Marks the duplicate as `posted` (with a clear error_message) so it leaves
+      // the Pending list and the Schedule tab stays in sync. We compare per
+      // platform string — exact match is fine because the scheduler always
+      // writes the same canonical platform string for a given slot.
+      try {
+        const sixtyMinAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+        const { data: recent } = await supabase
+          .from("post_history")
+          .select("id, created_at, platform")
+          .eq("user_id", post.user_id)
+          .eq("city", post.city)
+          .eq("platform", post.platform)
+          .eq("status", "success")
+          .gte("created_at", sixtyMinAgo)
+          .limit(1);
+        if (recent && recent.length > 0) {
+          console.log(`[dedupe] post ${post.id} skipped — duplicate of ${recent[0].id} (${post.city}/${post.platform}) posted ${recent[0].created_at}`);
+          await supabase.from("scheduled_posts").update({
+            status: "posted",
+            error_message: "[DEDUPED] Skipped — a successful post for this city/platform already exists within the last 60 minutes.",
+            last_attempt_at: new Date().toISOString(),
+          }).eq("id", post.id);
+          await supabase.from("system_logs").insert({
+            user_id: post.user_id,
+            type: "post_deduped",
+            message: `Skipped duplicate post for ${post.city} (${post.platform}); recent success at ${recent[0].created_at}`,
+            platform: post.platform,
+            context: { scheduled_post_id: post.id, duplicate_of: recent[0].id },
+          });
+          processed++;
+          continue;
+        }
+      } catch (dedupErr) {
+        console.warn(`[dedupe] check failed for ${post.id} (continuing):`, dedupErr);
+      }
+
       // === DEBUG TRACE COLLECTOR ===
       // Always built (cheap), persisted to scheduled_posts/post_history when the
       // user has flipped on enable_debug_trace in weather_settings (one-shot flag).
