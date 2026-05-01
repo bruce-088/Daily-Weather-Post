@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { MapPin, Plus, Star, Trash2, Loader2, Clock, AlertTriangle, Youtube, Twitter, Linkedin, Video } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { MapPin, Plus, Star, Trash2, Loader2, Clock, AlertTriangle, Youtube, Twitter, Linkedin, Video, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -44,6 +44,8 @@ export function CityManager({ activeCityId, onActiveCityChange, onCitiesChange, 
   const [savingAuto, setSavingAuto] = useState(false);
   // Map of cityId -> "has at least one platform across any slot when enabled"
   const [platformStatus, setPlatformStatus] = useState<Record<string, { enabled: boolean; hasPlatforms: boolean }>>({});
+  const [runningSlot, setRunningSlot] = useState<string | null>(null);
+  const slotEditorRef = useRef<HTMLDivElement | null>(null);
 
   const loadCities = async () => {
     setLoading(true);
@@ -168,24 +170,106 @@ export function CityManager({ activeCityId, onActiveCityChange, onCitiesChange, 
     setSavingAuto(true);
     const saved = await saveAutomation(activeCityId, patch);
     setSavingAuto(false);
-    if (!saved) toast.error("Couldn't save automation");
-    else {
-      setAutomation(saved);
-      // Recompute badge for this city
-      setPlatformStatus((prev) => ({
-        ...prev,
-        [activeCityId]: {
-          enabled: saved.enabled,
-          hasPlatforms:
-            (saved.morning_platforms?.length ?? 0) +
-              (saved.afternoon_platforms?.length ?? 0) +
-              (saved.evening_platforms?.length ?? 0) > 0,
-        },
-      }));
+    if (!saved) {
+      toast.error("Couldn't save automation");
+      return;
+    }
+    setAutomation(saved);
+    // Recompute badge for this city
+    setPlatformStatus((prev) => ({
+      ...prev,
+      [activeCityId]: {
+        enabled: saved.enabled,
+        hasPlatforms:
+          (saved.morning_platforms?.length ?? 0) +
+            (saved.afternoon_platforms?.length ?? 0) +
+            (saved.evening_platforms?.length ?? 0) > 0,
+      },
+    }));
+    // Surface a confirmation when platforms change, so the user knows the
+    // database write actually persisted (this was previously silent).
+    const platformPatch =
+      patch.morning_platforms || patch.afternoon_platforms || patch.evening_platforms;
+    if (platformPatch) {
+      const cityName = cities.find((c) => c.id === activeCityId)?.name || "city";
+      const total =
+        (saved.morning_platforms?.length ?? 0) +
+        (saved.afternoon_platforms?.length ?? 0) +
+        (saved.evening_platforms?.length ?? 0);
+      toast.success(`Saved · ${cityName} now has ${total} platform slot${total === 1 ? "" : "s"}`);
     }
   };
 
   const activeCity = cities.find((c) => c.id === activeCityId);
+
+  /** Activate a city and scroll the per-city editor into view (used by quick-fix badge). */
+  const quickFixCity = (cityId: string) => {
+    onActiveCityChange(cityId);
+    setActiveCityId(cityId);
+    setTimeout(() => {
+      slotEditorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 60);
+  };
+
+  /**
+   * Trigger a single slot immediately for the active city by inserting one
+   * scheduled_posts row per selected platform with scheduled_at = now+30s.
+   * The existing process-scheduled-posts worker runs every minute and will
+   * pick these up — bypassing the 15-minute auto-post-scheduler window.
+   */
+  const handleRunSlotNow = async (slot: "morning" | "afternoon" | "evening") => {
+    if (!activeCity || !automation) return;
+    const platsKey =
+      slot === "morning" ? "morning_platforms" : slot === "afternoon" ? "afternoon_platforms" : "evening_platforms";
+    const platforms = ((automation as any)[platsKey] as string[]) || [];
+    if (platforms.length === 0) {
+      toast.error(`Pick at least one platform for ${slot} first`);
+      return;
+    }
+    const slotKey = `${activeCity.id}:${slot}`;
+    setRunningSlot(slotKey);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("Not signed in");
+        return;
+      }
+      const cityLabel = `${activeCity.name}${activeCity.state ? ", " + activeCity.state : ""}`;
+      // include_voiceover comes from the user-level voiceover toggle (saved in
+      // weather_settings) and only applies to video platforms.
+      const { data: ws } = await supabase
+        .from("weather_settings")
+        .select("enable_voiceover")
+        .eq("user_id", user.id)
+        .limit(1)
+        .maybeSingle();
+      const voiceoverEnabled = (ws as any)?.enable_voiceover === true;
+      const VIDEO_PLATFORMS = new Set(["youtube", "tiktok", "instagram"]);
+      const scheduledAt = new Date(Date.now() + 30_000).toISOString();
+      const rows = platforms.map((platform) => ({
+        user_id: user.id,
+        city: cityLabel,
+        city_id: activeCity.id,
+        automation_id: automation.id || null,
+        platform,
+        scheduled_at: scheduledAt,
+        status: "pending",
+        caption: `[manual:${slot}]`,
+        include_voiceover: voiceoverEnabled && VIDEO_PLATFORMS.has(platform),
+      }));
+      const { error: insErr } = await supabase.from("scheduled_posts").insert(rows);
+      if (insErr) {
+        console.error("[runNow] insert failed:", insErr);
+        toast.error(insErr.message || "Failed to queue test post");
+        return;
+      }
+      toast.success(
+        `Queued ${slot} test for ${activeCity.name} → ${platforms.join(", ")}. Worker runs within ~1 min.`,
+      );
+    } finally {
+      setRunningSlot(null);
+    }
+  };
 
   return (
     <Card className="border-border/50 bg-card/80 backdrop-blur">
@@ -242,16 +326,20 @@ export function CityManager({ activeCityId, onActiveCityChange, onCitiesChange, 
                         <Star size={9} /> Primary
                       </Badge>
                     )}
-                    {platformStatus[c.id]?.enabled && !platformStatus[c.id]?.hasPlatforms && (
-                      <Badge
-                        variant="outline"
-                        className="text-[9px] gap-0.5 border-destructive/50 text-destructive"
-                        title="Automation is on but no platforms are selected for any time slot."
-                      >
-                        <AlertTriangle size={9} /> No platforms
-                      </Badge>
-                    )}
                   </button>
+                  {platformStatus[c.id]?.enabled && !platformStatus[c.id]?.hasPlatforms && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        quickFixCity(c.id);
+                      }}
+                      className="mr-2 inline-flex items-center gap-0.5 rounded-md border border-destructive/50 bg-destructive/10 px-1.5 py-0.5 text-[9px] font-medium text-destructive hover:bg-destructive/20 transition-colors"
+                      title="Automation is on but no platforms are selected. Click to fix."
+                    >
+                      <AlertTriangle size={9} /> No platforms — click to fix
+                    </button>
+                  )}
                   <div className="flex items-center gap-1">
                     {!c.is_primary && (
                       <Button
@@ -335,7 +423,7 @@ export function CityManager({ activeCityId, onActiveCityChange, onCitiesChange, 
 
         {/* Per-city automation editor */}
         {activeCity && automation && (
-          <div className="space-y-3 rounded-lg border border-border/30 bg-secondary/10 p-3">
+          <div ref={slotEditorRef} className="space-y-3 rounded-lg border border-border/30 bg-secondary/10 p-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Clock size={14} className="text-primary" />
@@ -443,6 +531,31 @@ export function CityManager({ activeCityId, onActiveCityChange, onCitiesChange, 
                             })}
                           </div>
                         )}
+                        <div className="flex items-center justify-between pt-1">
+                          <span className="text-[9px] text-muted-foreground italic">
+                            Bypasses the 15-min auto window — fires within ~1 min.
+                          </span>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={
+                              !automation.enabled ||
+                              selected.length === 0 ||
+                              runningSlot === `${activeCity?.id}:${slot}`
+                            }
+                            onClick={() => handleRunSlotNow(slot)}
+                            className="h-7 text-[10px] gap-1 border-primary/40 text-primary hover:bg-primary/10"
+                            title={`Queue a one-off ${slot} test post for ${activeCity?.name} now`}
+                          >
+                            {runningSlot === `${activeCity?.id}:${slot}` ? (
+                              <Loader2 size={11} className="animate-spin" />
+                            ) : (
+                              <Zap size={11} />
+                            )}
+                            Run This Slot Now
+                          </Button>
+                        </div>
                       </div>
                     );
                   })}
