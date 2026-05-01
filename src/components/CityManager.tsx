@@ -3,6 +3,8 @@ import { MapPin, Plus, Star, Trash2, Loader2, Clock, AlertTriangle, Youtube, Twi
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
+import { CollapsibleCardHeader } from "@/components/CollapsibleCardHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -295,18 +297,24 @@ export function CityManager({ activeCityId, onActiveCityChange, onCitiesChange, 
     }
   };
 
+  const [open, setOpen] = useState(false);
+
   return (
     <Card className="border-border/50 bg-card/80 backdrop-blur">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2">
-          <MapPin size={16} className="text-primary" />
-          Manage Cities
-        </CardTitle>
-        <CardDescription className="text-xs">
-          Add multiple cities and switch between them at the top of Create &amp; Schedule.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <CollapsibleCardHeader
+          open={open}
+          icon={<MapPin size={16} className="text-primary" />}
+          title="Manage Cities"
+          description="Add multiple cities and switch between them at the top of Create & Schedule."
+          collapsedHint={
+            <Badge variant="outline" className="text-[10px]">
+              {cities.length} {cities.length === 1 ? "city" : "cities"}
+            </Badge>
+          }
+        />
+        <CollapsibleContent>
+          <CardContent className="space-y-4">
         {loading ? (
           <div className="flex items-center justify-center py-4">
             <Loader2 size={16} className="animate-spin text-muted-foreground" />
@@ -588,7 +596,9 @@ export function CityManager({ activeCityId, onActiveCityChange, onCitiesChange, 
             })()}
           </div>
         )}
-      </CardContent>
+          </CardContent>
+        </CollapsibleContent>
+      </Collapsible>
     </Card>
   );
 }
