@@ -1536,11 +1536,13 @@ Deno.serve(async (req) => {
         // as the caption (for duplicate detection). Treat those as empty so we
         // generate a real AI caption here.
         const rawCaption: string | null = post.caption || null;
-        const isAutoMarker = !!rawCaption && /^\s*\[auto:[a-z]+\]\s*$/i.test(rawCaption);
+        // Treat both [auto:slot] and [manual:slot] markers as "no real caption"
+        // so we always generate (and persist) a real AI caption to post_history.
+        const isAutoMarker = !!rawCaption && /^\s*\[(auto|manual):[a-z]+\]\s*$/i.test(rawCaption);
         let caption: string | null = isAutoMarker ? null : rawCaption;
 
         // Resolve time period early so it can feed both the caption AND the video
-        const earlySlotMatch = rawCaption ? /\[auto:([a-z]+)\]/i.exec(rawCaption) : null;
+        const earlySlotMatch = rawCaption ? /\[(?:auto|manual):([a-z]+)\]/i.exec(rawCaption) : null;
         const earlyTimePeriod = earlySlotMatch ? earlySlotMatch[1].toLowerCase() : null;
 
         // Look up the user's caption tone preference
