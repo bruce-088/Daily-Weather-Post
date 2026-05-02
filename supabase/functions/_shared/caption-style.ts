@@ -397,38 +397,41 @@ export function buildStyleAddendum(opts: {
 // `process-scheduled-posts` (scheduled + auto-posts) so the spoken CTA stays
 // identical across paths.
 
-// CTA pools: every line MUST be ≤ 8 words so the spoken CTA fits in roughly
-// 2.5–3 seconds at 1.05–1.1× playback. Keep these tight on purpose.
+// CTA pools: "Double Hook" — ALWAYS ask for the LIKE first, then the
+// subscribe / follow. Likes drive YouTube Shorts algo signal harder than
+// subs, so we lead with them. Lines are intentionally a bit longer (~14–18
+// words) so both asks land clearly in audio (~4–5s of speech).
 const VOICE_CTAS_BY_TONE: Record<CaptionTone, string[]> = {
   professional: [
-    "Subscribe and tap the bell for daily updates.",
-    "Hit the bell for your daily forecast.",
-    "Tap the bell. See you tomorrow.",
-    "Subscribe and turn on notifications.",
+    "Drop a like if this was helpful, and subscribe for your daily local update.",
+    "Tap that like button and hit follow so you never miss a forecast.",
+    "Give us a like to help the channel grow, and subscribe for more daily weather.",
+    "Subscribe for daily alerts — and don't forget to like the video on your way out!",
   ],
   hype: [
-    "Smash that bell for daily updates!",
-    "Subscribe and turn on notifications!",
-    "Tap the bell. Lock in your forecast!",
-    "Bell on. See you tomorrow!",
+    "Smash that like button and subscribe for your daily local update!",
+    "Drop a like and hit follow — daily forecasts, every single day!",
+    "Like the video to help us grow, and subscribe for more daily weather!",
+    "Subscribe for daily alerts — and don't forget to smash that like!",
   ],
   funny: [
-    "Hit the bell. Outsmart the sky.",
-    "Tap the bell. Your umbrella thanks you.",
-    "Bell on. The sky never sleeps.",
-    "Subscribe so the weather stops surprising you.",
+    "Like the video so the algorithm stops ghosting us, then subscribe.",
+    "Tap like to thank the sky, and subscribe so it stops surprising you.",
+    "Drop a like for the weather gods, and follow for daily forecasts.",
+    "Subscribe for daily forecasts — and like the video, your umbrella will thank you.",
   ],
   local_legend: [
-    "Hit the bell for daily local weather.",
-    "Tap the bell. Catch you tomorrow.",
-    "Subscribe for your daily local forecast.",
-    "Bell on. See you tomorrow.",
+    "Drop a like if this helped, and subscribe for your daily local forecast.",
+    "Tap that like button and hit follow so you never miss the local weather.",
+    "Give us a like to help the channel grow, and subscribe for daily updates.",
+    "Subscribe for daily local alerts — and don't forget to like on your way out!",
   ],
 };
 
 // When weather is severe / alert-driven, swap to a single ultra-short CTA so
-// the safety message gets the airtime, not the marketing line.
-const ALERT_CTA = "Hit the bell for updates!";
+// the safety message gets the airtime, not the marketing line. Still leads
+// with the like to keep the engagement signal consistent.
+const ALERT_CTA = "Like and subscribe for safety updates!";
 
 /**
  * Returns true when the platform is audio-first and a spoken CTA makes sense.
