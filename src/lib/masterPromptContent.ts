@@ -45,6 +45,46 @@ SkyBrief is a social media automation tool that generates weather-based content 
 - In-app notification bell with unread count
 - Real-time updates for post status changes
 
+### Recent Posts (History)
+- Infinite scrolling — loads additional pages as the user scrolls toward the bottom
+- "Refresh" button reloads from the top and resets pagination to the first page
+
+---
+
+## YouTube SEO & Engagement Optimization
+
+All YouTube-specific metadata logic lives in \`supabase/functions/_shared/youtube-adapter.ts\` and is invoked by the posting pipeline without modifying scheduler/job/render flow.
+
+### Dynamic Hook-Based Titles
+Titles follow the format: \`[Hook] + City + Weather Detail + Emoji\`.
+Examples:
+- "Feels Like Summer Already in Gainesville ☀️ 84° Today"
+- "Cloudy Start, Warm Finish 🌤 Gainesville Weather Today"
+- "Calm & Clear Skies Ahead 🌙 Gainesville Tonight"
+
+### Smart Title Hashtags (Max 2)
+- Always appends \` #<City> #Shorts\` at the end (e.g., \`… #Gainesville #Shorts\`).
+- \`appendTitleHashtags()\` enforces YouTube's 100-char title limit. If the title is too long, it trims the weather-detail portion with an ellipsis (\`…\`) so the hook + hashtags always fit.
+- \`extractCityFromTitle()\` uses a skip-word list to dynamically detect city names across multi-city setups.
+
+### SEO-Optimized Tags (15–20 per video)
+\`buildYouTubeTags()\` assembles tags by category and caps total length at ~480 chars / 20 tags:
+
+- **Base / evergreen**: \`weather update\`, \`daily forecast\`, \`weather shorts\`, \`local weather\`, \`#Shorts\`
+- **Regional**: dynamic city + state tags (e.g., \`gainesville florida\`, \`florida weather today\`)
+- **Condition**: clear → \`sunny weather, clear skies, beautiful day\`; cloudy → \`cloudy forecast, overcast skies\`; rain → \`rain forecast, rainy day florida, storm update\`
+- **Temperature**: >85°F → \`heat wave, hot weather florida, summer heat\`; <55°F → \`cold front, chilly weather, florida cold\`
+- **Time-of-day**: morning → \`morning weather, today's forecast\`; afternoon → \`afternoon update, midday weather\`; evening → \`tonight's weather, evening forecast\`
+
+### Description Hashtag Block
+Appended after the subscription CTA at the bottom of every description:
+\`#<City>Weather #<Condition> #FloridaWeather #WeatherUpdate #DailyShorts\`
+
+### Engagement-Driven CTAs ("Double Hook")
+- **Voiceover**: Every script ends with a LIKE request first, then Subscribe/Follow. 4 rotated variants per tone (professional / hype / funny / local_legend) defined in \`VOICE_CTAS_BY_TONE\` in \`_shared/caption-style.ts\`.
+- **Description top line**: \`👍 Smash the LIKE button if you're enjoying the weather in <City>!\` is prepended to every YouTube description.
+- **Visual badge**: A pulsing \`👍 LIKE\` overlay renders in the top-right corner during the final 2.5s of every video (\`scale\` enter transition), wired in both \`daily-weather-post\` and \`process-scheduled-posts\`.
+
 ---
 
 ## Database Schema
