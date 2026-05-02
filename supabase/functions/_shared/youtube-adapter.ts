@@ -118,9 +118,20 @@ export class YouTubeAdapter implements PlatformAdapter {
     // adapters and never hit this code path).
     const YT_CHANNEL_URL = "https://www.youtube.com/@SkyBriefGNV?sub_confirmation=1";
     const YT_CTA = `👉 Subscribe and turn on notifications for daily Gainesville weather alerts: ${YT_CHANNEL_URL} 🔔`;
+    // Top-of-description LIKE prompt — drives the strongest engagement signal
+    // for the YouTube Shorts algo. City is dynamic so multi-city accounts
+    // still feel local. Stripped + re-prepended on every upload to avoid
+    // duplicates if the description was previously processed.
+    const cityForLike = extractCityFromTitle(title) || "your area";
+    const YT_LIKE_PROMPT = `👍 Smash the LIKE button if you're enjoying the weather in ${cityForLike}!`;
+    let baseDescription = (description || "").trimEnd();
+    // Strip any previously-prepended LIKE prompt (from earlier uploads) so we
+    // don't stack them.
+    baseDescription = baseDescription
+      .replace(/^👍[^\n]*\n+/u, "")
+      .trimStart();
     // Strip any previously-appended CTA variants so we always end with the
     // current notifications-focused line (and never stack duplicates).
-    let baseDescription = (description || "").trimEnd();
     baseDescription = baseDescription
       .replace(/\n*👉[^\n]*@SkyBriefGNV\?sub_confirmation=1[^\n]*$/u, "")
       .trimEnd();
@@ -129,7 +140,7 @@ export class YouTubeAdapter implements PlatformAdapter {
       .replace(/\n+#[A-Za-z0-9]+(?:\s+#[A-Za-z0-9]+)*\s*$/u, "")
       .trimEnd();
     const hashtagBlock = buildDescriptionHashtags(title, baseDescription);
-    const finalDescription = `${baseDescription}\n\n${YT_CTA}\n\n${hashtagBlock}`;
+    const finalDescription = `${YT_LIKE_PROMPT}\n\n${baseDescription}\n\n${YT_CTA}\n\n${hashtagBlock}`;
     // YouTube caps description at 5000 chars.
     const safeDescription = finalDescription.length > 5000
       ? finalDescription.substring(0, 5000)

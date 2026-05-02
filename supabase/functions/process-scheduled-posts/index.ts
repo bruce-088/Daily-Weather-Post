@@ -650,6 +650,22 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
       x: "50%", y: ctaTextY, x_alignment: "50%", y_alignment: "50%", shadow: "0px 2px 4px rgba(0,0,0,0.5)", enter: { type: "fade", duration: 0.6 } },
   );
 
+  // === FINAL "LIKE" PULSE BADGE ===
+  // Appears for the last ~2.5s as the voiceover asks for the like. Top-right
+  // placement keeps it out of the way of the centered CTA stack.
+  const likeStart = Math.max(0.5, D - 2.5);
+  const likeDur = Math.max(0.5, D - likeStart);
+  elements.push(
+    { type: "shape", track: nt(), time: likeStart, duration: likeDur, shape_type: "rectangle",
+      width: 220, height: 90, x: "82%", y: "9%", fill_color: "rgba(255,255,255,0.92)", border_radius: "45",
+      shadow: "0px 4px 12px rgba(0,0,0,0.35)",
+      enter: { type: "scale", start_scale: "20%", duration: 0.45 } },
+    { type: "text", track: nt(), time: likeStart, duration: likeDur, text: "👍 LIKE",
+      font_family: "Inter", font_weight: "800", font_size: "44", fill_color: "#0f172a",
+      x: "82%", y: "9%", x_alignment: "50%", y_alignment: "50%",
+      enter: { type: "scale", start_scale: "20%", duration: 0.45 } },
+  );
+
   // === AI VOICEOVER (optional) ===
   // Plays from t=0.5s on its own track. We do NOT trim the audio track — its duration
   // mirrors the real audio length so the CTA always finishes. The composition (D) is
