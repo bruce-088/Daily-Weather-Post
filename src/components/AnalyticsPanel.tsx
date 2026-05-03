@@ -430,7 +430,7 @@ export function AnalyticsPanel() {
               })}
             </TableBody>
           </Table>
-        </div>
+        </ScrollFadeContainer>
       </Card>
     </div>
   );
