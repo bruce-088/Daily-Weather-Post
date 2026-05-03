@@ -357,8 +357,8 @@ export function AnalyticsPanel() {
           <Trophy size={16} className="text-muted-foreground" />
           <h3 className="font-display text-sm uppercase tracking-wider">Per-post breakdown</h3>
         </div>
-        <div className="overflow-auto max-h-[28rem] rounded-md border border-border/30">
-          <Table>
+        <div className="overflow-x-auto overflow-y-auto max-h-[28rem] rounded-md border border-border/30">
+          <Table className="min-w-[860px]">
             <TableHeader>
               <TableRow>
                 <TableHead className="w-20">Video</TableHead>
