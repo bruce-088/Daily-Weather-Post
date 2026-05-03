@@ -436,6 +436,54 @@ export function AnalyticsPanel() {
   );
 }
 
+function ScrollFadeContainer({
+  className,
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}) {
+  const ref = React.useRef<HTMLDivElement>(null);
+  const [showLeft, setShowLeft] = useState(false);
+  const [showRight, setShowRight] = useState(false);
+
+  const update = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    setShowLeft(el.scrollLeft > 4);
+    setShowRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+  }, []);
+
+  useEffect(() => {
+    update();
+    const el = ref.current;
+    if (!el) return;
+    el.addEventListener("scroll", update, { passive: true });
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener("scroll", update);
+      ro.disconnect();
+    };
+  }, [update]);
+
+  return (
+    <div className={`relative ${className ?? ""}`}>
+      <div ref={ref} className="overflow-auto h-full w-full" onScroll={update}>
+        {children}
+      </div>
+      <div
+        className="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-card to-transparent transition-opacity duration-200"
+        style={{ opacity: showLeft ? 1 : 0 }}
+      />
+      <div
+        className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-card to-transparent transition-opacity duration-200"
+        style={{ opacity: showRight ? 1 : 0 }}
+      />
+    </div>
+  );
+}
+
 function OverviewCard({
   icon,
   label,
