@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -357,7 +357,7 @@ export function AnalyticsPanel() {
           <Trophy size={16} className="text-muted-foreground" />
           <h3 className="font-display text-sm uppercase tracking-wider">Per-post breakdown</h3>
         </div>
-        <div className="overflow-x-auto overflow-y-auto max-h-[28rem] rounded-md border border-border/30">
+        <ScrollFadeContainer className="max-h-[28rem] rounded-md border border-border/30">
           <Table className="min-w-[860px]">
             <TableHeader className="sticky top-0 z-10 bg-card [&_th]:bg-card [&_tr]:border-b [&_tr]:border-border/50">
               <TableRow>
@@ -430,8 +430,56 @@ export function AnalyticsPanel() {
               })}
             </TableBody>
           </Table>
-        </div>
+        </ScrollFadeContainer>
       </Card>
+    </div>
+  );
+}
+
+function ScrollFadeContainer({
+  className,
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}) {
+  const ref = React.useRef<HTMLDivElement>(null);
+  const [showLeft, setShowLeft] = useState(false);
+  const [showRight, setShowRight] = useState(false);
+
+  const update = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    setShowLeft(el.scrollLeft > 4);
+    setShowRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+  }, []);
+
+  useEffect(() => {
+    update();
+    const el = ref.current;
+    if (!el) return;
+    el.addEventListener("scroll", update, { passive: true });
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener("scroll", update);
+      ro.disconnect();
+    };
+  }, [update]);
+
+  return (
+    <div className={`relative ${className ?? ""}`}>
+      <div ref={ref} className="overflow-auto h-full w-full" onScroll={update}>
+        {children}
+      </div>
+      <div
+        className="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-card to-transparent transition-opacity duration-200"
+        style={{ opacity: showLeft ? 1 : 0 }}
+      />
+      <div
+        className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-card to-transparent transition-opacity duration-200"
+        style={{ opacity: showRight ? 1 : 0 }}
+      />
     </div>
   );
 }
