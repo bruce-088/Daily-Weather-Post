@@ -245,3 +245,24 @@
 .notif-scroll::-webkit-scrollbar-thumb:hover {
   background-color: hsl(var(--primary) / 0.55);
 }
+
+/* Always-visible horizontal scrollbar */
+.always-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--primary) / 0.4) transparent;
+}
+.always-scrollbar::-webkit-scrollbar {
+  height: 10px;
+  -webkit-appearance: none;
+}
+.always-scrollbar::-webkit-scrollbar-track {
+  background: hsl(var(--muted) / 0.3);
+  border-radius: 9999px;
+}
+.always-scrollbar::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--primary) / 0.5);
+  border-radius: 9999px;
+}
+.always-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(var(--primary) / 0.7);
+}
