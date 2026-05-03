@@ -469,7 +469,7 @@ function ScrollFadeContainer({
 
   return (
     <div className="relative">
-      <div ref={ref} className={`overflow-auto ${className ?? ""}`} onScroll={update}>
+      <div ref={ref} className={`overflow-x-scroll overflow-y-auto always-scrollbar ${className ?? ""}`} onScroll={update}>
         {children}
       </div>
       <div
