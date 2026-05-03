@@ -468,8 +468,8 @@ function ScrollFadeContainer({
   }, [update]);
 
   return (
-    <div className={`relative ${className ?? ""}`}>
-      <div ref={ref} className="overflow-auto h-full w-full" onScroll={update}>
+    <div className="relative">
+      <div ref={ref} className={`overflow-auto ${className ?? ""}`} onScroll={update}>
         {children}
       </div>
       <div
