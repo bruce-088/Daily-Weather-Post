@@ -359,7 +359,7 @@ export function AnalyticsPanel() {
         </div>
         <div className="overflow-x-auto overflow-y-auto max-h-[28rem] rounded-md border border-border/30">
           <Table className="min-w-[860px]">
-            <TableHeader>
+            <TableHeader className="sticky top-0 z-10 bg-card [&_th]:bg-card [&_tr]:border-b [&_tr]:border-border/50">
               <TableRow>
                 <TableHead className="w-20">Video</TableHead>
                 <TableHead>Posted</TableHead>
