@@ -1252,19 +1252,17 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    let userId: string | null = null;
-    const authHeader = req.headers.get("Authorization");
-    if (authHeader) {
-      const anonClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
-        global: { headers: { Authorization: authHeader } },
-      });
-      const { data: { user } } = await anonClient.auth.getUser();
-      userId = user?.id ?? null;
-    }
+    // Require authentication — this pipeline burns external API credits (OpenWeather, Lovable AI, Creatomate).
+    const auth = await verifyUser(req);
+    if (auth.response) return auth.response;
+    const userId = auth.userId;
 
-    const settingsQuery = supabase.from("weather_settings").select("*").limit(1);
-    if (userId) settingsQuery.eq("user_id", userId);
-    const { data: settings, error: settingsError } = await settingsQuery.single();
+    const { data: settings, error: settingsError } = await supabase
+      .from("weather_settings")
+      .select("*")
+      .eq("user_id", userId)
+      .limit(1)
+      .single();
 
     if (settingsError || !settings) {
       throw new Error("No weather settings found. Please configure your settings first.");
