@@ -1,45 +1,60 @@
-# Sync social connections between users — please read before approving
+## Context
 
-## What I found
+The project already has a partial learning system: `content_insights`, `hook_stats`, and `growth_recommendations` are computed by the `analyze-performance` and `analyze-growth` cron functions, and `generate-caption` already injects "PERFORMANCE LEARNING" + "HOOK ROTATION" + "VARIETY" notes into the prompt.
 
-Looking at `weather_settings` for both accounts:
+What's missing from the user's spec:
+- An explicit `engagement_score = (likes*2 + comments*3) / views` signal (currently uses `likes + comments + shares` summed).
+- A clean `getTopPerformingPatterns()` helper returning {top hooks, best conditions, best time of day, avoid list}.
+- Explicit FAVOR / AVOID phrase blocks in the prompt (today it's only "use this hook" — no avoid list, no generics filter).
+- A 70/30 exploit/explore toggle so the AI sometimes invents new variations.
+- A user-visible "AI Insights" panel summarizing what's working.
 
-| Account | Row exists | TikTok | YouTube | Twitter/X | LinkedIn |
-|---|---|---|---|---|---|
-| brucejr08@gmail.com | yes (city: Gainesville) | not connected | connected | connected | connected |
-| sample@sample.com | **no row at all** | — | — | — | — |
+## Plan
 
-So "the connections aren't the same" because sample@sample.com has never saved settings or connected any social accounts. Brucejr's account has YouTube, Twitter/X, and LinkedIn connected (TikTok is not connected on either).
+### 1. New shared helper — `supabase/functions/_shared/learning-patterns.ts`
+- `getTopPerformingPatterns(supabase, userId)` returns:
+  - `topHooks` — up to 5 hooks from `hook_stats` with `uses ≥ 2`, sorted by `avg_views`.
+  - `avoidPhrases` — generic phrases ("Weather Update", "Today's Forecast", "Daily Weather", "Weather Report") + 3 worst-performing hooks.
+  - `bestCondition`, `bestTimeOfDay` — computed from `post_analytics` using the new `engagement_score` formula.
+  - `conditionLifts[]` with `deltaPct` vs the user's baseline engagement (used by the UI).
+  - `hookPrefixes[]` — top 5 two-word openers (e.g. "Feels Like").
+- `buildLearningPromptBlock(patterns)` returns the prompt-injection text. Uses `Math.random() < 0.3` for EXPLORATION mode (no FAVOR list, fresh angle nudge), otherwise EXPLOITATION (lists FAVOR hooks + best prefix).
 
-## Why I want to confirm before doing this
+### 2. Wire into caption generation — `supabase/functions/generate-caption/index.ts`
+- Replace the bespoke insight-assembly block (~lines 187–237) with:
+  1. The existing `content_insights` lookup (kept — it provides condition/time-of-day specific tone steering).
+  2. A call to `getTopPerformingPatterns` + `buildLearningPromptBlock` to append the FAVOR / AVOID block.
+- The existing `growth_recommendations` "VARIETY" / "TONE NUDGE" notes stay — they complement the new block.
+- Net effect: the prompt now explicitly contains both `Favor hooks similar to:` and `Avoid generic phrases like:` sections, plus a 70/30 explore/exploit decision.
 
-Each connection stores **OAuth access tokens and refresh tokens** that authenticate as a specific human's social account (Bruce's YouTube channel, Bruce's LinkedIn person URN, Bruce's Twitter user ID). Copying those token rows into sample@sample.com means:
+### 3. New API surface for the UI — `src/lib/api.ts`
+- Add `fetchAiInsights()` that:
+  - Reads `hook_stats` (top 5 + worst 3), `content_insights`, and `post_analytics` (last 60d) for the current user.
+  - Computes the same `conditionLifts[]` and `hookPrefixes[]` as the helper, client-side, so the panel works even if no edge function is deployed yet.
 
-- sample@sample.com would be able to **post to Bruce's YouTube channel, X account, and LinkedIn profile** as if they were Bruce.
-- Both accounts would share the same refresh tokens — if one disconnects/reconnects, it can invalidate the other.
-- This is effectively giving a second login full posting access to Bruce's social presence.
+### 4. New UI — `src/components/AiInsightsCard.tsx`
+- Glassmorphic card titled "AI Insights — what's working".
+- Shows:
+  - Top 3 condition lifts as one-liners: "☀️ Sunny posts perform 22% better than your average."
+  - Top hook prefix: "Hooks starting with 'Feels Like' perform best (avg 1.2k views)."
+  - Best time of day chip.
+  - "Avoid" chips (generic + bottom-3 hooks).
+  - Note: "30% of generations explore new angles to keep your feed fresh."
+- Hook into the existing Analytics tab in `src/pages/Index.tsx`, just below the new `GrowthInsights` card.
 
-That may be exactly what you want (e.g. sample@sample.com is a test/admin account you control), but it is not a normal "settings sync" — it's credential sharing. I don't want to do it silently.
+### Technical details
 
-## Options
+- Engagement score is the spec formula `(likes*2 + comments*3) / views`, with `views` floored at 1 to avoid divide-by-zero.
+- All reads use existing tables — no schema changes.
+- The `getTopPerformingPatterns` helper requires `sample_size ≥ 2` per bucket to avoid noise from one-off posts.
+- The 70/30 split is per-call randomness on the edge function side; the panel surfaces this to the user as an explainer line so they understand why outputs vary.
+- `avoidPhrases` is capped at 6 items in the prompt to keep token usage low.
+- No new cron jobs — `analyze-performance` already refreshes `content_insights` daily and `analyze-growth` refreshes `hook_stats`/`growth_recommendations` every 6h.
 
-**A. Copy tokens from brucejr08 → sample@sample.com** (what your message literally asks)
-   - Insert a `weather_settings` row for sample@sample.com with the same city, post times, platform schedule, and **the same OAuth tokens** as brucejr08.
-   - Result: sample@sample.com posts to Bruce's connected social accounts.
+### Files touched
 
-**B. Copy only non-credential settings** (city, timezone, post times, schedule platforms, auto-post flags)
-   - sample@sample.com gets the same configuration shape, but would still need to connect their own TikTok/YouTube/X/LinkedIn via the Settings panel.
-   - Recommended if sample@sample.com is a different person.
-
-**C. Do nothing in the database, and instead investigate why sample@sample.com's UI looks different**
-   - If you expected the Settings panel itself to look the same regardless of user, that's a UI/account-state thing, not a data copy.
-
-## What I'll do once you pick
-
-If **A**: insert one row into `public.weather_settings` for sample@sample.com's user_id, copying every column from Bruce's row (except `id`, `user_id`, `created_at`, `updated_at`).
-
-If **B**: same insert, but with all `*_access_token`, `*_refresh_token`, `*_token_expires_at`, `tiktok_open_id`, `youtube_channel_id`, `twitter_user_id`, `twitter_access_token_secret`, `linkedin_person_urn`, `linkedin_organization_urn` set to NULL.
-
-If **C**: I'll dig into the Settings panel rendering logic and report back.
-
-No code files change in any option — this is a data operation only.
+- New: `supabase/functions/_shared/learning-patterns.ts`
+- New: `src/components/AiInsightsCard.tsx`
+- Edit: `supabase/functions/generate-caption/index.ts` (swap the insight-assembly block)
+- Edit: `src/lib/api.ts` (add `fetchAiInsights`)
+- Edit: `src/pages/Index.tsx` (mount `AiInsightsCard` in the Analytics tab)

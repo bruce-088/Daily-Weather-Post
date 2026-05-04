@@ -45,6 +45,7 @@ import { SmartInsightsCard } from "@/components/SmartInsightsCard";
 import { GrowthSummaryCard } from "@/components/GrowthSummaryCard";
 import { GrowthDashboard } from "@/components/GrowthDashboard";
 import { GrowthInsights } from "@/components/GrowthInsights";
+import { AiInsightsCard } from "@/components/AiInsightsCard";
 import { VideoPreviewDialog } from "@/components/VideoPreviewDialog";
 import { SchedulePostForm } from "@/components/SchedulePostForm";
 import { ScheduledPostsList } from "@/components/ScheduledPostsList";
@@ -1011,6 +1012,7 @@ const Index = () => {
                 <h2 className="text-lg font-semibold text-foreground">Performance & Growth</h2>
               </div>
               <GrowthInsights />
+              <AiInsightsCard />
               <GrowthDashboard />
               <SmartInsightsCard />
               <AnalyticsPanel />
