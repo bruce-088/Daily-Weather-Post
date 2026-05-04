@@ -194,5 +194,13 @@ export function buildLearningPromptBlock(p: TopPatterns): string {
     lines.push(`Note: your ${p.bestCondition} posts perform ~${Math.round(top.deltaPct)}% above your average — lean into vivid sensory detail when conditions match.`);
   }
 
+  if (p.provenWins && p.provenWins.length > 0) {
+    lines.push("");
+    lines.push("PROVEN WINS (validated by past A/B tests — favor these):");
+    for (const w of p.provenWins) {
+      lines.push(`  - ${w.variable}="${w.value}" wins ${Math.round(w.winRate * 100)}% of tests (${w.wins}+ wins)`);
+    }
+  }
+
   return lines.join("\n");
 }
