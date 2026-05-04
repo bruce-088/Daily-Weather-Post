@@ -839,6 +839,7 @@ export type Database = {
           id: string
           instagram_api_key: string | null
           linkedin_access_token: string | null
+          linkedin_connected: boolean | null
           linkedin_organization_urn: string | null
           linkedin_person_urn: string | null
           linkedin_refresh_token: string | null
@@ -850,12 +851,14 @@ export type Database = {
           state: string | null
           tiktok_access_token: string | null
           tiktok_api_key: string | null
+          tiktok_connected: boolean | null
           tiktok_open_id: string | null
           tiktok_refresh_token: string | null
           tiktok_token_expires_at: string | null
           timezone: string
           twitter_access_token: string | null
           twitter_access_token_secret: string | null
+          twitter_connected: boolean | null
           twitter_user_id: string | null
           updated_at: string
           use_jobs_pipeline: boolean
@@ -867,6 +870,8 @@ export type Database = {
           voiceover_voice_id: string
           youtube_access_token: string | null
           youtube_channel_id: string | null
+          youtube_connected: boolean | null
+          youtube_has_refresh_token: boolean | null
           youtube_refresh_token: string | null
           youtube_token_expires_at: string | null
         }
@@ -889,6 +894,7 @@ export type Database = {
           id?: string
           instagram_api_key?: string | null
           linkedin_access_token?: string | null
+          linkedin_connected?: boolean | null
           linkedin_organization_urn?: string | null
           linkedin_person_urn?: string | null
           linkedin_refresh_token?: string | null
@@ -900,12 +906,14 @@ export type Database = {
           state?: string | null
           tiktok_access_token?: string | null
           tiktok_api_key?: string | null
+          tiktok_connected?: boolean | null
           tiktok_open_id?: string | null
           tiktok_refresh_token?: string | null
           tiktok_token_expires_at?: string | null
           timezone?: string
           twitter_access_token?: string | null
           twitter_access_token_secret?: string | null
+          twitter_connected?: boolean | null
           twitter_user_id?: string | null
           updated_at?: string
           use_jobs_pipeline?: boolean
@@ -917,6 +925,8 @@ export type Database = {
           voiceover_voice_id?: string
           youtube_access_token?: string | null
           youtube_channel_id?: string | null
+          youtube_connected?: boolean | null
+          youtube_has_refresh_token?: boolean | null
           youtube_refresh_token?: string | null
           youtube_token_expires_at?: string | null
         }
@@ -939,6 +949,7 @@ export type Database = {
           id?: string
           instagram_api_key?: string | null
           linkedin_access_token?: string | null
+          linkedin_connected?: boolean | null
           linkedin_organization_urn?: string | null
           linkedin_person_urn?: string | null
           linkedin_refresh_token?: string | null
@@ -950,12 +961,14 @@ export type Database = {
           state?: string | null
           tiktok_access_token?: string | null
           tiktok_api_key?: string | null
+          tiktok_connected?: boolean | null
           tiktok_open_id?: string | null
           tiktok_refresh_token?: string | null
           tiktok_token_expires_at?: string | null
           timezone?: string
           twitter_access_token?: string | null
           twitter_access_token_secret?: string | null
+          twitter_connected?: boolean | null
           twitter_user_id?: string | null
           updated_at?: string
           use_jobs_pipeline?: boolean
@@ -967,6 +980,8 @@ export type Database = {
           voiceover_voice_id?: string
           youtube_access_token?: string | null
           youtube_channel_id?: string | null
+          youtube_connected?: boolean | null
+          youtube_has_refresh_token?: boolean | null
           youtube_refresh_token?: string | null
           youtube_token_expires_at?: string | null
         }
