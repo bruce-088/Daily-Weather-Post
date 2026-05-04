@@ -1,5 +1,11 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  shouldRunExperiment,
+  pickChallengerVariant,
+  buildControlVariant,
+  createExperimentRow,
+} from "../_shared/experiments.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
