@@ -395,6 +395,60 @@ Deno.serve(async (req) => {
               }
             }
           }
+
+          // ── A/B EXPERIMENT PAIRING ──
+          // ~50% of the time create a Challenger (B) post 60min after the
+          // Control (A). One row per inserted A platform-row gets paired so the
+          // engine works even when a slot fans out to multiple platforms.
+          if (!dryRun && inserted && inserted.length > 0) {
+            try {
+              const userToneRaw = (settingsByUser.get(target.user_id) as any)?.caption_tone || "professional";
+              if (await shouldRunExperiment(supabase, target.user_id)) {
+                const control = buildControlVariant({ tone: userToneRaw, hook: "statement", visuals: "gradient" });
+                const { variable, meta: challenger } = pickChallengerVariant(control);
+                const expId = await createExperimentRow(supabase, {
+                  userId: target.user_id,
+                  city: target.city,
+                  variable,
+                  variantA: control,
+                  variantB: challenger,
+                });
+                if (expId) {
+                  // Tag A rows
+                  await supabase.from("scheduled_posts").update({
+                    experiment_id: expId, experiment_variant: "A",
+                  }).in("id", inserted.map((r: any) => r.id));
+
+                  // Schedule B rows 60 min later, mirroring platforms
+                  const bScheduledAt = new Date(now.getTime() + 60 * 60 * 1000 + 5_000).toISOString();
+                  const bRows = inserted.map((r: any) => ({
+                    user_id: target.user_id,
+                    city: target.city,
+                    city_id: target.city_id,
+                    automation_id: target.automation_id,
+                    platform: r.platform,
+                    scheduled_at: bScheduledAt,
+                    status: "pending",
+                    caption: slotMarker + " [exp:B]",
+                    include_voiceover: voiceoverEnabled && VIDEO_PLATFORMS.has(r.platform),
+                    experiment_id: expId,
+                    experiment_variant: "B",
+                  }));
+                  const { data: bInserted, error: bErr } = await supabase
+                    .from("scheduled_posts")
+                    .insert(bRows)
+                    .select("id, platform");
+                  if (bErr) {
+                    console.warn(`[experiments] B-variant insert failed for exp ${expId}:`, bErr.message);
+                  } else {
+                    console.log(`[experiments] 🧪 Created exp ${expId} (var=${variable}); B rows: ${(bInserted || []).length}`);
+                  }
+                }
+              }
+            } catch (expErr) {
+              console.warn("[experiments] pairing exception:", expErr);
+            }
+          }
         }
       }
 
