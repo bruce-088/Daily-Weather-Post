@@ -1898,8 +1898,11 @@ Deno.serve(async (req) => {
 
         // Try video generation once (with voiceover baked in if available)
         console.log(`RENDER START: City: ${weather.city}, VoiceEnabled: ${voiceUrl ? "True" : "False"}`);
-        const video = await generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec);
-        trace("video_render", { success: !!video, mime: video?.mimeType });
+        const video = await generateVideoWithFallback({
+          weather, timePeriod, voiceUrl, audioDurationSec: voiceAudioDurationSec,
+          creatomate: () => generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec),
+        });
+        trace("video_render", { success: !!video, mime: video?.mimeType, provider: video?.provider });
 
         let publishedPostUrl: string | null = null;
         // Map of platform -> external/post id, used to seed post_analytics rows.
