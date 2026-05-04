@@ -134,10 +134,28 @@ export async function getTopPerformingPatterns(
 
   const avoidPhrases = Array.from(new Set([...GENERIC_AVOID, ...worstHooks]));
 
+  // ── A/B EXPERIMENT WINNERS ──
+  // Pull patterns that have won >=2 experiments with >=65% win rate.
+  let provenWins: Array<{ variable: string; value: string; wins: number; winRate: number }> = [];
+  try {
+    const { data: wins } = await supabase
+      .from("experiment_wins")
+      .select("variable, winning_value, wins, losses, win_rate")
+      .eq("user_id", userId)
+      .gte("wins", 2)
+      .gte("win_rate", 0.65)
+      .order("wins", { ascending: false })
+      .limit(5);
+    provenWins = (wins || []).map((w: any) => ({
+      variable: w.variable, value: w.winning_value, wins: w.wins, winRate: w.win_rate,
+    }));
+  } catch { /* ignore */ }
+
   return {
     topHooks, avoidPhrases, bestCondition, bestTimeOfDay,
     conditionLifts, hookPrefixes, baselineEngagement, sampleSize: totalN,
-  };
+    provenWins,
+  } as TopPatterns;
 }
 
 /**
