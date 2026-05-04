@@ -28,6 +28,7 @@ export interface TopPatterns {
   hookPrefixes: HookPrefixStat[];
   baselineEngagement: number;
   sampleSize: number;
+  provenWins?: Array<{ variable: string; value: string; wins: number; winRate: number }>;
 }
 
 const GENERIC_AVOID = [
