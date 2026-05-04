@@ -1,60 +1,115 @@
+# A/B Experiment Engine
+
 ## Context
 
-The project already has a partial learning system: `content_insights`, `hook_stats`, and `growth_recommendations` are computed by the `analyze-performance` and `analyze-growth` cron functions, and `generate-caption` already injects "PERFORMANCE LEARNING" + "HOOK ROTATION" + "VARIETY" notes into the prompt.
-
-What's missing from the user's spec:
-- An explicit `engagement_score = (likes*2 + comments*3) / views` signal (currently uses `likes + comments + shares` summed).
-- A clean `getTopPerformingPatterns()` helper returning {top hooks, best conditions, best time of day, avoid list}.
-- Explicit FAVOR / AVOID phrase blocks in the prompt (today it's only "use this hook" — no avoid list, no generics filter).
-- A 70/30 exploit/explore toggle so the AI sometimes invents new variations.
-- A user-visible "AI Insights" panel summarizing what's working.
+The app already has an automation pipeline (`process-scheduled-posts`, `daily-weather-post`), an analytics sync (`sync-post-performance`, every 12h), and a learning loop (`hook_stats`, `growth_recommendations`, `_shared/learning-patterns.ts`). The A/B engine plugs in between them: it pairs posts, picks winners 24h later, and feeds the winning style back into the same learning surfaces the caption generator already reads.
 
 ## Plan
 
-### 1. New shared helper — `supabase/functions/_shared/learning-patterns.ts`
-- `getTopPerformingPatterns(supabase, userId)` returns:
-  - `topHooks` — up to 5 hooks from `hook_stats` with `uses ≥ 2`, sorted by `avg_views`.
-  - `avoidPhrases` — generic phrases ("Weather Update", "Today's Forecast", "Daily Weather", "Weather Report") + 3 worst-performing hooks.
-  - `bestCondition`, `bestTimeOfDay` — computed from `post_analytics` using the new `engagement_score` formula.
-  - `conditionLifts[]` with `deltaPct` vs the user's baseline engagement (used by the UI).
-  - `hookPrefixes[]` — top 5 two-word openers (e.g. "Feels Like").
-- `buildLearningPromptBlock(patterns)` returns the prompt-injection text. Uses `Math.random() < 0.3` for EXPLORATION mode (no FAVOR list, fresh angle nudge), otherwise EXPLOITATION (lists FAVOR hooks + best prefix).
+### 1. Database — new `experiments` table + `experiment_wins` rollup
 
-### 2. Wire into caption generation — `supabase/functions/generate-caption/index.ts`
-- Replace the bespoke insight-assembly block (~lines 187–237) with:
-  1. The existing `content_insights` lookup (kept — it provides condition/time-of-day specific tone steering).
-  2. A call to `getTopPerformingPatterns` + `buildLearningPromptBlock` to append the FAVOR / AVOID block.
-- The existing `growth_recommendations` "VARIETY" / "TONE NUDGE" notes stay — they complement the new block.
-- Net effect: the prompt now explicitly contains both `Favor hooks similar to:` and `Avoid generic phrases like:` sections, plus a 70/30 explore/exploit decision.
+Migration:
 
-### 3. New API surface for the UI — `src/lib/api.ts`
-- Add `fetchAiInsights()` that:
-  - Reads `hook_stats` (top 5 + worst 3), `content_insights`, and `post_analytics` (last 60d) for the current user.
-  - Computes the same `conditionLifts[]` and `hookPrefixes[]` as the helper, client-side, so the panel works even if no edge function is deployed yet.
+```
+experiments (
+  id uuid pk,
+  user_id uuid not null,
+  city text,
+  variable_tested text not null,    -- 'hook' | 'tone' | 'visuals'
+  variant_a_meta jsonb not null,    -- { hook, tone, visuals }
+  variant_b_meta jsonb not null,
+  post_id_a uuid,                   -- references post_history
+  post_id_b uuid,
+  scheduled_post_id_a uuid,
+  scheduled_post_id_b uuid,
+  winner_post_id uuid,
+  winner_variant text,              -- 'a' | 'b' | 'tie'
+  status text not null default 'gathering_data',  -- 'gathering_data' | 'concluded' | 'cancelled'
+  insight_generated boolean not null default false,
+  conclude_at timestamptz not null, -- post_a_time + 24h
+  concluded_at timestamptz,
+  created_at timestamptz default now()
+)
 
-### 4. New UI — `src/components/AiInsightsCard.tsx`
-- Glassmorphic card titled "AI Insights — what's working".
-- Shows:
-  - Top 3 condition lifts as one-liners: "☀️ Sunny posts perform 22% better than your average."
-  - Top hook prefix: "Hooks starting with 'Feels Like' perform best (avg 1.2k views)."
-  - Best time of day chip.
-  - "Avoid" chips (generic + bottom-3 hooks).
-  - Note: "30% of generations explore new angles to keep your feed fresh."
-- Hook into the existing Analytics tab in `src/pages/Index.tsx`, just below the new `GrowthInsights` card.
+experiment_wins (
+  user_id uuid,
+  variable text,         -- 'hook' | 'tone' | 'visuals'
+  winning_value text,    -- e.g. 'question'
+  wins int default 0,
+  losses int default 0,
+  win_rate numeric,
+  last_win_at timestamptz,
+  primary key (user_id, variable, winning_value)
+)
+```
 
-### Technical details
+RLS: users read own; service role full. Add `experiment_id uuid` + `experiment_variant text` columns to `scheduled_posts` and `post_history` so each post knows its experiment + side.
 
-- Engagement score is the spec formula `(likes*2 + comments*3) / views`, with `views` floored at 1 to avoid divide-by-zero.
-- All reads use existing tables — no schema changes.
-- The `getTopPerformingPatterns` helper requires `sample_size ≥ 2` per bucket to avoid noise from one-off posts.
-- The 70/30 split is per-call randomness on the edge function side; the panel surfaces this to the user as an explainer line so they understand why outputs vary.
-- `avoidPhrases` is capped at 6 items in the prompt to keep token usage low.
-- No new cron jobs — `analyze-performance` already refreshes `content_insights` daily and `analyze-growth` refreshes `hook_stats`/`growth_recommendations` every 6h.
+### 2. Pairing logic in scheduling
 
-### Files touched
+New `supabase/functions/_shared/experiments.ts`:
+- `shouldRunExperiment(userId)` → 50% chance, skipped if user already has > 2 active experiments.
+- `pickChallengerVariant(control)` → randomly flip ONE variable:
+  - `hook`: statement ↔ question
+  - `tone`: contrasting (professional ↔ playful, calm ↔ urgent)
+  - `visuals`: gradient ↔ stock-video background
+- `createExperimentPair(...)` inserts the row and returns A/B variant metadata.
 
-- New: `supabase/functions/_shared/learning-patterns.ts`
-- New: `src/components/AiInsightsCard.tsx`
-- Edit: `supabase/functions/generate-caption/index.ts` (swap the insight-assembly block)
-- Edit: `src/lib/api.ts` (add `fetchAiInsights`)
-- Edit: `src/pages/Index.tsx` (mount `AiInsightsCard` in the Analytics tab)
+Hook in:
+- `process-scheduled-posts` and `daily-weather-post`: after creating Post A, if `shouldRunExperiment` is true, insert a second `scheduled_posts` +60 min later carrying the challenger variant; link both to a new `experiments` row.
+- `generate-caption`: when called with an `experiment_variant`, apply the override (question hook line, forced tone, or visuals flag passed to the renderer).
+
+### 3. Winner selection — `experiments-resolve` edge function (hourly cron)
+
+For each `gathering_data` experiment with `conclude_at <= now()`:
+1. Read latest `post_analytics` for both posts.
+2. `engagement_score = (likes*2 + comments*3) / max(views, 1)`.
+3. Pick winner — or `tie` if delta < 5% with ≥ 50 views each; `cancelled` if either side has 0 views.
+4. Update experiment: `winner_post_id`, `winner_variant`, `status='concluded'`.
+5. Roll up into `experiment_wins`.
+6. Bump the winning hook's `hook_stats.avg_views` by ~10% so the existing exploit/explore reader prefers it next generation.
+7. Insert a `notifications` row: "Experiment concluded — Question hooks beat Statement hooks (+34%)."
+
+Schedule via `pg_cron` + `pg_net`, hourly.
+
+### 4. Learning loop integration
+
+Extend `_shared/learning-patterns.ts`:
+- After `hook_stats`, also fetch `experiment_wins`.
+- For variables with `wins ≥ 3` and `win_rate ≥ 0.65`, append a "PROVEN WIN" line to the prompt block — e.g. `Question hooks have outperformed Statement hooks 4 of 5 tests — keep favoring questions.`
+
+### 5. UI — `src/components/GrowthLab.tsx`
+
+Mounted in the Analytics tab above `AiInsightsCard`:
+- **Active experiments**: A vs B mini-cards with current views/likes and "concludes in Xh".
+- **Proven wins**: top `experiment_wins` rows with `wins ≥ 2` ("Question hooks win 80% of tests (4/5)").
+- **AI recommendation**: derived client-side from the strongest proven-win row.
+- Empty state when no experiments yet.
+
+Optional Settings toggle `enable_experiments` (default true).
+
+## Technical details
+
+- 50% gate uses `Math.random()` — no determinism needed.
+- +1h offset is hard-coded for v1.
+- Tie threshold: < 5% delta with ≥ 50 views each.
+- Insufficient data (0 views) → `cancelled`, no learning update.
+- `hook_stats` boost is intentionally gentle (+10%); `analyze-growth` will overwrite with real numbers next run.
+- Cron `experiments-resolve` runs as service role; user-facing functions keep `verifyUser`.
+
+## Files
+
+New:
+- `supabase/functions/_shared/experiments.ts`
+- `supabase/functions/experiments-resolve/index.ts`
+- `src/components/GrowthLab.tsx`
+
+Edit:
+- `supabase/functions/process-scheduled-posts/index.ts`
+- `supabase/functions/daily-weather-post/index.ts`
+- `supabase/functions/generate-caption/index.ts`
+- `supabase/functions/_shared/learning-patterns.ts`
+- `src/pages/Index.tsx`
+- Migration: `experiments`, `experiment_wins`, columns on `scheduled_posts`/`post_history`, RLS, hourly cron
+
+No new secrets.
