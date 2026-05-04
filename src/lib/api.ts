@@ -38,25 +38,13 @@ export async function loadSettings(): Promise<{ settings: AutomationSettings; ti
       voiceoverSimilarity: Number((data as any).voiceover_similarity ?? 0.78),
       captionTone: ((data as any).caption_tone as any) || "professional",
     },
-    tiktokConnected: !!(data as any).tiktok_access_token,
-    youtubeConnected: !!(data as any).youtube_access_token,
-    // Token is "expired" (needs reconnect) when:
-    //   - access token exists, AND
-    //   - expires_at is in the past, AND
-    //   - no refresh_token is stored (worker can't auto-heal)
-    // If a refresh_token exists, the worker will refresh it transparently
-    // and we keep showing "Connected".
-    youtubeExpired: (() => {
-      const accessToken = (data as any).youtube_access_token;
-      const refreshToken = (data as any).youtube_refresh_token;
-      const expiresAt = (data as any).youtube_token_expires_at;
-      if (!accessToken) return false;
-      if (refreshToken) return false;
-      if (!expiresAt) return false;
-      return new Date(expiresAt).getTime() < Date.now();
-    })(),
-    twitterConnected: !!(data as any).twitter_access_token,
-    linkedinConnected: !!(data as any).linkedin_access_token,
+    tiktokConnected: !!(data as any).tiktok_connected,
+    youtubeConnected: !!(data as any).youtube_connected,
+    // The backend refreshes tokens transparently. Show "expired" only when the
+    // row is connected but has no refresh token (worker can't auto-heal).
+    youtubeExpired: !!(data as any).youtube_connected && !(data as any).youtube_has_refresh_token,
+    twitterConnected: !!(data as any).twitter_connected,
+    linkedinConnected: !!(data as any).linkedin_connected,
   };
 }
 
