@@ -2078,8 +2078,19 @@ Deno.serve(async (req) => {
           voice_error: voiceError,
           voice_attempts: voiceAttemptsCount,
           debug_trace: persistedTrace,
+          experiment_id: experimentCtx?.id ?? null,
+          experiment_variant: experimentCtx?.variant ?? null,
         }).select("id").single();
         if (historyErr) {
+          console.error(`[process] post_history insert failed for ${post.id}:`, historyErr);
+        } else {
+          // Backfill experiment.post_id_a / post_id_b so the resolver can score it.
+          if (experimentCtx && historyRow?.id && historyStatus === "success") {
+            const col = experimentCtx.variant === "A" ? "post_id_a" : "post_id_b";
+            try {
+              await supabase.from("experiments").update({ [col]: historyRow.id }).eq("id", experimentCtx.id);
+            } catch (e) { console.warn("[experiments] backfill failed:", e); }
+          }
           console.error(`[process] post_history insert failed for ${post.id}:`, historyErr);
         } else {
           console.log(`[process] post_history row created for ${post.id} (${post.platform}, ${historyStatus})`);
