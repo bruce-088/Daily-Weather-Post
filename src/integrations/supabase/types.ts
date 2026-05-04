@@ -154,6 +154,164 @@ export type Database = {
         }
         Relationships: []
       }
+      experiment_wins: {
+        Row: {
+          last_win_at: string | null
+          losses: number
+          updated_at: string
+          user_id: string
+          variable: string
+          win_rate: number
+          winning_value: string
+          wins: number
+        }
+        Insert: {
+          last_win_at?: string | null
+          losses?: number
+          updated_at?: string
+          user_id: string
+          variable: string
+          win_rate?: number
+          winning_value: string
+          wins?: number
+        }
+        Update: {
+          last_win_at?: string | null
+          losses?: number
+          updated_at?: string
+          user_id?: string
+          variable?: string
+          win_rate?: number
+          winning_value?: string
+          wins?: number
+        }
+        Relationships: []
+      }
+      experiments: {
+        Row: {
+          city: string | null
+          conclude_at: string
+          concluded_at: string | null
+          created_at: string
+          delta_pct: number | null
+          id: string
+          insight_generated: boolean
+          post_id_a: string | null
+          post_id_b: string | null
+          scheduled_post_id_a: string | null
+          scheduled_post_id_b: string | null
+          status: string
+          user_id: string
+          variable_tested: string
+          variant_a_meta: Json
+          variant_b_meta: Json
+          winner_post_id: string | null
+          winner_variant: string | null
+        }
+        Insert: {
+          city?: string | null
+          conclude_at?: string
+          concluded_at?: string | null
+          created_at?: string
+          delta_pct?: number | null
+          id?: string
+          insight_generated?: boolean
+          post_id_a?: string | null
+          post_id_b?: string | null
+          scheduled_post_id_a?: string | null
+          scheduled_post_id_b?: string | null
+          status?: string
+          user_id: string
+          variable_tested: string
+          variant_a_meta?: Json
+          variant_b_meta?: Json
+          winner_post_id?: string | null
+          winner_variant?: string | null
+        }
+        Update: {
+          city?: string | null
+          conclude_at?: string
+          concluded_at?: string | null
+          created_at?: string
+          delta_pct?: number | null
+          id?: string
+          insight_generated?: boolean
+          post_id_a?: string | null
+          post_id_b?: string | null
+          scheduled_post_id_a?: string | null
+          scheduled_post_id_b?: string | null
+          status?: string
+          user_id?: string
+          variable_tested?: string
+          variant_a_meta?: Json
+          variant_b_meta?: Json
+          winner_post_id?: string | null
+          winner_variant?: string | null
+        }
+        Relationships: []
+      }
+      growth_insights: {
+        Row: {
+          city: string | null
+          created_at: string
+          delta_pct: number
+          experiment_id: string | null
+          id: string
+          loser_value: string | null
+          message: string
+          post_id_a: string | null
+          post_id_b: string | null
+          read: boolean
+          title: string
+          user_id: string
+          variable: string
+          winner_value: string | null
+          winner_variant: string
+        }
+        Insert: {
+          city?: string | null
+          created_at?: string
+          delta_pct?: number
+          experiment_id?: string | null
+          id?: string
+          loser_value?: string | null
+          message: string
+          post_id_a?: string | null
+          post_id_b?: string | null
+          read?: boolean
+          title: string
+          user_id: string
+          variable: string
+          winner_value?: string | null
+          winner_variant: string
+        }
+        Update: {
+          city?: string | null
+          created_at?: string
+          delta_pct?: number
+          experiment_id?: string | null
+          id?: string
+          loser_value?: string | null
+          message?: string
+          post_id_a?: string | null
+          post_id_b?: string | null
+          read?: boolean
+          title?: string
+          user_id?: string
+          variable?: string
+          winner_value?: string | null
+          winner_variant?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "growth_insights_experiment_id_fkey"
+            columns: ["experiment_id"]
+            isOneToOne: false
+            referencedRelation: "experiments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       growth_recommendations: {
         Row: {
           best_slot: Json | null
@@ -400,6 +558,8 @@ export type Database = {
           created_at: string
           debug_trace: Json | null
           error_message: string | null
+          experiment_id: string | null
+          experiment_variant: string | null
           external_id: string | null
           id: string
           image_url: string | null
@@ -427,6 +587,8 @@ export type Database = {
           created_at?: string
           debug_trace?: Json | null
           error_message?: string | null
+          experiment_id?: string | null
+          experiment_variant?: string | null
           external_id?: string | null
           id?: string
           image_url?: string | null
@@ -454,6 +616,8 @@ export type Database = {
           created_at?: string
           debug_trace?: Json | null
           error_message?: string | null
+          experiment_id?: string | null
+          experiment_variant?: string | null
           external_id?: string | null
           id?: string
           image_url?: string | null
@@ -520,6 +684,8 @@ export type Database = {
           created_at: string
           debug_trace: Json | null
           error_message: string | null
+          experiment_id: string | null
+          experiment_variant: string | null
           id: string
           include_voiceover: boolean
           last_attempt_at: string | null
@@ -542,6 +708,8 @@ export type Database = {
           created_at?: string
           debug_trace?: Json | null
           error_message?: string | null
+          experiment_id?: string | null
+          experiment_variant?: string | null
           id?: string
           include_voiceover?: boolean
           last_attempt_at?: string | null
@@ -564,6 +732,8 @@ export type Database = {
           created_at?: string
           debug_trace?: Json | null
           error_message?: string | null
+          experiment_id?: string | null
+          experiment_variant?: string | null
           id?: string
           include_voiceover?: boolean
           last_attempt_at?: string | null

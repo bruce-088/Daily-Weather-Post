@@ -28,6 +28,7 @@ export interface TopPatterns {
   hookPrefixes: HookPrefixStat[];
   baselineEngagement: number;
   sampleSize: number;
+  provenWins?: Array<{ variable: string; value: string; wins: number; winRate: number }>;
 }
 
 const GENERIC_AVOID = [
@@ -134,10 +135,28 @@ export async function getTopPerformingPatterns(
 
   const avoidPhrases = Array.from(new Set([...GENERIC_AVOID, ...worstHooks]));
 
+  // ── A/B EXPERIMENT WINNERS ──
+  // Pull patterns that have won >=2 experiments with >=65% win rate.
+  let provenWins: Array<{ variable: string; value: string; wins: number; winRate: number }> = [];
+  try {
+    const { data: wins } = await supabase
+      .from("experiment_wins")
+      .select("variable, winning_value, wins, losses, win_rate")
+      .eq("user_id", userId)
+      .gte("wins", 2)
+      .gte("win_rate", 0.65)
+      .order("wins", { ascending: false })
+      .limit(5);
+    provenWins = (wins || []).map((w: any) => ({
+      variable: w.variable, value: w.winning_value, wins: w.wins, winRate: w.win_rate,
+    }));
+  } catch { /* ignore */ }
+
   return {
     topHooks, avoidPhrases, bestCondition, bestTimeOfDay,
     conditionLifts, hookPrefixes, baselineEngagement, sampleSize: totalN,
-  };
+    provenWins,
+  } as TopPatterns;
 }
 
 /**
@@ -173,6 +192,14 @@ export function buildLearningPromptBlock(p: TopPatterns): string {
   if (p.bestCondition && top?.deltaPct && top.deltaPct > 5) {
     lines.push("");
     lines.push(`Note: your ${p.bestCondition} posts perform ~${Math.round(top.deltaPct)}% above your average — lean into vivid sensory detail when conditions match.`);
+  }
+
+  if (p.provenWins && p.provenWins.length > 0) {
+    lines.push("");
+    lines.push("PROVEN WINS (validated by past A/B tests — favor these):");
+    for (const w of p.provenWins) {
+      lines.push(`  - ${w.variable}="${w.value}" wins ${Math.round(w.winRate * 100)}% of tests (${w.wins}+ wins)`);
+    }
   }
 
   return lines.join("\n");
