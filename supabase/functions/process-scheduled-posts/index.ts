@@ -1650,6 +1650,29 @@ Deno.serve(async (req) => {
           if ((toneSettings as any)?.caption_tone) captionTone = (toneSettings as any).caption_tone;
         } catch { /* ignore */ }
 
+        // ── A/B EXPERIMENT VARIANT OVERRIDE ──
+        // If this post belongs to an experiment, apply variant_b_meta overrides.
+        let experimentCtx: { id: string; variant: "A" | "B"; variable: string; meta: any } | null = null;
+        if ((post as any).experiment_id && (post as any).experiment_variant) {
+          try {
+            const { data: exp } = await supabase
+              .from("experiments")
+              .select("id, variable_tested, variant_a_meta, variant_b_meta")
+              .eq("id", (post as any).experiment_id)
+              .maybeSingle();
+            if (exp) {
+              const variant = (post as any).experiment_variant as "A" | "B";
+              const meta = variant === "B" ? (exp as any).variant_b_meta : (exp as any).variant_a_meta;
+              experimentCtx = { id: (exp as any).id, variant, variable: (exp as any).variable_tested, meta };
+              if (variant === "B" && (exp as any).variable_tested === "tone" && meta?.tone) {
+                captionTone = String(meta.tone);
+                console.log(`[experiments] Post ${post.id} variant B overriding tone → ${captionTone}`);
+              }
+            }
+          } catch (e) { console.warn("[experiments] context lookup failed:", e); }
+        }
+
+
         // Resolve the primary platform up-front so the caption can be platform-tuned
         const earlyPlatformList = post.platform === "both"
           ? ["youtube", "tiktok"]
