@@ -8,6 +8,7 @@ import {
   stripUnverifiedReferences,
 } from "../_shared/location-guard.ts";
 import { generateVideoWithFallback } from "../_shared/video-render.ts";
+import { verifyUser } from "../_shared/auth-helpers.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
