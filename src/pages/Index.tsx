@@ -88,6 +88,7 @@ const DEFAULT_SETTINGS: AutomationSettings = {
 
 const Index = () => {
   const { signOut } = useAuth();
+  useGrowthInsights();
   const navigate = useNavigate();
   const cardRef = useRef<HTMLDivElement>(null);
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("9:16");
