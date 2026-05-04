@@ -1009,6 +1009,7 @@ const Index = () => {
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-semibold text-foreground">Performance & Growth</h2>
               </div>
+              <GrowthInsights />
               <GrowthDashboard />
               <SmartInsightsCard />
               <AnalyticsPanel />
