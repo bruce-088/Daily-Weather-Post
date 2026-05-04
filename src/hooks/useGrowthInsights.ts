@@ -56,14 +56,30 @@ export function useGrowthInsights() {
         (payload) => {
           const row = payload.new as {
             title: string; message: string; delta_pct: number;
-            winner_value: string | null; variable: string;
+            winner_value: string | null; loser_value: string | null; variable: string;
           };
           playGoldChime();
+          const varLabel = row.variable
+            ? row.variable.charAt(0).toUpperCase() + row.variable.slice(1)
+            : "Pattern";
+          const deltaPct = Math.abs(Math.round(row.delta_pct ?? 0));
+          const description =
+            row.winner_value && row.loser_value
+              ? `${varLabel} "${row.winner_value}" beat "${row.loser_value}" by +${deltaPct}% engagement`
+              : row.winner_value
+                ? `${varLabel} "${row.winner_value}" wins by +${deltaPct}% engagement`
+                : row.message;
           toast.success(row.title, {
-            description: row.message,
-            duration: 9000,
+            description,
+            duration: 5000,
             icon: createElement(Gem, { size: 16, className: "text-amber-400" }),
             className: "border-amber-500/40",
+            action: {
+              label: "View Insights",
+              onClick: () => {
+                window.dispatchEvent(new CustomEvent("skybrief:open-growth-log"));
+              },
+            },
           });
         },
       )
