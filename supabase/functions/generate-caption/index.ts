@@ -8,6 +8,7 @@ import {
   validateCaptionLocation,
   stripUnverifiedReferences,
 } from "../_shared/location-guard.ts";
+import { getTopPerformingPatterns, buildLearningPromptBlock } from "../_shared/learning-patterns.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
