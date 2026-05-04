@@ -93,6 +93,19 @@ const Index = () => {
   const cardRef = useRef<HTMLDivElement>(null);
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("9:16");
   const [activeTab, setActiveTab] = useState("create");
+
+  // "View Insights" button on growth toast → jump to Analytics tab + scroll to Growth Log.
+  useEffect(() => {
+    const handler = () => {
+      setActiveTab("analytics");
+      // Wait for the tab content to mount, then scroll the Growth Log into view.
+      setTimeout(() => {
+        document.getElementById("growth-log")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 150);
+    };
+    window.addEventListener("skybrief:open-growth-log", handler);
+    return () => window.removeEventListener("skybrief:open-growth-log", handler);
+  }, []);
   const [settings, setSettings] = useState<AutomationSettings>(DEFAULT_SETTINGS);
   const [tiktokConnected, setTiktokConnected] = useState(false);
   const [youtubeConnected, setYoutubeConnected] = useState(false);

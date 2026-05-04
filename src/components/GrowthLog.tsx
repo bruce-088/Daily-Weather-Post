@@ -103,7 +103,7 @@ export function GrowthLog() {
   if (loading) return <Card className="p-6 text-sm text-muted-foreground">Loading growth log…</Card>;
 
   return (
-    <div className="space-y-4">
+    <div id="growth-log" className="space-y-4 scroll-mt-24">
       {/* Growth Log feed */}
       <Card className="border-amber-500/30 bg-gradient-to-br from-amber-500/5 to-transparent">
         <CardHeader className="pb-2">
