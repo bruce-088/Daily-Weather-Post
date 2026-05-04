@@ -2091,8 +2091,6 @@ Deno.serve(async (req) => {
               await supabase.from("experiments").update({ [col]: historyRow.id }).eq("id", experimentCtx.id);
             } catch (e) { console.warn("[experiments] backfill failed:", e); }
           }
-          console.error(`[process] post_history insert failed for ${post.id}:`, historyErr);
-        } else {
           console.log(`[process] post_history row created for ${post.id} (${post.platform}, ${historyStatus})`);
 
           // Seed post_analytics rows so the Analytics tab shows the post immediately.
