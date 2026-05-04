@@ -395,6 +395,7 @@ export type Database = {
         Row: {
           caption: string | null
           city: string
+          comment_count: number
           condition: string | null
           created_at: string
           debug_trace: Json | null
@@ -403,13 +404,17 @@ export type Database = {
           id: string
           image_url: string | null
           last_attempt_at: string | null
+          last_synced_at: string | null
+          likes_count: number
           next_retry_at: string | null
           platform: string | null
           post_url: string | null
+          retention_rate: number | null
           retry_count: number
           status: string
           temperature: number | null
           user_id: string | null
+          views_count: number
           voice_attempts: number
           voice_error: string | null
           voice_status: string | null
@@ -417,6 +422,7 @@ export type Database = {
         Insert: {
           caption?: string | null
           city: string
+          comment_count?: number
           condition?: string | null
           created_at?: string
           debug_trace?: Json | null
@@ -425,13 +431,17 @@ export type Database = {
           id?: string
           image_url?: string | null
           last_attempt_at?: string | null
+          last_synced_at?: string | null
+          likes_count?: number
           next_retry_at?: string | null
           platform?: string | null
           post_url?: string | null
+          retention_rate?: number | null
           retry_count?: number
           status?: string
           temperature?: number | null
           user_id?: string | null
+          views_count?: number
           voice_attempts?: number
           voice_error?: string | null
           voice_status?: string | null
@@ -439,6 +449,7 @@ export type Database = {
         Update: {
           caption?: string | null
           city?: string
+          comment_count?: number
           condition?: string | null
           created_at?: string
           debug_trace?: Json | null
@@ -447,13 +458,17 @@ export type Database = {
           id?: string
           image_url?: string | null
           last_attempt_at?: string | null
+          last_synced_at?: string | null
+          likes_count?: number
           next_retry_at?: string | null
           platform?: string | null
           post_url?: string | null
+          retention_rate?: number | null
           retry_count?: number
           status?: string
           temperature?: number | null
           user_id?: string | null
+          views_count?: number
           voice_attempts?: number
           voice_error?: string | null
           voice_status?: string | null
