@@ -235,6 +235,18 @@ Deno.serve(async (req) => {
             insightNote += `\n\nTONE NUDGE: Your last several posts were ${recentTones[0]}. Consider a different tone today for variety (the user-selected tone still wins).`;
           }
         }
+
+        // FAVOR / AVOID + 70/30 explore/exploit (engagement_score = (likes*2+comments*3)/views)
+        try {
+          const patterns = await getTopPerformingPatterns(svc, auth.userId);
+          const block = buildLearningPromptBlock(patterns);
+          if (block) {
+            insightNote += block;
+            aiOptimized = true;
+          }
+        } catch (e) {
+          console.warn("[generate-caption] patterns lookup failed:", e);
+        }
       }
     } catch (e) {
       console.warn("[generate-caption] insight lookup failed:", e);
