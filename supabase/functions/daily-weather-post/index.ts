@@ -7,6 +7,7 @@ import {
   validateCaptionLocation,
   stripUnverifiedReferences,
 } from "../_shared/location-guard.ts";
+import { generateVideoWithFallback } from "../_shared/video-render.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1375,7 +1376,10 @@ Deno.serve(async (req) => {
 
     // Generate video (with voice baked in if available). Composition length is sized
     // dynamically from the audio duration so the voiceover + CTA always finish in full.
-    const video = await generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec);
+    const video = await generateVideoWithFallback({
+      weather, timePeriod, voiceUrl, audioDurationSec: voiceAudioDurationSec,
+      creatomate: () => generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec),
+    });
 
 
     // === PREVIEW MODE ===

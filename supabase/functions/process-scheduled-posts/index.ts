@@ -2,6 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildStyleAddendum, normalizeTone, appendVoiceCTA, isWeatherAlert } from "../_shared/caption-style.ts";
 import { LOCATION_ACCURACY_RULES, validateCaptionLocation, buildVerifiedLandmarksBlock, stripUnverifiedReferences } from "../_shared/location-guard.ts";
+import { generateVideoWithFallback } from "../_shared/video-render.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1897,8 +1898,11 @@ Deno.serve(async (req) => {
 
         // Try video generation once (with voiceover baked in if available)
         console.log(`RENDER START: City: ${weather.city}, VoiceEnabled: ${voiceUrl ? "True" : "False"}`);
-        const video = await generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec);
-        trace("video_render", { success: !!video, mime: video?.mimeType });
+        const video = await generateVideoWithFallback({
+          weather, timePeriod, voiceUrl, audioDurationSec: voiceAudioDurationSec,
+          creatomate: () => generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec),
+        });
+        trace("video_render", { success: !!video, mime: video?.mimeType, provider: video?.provider });
 
         let publishedPostUrl: string | null = null;
         // Map of platform -> external/post id, used to seed post_analytics rows.
