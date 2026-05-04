@@ -7,6 +7,7 @@ import {
   validateCaptionLocation,
   stripUnverifiedReferences,
 } from "../_shared/location-guard.ts";
+import { generateVideoWithFallback } from "../_shared/video-render.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
