@@ -44,6 +44,7 @@ import { AnalyticsPanel } from "@/components/AnalyticsPanel";
 import { SmartInsightsCard } from "@/components/SmartInsightsCard";
 import { GrowthSummaryCard } from "@/components/GrowthSummaryCard";
 import { GrowthDashboard } from "@/components/GrowthDashboard";
+import { GrowthInsights } from "@/components/GrowthInsights";
 import { VideoPreviewDialog } from "@/components/VideoPreviewDialog";
 import { SchedulePostForm } from "@/components/SchedulePostForm";
 import { ScheduledPostsList } from "@/components/ScheduledPostsList";
