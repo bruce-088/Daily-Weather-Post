@@ -1,0 +1,179 @@
+// Shared learning-patterns helper.
+//
+// Surfaces "what's working" for a given user from existing analytics tables
+// (hook_stats + post_analytics) so the caption generator can FAVOR proven
+// patterns and AVOID weak ones, with 70/30 exploit/explore.
+//
+// engagement_score = (likes*2 + comments*3) / max(views, 1)
+
+export interface ConditionLift {
+  condition: string;
+  avgViews: number;
+  engagementScore: number;
+  deltaPct: number | null;
+}
+
+export interface HookPrefixStat {
+  prefix: string;
+  avgViews: number;
+  uses: number;
+}
+
+export interface TopPatterns {
+  topHooks: string[];
+  avoidPhrases: string[];
+  bestCondition: string | null;
+  bestTimeOfDay: string | null;
+  conditionLifts: ConditionLift[];
+  hookPrefixes: HookPrefixStat[];
+  baselineEngagement: number;
+  sampleSize: number;
+}
+
+const GENERIC_AVOID = [
+  "Weather Update",
+  "Today's Forecast",
+  "Daily Weather",
+  "Weather Report",
+  "Forecast for today",
+];
+
+export async function getTopPerformingPatterns(
+  supabase: any,
+  userId: string,
+): Promise<TopPatterns> {
+  const { data: hookRows } = await supabase
+    .from("hook_stats")
+    .select("hook_text, avg_views, uses")
+    .eq("user_id", userId)
+    .order("avg_views", { ascending: false })
+    .limit(20);
+
+  const hooks = (hookRows || []) as Array<{ hook_text: string; avg_views: number; uses: number }>;
+  const topHooks = hooks
+    .filter(h => h.uses >= 2 && h.avg_views > 0)
+    .slice(0, 5)
+    .map(h => h.hook_text);
+
+  const worstHooks = [...hooks]
+    .filter(h => h.uses >= 2)
+    .sort((a, b) => a.avg_views - b.avg_views)
+    .slice(0, 3)
+    .map(h => h.hook_text);
+
+  const prefixMap = new Map<string, { sum: number; n: number }>();
+  for (const h of hooks) {
+    if (!h.hook_text) continue;
+    const words = h.hook_text.trim().split(/\s+/).slice(0, 2).join(" ");
+    if (words.length < 3) continue;
+    const cur = prefixMap.get(words) || { sum: 0, n: 0 };
+    cur.sum += h.avg_views * Math.max(1, h.uses);
+    cur.n += Math.max(1, h.uses);
+    prefixMap.set(words, cur);
+  }
+  const hookPrefixes: HookPrefixStat[] = Array.from(prefixMap.entries())
+    .filter(([, v]) => v.n >= 2)
+    .map(([prefix, v]) => ({ prefix, avgViews: v.sum / v.n, uses: v.n }))
+    .sort((a, b) => b.avgViews - a.avgViews)
+    .slice(0, 5);
+
+  const since = new Date(Date.now() - 60 * 86400_000).toISOString();
+  const { data: rows } = await supabase
+    .from("post_analytics")
+    .select("views, likes, comments, condition, time_of_day")
+    .eq("user_id", userId)
+    .gte("created_at", since);
+
+  const analytics = (rows || []) as Array<{
+    views: number; likes: number; comments: number;
+    condition: string | null; time_of_day: string | null;
+  }>;
+
+  const condBuckets = new Map<string, { views: number; eng: number; n: number }>();
+  const todBuckets = new Map<string, { views: number; eng: number; n: number }>();
+  let totalEng = 0, totalN = 0;
+
+  for (const r of analytics) {
+    const v = Math.max(1, r.views || 0);
+    const eScore = ((r.likes || 0) * 2 + (r.comments || 0) * 3) / v;
+    totalEng += eScore; totalN += 1;
+    if (r.condition) {
+      const k = r.condition.toLowerCase();
+      const b = condBuckets.get(k) || { views: 0, eng: 0, n: 0 };
+      b.views += r.views || 0; b.eng += eScore; b.n += 1;
+      condBuckets.set(k, b);
+    }
+    if (r.time_of_day) {
+      const b = todBuckets.get(r.time_of_day) || { views: 0, eng: 0, n: 0 };
+      b.views += r.views || 0; b.eng += eScore; b.n += 1;
+      todBuckets.set(r.time_of_day, b);
+    }
+  }
+
+  const baselineEngagement = totalN ? totalEng / totalN : 0;
+  const conditionLifts: ConditionLift[] = Array.from(condBuckets.entries())
+    .filter(([, b]) => b.n >= 2)
+    .map(([condition, b]) => {
+      const eng = b.eng / b.n;
+      return {
+        condition,
+        avgViews: b.views / b.n,
+        engagementScore: eng,
+        deltaPct: baselineEngagement > 0 ? ((eng - baselineEngagement) / baselineEngagement) * 100 : null,
+      };
+    })
+    .sort((a, b) => b.engagementScore - a.engagementScore);
+
+  const bestCondition = conditionLifts[0]?.condition ?? null;
+
+  const bestTodEntry = Array.from(todBuckets.entries())
+    .map(([tod, b]) => ({ tod, score: b.n ? b.eng / b.n : 0, n: b.n }))
+    .filter(t => t.n >= 2)
+    .sort((a, b) => b.score - a.score)[0];
+  const bestTimeOfDay = bestTodEntry?.tod ?? null;
+
+  const avoidPhrases = Array.from(new Set([...GENERIC_AVOID, ...worstHooks]));
+
+  return {
+    topHooks, avoidPhrases, bestCondition, bestTimeOfDay,
+    conditionLifts, hookPrefixes, baselineEngagement, sampleSize: totalN,
+  };
+}
+
+/**
+ * 70% exploit proven patterns, 30% exploration.
+ */
+export function buildLearningPromptBlock(p: TopPatterns): string {
+  if (p.topHooks.length === 0 && p.conditionLifts.length === 0) return "";
+
+  const explore = Math.random() < 0.3;
+  const lines: string[] = ["", "PERFORMANCE LEARNING LOOP:"];
+
+  if (explore) {
+    lines.push("MODE: EXPLORATION — try a fresh angle today. Invent a new opener that still feels on-brand. Do NOT lean on the proven hook list verbatim.");
+  } else {
+    lines.push("MODE: EXPLOITATION — favor proven high-performing patterns.");
+    if (p.topHooks.length > 0) {
+      lines.push("Favor hooks similar to:");
+      for (const h of p.topHooks) lines.push(`  - ${h}`);
+    }
+    if (p.hookPrefixes.length > 0) {
+      const top = p.hookPrefixes[0];
+      lines.push(`Hooks starting with "${top.prefix}" have been your strongest pattern.`);
+    }
+  }
+
+  if (p.avoidPhrases.length > 0) {
+    lines.push("");
+    lines.push("Avoid generic or weak phrases like:");
+    for (const a of p.avoidPhrases.slice(0, 6)) lines.push(`  - ${a}`);
+  }
+
+  const top = p.conditionLifts[0];
+  if (p.bestCondition && top?.deltaPct && top.deltaPct > 5) {
+    lines.push("");
+    lines.push(`Note: your ${p.bestCondition} posts perform ~${Math.round(top.deltaPct)}% above your average — lean into vivid sensory detail when conditions match.`);
+  }
+
+  return lines.join("\n");
+}
