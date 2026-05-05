@@ -188,12 +188,49 @@ Deno.serve(async (req) => {
     const memoryType = variable === "hook" ? "hook"
       : variable === "tone" ? "tone"
       : "script";
+
+    // Pull condition + time_of_day + voice info from the winning post.
+    const winnerPostId = winner === "A" ? e.post_id_a : e.post_id_b;
+    const winnerViews = winner === "A" ? a.views : b.views;
+    let winnerCondition: string | null = null;
+    let winnerTimeOfDay: string | null = null;
+    let winnerVoiceId: string | null = null;
+    let winnerVoiceStyle: string | null = null;
+    try {
+      const { data: pa } = await supabase
+        .from("post_analytics")
+        .select("condition, time_of_day")
+        .eq("post_id", winnerPostId)
+        .limit(1)
+        .maybeSingle();
+      winnerCondition = pa?.condition?.toLowerCase() || null;
+      winnerTimeOfDay = pa?.time_of_day || null;
+
+      const { data: ph } = await supabase
+        .from("post_history")
+        .select("debug_trace")
+        .eq("id", winnerPostId)
+        .limit(1)
+        .maybeSingle();
+      const trace = (ph?.debug_trace as any) || {};
+      // debug_trace.voice_config = { voice_id, ... } when voiceover ran
+      winnerVoiceId = trace?.voice_config?.voice_id ?? trace?.voice_id ?? null;
+      if (winnerVoiceId) {
+        const { classifyVoiceStyle } = await import("../_shared/voice-memory.ts");
+        winnerVoiceStyle = classifyVoiceStyle(winnerVoiceId);
+      }
+    } catch (_e) { /* best-effort enrichment */ }
+
     await supabase.from("ai_memory").insert({
       user_id: e.user_id,
       memory_type: memoryType,
       content: winnerVal,
       performance_score: deltaPct,
-      condition: null,
+      condition: winnerCondition,
+      time_of_day: winnerTimeOfDay,
+      voice_id: winnerVoiceId,
+      voice_style: winnerVoiceStyle,
+      views: winnerViews,
     });
   }
 
