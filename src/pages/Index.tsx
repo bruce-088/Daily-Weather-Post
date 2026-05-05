@@ -28,6 +28,7 @@ import {
   Loader2,
   Mic,
   BarChart3,
+  Sparkles,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
