@@ -298,7 +298,7 @@ export function AnalyticsPanel() {
       {/* Header + Sync Now */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="font-display text-base">YouTube performance</h3>
+          <h3 className="font-display text-base">YouTube performance{activeCity.name ? ` · ${activeCity.name}` : ""}</h3>
           <p className="text-xs text-muted-foreground">Auto-syncs every 6h · last refreshed {new Date(analytics[0]?.fetched_at ?? Date.now()).toLocaleString()}</p>
         </div>
         <Button onClick={handleSyncNow} disabled={syncing} size="sm" variant="outline">
