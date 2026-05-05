@@ -936,7 +936,7 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
   for (let i = 0; i < 36; i++) {
     await new Promise((r) => setTimeout(r, 5000));
 
-    const statusRes = await fetch("https://api.creatomate.com/v2/renders/" + renderId, {
+    const statusRes = await fetch("https://api.creatomate.com/v1/renders/" + renderId, {
       headers: { Authorization: "Bearer " + apiKey },
     });
 
