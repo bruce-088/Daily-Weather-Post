@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import {
   Sparkles, TrendingUp, AlertTriangle, Trophy, Clock, Activity, X, ArrowUpRight,
+  ChevronLeft, ChevronRight,
 } from "lucide-react";
 
 interface HookStat {
@@ -56,6 +57,8 @@ export function GrowthDashboard() {
   const [alerts, setAlerts] = useState<AlertRow[]>([]);
   const [rec, setRec] = useState<Recommendation | null>(null);
   const [loading, setLoading] = useState(true);
+  const [hooksPage, setHooksPage] = useState(0);
+  const HOOKS_PER_PAGE = 8;
 
   const load = async () => {
     setLoading(true);
@@ -187,26 +190,54 @@ export function GrowthDashboard() {
           {hooks.length === 0 ? (
             <p className="text-xs text-muted-foreground italic">No hook data yet. Publish a few posts to start the leaderboard.</p>
           ) : (
-            hooks.slice(0, 8).map((h) => (
-              <div key={h.hook_text} className="flex items-center gap-3 rounded-md border border-border/40 bg-muted/20 p-2">
-                <div className="text-xs font-mono text-muted-foreground w-6">#{h.rank}</div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs line-clamp-1">{h.hook_text}</p>
-                  <div className="text-[10px] text-muted-foreground tabular-nums">
-                    {h.uses} use{h.uses === 1 ? "" : "s"} · avg {Math.round(h.avg_views).toLocaleString()} views
+            <>
+              {hooks
+                .slice(hooksPage * HOOKS_PER_PAGE, hooksPage * HOOKS_PER_PAGE + HOOKS_PER_PAGE)
+                .map((h) => (
+                  <div key={h.hook_text} className="flex items-center gap-3 rounded-md border border-border/40 bg-muted/20 p-2">
+                    <div className="text-xs font-mono text-muted-foreground w-6">#{h.rank}</div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs line-clamp-1">{h.hook_text}</p>
+                      <div className="text-[10px] text-muted-foreground tabular-nums">
+                        {h.uses} use{h.uses === 1 ? "" : "s"} · avg {Math.round(h.avg_views).toLocaleString()} views
+                      </div>
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className={`text-[10px] capitalize ${
+                        h.status === "top" ? "border-emerald-500/40 text-emerald-400" :
+                        h.status === "retired" ? "border-red-500/40 text-red-400/80" : ""
+                      }`}
+                    >
+                      {h.status}
+                    </Badge>
+                  </div>
+                ))}
+              {hooks.length > HOOKS_PER_PAGE && (
+                <div className="flex items-center justify-between pt-2 text-[11px] text-muted-foreground">
+                  <span className="tabular-nums">
+                    {hooksPage * HOOKS_PER_PAGE + 1}–
+                    {Math.min((hooksPage + 1) * HOOKS_PER_PAGE, hooks.length)} of {hooks.length}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      size="icon" variant="ghost" className="h-6 w-6"
+                      disabled={hooksPage === 0}
+                      onClick={() => setHooksPage((p) => Math.max(0, p - 1))}
+                    >
+                      <ChevronLeft size={12} />
+                    </Button>
+                    <Button
+                      size="icon" variant="ghost" className="h-6 w-6"
+                      disabled={(hooksPage + 1) * HOOKS_PER_PAGE >= hooks.length}
+                      onClick={() => setHooksPage((p) => p + 1)}
+                    >
+                      <ChevronRight size={12} />
+                    </Button>
                   </div>
                 </div>
-                <Badge
-                  variant="outline"
-                  className={`text-[10px] capitalize ${
-                    h.status === "top" ? "border-emerald-500/40 text-emerald-400" :
-                    h.status === "retired" ? "border-red-500/40 text-red-400/80" : ""
-                  }`}
-                >
-                  {h.status}
-                </Badge>
-              </div>
-            ))
+              )}
+            </>
           )}
         </CardContent>
       </Card>

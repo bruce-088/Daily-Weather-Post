@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Brain, TrendingUp, Clock, MapPin } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Brain, TrendingUp, Clock, MapPin, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface InsightRow {
   condition: string;
@@ -28,6 +29,8 @@ function timeLabel(t: string) {
 export function SmartInsightsCard({ compact = false }: SmartInsightsCardProps) {
   const [insights, setInsights] = useState<InsightRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = compact ? 2 : 4;
 
   useEffect(() => {
     (async () => {
@@ -36,7 +39,7 @@ export function SmartInsightsCard({ compact = false }: SmartInsightsCardProps) {
         .select("condition, tone, time_of_day, avg_views, delta_pct, sample_size, top_hook, rank")
         .eq("rank", 1)
         .order("avg_views", { ascending: false })
-        .limit(compact ? 2 : 12);
+        .limit(compact ? 2 : 24);
       setInsights((data as any) || []);
       setLoading(false);
     })();
@@ -62,34 +65,59 @@ export function SmartInsightsCard({ compact = false }: SmartInsightsCardProps) {
             Not enough data yet. Insights appear after the analyzer has at least 3 posts per pattern.
           </p>
         ) : (
-          insights.map((i, idx) => {
-            const delta = i.delta_pct ? Math.round(i.delta_pct) : null;
-            return (
-              <div key={idx} className="rounded-md border border-border/50 bg-muted/30 p-2.5 text-xs space-y-1">
-                <div className="flex items-start gap-1.5">
-                  <TrendingUp size={12} className="text-primary mt-0.5 shrink-0" />
-                  <span>
-                    🔥 <strong className="capitalize">{i.condition}</strong> posts perform best with{" "}
-                    <strong className="capitalize">{i.tone}</strong> tone
-                    {delta !== null && delta > 0 && (
-                      <span className="text-green-500"> (+{delta}% vs your avg)</span>
-                    )}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5 text-muted-foreground">
-                  <Clock size={11} /> Best slot: {timeLabel(i.time_of_day)} · avg{" "}
-                  <span className="tabular-nums">{Math.round(i.avg_views).toLocaleString()}</span> views
-                  <span className="opacity-60">· {i.sample_size} samples</span>
-                </div>
-                {!compact && i.top_hook && (
-                  <div className="flex items-start gap-1.5 text-muted-foreground italic">
-                    <MapPin size={11} className="mt-0.5 shrink-0" />
-                    <span>"{i.top_hook}"</span>
+          insights
+            .slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE)
+            .map((i, idx) => {
+              const delta = i.delta_pct ? Math.round(i.delta_pct) : null;
+              return (
+                <div key={`${page}-${idx}`} className="rounded-md border border-border/50 bg-muted/30 p-2.5 text-xs space-y-1">
+                  <div className="flex items-start gap-1.5">
+                    <TrendingUp size={12} className="text-primary mt-0.5 shrink-0" />
+                    <span>
+                      🔥 <strong className="capitalize">{i.condition}</strong> posts perform best with{" "}
+                      <strong className="capitalize">{i.tone}</strong> tone
+                      {delta !== null && delta > 0 && (
+                        <span className="text-green-500"> (+{delta}% vs your avg)</span>
+                      )}
+                    </span>
                   </div>
-                )}
-              </div>
-            );
-          })
+                  <div className="flex items-center gap-1.5 text-muted-foreground">
+                    <Clock size={11} /> Best slot: {timeLabel(i.time_of_day)} · avg{" "}
+                    <span className="tabular-nums">{Math.round(i.avg_views).toLocaleString()}</span> views
+                    <span className="opacity-60">· {i.sample_size} samples</span>
+                  </div>
+                  {!compact && i.top_hook && (
+                    <div className="flex items-start gap-1.5 text-muted-foreground italic">
+                      <MapPin size={11} className="mt-0.5 shrink-0" />
+                      <span>"{i.top_hook}"</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })
+        )}
+        {!compact && insights.length > PAGE_SIZE && (
+          <div className="flex items-center justify-between pt-1 text-[11px] text-muted-foreground">
+            <span className="tabular-nums">
+              {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, insights.length)} of {insights.length}
+            </span>
+            <div className="flex items-center gap-1">
+              <Button
+                size="icon" variant="ghost" className="h-6 w-6"
+                disabled={page === 0}
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+              >
+                <ChevronLeft size={12} />
+              </Button>
+              <Button
+                size="icon" variant="ghost" className="h-6 w-6"
+                disabled={(page + 1) * PAGE_SIZE >= insights.length}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                <ChevronRight size={12} />
+              </Button>
+            </div>
+          </div>
         )}
       </CardContent>
     </Card>
