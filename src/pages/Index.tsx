@@ -1026,6 +1026,21 @@ const Index = () => {
             </div>
           </TabsContent>
 
+          {/* GROWTH TAB */}
+          <TabsContent value="growth">
+            <div className="max-w-3xl mx-auto">
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                    <Sparkles size={16} className="text-primary" /> Growth Command Center
+                  </h2>
+                  <p className="text-xs text-muted-foreground">Watch the AI get smarter in real-time.</p>
+                </div>
+              </div>
+              <GrowthCommandCenter />
+            </div>
+          </TabsContent>
+
           {/* ANALYTICS TAB */}
           <TabsContent value="analytics">
             <div className="max-w-3xl mx-auto space-y-4">
