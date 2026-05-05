@@ -34,8 +34,12 @@ export function buildControlVariant(opts: {
 }
 
 export function pickChallengerVariant(control: VariantMeta): { variable: Variable; meta: VariantMeta } {
-  // Pick which single variable to flip (uniform random).
-  const variable = (["hook", "tone", "visuals"] as Variable[])[Math.floor(Math.random() * 3)];
+  // Pick which single variable to flip. Voice is occasionally tested (~1 in 5
+  // experiments) so existing hook/tone/visuals coverage isn't reduced too much.
+  const pool: Variable[] = Math.random() < 0.2
+    ? ["voice"]
+    : ["hook", "tone", "visuals"];
+  const variable = pool[Math.floor(Math.random() * pool.length)];
   const next: VariantMeta = { ...control, label: "Challenger" };
 
   if (variable === "hook") {
@@ -44,9 +48,14 @@ export function pickChallengerVariant(control: VariantMeta): { variable: Variabl
   } else if (variable === "tone") {
     const others = TONES.filter((t) => t !== control.tone);
     next.tone = others[Math.floor(Math.random() * others.length)];
-  } else {
+  } else if (variable === "visuals") {
     const others = VISUAL_STYLES.filter((v) => v !== control.visuals);
     next.visuals = others[Math.floor(Math.random() * others.length)];
+  } else {
+    // voice — flip the style; everything else identical.
+    const controlVoice = control.voice || "calm";
+    const others = VOICE_STYLES.filter((v) => v !== controlVoice);
+    next.voice = others[Math.floor(Math.random() * others.length)];
   }
 
   return { variable, meta: next };
