@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Brain, TrendingUp, Clock, MapPin } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Brain, TrendingUp, Clock, MapPin, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface InsightRow {
   condition: string;
