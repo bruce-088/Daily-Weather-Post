@@ -36,6 +36,7 @@ import {
   CartesianGrid,
 } from "recharts";
 import { toast } from "sonner";
+import { useActiveCity } from "@/hooks/useActiveCity";
 
 type AnalyticsRow = {
   id: string;
@@ -92,6 +93,8 @@ const ytThumb = (videoId: string | null | undefined) =>
 const fmt = (n: number) => (n || 0).toLocaleString();
 
 export function AnalyticsPanel() {
+  const activeCity = useActiveCity();
+  const cityName = activeCity.name?.toLowerCase() || null;
   const [analytics, setAnalytics] = useState<AnalyticsRow[]>([]);
   const [hooks, setHooks] = useState<HookRow[]>([]);
   const [posts, setPosts] = useState<PostRow[]>([]);
@@ -104,19 +107,34 @@ export function AnalyticsPanel() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setLoading(false); return; }
 
-    const [a, h, p, s] = await Promise.all([
-      supabase.from("post_analytics").select("*").eq("user_id", user.id).order("fetched_at", { ascending: false }).limit(1000),
-      supabase.from("post_hooks").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(500),
-      supabase.from("post_history").select("id, caption, platform, city, condition, external_id, post_url, image_url, created_at").eq("user_id", user.id).order("created_at", { ascending: false }).limit(500),
-      supabase.from("scheduled_posts").select("id, include_voiceover, voiceover_url, caption, city, scheduled_at").eq("user_id", user.id).order("scheduled_at", { ascending: false }).limit(500),
-    ]);
+    let postsQ = supabase.from("post_history").select("id, caption, platform, city, condition, external_id, post_url, image_url, created_at").eq("user_id", user.id).order("created_at", { ascending: false }).limit(500);
+    let schedQ = supabase.from("scheduled_posts").select("id, include_voiceover, voiceover_url, caption, city, scheduled_at").eq("user_id", user.id).order("scheduled_at", { ascending: false }).limit(500);
+    if (activeCity.name) {
+      postsQ = postsQ.ilike("city", activeCity.name);
+      schedQ = schedQ.ilike("city", activeCity.name);
+    }
 
-    setAnalytics((a.data as AnalyticsRow[]) ?? []);
-    setHooks((h.data as HookRow[]) ?? []);
-    setPosts((p.data as PostRow[]) ?? []);
+    const [p, s] = await Promise.all([postsQ, schedQ]);
+    const postRows = (p.data as PostRow[]) ?? [];
+    const postIds = postRows.map((r) => r.id);
+
+    let analyticsRows: AnalyticsRow[] = [];
+    let hookRows: HookRow[] = [];
+    if (postIds.length > 0) {
+      const [a, h] = await Promise.all([
+        supabase.from("post_analytics").select("*").eq("user_id", user.id).in("post_id", postIds).order("fetched_at", { ascending: false }).limit(1000),
+        supabase.from("post_hooks").select("*").eq("user_id", user.id).in("post_id", postIds).order("created_at", { ascending: false }).limit(500),
+      ]);
+      analyticsRows = (a.data as AnalyticsRow[]) ?? [];
+      hookRows = (h.data as HookRow[]) ?? [];
+    }
+
+    setAnalytics(analyticsRows);
+    setHooks(hookRows);
+    setPosts(postRows);
     setScheduled((s.data as ScheduledRow[]) ?? []);
     setLoading(false);
-  }, []);
+  }, [activeCity.name]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -259,9 +277,13 @@ export function AnalyticsPanel() {
     return (
       <Card className="p-8 text-center">
         <BarChart3 className="mx-auto mb-3 text-muted-foreground" size={32} />
-        <h3 className="font-display text-lg mb-1">No YouTube posts yet</h3>
+        <h3 className="font-display text-lg mb-1">
+          {activeCity.name ? `No data yet for ${activeCity.name}` : "No YouTube posts yet"}
+        </h3>
         <p className="text-sm text-muted-foreground max-w-sm mx-auto mb-4">
-          Once your Shorts are live, view counts, likes and comments will appear here automatically.
+          {activeCity.name
+            ? `Start posting to ${activeCity.name} to generate insights — view counts, likes and comments will appear here automatically.`
+            : "Once your Shorts are live, view counts, likes and comments will appear here automatically."}
         </p>
         <Button onClick={handleSyncNow} disabled={syncing} size="sm" variant="outline">
           <RefreshCw size={14} className={syncing ? "animate-spin" : ""} />
@@ -276,7 +298,7 @@ export function AnalyticsPanel() {
       {/* Header + Sync Now */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="font-display text-base">YouTube performance</h3>
+          <h3 className="font-display text-base">YouTube performance{activeCity.name ? ` · ${activeCity.name}` : ""}</h3>
           <p className="text-xs text-muted-foreground">Auto-syncs every 6h · last refreshed {new Date(analytics[0]?.fetched_at ?? Date.now()).toLocaleString()}</p>
         </div>
         <Button onClick={handleSyncNow} disabled={syncing} size="sm" variant="outline">

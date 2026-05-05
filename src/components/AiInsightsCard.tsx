@@ -154,9 +154,12 @@ export function AiInsightsCard() {
           <Sparkles size={18} className="text-primary" />
           <h3 className="font-display text-lg">AI Insights — what's working</h3>
         </div>
-        <Badge variant="outline" className="text-xs">
-          {data.sampleSize} posts analyzed
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="text-[10px]">All cities</Badge>
+          <Badge variant="outline" className="text-xs">
+            {data.sampleSize} posts analyzed
+          </Badge>
+        </div>
       </div>
 
       <div className="space-y-4">

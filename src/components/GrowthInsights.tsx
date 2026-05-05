@@ -8,6 +8,7 @@ import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip as RTooltip, CartesianGrid,
 } from "recharts";
 import { toast } from "sonner";
+import { useActiveCity } from "@/hooks/useActiveCity";
 
 type PostRow = {
   id: string;
@@ -52,6 +53,7 @@ function conditionEmoji(c: string | null) {
 }
 
 export function GrowthInsights() {
+  const activeCity = useActiveCity();
   const [posts, setPosts] = useState<PostRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -60,17 +62,19 @@ export function GrowthInsights() {
     setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setLoading(false); return; }
-    const { data } = await supabase
+    let q = supabase
       .from("post_history")
       .select("id, caption, platform, city, condition, post_url, image_url, created_at, views_count, likes_count, comment_count, retention_rate, last_synced_at")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(500);
+    if (activeCity.name) q = q.ilike("city", activeCity.name);
+    const { data } = await q;
     setPosts((data || []) as PostRow[]);
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [activeCity.name]);
 
   const sync = async () => {
     setSyncing(true);
@@ -147,9 +151,13 @@ export function GrowthInsights() {
         <div>
           <h3 className="text-lg font-semibold flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-primary" />
-            Growth Insights
+            Growth Insights{activeCity.name ? ` · ${activeCity.name}` : ""}
           </h3>
-          <p className="text-xs text-muted-foreground">Live performance of your published content.</p>
+          <p className="text-xs text-muted-foreground">
+            {activeCity.name
+              ? `Live performance of posts published for ${activeCity.name}.`
+              : "Live performance of your published content."}
+          </p>
         </div>
         <Button size="sm" variant="outline" onClick={sync} disabled={syncing}>
           <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${syncing ? "animate-spin" : ""}`} />

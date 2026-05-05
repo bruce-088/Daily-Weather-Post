@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Trophy, Sparkles, Beaker, Gem, ExternalLink, Clock } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { useActiveCity } from "@/hooks/useActiveCity";
 
 interface GrowthInsightRow {
   id: string;
@@ -50,6 +51,7 @@ interface ExperimentWinRow {
 }
 
 export function GrowthLog() {
+  const activeCity = useActiveCity();
   const [insights, setInsights] = useState<GrowthInsightRow[]>([]);
   const [active, setActive] = useState<ExperimentRow[]>([]);
   const [wins, setWins] = useState<ExperimentWinRow[]>([]);
@@ -59,18 +61,25 @@ export function GrowthLog() {
     setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setLoading(false); return; }
+
+    let iQ = supabase.from("growth_insights")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(25);
+    let eQ = supabase.from("experiments")
+      .select("id, city, variable_tested, variant_a_meta, variant_b_meta, status, conclude_at, created_at")
+      .eq("user_id", user.id)
+      .eq("status", "gathering_data")
+      .order("created_at", { ascending: false })
+      .limit(10);
+    if (activeCity.name) {
+      iQ = iQ.ilike("city", activeCity.name);
+      eQ = eQ.ilike("city", activeCity.name);
+    }
+
     const [i, e, w] = await Promise.all([
-      supabase.from("growth_insights")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(25),
-      supabase.from("experiments")
-        .select("id, city, variable_tested, variant_a_meta, variant_b_meta, status, conclude_at, created_at")
-        .eq("user_id", user.id)
-        .eq("status", "gathering_data")
-        .order("created_at", { ascending: false })
-        .limit(10),
+      iQ, eQ,
       supabase.from("experiment_wins")
         .select("variable, winning_value, wins, losses, win_rate, last_win_at")
         .eq("user_id", user.id)
@@ -86,15 +95,16 @@ export function GrowthLog() {
 
   useEffect(() => {
     load();
-    let active = true;
+    let alive = true;
     const channel = supabase
       .channel("growth-insights-feed")
       .on("postgres_changes",
         { event: "INSERT", schema: "public", table: "growth_insights" },
-        () => { if (active) load(); })
+        () => { if (alive) load(); })
       .subscribe();
-    return () => { active = false; supabase.removeChannel(channel); };
-  }, []);
+    return () => { alive = false; supabase.removeChannel(channel); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCity.name]);
 
   const recommendation = wins[0]
     ? `Based on recent A/B tests, your audience consistently prefers ${wins[0].variable} = "${wins[0].winning_value}" (${Math.round(wins[0].win_rate * 100)}% win rate). The AI is now favoring this style automatically.`
@@ -121,7 +131,9 @@ export function GrowthLog() {
         <CardContent className="space-y-2">
           {insights.length === 0 ? (
             <p className="text-xs text-muted-foreground italic">
-              No insights yet. The engine is running A/B tests in the background — check back after a few posts publish.
+              {activeCity.name
+                ? `No data yet for ${activeCity.name} — start posting to generate insights.`
+                : "No insights yet. The engine is running A/B tests in the background — check back after a few posts publish."}
             </p>
           ) : (
             insights.map((ins) => (
@@ -208,8 +220,9 @@ export function GrowthLog() {
           </div>
 
           <div>
-            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-2">
               Proven wins
+              <Badge variant="outline" className="text-[9px] font-normal">All cities</Badge>
             </p>
             {wins.length === 0 ? (
               <p className="text-xs text-muted-foreground italic">No repeated winners yet.</p>
