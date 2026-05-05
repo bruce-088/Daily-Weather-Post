@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_memory: {
+        Row: {
+          condition: string | null
+          content: string
+          created_at: string
+          id: string
+          memory_type: string
+          performance_score: number
+          user_id: string
+        }
+        Insert: {
+          condition?: string | null
+          content: string
+          created_at?: string
+          id?: string
+          memory_type: string
+          performance_score?: number
+          user_id: string
+        }
+        Update: {
+          condition?: string | null
+          content?: string
+          created_at?: string
+          id?: string
+          memory_type?: string
+          performance_score?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       automations: {
         Row: {
           afternoon_platforms: Json
