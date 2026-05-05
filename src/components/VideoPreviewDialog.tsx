@@ -274,14 +274,14 @@ export function VideoPreviewDialog({
                   ? "🎙️ Generating voice narration…"
                   : genStage === "image"
                   ? "🖼️ Generating AI weather image via Gemini…"
-                  : "🎥 Creating high-quality video via Creatomate…"}
+                  : "🎥 Creatomate is crafting your video (expect ~45s)…"}
               </p>
               <p className="text-xs text-muted-foreground">
                 {genStage === "voice"
                   ? "Synthesizing your AI voiceover with ElevenLabs."
                   : genStage === "image"
                   ? "Video render didn't make it — falling back to a designed image."
-                  : "This usually takes 30–60 seconds. We'll fall back to an AI image if needed."}
+                  : "Hang tight — renders typically finish in 46–50s. We wait up to 80s before falling back."}
               </p>
             </div>
           )}
