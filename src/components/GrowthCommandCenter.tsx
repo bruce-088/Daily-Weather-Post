@@ -46,6 +46,7 @@ function nextSundayRecap(): Date {
 }
 
 export function GrowthCommandCenter() {
+  const activeCity = useActiveCity();
   const [loading, setLoading] = useState(true);
   const [memories, setMemories] = useState<MemoryRow[]>([]);
   const [bestHook, setBestHook] = useState<MemoryRow | null>(null);
@@ -59,27 +60,34 @@ export function GrowthCommandCenter() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { setLoading(false); return; }
 
+      let expQ = supabase.from("experiments")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .eq("status", "gathering_data");
+      let giQ = supabase.from("growth_insights")
+        .select("id, title, message, delta_pct, city, created_at")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(10);
+      let phQ = supabase.from("post_history")
+        .select("id, city, image_url, created_at")
+        .eq("user_id", user.id)
+        .eq("status", "posted")
+        .order("created_at", { ascending: false })
+        .limit(3);
+      if (activeCity.name) {
+        expQ = expQ.ilike("city", activeCity.name);
+        giQ = giQ.ilike("city", activeCity.name);
+        phQ = phQ.ilike("city", activeCity.name);
+      }
+
       const [m, e, gi, ph] = await Promise.all([
         supabase.from("ai_memory")
           .select("id, memory_type, content, performance_score, condition, created_at")
           .eq("user_id", user.id)
           .order("performance_score", { ascending: false })
           .limit(50),
-        supabase.from("experiments")
-          .select("id", { count: "exact", head: true })
-          .eq("user_id", user.id)
-          .eq("status", "gathering_data"),
-        supabase.from("growth_insights")
-          .select("id, title, message, delta_pct, city, created_at")
-          .eq("user_id", user.id)
-          .order("created_at", { ascending: false })
-          .limit(10),
-        supabase.from("post_history")
-          .select("id, city, image_url, created_at")
-          .eq("user_id", user.id)
-          .eq("status", "posted")
-          .order("created_at", { ascending: false })
-          .limit(3),
+        expQ, giQ, phQ,
       ]);
 
       const mem = (m.data as MemoryRow[]) || [];
@@ -91,7 +99,7 @@ export function GrowthCommandCenter() {
       setRecentPosts((ph.data as RecentPost[]) || []);
       setLoading(false);
     })();
-  }, []);
+  }, [activeCity.name]);
 
   const nextRecap = nextSundayRecap();
   const recapLabel = nextRecap.toLocaleString(undefined, {
