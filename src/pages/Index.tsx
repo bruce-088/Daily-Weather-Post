@@ -1017,16 +1017,32 @@ const Index = () => {
 
           {/* GROWTH TAB */}
           <TabsContent value="growth">
-            <div className="max-w-3xl mx-auto">
-              <div className="mb-4 flex items-center justify-between">
+            <div className="max-w-6xl mx-auto space-y-6">
+              <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
-                    <Sparkles size={16} className="text-primary" /> Growth Command Center
+                    <Sparkles size={16} className="text-primary" /> Growth Insights Center
                   </h2>
-                  <p className="text-xs text-muted-foreground">Watch the AI get smarter in real-time.</p>
+                  <p className="text-xs text-muted-foreground">
+                    Every A/B win, learned pattern, and active experiment in one place.
+                  </p>
                 </div>
               </div>
+
+              {/* Top: key metrics + memory bank */}
               <GrowthCommandCenter />
+
+              {/* Main: chronological wins feed + Growth Lab side-by-side on wide screens */}
+              <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+                <div className="space-y-4">
+                  <GrowthLog />
+                </div>
+                <div className="space-y-4">
+                  <GrowthDashboard />
+                  <AiInsightsCard />
+                  <SmartInsightsCard />
+                </div>
+              </div>
             </div>
           </TabsContent>
 
@@ -1034,13 +1050,14 @@ const Index = () => {
           <TabsContent value="analytics">
             <div className="max-w-3xl mx-auto space-y-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-foreground">Performance & Growth</h2>
+                <div>
+                  <h2 className="text-lg font-semibold text-foreground">Performance</h2>
+                  <p className="text-xs text-muted-foreground">
+                    Raw post metrics. Growth patterns moved to the <span className="text-primary">Growth</span> tab.
+                  </p>
+                </div>
               </div>
               <GrowthInsights />
-              <GrowthLog />
-              <AiInsightsCard />
-              <GrowthDashboard />
-              <SmartInsightsCard />
               <AnalyticsPanel />
             </div>
           </TabsContent>
