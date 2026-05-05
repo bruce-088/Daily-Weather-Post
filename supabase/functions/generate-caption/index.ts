@@ -32,8 +32,9 @@ function getDynamicHandle(city: string): string {
 }
 
 // Fetch top-performing past winners from ai_memory for this user.
+// NOTE: ai_memory is a GLOBAL knowledge base — winning patterns from any
+// city are intentionally surfaced for all cities. Do NOT filter by city here.
 // Filters by condition when available; falls back to user's overall top.
-// Returns [] on any error so callers proceed with original generation.
 async function getRelevantMemories(
   svc: any,
   userId: string,
