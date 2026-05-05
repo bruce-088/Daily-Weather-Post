@@ -151,9 +151,13 @@ export function GrowthInsights() {
         <div>
           <h3 className="text-lg font-semibold flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-primary" />
-            Growth Insights
+            Growth Insights{activeCity.name ? ` · ${activeCity.name}` : ""}
           </h3>
-          <p className="text-xs text-muted-foreground">Live performance of your published content.</p>
+          <p className="text-xs text-muted-foreground">
+            {activeCity.name
+              ? `Live performance of posts published for ${activeCity.name}.`
+              : "Live performance of your published content."}
+          </p>
         </div>
         <Button size="sm" variant="outline" onClick={sync} disabled={syncing}>
           <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${syncing ? "animate-spin" : ""}`} />
