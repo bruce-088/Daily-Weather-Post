@@ -190,14 +190,21 @@ const Index = () => {
   useEffect(() => { refreshCities(); }, []); // initial load only
 
   // When active city changes, push its name+state into settings (drives weather + draft)
+  // and broadcast to any analytics/growth listeners so they re-fetch.
   useEffect(() => {
-    if (!activeCityId) return;
+    if (!activeCityId) {
+      window.dispatchEvent(new CustomEvent("skybrief:active-city-changed", { detail: { id: null, name: null, state: null } }));
+      return;
+    }
     const c = userCities.find((x) => x.id === activeCityId);
     if (!c) return;
     setSettings((prev) => {
       if (prev.location === c.name && (prev.state || "") === (c.state || "")) return prev;
       return { ...prev, location: c.name, state: c.state || "" };
     });
+    window.dispatchEvent(new CustomEvent("skybrief:active-city-changed", {
+      detail: { id: c.id, name: c.name, state: c.state || null },
+    }));
   }, [activeCityId, userCities]);
 
   const [voiceEnabled, setVoiceEnabled] = useState(false);
