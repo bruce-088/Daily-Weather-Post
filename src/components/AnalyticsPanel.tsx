@@ -36,6 +36,7 @@ import {
   CartesianGrid,
 } from "recharts";
 import { toast } from "sonner";
+import { useActiveCity } from "@/hooks/useActiveCity";
 
 type AnalyticsRow = {
   id: string;
