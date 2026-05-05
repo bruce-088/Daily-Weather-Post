@@ -28,6 +28,7 @@ import {
   Loader2,
   Mic,
   BarChart3,
+  Sparkles,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
@@ -44,6 +45,7 @@ import { AnalyticsPanel } from "@/components/AnalyticsPanel";
 import { SmartInsightsCard } from "@/components/SmartInsightsCard";
 import { GrowthSummaryCard } from "@/components/GrowthSummaryCard";
 import { GrowthDashboard } from "@/components/GrowthDashboard";
+import { GrowthCommandCenter } from "@/components/GrowthCommandCenter";
 import { GrowthInsights } from "@/components/GrowthInsights";
 import { GrowthLog } from "@/components/GrowthLog";
 import { AiInsightsCard } from "@/components/AiInsightsCard";
@@ -577,6 +579,9 @@ const Index = () => {
             <TabsTrigger value="history" className="gap-1.5 text-xs">
               <History size={14} /> History
             </TabsTrigger>
+            <TabsTrigger value="growth" className="gap-1.5 text-xs">
+              <Sparkles size={14} /> Growth
+            </TabsTrigger>
             <TabsTrigger value="analytics" className="gap-1.5 text-xs">
               <BarChart3 size={14} /> Analytics
             </TabsTrigger>
@@ -1018,6 +1023,21 @@ const Index = () => {
                   </div>
                 )}
               </div>
+            </div>
+          </TabsContent>
+
+          {/* GROWTH TAB */}
+          <TabsContent value="growth">
+            <div className="max-w-3xl mx-auto">
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                    <Sparkles size={16} className="text-primary" /> Growth Command Center
+                  </h2>
+                  <p className="text-xs text-muted-foreground">Watch the AI get smarter in real-time.</p>
+                </div>
+              </div>
+              <GrowthCommandCenter />
             </div>
           </TabsContent>
 
