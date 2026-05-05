@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Trophy, Sparkles, Beaker, Gem, ExternalLink, Clock } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { useActiveCity } from "@/hooks/useActiveCity";
 
 interface GrowthInsightRow {
   id: string;
