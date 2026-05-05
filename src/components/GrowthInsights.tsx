@@ -53,6 +53,7 @@ function conditionEmoji(c: string | null) {
 }
 
 export function GrowthInsights() {
+  const activeCity = useActiveCity();
   const [posts, setPosts] = useState<PostRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -61,17 +62,19 @@ export function GrowthInsights() {
     setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setLoading(false); return; }
-    const { data } = await supabase
+    let q = supabase
       .from("post_history")
       .select("id, caption, platform, city, condition, post_url, image_url, created_at, views_count, likes_count, comment_count, retention_rate, last_synced_at")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(500);
+    if (activeCity.name) q = q.ilike("city", activeCity.name);
+    const { data } = await q;
     setPosts((data || []) as PostRow[]);
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [activeCity.name]);
 
   const sync = async () => {
     setSyncing(true);
