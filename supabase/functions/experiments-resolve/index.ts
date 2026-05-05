@@ -182,6 +182,19 @@ Deno.serve(async (req) => {
       message,
       type: "success",
     });
+
+    // AI Memory: persist winning content for future learning.
+    // hook/tone variables map directly; visuals winners are stored as 'script' style hints.
+    const memoryType = variable === "hook" ? "hook"
+      : variable === "tone" ? "tone"
+      : "script";
+    await supabase.from("ai_memory").insert({
+      user_id: e.user_id,
+      memory_type: memoryType,
+      content: winnerVal,
+      performance_score: deltaPct,
+      condition: null,
+    });
   }
 
   await supabase.from("system_health").upsert({
