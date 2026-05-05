@@ -55,6 +55,7 @@ import { SchedulePostForm } from "@/components/SchedulePostForm";
 import { ScheduledPostsList } from "@/components/ScheduledPostsList";
 import { CityManager } from "@/components/CityManager";
 import { CityAccountsManager } from "@/components/CityAccountsManager";
+import { YouTubeChannelsManager } from "@/components/YouTubeChannelsManager";
 import { CitySwitcher } from "@/components/CitySwitcher";
 import { fetchUserCities, getActiveCityId, setActiveCityId, type UserCity } from "@/lib/citiesApi";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -1076,6 +1077,7 @@ const Index = () => {
                   tiktok: tiktokConnected,
                 }}
               />
+              <YouTubeChannelsManager cities={userCities} />
               <CityAccountsManager cities={userCities} />
               <SettingsPanel
                 settings={settings}

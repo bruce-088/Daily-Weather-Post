@@ -11,29 +11,71 @@ export class YouTubeAdapter implements PlatformAdapter {
     return hasUsableAccessToken || !!settings.youtube_refresh_token;
   }
 
-  async getValidToken(supabase: any, userId: string): Promise<string | null> {
-    const { data: settings } = await supabase
-      .from("weather_settings")
-      .select("youtube_access_token, youtube_refresh_token, youtube_token_expires_at")
-      .eq("user_id", userId)
-      .single();
+  async getValidToken(supabase: any, userId: string, cityId?: string | null): Promise<string | null> {
+    const clientId = Deno.env.get("YOUTUBE_CLIENT_ID");
+    const clientSecret = Deno.env.get("YOUTUBE_CLIENT_SECRET");
 
-    if (!settings?.youtube_access_token && !settings?.youtube_refresh_token) return null;
+    // ---- Resolve which YouTube channel (social_accounts row) to use ----
+    // 1. If a cityId is given, prefer the row assigned to that city.
+    // 2. Otherwise (or if no city-specific row exists), use a row with
+    //    city_id IS NULL (shared). If multiple shared rows exist, take the
+    //    most recently updated one — preserves single-channel behavior.
+    let account: {
+      id: string;
+      access_token: string | null;
+      refresh_token: string | null;
+      token_expires_at: string | null;
+    } | null = null;
 
-    const expiresAt = settings.youtube_token_expires_at
-      ? new Date(settings.youtube_token_expires_at)
-      : null;
-    if (settings.youtube_access_token && expiresAt && expiresAt.getTime() > Date.now() + 5 * 60 * 1000) {
-      return settings.youtube_access_token;
+    if (cityId) {
+      const { data } = await supabase
+        .from("social_accounts")
+        .select("id, access_token, refresh_token, token_expires_at")
+        .eq("user_id", userId)
+        .eq("platform", "youtube")
+        .eq("city_id", cityId)
+        .maybeSingle();
+      if (data) account = data;
     }
 
-    if (!settings.youtube_refresh_token) {
+    if (!account) {
+      const { data } = await supabase
+        .from("social_accounts")
+        .select("id, access_token, refresh_token, token_expires_at")
+        .eq("user_id", userId)
+        .eq("platform", "youtube")
+        .is("city_id", null)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (data) account = data;
+    }
+
+    // Final fallback to legacy weather_settings columns (oldest single-channel install).
+    if (!account) {
+      const { data: settings } = await supabase
+        .from("weather_settings")
+        .select("youtube_access_token, youtube_refresh_token, youtube_token_expires_at")
+        .eq("user_id", userId)
+        .single();
+      if (!settings?.youtube_access_token && !settings?.youtube_refresh_token) return null;
+      account = {
+        id: "",
+        access_token: settings.youtube_access_token,
+        refresh_token: settings.youtube_refresh_token,
+        token_expires_at: settings.youtube_token_expires_at,
+      };
+    }
+
+    const expiresAt = account.token_expires_at ? new Date(account.token_expires_at) : null;
+    if (account.access_token && expiresAt && expiresAt.getTime() > Date.now() + 5 * 60 * 1000) {
+      return account.access_token;
+    }
+
+    if (!account.refresh_token) {
       console.error("No YouTube refresh token available");
       return null;
     }
-
-    const clientId = Deno.env.get("YOUTUBE_CLIENT_ID");
-    const clientSecret = Deno.env.get("YOUTUBE_CLIENT_SECRET");
     if (!clientId || !clientSecret) {
       console.error("YouTube client credentials not configured");
       return null;
@@ -46,56 +88,51 @@ export class YouTubeAdapter implements PlatformAdapter {
         client_id: clientId,
         client_secret: clientSecret,
         grant_type: "refresh_token",
-        refresh_token: settings.youtube_refresh_token,
+        refresh_token: account.refresh_token,
       }),
     });
 
     const refreshData = await refreshRes.json();
     if (!refreshData.access_token) {
       console.error("YouTube token refresh failed:", JSON.stringify(refreshData));
-      // If Google says the refresh_token is permanently invalid (revoked/expired),
-      // clear it so the UI flips from "Connected" → "Reconnect Required" instead
-      // of silently failing every auto-post.
       const errorCode = (refreshData?.error || "").toString();
       if (errorCode === "invalid_grant" || errorCode === "invalid_token") {
-        await supabase
-          .from("weather_settings")
-          .update({ youtube_refresh_token: null })
-          .eq("user_id", userId);
+        if (account.id) {
+          await supabase
+            .from("social_accounts")
+            .update({ refresh_token: null, access_token: null })
+            .eq("id", account.id);
+        } else {
+          await supabase
+            .from("weather_settings")
+            .update({ youtube_refresh_token: null })
+            .eq("user_id", userId);
+        }
         console.warn("YouTube refresh_token cleared due to invalid_grant — user must reconnect");
       }
       return null;
     }
 
-    const newExpiresAt = new Date(
-      Date.now() + refreshData.expires_in * 1000,
-    ).toISOString();
-    await supabase
-      .from("weather_settings")
-      .update({
-        youtube_access_token: refreshData.access_token,
-        youtube_token_expires_at: newExpiresAt,
-      })
-      .eq("user_id", userId);
+    const newExpiresAt = new Date(Date.now() + refreshData.expires_in * 1000).toISOString();
 
-    const { data: socialRows } = await supabase
-      .from("social_accounts")
-      .update({
-        access_token: refreshData.access_token,
-        token_expires_at: newExpiresAt,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("user_id", userId)
-      .eq("platform", "youtube")
-      .select("id");
-    if (!socialRows?.length) {
-      await supabase.from("social_accounts").insert({
-        user_id: userId,
-        platform: "youtube",
-        access_token: refreshData.access_token,
-        refresh_token: settings.youtube_refresh_token,
-        token_expires_at: newExpiresAt,
-      });
+    if (account.id) {
+      await supabase
+        .from("social_accounts")
+        .update({
+          access_token: refreshData.access_token,
+          token_expires_at: newExpiresAt,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", account.id);
+    } else {
+      // Legacy fallback path: also keep weather_settings warm.
+      await supabase
+        .from("weather_settings")
+        .update({
+          youtube_access_token: refreshData.access_token,
+          youtube_token_expires_at: newExpiresAt,
+        })
+        .eq("user_id", userId);
     }
 
     console.log("YouTube token refreshed successfully");

@@ -1986,7 +1986,7 @@ Deno.serve(async (req) => {
         if (video) {
           // Video succeeded — post to all platforms
           for (const platformName of platformsToPost) {
-            const result = await postToPlatform(platformName, supabase, post.user_id, video.data, title, desc, video.mimeType);
+            const result = await postToPlatform(platformName, supabase, post.user_id, video.data, title, desc, video.mimeType, post.city_id || null);
             if (result.success) {
               console.log(`Scheduled post ${post.id}: ${platformName} published, ID: ${result.id}`);
               if (platformName === "youtube" && result.id) {
@@ -2050,7 +2050,7 @@ Deno.serve(async (req) => {
                   const { getAdapter } = await import("../_shared/platform-adapter.ts");
                   const adapter = getAdapter(platformName);
                   if (!adapter) continue;
-                  const token = await adapter.getValidToken(supabase, post.user_id);
+                  const token = await adapter.getValidToken(supabase, post.user_id, post.city_id || null);
                   if (!token) {
                     console.error(`${platformName}: failed to get token for image post`);
                     await notifyFailure("upload", `${platformName} auth failed`, "Could not get valid token for image post.", { platform: platformName });

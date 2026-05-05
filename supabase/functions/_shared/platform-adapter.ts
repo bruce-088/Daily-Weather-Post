@@ -19,7 +19,7 @@ export interface PlatformAdapter {
   isConnected(settings: Record<string, unknown>): boolean;
 
   /** Get a valid access token (refreshing if needed) */
-  getValidToken(supabase: any, userId: string): Promise<string | null>;
+  getValidToken(supabase: any, userId: string, cityId?: string | null): Promise<string | null>;
 
   /** Upload video content to the platform */
   uploadVideo(
@@ -65,6 +65,7 @@ export async function postToPlatform(
   title: string,
   description: string,
   mimeType = "video/mp4",
+  cityId?: string | null,
 ): Promise<PostResult> {
   const adapter = getAdapter(platform);
   if (!adapter) {
@@ -72,7 +73,7 @@ export async function postToPlatform(
   }
 
   try {
-    const token = await adapter.getValidToken(supabase, userId);
+    const token = await adapter.getValidToken(supabase, userId, cityId);
     if (!token) {
       return { success: false, error: `Failed to obtain valid ${adapter.name} access token` };
     }
