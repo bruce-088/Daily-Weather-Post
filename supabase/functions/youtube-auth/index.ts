@@ -85,7 +85,10 @@ Deno.serve(async (req) => {
         response_type: "code",
         scope: "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly",
         access_type: "offline",
-        prompt: "consent",
+        // select_account → user can pick a different Google account or brand channel
+        // consent → guarantees we receive a refresh_token even on re-auth
+        prompt: "select_account consent",
+        include_granted_scopes: "true",
         state: csrfState,
       });
 
