@@ -53,6 +53,7 @@ const fmtHour = (h: number) => {
 };
 
 export function GrowthDashboard() {
+  const activeCity = useActiveCity();
   const [hooks, setHooks] = useState<HookStat[]>([]);
   const [slots, setSlots] = useState<SlotStat[]>([]);
   const [alerts, setAlerts] = useState<AlertRow[]>([]);
@@ -65,6 +66,15 @@ export function GrowthDashboard() {
     setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setLoading(false); return; }
+
+    let alertsQ = supabase.from("trend_alerts")
+      .select("id, alert_type, severity, message, city, created_at, suggested_post_id, dismissed")
+      .eq("user_id", user.id)
+      .eq("dismissed", false)
+      .order("created_at", { ascending: false })
+      .limit(5);
+    if (activeCity.name) alertsQ = alertsQ.ilike("city", activeCity.name);
+
     const [h, s, a, r] = await Promise.all([
       supabase.from("hook_stats")
         .select("hook_text, uses, avg_views, status, rank")
@@ -74,12 +84,7 @@ export function GrowthDashboard() {
       supabase.from("time_slot_stats")
         .select("day_of_week, hour, posts, avg_views")
         .eq("user_id", user.id),
-      supabase.from("trend_alerts")
-        .select("id, alert_type, severity, message, city, created_at, suggested_post_id, dismissed")
-        .eq("user_id", user.id)
-        .eq("dismissed", false)
-        .order("created_at", { ascending: false })
-        .limit(5),
+      alertsQ,
       supabase.from("growth_recommendations")
         .select("recommendation, top_hooks, best_slot, variety_score, recent_tones")
         .eq("user_id", user.id)
@@ -92,7 +97,7 @@ export function GrowthDashboard() {
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [activeCity.name]);
 
   const dismissAlert = async (id: string) => {
     const { error } = await supabase.from("trend_alerts").update({ dismissed: true }).eq("id", id);
