@@ -187,6 +187,7 @@ Deno.serve(async (req) => {
     // hook/tone variables map directly; visuals winners are stored as 'script' style hints.
     const memoryType = variable === "hook" ? "hook"
       : variable === "tone" ? "tone"
+      : variable === "voice" ? "voice"
       : "script";
 
     // Pull condition + time_of_day + voice info from the winning post.
