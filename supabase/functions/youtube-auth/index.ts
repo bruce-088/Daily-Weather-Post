@@ -157,82 +157,104 @@ Deno.serve(async (req) => {
         );
       }
 
-      let channelId = null;
+      let channelId: string | null = null;
+      let channelTitle: string | null = null;
       try {
         const channelRes = await fetch(
-          "https://www.googleapis.com/youtube/v3/channels?part=id&mine=true",
+          "https://www.googleapis.com/youtube/v3/channels?part=id,snippet&mine=true",
           { headers: { Authorization: `Bearer ${tokenData.access_token}` } }
         );
         const channelData = await channelRes.json();
         channelId = channelData.items?.[0]?.id || null;
+        channelTitle = channelData.items?.[0]?.snippet?.title || null;
       } catch (e) {
-        console.error("Failed to fetch channel ID:", e);
+        console.error("Failed to fetch channel info:", e);
+      }
+
+      if (!channelId) {
+        return new Response(
+          JSON.stringify({ error: "Could not determine YouTube channel for this account" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
 
       const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
       const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000).toISOString();
       const refreshToken = tokenData.refresh_token || null;
 
-      const { data: existing } = await supabaseAdmin
+      // ---- Multi-channel: upsert per-channel row in social_accounts ----
+      // Look up by (user_id, platform, account_external_id) so re-connecting
+      // the SAME channel updates tokens, but a NEW channel adds a new row.
+      const { data: existingChannel } = await supabaseAdmin
+        .from("social_accounts")
+        .select("id, refresh_token")
+        .eq("user_id", userId)
+        .eq("platform", "youtube")
+        .eq("account_external_id", channelId)
+        .maybeSingle();
+
+      if (existingChannel) {
+        await supabaseAdmin
+          .from("social_accounts")
+          .update({
+            account_name: channelTitle,
+            access_token: tokenData.access_token,
+            // Preserve previous refresh_token if Google didn't return one this time.
+            refresh_token: refreshToken || existingChannel.refresh_token,
+            token_expires_at: expiresAt,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", existingChannel.id);
+      } else {
+        await supabaseAdmin.from("social_accounts").insert({
+          user_id: userId,
+          platform: "youtube",
+          account_external_id: channelId,
+          account_name: channelTitle,
+          access_token: tokenData.access_token,
+          refresh_token: refreshToken,
+          token_expires_at: expiresAt,
+        });
+      }
+
+      // ---- Legacy weather_settings columns (single-channel compatibility) ----
+      // Only write here when this is the user's FIRST connected YouTube channel
+      // — otherwise we'd clobber the "primary" channel that legacy code paths
+      // (sync-platform-metrics, status flags, refresh_token endpoint) still read.
+      const { count: channelCount } = await supabaseAdmin
+        .from("social_accounts")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .eq("platform", "youtube");
+
+      const isFirstChannel = (channelCount || 0) <= 1;
+
+      const { data: existingSettings } = await supabaseAdmin
         .from("weather_settings")
-        .select("id")
+        .select("id, youtube_refresh_token")
         .eq("user_id", userId)
         .maybeSingle();
 
-      let dbError;
-      if (existing) {
-        const { error } = await supabaseAdmin
-          .from("weather_settings")
-          .update({
-            youtube_access_token: tokenData.access_token,
-            youtube_refresh_token: refreshToken,
-            youtube_channel_id: channelId,
-            youtube_token_expires_at: expiresAt,
-          })
-          .eq("user_id", userId);
-        dbError = error;
-      } else {
-        const { error } = await supabaseAdmin
-          .from("weather_settings")
-          .insert({
+      if (isFirstChannel) {
+        if (existingSettings) {
+          await supabaseAdmin
+            .from("weather_settings")
+            .update({
+              youtube_access_token: tokenData.access_token,
+              youtube_refresh_token: refreshToken || existingSettings.youtube_refresh_token,
+              youtube_channel_id: channelId,
+              youtube_token_expires_at: expiresAt,
+            })
+            .eq("user_id", userId);
+        } else {
+          await supabaseAdmin.from("weather_settings").insert({
             user_id: userId,
             youtube_access_token: tokenData.access_token,
             youtube_refresh_token: refreshToken,
             youtube_channel_id: channelId,
             youtube_token_expires_at: expiresAt,
           });
-        dbError = error;
-      }
-
-      if (dbError) {
-        console.error("Failed to save YouTube tokens:", JSON.stringify(dbError));
-        return new Response(
-          JSON.stringify({ error: "Failed to save tokens" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      const { data: socialRows } = await supabaseAdmin
-        .from("social_accounts")
-        .update({
-          account_external_id: channelId,
-          access_token: tokenData.access_token,
-          refresh_token: refreshToken,
-          token_expires_at: expiresAt,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("user_id", userId)
-        .eq("platform", "youtube")
-        .select("id");
-      if (!socialRows?.length) {
-        await supabaseAdmin.from("social_accounts").insert({
-          user_id: userId,
-          platform: "youtube",
-          account_external_id: channelId,
-          access_token: tokenData.access_token,
-          refresh_token: refreshToken,
-          token_expires_at: expiresAt,
-        });
+        }
       }
 
       return new Response(
