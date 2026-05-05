@@ -31,6 +31,41 @@ function getDynamicHandle(city: string): string {
   return `@SkyBrief${cleaned}`;
 }
 
+// Fetch top-performing past winners from ai_memory for this user.
+// Filters by condition when available; falls back to user's overall top.
+// Returns [] on any error so callers proceed with original generation.
+async function getRelevantMemories(
+  svc: any,
+  userId: string,
+  condition: string | null,
+  _timeOfDay: string | null,
+): Promise<Array<{ content: string; performance_score: number; memory_type: string }>> {
+  try {
+    let q = svc
+      .from("ai_memory")
+      .select("content, performance_score, memory_type, condition")
+      .eq("user_id", userId)
+      .order("performance_score", { ascending: false })
+      .limit(3);
+    if (condition) q = q.eq("condition", condition);
+    const { data, error } = await q;
+    if (error) return [];
+    let rows = (data || []) as any[];
+    if (condition && rows.length === 0) {
+      const { data: any2 } = await svc
+        .from("ai_memory")
+        .select("content, performance_score, memory_type, condition")
+        .eq("user_id", userId)
+        .order("performance_score", { ascending: false })
+        .limit(3);
+      rows = (any2 || []) as any[];
+    }
+    return rows;
+  } catch {
+    return [];
+  }
+}
+
 const SKYBRIEF_SYSTEM_PROMPT = `You are the caption-writing engine for a social media weather brand called SkyBrief.
 
 BRAND IDENTITY:
