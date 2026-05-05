@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Bell, CheckCheck, RotateCw, ExternalLink, Volume2, VolumeX, Loader2, Bug } from "lucide-react";
+import { Bell, CheckCheck, RotateCw, ExternalLink, Volume2, VolumeX, Loader2, Bug, Gem } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
@@ -78,6 +78,9 @@ export function NotificationBell() {
                 const failures = n.meta?.failures ?? [];
                 const successes = n.meta?.successes ?? [];
                 const isSummary = n.meta?.kind === "summary";
+                const isGrowthInsight =
+                  (typeof n.title === "string" && n.title.startsWith("New Growth Insight")) ||
+                  (n.meta as any)?.kind === "growth_insight";
                 const viewUrl = !isSummary && failures.length === 0 ? getViewPostUrl(n.meta) : null;
                 const canRetry = !isSummary && failures.length > 0;
 
@@ -94,7 +97,11 @@ export function NotificationBell() {
                   <div
                     key={n.id}
                     className={`w-full text-left px-4 py-4 border-b border-border/50 hover:bg-primary/10 transition-colors ${
-                      !n.read ? "bg-primary/5" : ""
+                      isGrowthInsight
+                        ? "bg-amber-500/10 border-l-2 border-l-amber-500/60 hover:bg-amber-500/15"
+                        : !n.read
+                        ? "bg-primary/5"
+                        : ""
                     }`}
                   >
                     <button
@@ -102,9 +109,13 @@ export function NotificationBell() {
                       className="w-full text-left"
                     >
                       <div className="flex items-start gap-2">
-                        <div className={`mt-1 h-2 w-2 rounded-full shrink-0 ${dotColor}`} />
+                        {isGrowthInsight ? (
+                          <Gem size={14} className="mt-0.5 text-amber-400 shrink-0 drop-shadow-[0_0_4px_rgba(251,191,36,0.6)]" />
+                        ) : (
+                          <div className={`mt-1 h-2 w-2 rounded-full shrink-0 ${dotColor}`} />
+                        )}
                         <div className="min-w-0 flex-1">
-                          <p className="text-xs font-medium text-foreground">{n.title}</p>
+                          <p className={`text-xs font-medium ${isGrowthInsight ? "text-amber-200" : "text-foreground"}`}>{n.title}</p>
                           <p className="text-xs text-muted-foreground whitespace-pre-line">
                             {n.displayMessage}
                           </p>

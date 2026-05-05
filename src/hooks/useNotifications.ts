@@ -93,6 +93,17 @@ export function useNotifications() {
               }
             : undefined;
 
+          // Growth-insight rows are rewarded by useGrowthInsights (gold chime + amber
+          // toast + "View Insights" action). Still added to the bell list above; just
+          // skip the duplicate generic toast/ping here.
+          const isGrowthInsight =
+            (typeof n.title === "string" && n.title.startsWith("New Growth Insight")) ||
+            (n.meta as any)?.kind === "growth_insight";
+
+          if (isGrowthInsight) {
+            return;
+          }
+
           if (n.type === "success") {
             playSuccessPing();
             // Fire global success-shimmer event
