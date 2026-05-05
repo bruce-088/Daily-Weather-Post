@@ -939,16 +939,6 @@ const Index = () => {
           {/* SCHEDULE TAB */}
           <TabsContent value="schedule">
             <div className="max-w-2xl mx-auto">
-              {userCities.length > 0 && (
-                <div className="mb-4 flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">City:</span>
-                  <CitySwitcher
-                    cities={userCities}
-                    activeCityId={activeCityId}
-                    onChange={(id) => { setActiveCityIdState(id); setActiveCityId(id); }}
-                  />
-                </div>
-              )}
               <div className="grid md:grid-cols-[320px_1fr] gap-6">
                 <SchedulePostForm key={activeCityId || "default"} defaultCity={settings.location} onScheduled={loadScheduled} />
                 <div>
