@@ -51,6 +51,7 @@ interface ExperimentWinRow {
 }
 
 export function GrowthLog() {
+  const activeCity = useActiveCity();
   const [insights, setInsights] = useState<GrowthInsightRow[]>([]);
   const [active, setActive] = useState<ExperimentRow[]>([]);
   const [wins, setWins] = useState<ExperimentWinRow[]>([]);
@@ -60,18 +61,25 @@ export function GrowthLog() {
     setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setLoading(false); return; }
+
+    let iQ = supabase.from("growth_insights")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(25);
+    let eQ = supabase.from("experiments")
+      .select("id, city, variable_tested, variant_a_meta, variant_b_meta, status, conclude_at, created_at")
+      .eq("user_id", user.id)
+      .eq("status", "gathering_data")
+      .order("created_at", { ascending: false })
+      .limit(10);
+    if (activeCity.name) {
+      iQ = iQ.ilike("city", activeCity.name);
+      eQ = eQ.ilike("city", activeCity.name);
+    }
+
     const [i, e, w] = await Promise.all([
-      supabase.from("growth_insights")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(25),
-      supabase.from("experiments")
-        .select("id, city, variable_tested, variant_a_meta, variant_b_meta, status, conclude_at, created_at")
-        .eq("user_id", user.id)
-        .eq("status", "gathering_data")
-        .order("created_at", { ascending: false })
-        .limit(10),
+      iQ, eQ,
       supabase.from("experiment_wins")
         .select("variable, winning_value, wins, losses, win_rate, last_win_at")
         .eq("user_id", user.id)
@@ -87,15 +95,16 @@ export function GrowthLog() {
 
   useEffect(() => {
     load();
-    let active = true;
+    let alive = true;
     const channel = supabase
       .channel("growth-insights-feed")
       .on("postgres_changes",
         { event: "INSERT", schema: "public", table: "growth_insights" },
-        () => { if (active) load(); })
+        () => { if (alive) load(); })
       .subscribe();
-    return () => { active = false; supabase.removeChannel(channel); };
-  }, []);
+    return () => { alive = false; supabase.removeChannel(channel); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCity.name]);
 
   const recommendation = wins[0]
     ? `Based on recent A/B tests, your audience consistently prefers ${wins[0].variable} = "${wins[0].winning_value}" (${Math.round(wins[0].win_rate * 100)}% win rate). The AI is now favoring this style automatically.`
