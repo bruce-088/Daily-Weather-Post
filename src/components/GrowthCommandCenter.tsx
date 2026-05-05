@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Brain, Trophy, FlaskConical, Gem, CalendarClock, Sparkles, Cloud,
 } from "lucide-react";
+import { useActiveCity } from "@/hooks/useActiveCity";
 
 interface MemoryRow {
   id: string;
