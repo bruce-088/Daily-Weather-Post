@@ -1986,7 +1986,7 @@ Deno.serve(async (req) => {
         if (video) {
           // Video succeeded — post to all platforms
           for (const platformName of platformsToPost) {
-            const result = await postToPlatform(platformName, supabase, post.user_id, video.data, title, desc, video.mimeType);
+            const result = await postToPlatform(platformName, supabase, post.user_id, video.data, title, desc, video.mimeType, post.city_id || null);
             if (result.success) {
               console.log(`Scheduled post ${post.id}: ${platformName} published, ID: ${result.id}`);
               if (platformName === "youtube" && result.id) {
