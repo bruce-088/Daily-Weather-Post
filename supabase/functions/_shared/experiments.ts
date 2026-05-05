@@ -4,19 +4,21 @@
 // Used by auto-post-scheduler: after creating Post A, ~50% of the time
 // we also schedule Post B 60 minutes later with one variable changed.
 
-export type Variable = "hook" | "tone" | "visuals";
+export type Variable = "hook" | "tone" | "visuals" | "voice";
 export type VariantLabel = "A" | "B";
 
 export interface VariantMeta {
   hook?: string;            // "statement" | "question"
   tone?: string;            // mirrors normalizeTone() outputs
   visuals?: string;         // "gradient" | "stock-video"
+  voice?: string;           // "calm" | "energetic" | "urgent"
   label?: string;           // human-readable summary
 }
 
 const TONES = ["professional", "warm", "playful", "warning"];
 const VISUAL_STYLES = ["gradient", "stock-video"];
 const HOOK_STYLES = ["statement", "question"];
+const VOICE_STYLES = ["calm", "energetic", "urgent"];
 
 export function buildControlVariant(opts: {
   tone?: string | null;
@@ -32,8 +34,12 @@ export function buildControlVariant(opts: {
 }
 
 export function pickChallengerVariant(control: VariantMeta): { variable: Variable; meta: VariantMeta } {
-  // Pick which single variable to flip (uniform random).
-  const variable = (["hook", "tone", "visuals"] as Variable[])[Math.floor(Math.random() * 3)];
+  // Pick which single variable to flip. Voice is occasionally tested (~1 in 5
+  // experiments) so existing hook/tone/visuals coverage isn't reduced too much.
+  const pool: Variable[] = Math.random() < 0.2
+    ? ["voice"]
+    : ["hook", "tone", "visuals"];
+  const variable = pool[Math.floor(Math.random() * pool.length)];
   const next: VariantMeta = { ...control, label: "Challenger" };
 
   if (variable === "hook") {
@@ -42,9 +48,14 @@ export function pickChallengerVariant(control: VariantMeta): { variable: Variabl
   } else if (variable === "tone") {
     const others = TONES.filter((t) => t !== control.tone);
     next.tone = others[Math.floor(Math.random() * others.length)];
-  } else {
+  } else if (variable === "visuals") {
     const others = VISUAL_STYLES.filter((v) => v !== control.visuals);
     next.visuals = others[Math.floor(Math.random() * others.length)];
+  } else {
+    // voice — flip the style; everything else identical.
+    const controlVoice = control.voice || "calm";
+    const others = VOICE_STYLES.filter((v) => v !== controlVoice);
+    next.voice = others[Math.floor(Math.random() * others.length)];
   }
 
   return { variable, meta: next };
@@ -94,5 +105,6 @@ export async function createExperimentRow(
 export function variantValue(variable: Variable, meta: VariantMeta): string {
   if (variable === "hook") return meta.hook || "";
   if (variable === "tone") return meta.tone || "";
+  if (variable === "voice") return meta.voice || "";
   return meta.visuals || "";
 }

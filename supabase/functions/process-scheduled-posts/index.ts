@@ -1798,10 +1798,62 @@ Deno.serve(async (req) => {
         if (wantVoice && post.user_id) {
           console.log(`[process] post ${post.id}: VOICE: enabled (row.include_voiceover=${post.include_voiceover}, settings.enable_voiceover=${settingsEnabled})`);
           try {
-            const voiceId = voiceSettingsRow?.voiceover_voice_id || "female";
+            let voiceId = voiceSettingsRow?.voiceover_voice_id || "female";
             const voiceSpeed = voiceSettingsRow?.voiceover_speed;
             const voiceStability = voiceSettingsRow?.voiceover_stability;
             const voiceSimilarity = voiceSettingsRow?.voiceover_similarity;
+
+            // === SAFE INJECTION: AI voice optimization ===
+            // Only override the configured voice if a high-confidence winner exists
+            // (>10% lift, >=100 cumulative views) for this condition + time-of-day.
+            try {
+              const { getBestVoice } = await import("../_shared/voice-memory.ts");
+              const condForVoice = (weather?.condition || "").toLowerCase() || null;
+              const best = await getBestVoice(supabase, {
+                userId: post.user_id,
+                condition: condForVoice,
+                timeOfDay: timePeriod,
+              });
+              if (best && best.voiceId && best.voiceId !== voiceId) {
+                console.log(`[process] post ${post.id}: VOICE: 🧠 AI voice override → ${best.voiceId} (style=${best.voiceStyle}, lift=${best.liftPct.toFixed(1)}%, views=${best.totalViews}, n=${best.sampleSize})`);
+                trace("voice_ai_override", { from: voiceId, to: best.voiceId, lift_pct: best.liftPct, views: best.totalViews, sample: best.sampleSize });
+                voiceId = best.voiceId;
+              } else {
+                console.log(`[process] post ${post.id}: VOICE: AI override not applied (no high-confidence winner)`);
+              }
+            } catch (vmErr) {
+              console.warn(`[process] post ${post.id}: VOICE: AI override skipped:`, vmErr);
+            }
+
+            // === A/B EXPERIMENT: voice variable ===
+            // If this post is part of a "voice" experiment, force the variant's voice
+            // style so we can isolate the effect. Other variables stay identical.
+            try {
+              if (post.experiment_id && post.experiment_variant) {
+                const { data: exp } = await supabase
+                  .from("experiments")
+                  .select("variable_tested, variant_a_meta, variant_b_meta")
+                  .eq("id", post.experiment_id)
+                  .maybeSingle();
+                if (exp?.variable_tested === "voice") {
+                  const meta = (post.experiment_variant === "B" ? exp.variant_b_meta : exp.variant_a_meta) || {};
+                  const styleToVoice: Record<string, string> = {
+                    calm: "anchor",
+                    energetic: "cheerful",
+                    urgent: "deep",
+                  };
+                  const desired = styleToVoice[(meta.voice || "").toLowerCase()];
+                  if (desired) {
+                    console.log(`[process] post ${post.id}: VOICE: 🧪 A/B voice variant=${post.experiment_variant} style=${meta.voice} → ${desired}`);
+                    trace("voice_experiment", { variant: post.experiment_variant, style: meta.voice, voice_id: desired });
+                    voiceId = desired;
+                  }
+                }
+              }
+            } catch (expErr) {
+              console.warn(`[process] post ${post.id}: VOICE: experiment override skipped:`, expErr);
+            }
+
             console.log(`[process] post ${post.id}: VOICE: config voice=${voiceId} speed=${voiceSpeed} stability=${voiceStability} similarity=${voiceSimilarity}`);
             trace("voice_config", { voice_id: voiceId, speed: voiceSpeed, stability: voiceStability, similarity: voiceSimilarity });
 
