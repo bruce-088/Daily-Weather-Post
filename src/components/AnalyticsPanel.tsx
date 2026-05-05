@@ -277,9 +277,13 @@ export function AnalyticsPanel() {
     return (
       <Card className="p-8 text-center">
         <BarChart3 className="mx-auto mb-3 text-muted-foreground" size={32} />
-        <h3 className="font-display text-lg mb-1">No YouTube posts yet</h3>
+        <h3 className="font-display text-lg mb-1">
+          {activeCity.name ? `No data yet for ${activeCity.name}` : "No YouTube posts yet"}
+        </h3>
         <p className="text-sm text-muted-foreground max-w-sm mx-auto mb-4">
-          Once your Shorts are live, view counts, likes and comments will appear here automatically.
+          {activeCity.name
+            ? `Start posting to ${activeCity.name} to generate insights — view counts, likes and comments will appear here automatically.`
+            : "Once your Shorts are live, view counts, likes and comments will appear here automatically."}
         </p>
         <Button onClick={handleSyncNow} disabled={syncing} size="sm" variant="outline">
           <RefreshCw size={14} className={syncing ? "animate-spin" : ""} />
