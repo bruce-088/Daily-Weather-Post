@@ -457,6 +457,14 @@ const Index = () => {
             </Badge>
           </div>
           <div className="flex items-center gap-2">
+            {userCities.length > 0 && (
+              <CitySwitcher
+                cities={userCities}
+                activeCityId={activeCityId}
+                onChange={(id) => { setActiveCityIdState(id); setActiveCityId(id); }}
+                className="hidden sm:block"
+              />
+            )}
             <NotificationBell />
             <Button
               size="sm"
