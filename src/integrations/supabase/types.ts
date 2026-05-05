@@ -22,7 +22,11 @@ export type Database = {
           id: string
           memory_type: string
           performance_score: number
+          time_of_day: string | null
           user_id: string
+          views: number
+          voice_id: string | null
+          voice_style: string | null
         }
         Insert: {
           condition?: string | null
@@ -31,7 +35,11 @@ export type Database = {
           id?: string
           memory_type: string
           performance_score?: number
+          time_of_day?: string | null
           user_id: string
+          views?: number
+          voice_id?: string | null
+          voice_style?: string | null
         }
         Update: {
           condition?: string | null
@@ -40,7 +48,11 @@ export type Database = {
           id?: string
           memory_type?: string
           performance_score?: number
+          time_of_day?: string | null
           user_id?: string
+          views?: number
+          voice_id?: string | null
+          voice_style?: string | null
         }
         Relationships: []
       }
