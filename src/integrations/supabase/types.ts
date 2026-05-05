@@ -797,6 +797,7 @@ export type Database = {
           access_token: string | null
           account_external_id: string | null
           account_name: string | null
+          city_id: string | null
           created_at: string
           extra: Json
           id: string
@@ -810,6 +811,7 @@ export type Database = {
           access_token?: string | null
           account_external_id?: string | null
           account_name?: string | null
+          city_id?: string | null
           created_at?: string
           extra?: Json
           id?: string
@@ -823,6 +825,7 @@ export type Database = {
           access_token?: string | null
           account_external_id?: string | null
           account_name?: string | null
+          city_id?: string | null
           created_at?: string
           extra?: Json
           id?: string
