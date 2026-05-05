@@ -220,8 +220,9 @@ export function GrowthLog() {
           </div>
 
           <div>
-            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-2">
               Proven wins
+              <Badge variant="outline" className="text-[9px] font-normal">All cities</Badge>
             </p>
             {wins.length === 0 ? (
               <p className="text-xs text-muted-foreground italic">No repeated winners yet.</p>
