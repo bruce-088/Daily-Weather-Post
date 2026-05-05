@@ -1,34 +1,37 @@
-# Growth Discovery toast: persist + "View Insights" action
+# Reward growth-insight notifications in the bell
 
 ## What changes for the user
-When the experiments-resolve job finds a clear winner, the success toast will:
-1. Stay on screen for 5 seconds (long enough to read).
-2. Clearly show the winning pattern and the engagement delta, e.g.
-   `Hook "Feels Like Summer" beat "Weather Update" by +24% engagement`.
-3. Include a **View Insights** button. Clicking it jumps straight to the Growth Log on the Analytics tab and scrolls it into view.
+Every "New Growth Insight Found! 🚀" event will:
+1. Show a gold-trimmed entry in the existing notification bell (with a diamond/gem icon instead of the generic colored dot).
+2. Play the same subtle gold chime that the toast uses (respecting the existing mute toggle).
+3. Continue to fire the persistent toast + "View Insights" button from `useGrowthInsights`.
+4. Avoid the duplicate generic success toast/ping that `useNotifications` would otherwise fire.
 
-No changes to the resolver job — it already writes `title`, `message`, `delta_pct`, `winner_value`, `loser_value`, and `variable` into `growth_insights`. We just present them better in the toast.
+The bell already lists growth-insight rows because the resolver writes to `notifications` — we're just upgrading their look and sound, and de-duplicating with the gold toast.
 
 ## Files to edit
 
-### 1. `src/hooks/useGrowthInsights.ts`
-- Set `duration: 5000` (currently 9000).
-- Build a richer `description` from the row: prefer `winner_value` vs `loser_value` and append `+X% engagement`. Fall back to `row.message` when values are missing.
-- Add a sonner `action` button labeled **View Insights** that dispatches a `CustomEvent("skybrief:open-growth-log")` on `window`. (The hook is mounted globally, outside the tabs component, so a window event is the cleanest bridge.)
+### 1. `supabase/functions/experiments-resolve/index.ts`
+- Tag the inserted notification with a kind sentinel so the client can recognize it without relying on the title string. Append `[meta:growth_insight]` to `message` (matches the existing `parseNotificationMessage` sentinel pattern) — or simpler: add `kind: "growth_insight"` via the same meta channel the rest of the app uses.
+- Quick approach: extend the message with the existing meta sentinel so `parseNotificationMessage` returns `meta.kind === "growth_insight"`. (Confirm sentinel format from `src/lib/notificationUtils.ts` during build.)
 
-### 2. `src/pages/Index.tsx`
-- Add a `useEffect` that listens for `skybrief:open-growth-log` and calls `setActiveTab("analytics")`, then on the next tick scrolls a ref into view.
-- Pass a `ref` to the wrapper around `<GrowthLog />` inside the analytics `TabsContent` and call `ref.current?.scrollIntoView({ behavior: "smooth", block: "start" })`.
+### 2. `src/hooks/useNotifications.ts`
+- In the realtime INSERT handler, detect growth-insight rows (`n.title.startsWith("New Growth Insight")` or `n.meta?.kind === "growth_insight"`).
+- For those rows: skip the standard `toast.success` + `playSuccessPing` (the gold chime + amber toast from `useGrowthInsights` already handles the reward UX).
+- All other notification types behave exactly as today.
 
-### 3. `src/components/GrowthLog.tsx`
-- Add `id="growth-log"` to the root section so the scroll target is stable (used as a fallback if the ref isn't mounted yet when the event fires — we re-query by id after a short timeout).
+### 3. `src/components/NotificationBell.tsx`
+- When rendering each notification row, detect growth insights the same way.
+- Replace the small colored status dot with a `Gem` icon (lucide, `text-amber-400`).
+- Add an amber tint to the row: `bg-amber-500/5 border-l-2 border-amber-500/50` (only for growth-insight rows; keeps the rest unchanged).
+- Keep title/message rendering as-is — the resolver already writes a friendly title and pattern message.
 
 ## Technical notes
-- Sonner's `action` accepts `{ label, onClick }` and renders an inline button inside the toast — no extra UI plumbing needed.
-- Toast description format: `` `Hook "${winner_value}" beat "${loser_value}" by +${Math.abs(delta_pct)}% engagement` `` when both values exist; otherwise reuse `row.message`. `delta_pct` is already stored as a percentage (e.g. `24` for 24%).
-- Window-event bridge avoids lifting state or introducing a store just for one toast action.
-- Sound, gold border, and gem icon stay as-is.
+- The gold chime + 5-second toast + "View Insights" action are already wired in `useGrowthInsights` (listens on the `growth_insights` table). We are NOT moving sound to the bell hook — it would double up.
+- Sound mute respects `isSoundEnabled()` already (used by the chime util).
+- No DB migration needed; we only piggyback on the existing `notifications` row.
+- No styling tokens are hardcoded outside of amber utility classes already used by `GrowthLog.tsx`, keeping the gold/diamond visual language consistent.
 
 ## Out of scope
-- No DB or edge-function changes.
-- No changes to the Growth Log layout itself beyond adding an `id` anchor.
+- New notification types or DB columns.
+- Changes to the resolver scoring logic.
