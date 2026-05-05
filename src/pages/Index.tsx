@@ -1058,6 +1058,7 @@ const Index = () => {
                   tiktok: tiktokConnected,
                 }}
               />
+              <CityAccountsManager cities={userCities} />
               <SettingsPanel
                 settings={settings}
                 onUpdate={setSettings}
