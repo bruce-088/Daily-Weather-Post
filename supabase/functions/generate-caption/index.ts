@@ -31,6 +31,41 @@ function getDynamicHandle(city: string): string {
   return `@SkyBrief${cleaned}`;
 }
 
+// Fetch top-performing past winners from ai_memory for this user.
+// Filters by condition when available; falls back to user's overall top.
+// Returns [] on any error so callers proceed with original generation.
+async function getRelevantMemories(
+  svc: any,
+  userId: string,
+  condition: string | null,
+  _timeOfDay: string | null,
+): Promise<Array<{ content: string; performance_score: number; memory_type: string }>> {
+  try {
+    let q = svc
+      .from("ai_memory")
+      .select("content, performance_score, memory_type, condition")
+      .eq("user_id", userId)
+      .order("performance_score", { ascending: false })
+      .limit(3);
+    if (condition) q = q.eq("condition", condition);
+    const { data, error } = await q;
+    if (error) return [];
+    let rows = (data || []) as any[];
+    if (condition && rows.length === 0) {
+      const { data: any2 } = await svc
+        .from("ai_memory")
+        .select("content, performance_score, memory_type, condition")
+        .eq("user_id", userId)
+        .order("performance_score", { ascending: false })
+        .limit(3);
+      rows = (any2 || []) as any[];
+    }
+    return rows;
+  } catch {
+    return [];
+  }
+}
+
 const SKYBRIEF_SYSTEM_PROMPT = `You are the caption-writing engine for a social media weather brand called SkyBrief.
 
 BRAND IDENTITY:
@@ -246,6 +281,24 @@ Deno.serve(async (req) => {
           }
         } catch (e) {
           console.warn("[generate-caption] patterns lookup failed:", e);
+        }
+
+        // ---- AI Memory injection (winners from past A/B tests) ----
+        try {
+          const hourLocal2 = new Date().getHours();
+          const tod2 =
+            hourLocal2 < 11 ? "morning" :
+            hourLocal2 < 16 ? "afternoon" :
+            hourLocal2 < 21 ? "evening" : "night";
+          const condKey2 = (conditions || "").toLowerCase().split(/[,;]/)[0]?.trim() || null;
+          const memories = await getRelevantMemories(svc, auth.userId, condKey2, tod2);
+          console.log("AI memory injected:", memories.length);
+          if (memories.length >= 2) {
+            insightNote += `\n\nUse similar styles to these high-performing examples:\n${memories.map((m: any) => `- ${m.content}`).join("\n")}`;
+            aiOptimized = true;
+          }
+        } catch (e) {
+          console.warn("[generate-caption] ai_memory lookup failed:", e);
         }
       }
     } catch (e) {
