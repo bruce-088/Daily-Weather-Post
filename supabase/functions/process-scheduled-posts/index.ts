@@ -1825,6 +1825,35 @@ Deno.serve(async (req) => {
               console.warn(`[process] post ${post.id}: VOICE: AI override skipped:`, vmErr);
             }
 
+            // === A/B EXPERIMENT: voice variable ===
+            // If this post is part of a "voice" experiment, force the variant's voice
+            // style so we can isolate the effect. Other variables stay identical.
+            try {
+              if (post.experiment_id && post.experiment_variant) {
+                const { data: exp } = await supabase
+                  .from("experiments")
+                  .select("variable_tested, variant_a_meta, variant_b_meta")
+                  .eq("id", post.experiment_id)
+                  .maybeSingle();
+                if (exp?.variable_tested === "voice") {
+                  const meta = (post.experiment_variant === "B" ? exp.variant_b_meta : exp.variant_a_meta) || {};
+                  const styleToVoice: Record<string, string> = {
+                    calm: "anchor",
+                    energetic: "cheerful",
+                    urgent: "deep",
+                  };
+                  const desired = styleToVoice[(meta.voice || "").toLowerCase()];
+                  if (desired) {
+                    console.log(`[process] post ${post.id}: VOICE: 🧪 A/B voice variant=${post.experiment_variant} style=${meta.voice} → ${desired}`);
+                    trace("voice_experiment", { variant: post.experiment_variant, style: meta.voice, voice_id: desired });
+                    voiceId = desired;
+                  }
+                }
+              }
+            } catch (expErr) {
+              console.warn(`[process] post ${post.id}: VOICE: experiment override skipped:`, expErr);
+            }
+
             console.log(`[process] post ${post.id}: VOICE: config voice=${voiceId} speed=${voiceSpeed} stability=${voiceStability} similarity=${voiceSimilarity}`);
             trace("voice_config", { voice_id: voiceId, speed: voiceSpeed, stability: voiceStability, similarity: voiceSimilarity });
 
