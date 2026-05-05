@@ -4,19 +4,21 @@
 // Used by auto-post-scheduler: after creating Post A, ~50% of the time
 // we also schedule Post B 60 minutes later with one variable changed.
 
-export type Variable = "hook" | "tone" | "visuals";
+export type Variable = "hook" | "tone" | "visuals" | "voice";
 export type VariantLabel = "A" | "B";
 
 export interface VariantMeta {
   hook?: string;            // "statement" | "question"
   tone?: string;            // mirrors normalizeTone() outputs
   visuals?: string;         // "gradient" | "stock-video"
+  voice?: string;           // "calm" | "energetic" | "urgent"
   label?: string;           // human-readable summary
 }
 
 const TONES = ["professional", "warm", "playful", "warning"];
 const VISUAL_STYLES = ["gradient", "stock-video"];
 const HOOK_STYLES = ["statement", "question"];
+const VOICE_STYLES = ["calm", "energetic", "urgent"];
 
 export function buildControlVariant(opts: {
   tone?: string | null;
