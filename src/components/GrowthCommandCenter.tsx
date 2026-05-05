@@ -193,7 +193,9 @@ export function GrowthCommandCenter() {
         <CardContent className="space-y-2">
           {insights.length === 0 ? (
             <p className="text-xs text-muted-foreground italic">
-              No wins logged yet. Keep posting — A/B tests resolve after ~24h.
+              {activeCity.name
+                ? `No data yet for ${activeCity.name} — start posting to generate insights.`
+                : "No wins logged yet. Keep posting — A/B tests resolve after ~24h."}
             </p>
           ) : (
             insights.map((i) => (
