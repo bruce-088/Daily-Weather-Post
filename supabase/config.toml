@@ -23,3 +23,6 @@ verify_jwt = false
 
 [functions.sync-youtube-metrics]
 verify_jwt = false
+
+[functions.create-weekly-recap]
+verify_jwt = false
