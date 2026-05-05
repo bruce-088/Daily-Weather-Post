@@ -187,6 +187,7 @@ export function GrowthDashboard() {
         <CardHeader className="pb-2">
           <CardTitle className="text-sm flex items-center gap-2">
             <Trophy size={14} className="text-primary" /> Top performing hooks
+            <Badge variant="outline" className="text-[10px] ml-auto">All cities</Badge>
           </CardTitle>
           <CardDescription className="text-xs">
             Ranked by average views. Hooks with 10+ uses get classified as Top, Active, or Retired.
