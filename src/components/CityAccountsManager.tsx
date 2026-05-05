@@ -123,15 +123,22 @@ export function CityAccountsManager({ cities }: Props) {
                 onValueChange={(v) => handleAssign(acct.id, v)}
                 disabled={saving === acct.id}
               >
-                <SelectTrigger className="h-8 w-[180px] text-xs">
+                <SelectTrigger className="h-8 w-[180px] text-xs bg-secondary border border-border/60 text-foreground hover:bg-secondary/80">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__shared__">
+                <SelectContent className="z-[100] bg-popover border border-border text-popover-foreground shadow-lg">
+                  <SelectItem
+                    value="__shared__"
+                    className="text-popover-foreground data-[state=checked]:bg-primary/15 data-[state=checked]:text-primary data-[state=checked]:font-medium"
+                  >
                     <span className="flex items-center gap-1.5"><Globe size={12} /> Shared (all cities)</span>
                   </SelectItem>
                   {cities.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
+                    <SelectItem
+                      key={c.id}
+                      value={c.id}
+                      className="text-popover-foreground data-[state=checked]:bg-primary/15 data-[state=checked]:text-primary data-[state=checked]:font-medium"
+                    >
                       {c.name}{c.state ? `, ${c.state}` : ""}
                     </SelectItem>
                   ))}
