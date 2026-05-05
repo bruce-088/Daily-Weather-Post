@@ -54,6 +54,7 @@ import { VideoPreviewDialog } from "@/components/VideoPreviewDialog";
 import { SchedulePostForm } from "@/components/SchedulePostForm";
 import { ScheduledPostsList } from "@/components/ScheduledPostsList";
 import { CityManager } from "@/components/CityManager";
+import { CityAccountsManager } from "@/components/CityAccountsManager";
 import { CitySwitcher } from "@/components/CitySwitcher";
 import { fetchUserCities, getActiveCityId, setActiveCityId, type UserCity } from "@/lib/citiesApi";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -457,6 +458,14 @@ const Index = () => {
             </Badge>
           </div>
           <div className="flex items-center gap-2">
+            {userCities.length > 0 && (
+              <CitySwitcher
+                cities={userCities}
+                activeCityId={activeCityId}
+                onChange={(id) => { setActiveCityIdState(id); setActiveCityId(id); }}
+                className="hidden sm:block"
+              />
+            )}
             <NotificationBell />
             <Button
               size="sm"
@@ -593,16 +602,6 @@ const Index = () => {
           {/* CREATE TAB */}
           <TabsContent value="create">
             <div className="mx-auto max-w-[1400px]">
-              {userCities.length > 0 && (
-                <div className="mb-4 flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">City:</span>
-                  <CitySwitcher
-                    cities={userCities}
-                    activeCityId={activeCityId}
-                    onChange={(id) => { setActiveCityIdState(id); setActiveCityId(id); }}
-                  />
-                </div>
-              )}
               <div className="grid gap-6 lg:grid-cols-[340px_minmax(0,1fr)_340px]">
 
                 {/* LEFT: Inputs + caption */}
@@ -941,16 +940,6 @@ const Index = () => {
           {/* SCHEDULE TAB */}
           <TabsContent value="schedule">
             <div className="max-w-2xl mx-auto">
-              {userCities.length > 0 && (
-                <div className="mb-4 flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">City:</span>
-                  <CitySwitcher
-                    cities={userCities}
-                    activeCityId={activeCityId}
-                    onChange={(id) => { setActiveCityIdState(id); setActiveCityId(id); }}
-                  />
-                </div>
-              )}
               <div className="grid md:grid-cols-[320px_1fr] gap-6">
                 <SchedulePostForm key={activeCityId || "default"} defaultCity={settings.location} onScheduled={loadScheduled} />
                 <div>
@@ -1070,6 +1059,7 @@ const Index = () => {
                   tiktok: tiktokConnected,
                 }}
               />
+              <CityAccountsManager cities={userCities} />
               <SettingsPanel
                 settings={settings}
                 onUpdate={setSettings}
