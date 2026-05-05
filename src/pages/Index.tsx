@@ -579,6 +579,9 @@ const Index = () => {
             <TabsTrigger value="history" className="gap-1.5 text-xs">
               <History size={14} /> History
             </TabsTrigger>
+            <TabsTrigger value="growth" className="gap-1.5 text-xs">
+              <Sparkles size={14} /> Growth
+            </TabsTrigger>
             <TabsTrigger value="analytics" className="gap-1.5 text-xs">
               <BarChart3 size={14} /> Analytics
             </TabsTrigger>
