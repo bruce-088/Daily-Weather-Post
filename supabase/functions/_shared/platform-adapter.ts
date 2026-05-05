@@ -19,7 +19,7 @@ export interface PlatformAdapter {
   isConnected(settings: Record<string, unknown>): boolean;
 
   /** Get a valid access token (refreshing if needed) */
-  getValidToken(supabase: any, userId: string): Promise<string | null>;
+  getValidToken(supabase: any, userId: string, cityId?: string | null): Promise<string | null>;
 
   /** Upload video content to the platform */
   uploadVideo(
