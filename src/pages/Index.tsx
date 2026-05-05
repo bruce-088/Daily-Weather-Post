@@ -54,6 +54,7 @@ import { VideoPreviewDialog } from "@/components/VideoPreviewDialog";
 import { SchedulePostForm } from "@/components/SchedulePostForm";
 import { ScheduledPostsList } from "@/components/ScheduledPostsList";
 import { CityManager } from "@/components/CityManager";
+import { CityAccountsManager } from "@/components/CityAccountsManager";
 import { CitySwitcher } from "@/components/CitySwitcher";
 import { fetchUserCities, getActiveCityId, setActiveCityId, type UserCity } from "@/lib/citiesApi";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
