@@ -1076,6 +1076,7 @@ const Index = () => {
                   tiktok: tiktokConnected,
                 }}
               />
+              <YouTubeChannelsManager cities={userCities} />
               <CityAccountsManager cities={userCities} />
               <SettingsPanel
                 settings={settings}
