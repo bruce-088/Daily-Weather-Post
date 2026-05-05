@@ -8,6 +8,7 @@ import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip as RTooltip, CartesianGrid,
 } from "recharts";
 import { toast } from "sonner";
+import { useActiveCity } from "@/hooks/useActiveCity";
 
 type PostRow = {
   id: string;
