@@ -131,7 +131,9 @@ export function GrowthLog() {
         <CardContent className="space-y-2">
           {insights.length === 0 ? (
             <p className="text-xs text-muted-foreground italic">
-              No insights yet. The engine is running A/B tests in the background — check back after a few posts publish.
+              {activeCity.name
+                ? `No data yet for ${activeCity.name} — start posting to generate insights.`
+                : "No insights yet. The engine is running A/B tests in the background — check back after a few posts publish."}
             </p>
           ) : (
             insights.map((ins) => (
