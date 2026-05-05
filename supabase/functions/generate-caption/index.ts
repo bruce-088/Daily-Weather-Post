@@ -247,6 +247,24 @@ Deno.serve(async (req) => {
         } catch (e) {
           console.warn("[generate-caption] patterns lookup failed:", e);
         }
+
+        // ---- AI Memory injection (winners from past A/B tests) ----
+        try {
+          const hourLocal2 = new Date().getHours();
+          const tod2 =
+            hourLocal2 < 11 ? "morning" :
+            hourLocal2 < 16 ? "afternoon" :
+            hourLocal2 < 21 ? "evening" : "night";
+          const condKey2 = (conditions || "").toLowerCase().split(/[,;]/)[0]?.trim() || null;
+          const memories = await getRelevantMemories(svc, auth.userId, condKey2, tod2);
+          console.log("AI memory injected:", memories.length);
+          if (memories.length >= 2) {
+            insightNote += `\n\nUse similar styles to these high-performing examples:\n${memories.map((m: any) => `- ${m.content}`).join("\n")}`;
+            aiOptimized = true;
+          }
+        } catch (e) {
+          console.warn("[generate-caption] ai_memory lookup failed:", e);
+        }
       }
     } catch (e) {
       console.warn("[generate-caption] insight lookup failed:", e);
