@@ -29,6 +29,8 @@ function timeLabel(t: string) {
 export function SmartInsightsCard({ compact = false }: SmartInsightsCardProps) {
   const [insights, setInsights] = useState<InsightRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = compact ? 2 : 4;
 
   useEffect(() => {
     (async () => {
@@ -37,7 +39,7 @@ export function SmartInsightsCard({ compact = false }: SmartInsightsCardProps) {
         .select("condition, tone, time_of_day, avg_views, delta_pct, sample_size, top_hook, rank")
         .eq("rank", 1)
         .order("avg_views", { ascending: false })
-        .limit(compact ? 2 : 12);
+        .limit(compact ? 2 : 24);
       setInsights((data as any) || []);
       setLoading(false);
     })();
