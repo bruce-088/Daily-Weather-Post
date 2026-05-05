@@ -8,6 +8,7 @@ import {
   Sparkles, TrendingUp, AlertTriangle, Trophy, Clock, Activity, X, ArrowUpRight,
   ChevronLeft, ChevronRight,
 } from "lucide-react";
+import { useActiveCity } from "@/hooks/useActiveCity";
 
 interface HookStat {
   hook_text: string;
