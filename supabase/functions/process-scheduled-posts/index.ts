@@ -2050,7 +2050,7 @@ Deno.serve(async (req) => {
                   const { getAdapter } = await import("../_shared/platform-adapter.ts");
                   const adapter = getAdapter(platformName);
                   if (!adapter) continue;
-                  const token = await adapter.getValidToken(supabase, post.user_id);
+                  const token = await adapter.getValidToken(supabase, post.user_id, post.city_id || null);
                   if (!token) {
                     console.error(`${platformName}: failed to get token for image post`);
                     await notifyFailure("upload", `${platformName} auth failed`, "Could not get valid token for image post.", { platform: platformName });
