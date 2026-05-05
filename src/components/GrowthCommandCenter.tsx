@@ -165,6 +165,7 @@ export function GrowthCommandCenter() {
         <CardHeader className="pb-2">
           <CardTitle className="text-sm flex items-center gap-2">
             <Brain size={14} className="text-primary" /> Memory Bank
+            <Badge variant="outline" className="text-[10px] ml-auto">All cities</Badge>
           </CardTitle>
           <CardDescription className="text-xs">
             Every winning pattern the AI has learned. High-performance items are reused in future captions.
