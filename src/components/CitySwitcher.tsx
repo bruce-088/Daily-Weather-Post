@@ -14,13 +14,17 @@ export function CitySwitcher({ cities, activeCityId, onChange, className }: City
   return (
     <div className={className}>
       <Select value={activeCityId ?? undefined} onValueChange={onChange}>
-        <SelectTrigger className="h-9 gap-2 bg-secondary/40 border-border/40 text-sm w-auto min-w-[200px]">
+        <SelectTrigger className="h-9 gap-2 bg-secondary border border-border/60 text-sm text-foreground w-auto min-w-[200px] hover:bg-secondary/80">
           <MapPin size={14} className="text-primary shrink-0" />
           <SelectValue placeholder="Select city" />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent className="z-[100] bg-popover border border-border text-popover-foreground shadow-lg">
           {cities.map((c) => (
-            <SelectItem key={c.id} value={c.id}>
+            <SelectItem
+              key={c.id}
+              value={c.id}
+              className="text-popover-foreground data-[state=checked]:bg-primary/15 data-[state=checked]:text-primary data-[state=checked]:font-medium"
+            >
               {c.name}{c.state ? `, ${c.state}` : ""}{c.is_primary ? " ★" : ""}
             </SelectItem>
           ))}
