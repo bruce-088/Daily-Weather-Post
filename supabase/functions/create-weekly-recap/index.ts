@@ -218,9 +218,9 @@ async function stitchSlideshow(posts: PostRow[], title: string): Promise<StitchR
   const renderId = Array.isArray(renders) ? renders[0]?.id : renders?.id;
   if (!renderId) return null;
 
-  for (let i = 0; i < 30; i++) {
-    await new Promise((r) => setTimeout(r, 4000));
-    const sr = await fetch(`https://api.creatomate.com/v2/renders/${renderId}`, {
+  for (let i = 0; i < 36; i++) {
+    await new Promise((r) => setTimeout(r, 5000));
+    const sr = await fetch(`https://api.creatomate.com/v1/renders/${renderId}`, {
       headers: { Authorization: `Bearer ${CREATOMATE_API_KEY}` },
     });
     if (!sr.ok) continue;

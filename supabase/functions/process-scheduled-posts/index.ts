@@ -979,13 +979,13 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
 
   console.log("Creatomate render started, ID:", renderId);
 
-  // Poll budget: 18 ticks × 2.5s = 45s. Combined with the medium-quality
-  // render (render_scale 0.75) this keeps us well inside the worker window
-  // and surfaces a clean failure on slow renders instead of a stuck row.
-  for (let i = 0; i < 18; i++) {
-    await new Promise((r) => setTimeout(r, 2500));
+  // Poll budget: 16 ticks × 5s = 80s. Creatomate renders typically take
+  // 46–50s, so we need ≥75s of patience before falling back to image to
+  // avoid wasting credits on renders that actually succeed.
+  for (let i = 0; i < 16; i++) {
+    await new Promise((r) => setTimeout(r, 5000));
 
-    const statusRes = await fetch(`https://api.creatomate.com/v2/renders/${renderId}`, {
+    const statusRes = await fetch(`https://api.creatomate.com/v1/renders/${renderId}`, {
       headers: { Authorization: `Bearer ${apiKey}` },
     });
 
@@ -995,7 +995,7 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
     }
 
     const statusData = await statusRes.json();
-    console.log(`Render ${renderId} status: ${statusData.status}`);
+    console.log(`Render ${renderId} status: ${statusData.status} (poll ${i + 1}/16, ~${(i + 1) * 5}s)`);
 
     if (statusData.status === "succeeded" && statusData.url) {
       console.log("Render complete, downloading video...");
@@ -1015,7 +1015,7 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
     }
   }
 
-  console.error("Creatomate render timed out after 45 seconds (medium-quality budget)");
+  console.error("Creatomate render timed out after 80 seconds");
   return null;
 }
 
