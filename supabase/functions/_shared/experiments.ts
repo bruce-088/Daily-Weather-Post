@@ -105,5 +105,6 @@ export async function createExperimentRow(
 export function variantValue(variable: Variable, meta: VariantMeta): string {
   if (variable === "hook") return meta.hook || "";
   if (variable === "tone") return meta.tone || "";
+  if (variable === "voice") return meta.voice || "";
   return meta.visuals || "";
 }
