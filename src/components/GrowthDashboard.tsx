@@ -57,6 +57,8 @@ export function GrowthDashboard() {
   const [alerts, setAlerts] = useState<AlertRow[]>([]);
   const [rec, setRec] = useState<Recommendation | null>(null);
   const [loading, setLoading] = useState(true);
+  const [hooksPage, setHooksPage] = useState(0);
+  const HOOKS_PER_PAGE = 8;
 
   const load = async () => {
     setLoading(true);
