@@ -123,7 +123,7 @@ export function GrowthCommandCenter() {
           </CardHeader>
           <CardContent className="pb-4">
             <p className="text-3xl font-bold tabular-nums">{memories.length}</p>
-            <p className="text-[10px] text-muted-foreground mt-1">Patterns stored in AI memory</p>
+            <p className="text-[10px] text-muted-foreground mt-1">Patterns stored in AI memory · shared across all cities</p>
           </CardContent>
         </Card>
 
