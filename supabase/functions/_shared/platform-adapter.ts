@@ -78,7 +78,14 @@ export async function postToPlatform(
       return { success: false, error: `Failed to obtain valid ${adapter.name} access token` };
     }
 
-    const result = await adapter.uploadVideo(token, videoData, title, description, mimeType);
+    // Strip internal tracking tags like [auto:afternoon] or [exp:B] from
+    // public-facing caption/title before sending to any platform. These tags
+    // are still preserved upstream in the DB for analytics/logging.
+    const stripTags = (s: string) => (s || "").replace(/\[[^\]]*\]/g, "").replace(/[ \t]{2,}/g, " ").replace(/\s+\n/g, "\n").trim();
+    const cleanTitle = stripTags(title);
+    const cleanDescription = stripTags(description);
+
+    const result = await adapter.uploadVideo(token, videoData, cleanTitle, cleanDescription, mimeType);
     if (!result) {
       return { success: false, error: `${adapter.name} upload failed` };
     }
