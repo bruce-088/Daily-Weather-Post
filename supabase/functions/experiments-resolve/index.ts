@@ -121,8 +121,10 @@ Deno.serve(async (req) => {
 
     // Rollup: increment wins/losses for this winning value, and losses for loser.
     const pct = Math.round(deltaPct * 100);
-    const title = "New Growth Insight Found! 🚀";
-    const message = `Pattern: "${winnerVal}" beat "${loserVal}" by +${pct}% in engagement. AI Update: Your master prompt has been automatically optimized to favor this style.`;
+    const title = variable === "timing" ? "Optimal Posting Window Found ⏱️" : "New Growth Insight Found! 🚀";
+    const message = variable === "timing"
+      ? `Posting ${winnerVal} minutes from base time outperformed by +${pct}% in ${e.city || "this city"}. The scheduler will now favor this window.`
+      : `Pattern: "${winnerVal}" beat "${loserVal}" by +${pct}% in engagement. AI Update: Your master prompt has been automatically optimized to favor this style.`;
 
     // Upsert winner row
     {
