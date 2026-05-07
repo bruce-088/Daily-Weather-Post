@@ -121,8 +121,10 @@ Deno.serve(async (req) => {
 
     // Rollup: increment wins/losses for this winning value, and losses for loser.
     const pct = Math.round(deltaPct * 100);
-    const title = "New Growth Insight Found! 🚀";
-    const message = `Pattern: "${winnerVal}" beat "${loserVal}" by +${pct}% in engagement. AI Update: Your master prompt has been automatically optimized to favor this style.`;
+    const title = variable === "timing" ? "Optimal Posting Window Found ⏱️" : "New Growth Insight Found! 🚀";
+    const message = variable === "timing"
+      ? `Posting ${winnerVal} minutes from base time outperformed by +${pct}% in ${e.city || "this city"}. The scheduler will now favor this window.`
+      : `Pattern: "${winnerVal}" beat "${loserVal}" by +${pct}% in engagement. AI Update: Your master prompt has been automatically optimized to favor this style.`;
 
     // Upsert winner row
     {
@@ -184,10 +186,11 @@ Deno.serve(async (req) => {
     });
 
     // AI Memory: persist winning content for future learning.
-    // hook/tone variables map directly; visuals winners are stored as 'script' style hints.
+    // hook/tone/voice/timing variables map directly; visuals winners are stored as 'script' style hints.
     const memoryType = variable === "hook" ? "hook"
       : variable === "tone" ? "tone"
       : variable === "voice" ? "voice"
+      : variable === "timing" ? "timing"
       : "script";
 
     // Pull condition + time_of_day + voice info from the winning post.
@@ -197,6 +200,7 @@ Deno.serve(async (req) => {
     let winnerTimeOfDay: string | null = null;
     let winnerVoiceId: string | null = null;
     let winnerVoiceStyle: string | null = null;
+    let winnerSlot: string | null = null;
     try {
       const { data: pa } = await supabase
         .from("post_analytics")
@@ -209,25 +213,32 @@ Deno.serve(async (req) => {
 
       const { data: ph } = await supabase
         .from("post_history")
-        .select("debug_trace")
+        .select("debug_trace, caption")
         .eq("id", winnerPostId)
         .limit(1)
         .maybeSingle();
       const trace = (ph?.debug_trace as any) || {};
-      // debug_trace.voice_config = { voice_id, ... } when voiceover ran
       winnerVoiceId = trace?.voice_config?.voice_id ?? trace?.voice_id ?? null;
       if (winnerVoiceId) {
         const { classifyVoiceStyle } = await import("../_shared/voice-memory.ts");
         winnerVoiceStyle = classifyVoiceStyle(winnerVoiceId);
       }
+      const slotMatch = String(ph?.caption || "").match(/\[auto:(\w+)\]/);
+      if (slotMatch) winnerSlot = slotMatch[1].toLowerCase();
     } catch (_e) { /* best-effort enrichment */ }
+
+    // For timing experiments, encode city:slot into `condition` so the scheduler
+    // can find the right tilt for the right slot. Content is the offset string.
+    const memCondition = variable === "timing"
+      ? [String(e.city || "").toLowerCase(), winnerSlot || ""].filter(Boolean).join(":")
+      : winnerCondition;
 
     await supabase.from("ai_memory").insert({
       user_id: e.user_id,
       memory_type: memoryType,
       content: winnerVal,
       performance_score: deltaPct,
-      condition: winnerCondition,
+      condition: memCondition,
       time_of_day: winnerTimeOfDay,
       voice_id: winnerVoiceId,
       voice_style: winnerVoiceStyle,

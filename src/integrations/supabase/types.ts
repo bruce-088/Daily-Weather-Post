@@ -242,7 +242,10 @@ export type Database = {
           post_id_b: string | null
           scheduled_post_id_a: string | null
           scheduled_post_id_b: string | null
+          scheduled_time_offset_a: number | null
+          scheduled_time_offset_b: number | null
           status: string
+          test_type: string
           user_id: string
           variable_tested: string
           variant_a_meta: Json
@@ -262,7 +265,10 @@ export type Database = {
           post_id_b?: string | null
           scheduled_post_id_a?: string | null
           scheduled_post_id_b?: string | null
+          scheduled_time_offset_a?: number | null
+          scheduled_time_offset_b?: number | null
           status?: string
+          test_type?: string
           user_id: string
           variable_tested: string
           variant_a_meta?: Json
@@ -282,7 +288,10 @@ export type Database = {
           post_id_b?: string | null
           scheduled_post_id_a?: string | null
           scheduled_post_id_b?: string | null
+          scheduled_time_offset_a?: number | null
+          scheduled_time_offset_b?: number | null
           status?: string
+          test_type?: string
           user_id?: string
           variable_tested?: string
           variant_a_meta?: Json

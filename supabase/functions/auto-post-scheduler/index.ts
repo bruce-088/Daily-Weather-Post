@@ -2,6 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   shouldRunExperiment,
+  shouldRunTimingExperiment,
   pickChallengerVariant,
   buildControlVariant,
   createExperimentRow,
@@ -252,7 +253,43 @@ Deno.serve(async (req) => {
           if (dryRun) dryRunReport.push({ ...baseEntry, reason: "No platforms selected for this slot. Pick at least one in the city's automation settings." });
           continue;
         }
-        const ev = evaluateTime(period.time, userTz);
+        // ── TIMING TILT ──: if ai_memory has a winning timing offset for this user/city,
+        // shift the slot's target time by that many minutes (max ±30).
+        let timingTiltMin = 0;
+        try {
+          const { data: timingMem } = await supabase
+            .from("ai_memory")
+            .select("content, performance_score, condition")
+            .eq("user_id", target.user_id)
+            .eq("memory_type", "timing")
+            .order("performance_score", { ascending: false })
+            .limit(20);
+          // Prefer entries whose `condition` field encodes "<city>:<slot>" or matches city.
+          const cityKey = target.city.toLowerCase();
+          const slotKey = period.name.toLowerCase();
+          const tagged = (timingMem || []).find((m: any) => {
+            const c = String(m.condition || "").toLowerCase();
+            return c.includes(cityKey) && c.includes(slotKey);
+          }) || (timingMem || []).find((m: any) => String(m.condition || "").toLowerCase().includes(cityKey));
+          if (tagged?.content) {
+            const parsed = parseInt(String(tagged.content).replace(/[^-\d]/g, ""), 10);
+            if (!isNaN(parsed) && Math.abs(parsed) <= 30) {
+              timingTiltMin = parsed;
+              console.log(`[scheduler]   ⏱️  timing tilt: applying ${parsed >= 0 ? "+" : ""}${parsed}min from ai_memory winner (city=${target.city}, slot=${period.name})`);
+            }
+          }
+        } catch (tErr) {
+          console.warn("[scheduler]   timing tilt lookup failed:", tErr);
+        }
+        // Apply the tilt to the period time before evaluation.
+        const tiltedTime = (() => {
+          const t = parseTime(period.time);
+          let total = t.hour * 60 + t.minute + timingTiltMin;
+          total = ((total % 1440) + 1440) % 1440;
+          const h = Math.floor(total / 60), m = total % 60;
+          return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+        })();
+        const ev = evaluateTime(tiltedTime, userTz);
         console.log(
           `[scheduler]   ${period.name}: target_local=${ev.targetLocal} ${userTz}, current_local=${ev.currentLocal}, diff=${ev.diff}min, shouldPost=${ev.shouldPost}`
         );
@@ -396,11 +433,58 @@ Deno.serve(async (req) => {
             }
           }
 
-          // ── A/B EXPERIMENT PAIRING ──
-          // ~50% of the time create a Challenger (B) post 60min after the
-          // Control (A). One row per inserted A platform-row gets paired so the
-          // engine works even when a slot fans out to multiple platforms.
+          // ── TIMING EXPERIMENT PAIRING ──
+          // Same content, two times: A = base-15min (effectively "now" because the
+          // slot just triggered), B = base+15min (now + 30min). Picks ~25% of slots.
+          let timingExpRan = false;
           if (!dryRun && inserted && inserted.length > 0) {
+            try {
+              if (await shouldRunTimingExperiment(supabase, target.user_id, target.city)) {
+                const expId = await createExperimentRow(supabase, {
+                  userId: target.user_id,
+                  city: target.city,
+                  variable: "timing",
+                  variantA: { label: "Earlier", ...({ timing: "-15" } as any) } as any,
+                  variantB: { label: "Later", ...({ timing: "+15" } as any) } as any,
+                  testType: "timing",
+                  offsetA: -15,
+                  offsetB: 15,
+                });
+                if (expId) {
+                  await supabase.from("scheduled_posts").update({
+                    experiment_id: expId, experiment_variant: "A",
+                  }).in("id", inserted.map((r: any) => r.id));
+
+                  const bScheduledAt = new Date(now.getTime() + 30 * 60 * 1000 + 5_000).toISOString();
+                  const bRows = inserted.map((r: any) => ({
+                    user_id: target.user_id,
+                    city: target.city,
+                    city_id: target.city_id,
+                    automation_id: target.automation_id,
+                    platform: r.platform,
+                    scheduled_at: bScheduledAt,
+                    status: "pending",
+                    caption: slotMarker + " [exp:B] [timing:+15]",
+                    include_voiceover: voiceoverEnabled && VIDEO_PLATFORMS.has(r.platform),
+                    experiment_id: expId,
+                    experiment_variant: "B",
+                  }));
+                  const { error: bErr, data: bInserted } = await supabase
+                    .from("scheduled_posts").insert(bRows).select("id, platform");
+                  if (bErr) console.warn(`[experiments] timing B insert failed:`, bErr.message);
+                  else console.log(`[experiments] ⏱️  Timing exp ${expId} created; B rows: ${(bInserted || []).length}`);
+                  timingExpRan = true;
+                }
+              }
+            } catch (tExpErr) {
+              console.warn("[experiments] timing pairing exception:", tExpErr);
+            }
+          }
+
+          // ── A/B EXPERIMENT PAIRING (content) ──
+          // ~50% of the time create a Challenger (B) post 60min after the
+          // Control (A). Skipped if a timing experiment was created for this slot.
+          if (!dryRun && !timingExpRan && inserted && inserted.length > 0) {
             try {
               const userToneRaw = (settingsByUser.get(target.user_id) as any)?.caption_tone || "professional";
               if (await shouldRunExperiment(supabase, target.user_id)) {

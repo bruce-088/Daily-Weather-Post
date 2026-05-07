@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Trophy, TrendingUp, Sparkles, RefreshCw, ExternalLink, Eye, Heart, MessageCircle } from "lucide-react";
+import { Trophy, TrendingUp, Sparkles, RefreshCw, ExternalLink, Eye, Heart, MessageCircle, Clock } from "lucide-react";
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip as RTooltip, CartesianGrid,
 } from "recharts";
@@ -52,11 +52,31 @@ function conditionEmoji(c: string | null) {
   return "🌤️";
 }
 
+type TimingWindow = {
+  slot: string | null;
+  offset: number;
+  delta_pct: number;
+  base_time: string | null;
+  optimized_time: string | null;
+};
+
+function addMinutesToHHMM(hhmm: string, mins: number): string {
+  const [h, m] = hhmm.split(":").map((n) => parseInt(n, 10));
+  let total = h * 60 + m + mins;
+  total = ((total % 1440) + 1440) % 1440;
+  const oh = Math.floor(total / 60);
+  const om = total % 60;
+  const ampm = oh >= 12 ? "PM" : "AM";
+  const h12 = ((oh + 11) % 12) + 1;
+  return `${h12}:${String(om).padStart(2, "0")} ${ampm}`;
+}
+
 export function GrowthInsights() {
   const activeCity = useActiveCity();
   const [posts, setPosts] = useState<PostRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [timingWindows, setTimingWindows] = useState<TimingWindow[]>([]);
 
   const load = async () => {
     setLoading(true);
@@ -71,6 +91,54 @@ export function GrowthInsights() {
     if (activeCity.name) q = q.ilike("city", activeCity.name);
     const { data } = await q;
     setPosts((data || []) as PostRow[]);
+
+    // ── Optimal Posting Windows: from concluded timing experiments ──
+    let expQ = supabase
+      .from("experiments")
+      .select("id, city, delta_pct, winner_variant, scheduled_time_offset_a, scheduled_time_offset_b, concluded_at")
+      .eq("user_id", user.id)
+      .eq("test_type", "timing")
+      .eq("status", "concluded")
+      .order("concluded_at", { ascending: false })
+      .limit(20);
+    if (activeCity.name) expQ = expQ.ilike("city", activeCity.name);
+    const { data: timingExps } = await expQ;
+
+    const { data: autos } = await supabase
+      .from("automations")
+      .select("city_id, morning_time, afternoon_time, evening_time, cities:city_id(name)")
+      .eq("user_id", user.id);
+    const automationForCity: any = (autos || []).find((a: any) =>
+      activeCity.name && a?.cities?.name?.toLowerCase() === activeCity.name.toLowerCase()
+    ) || (autos || [])[0];
+
+    const { data: mem } = await supabase
+      .from("ai_memory")
+      .select("content, condition, performance_score, created_at")
+      .eq("user_id", user.id)
+      .eq("memory_type", "timing")
+      .order("created_at", { ascending: false })
+      .limit(20);
+
+    const windows: TimingWindow[] = [];
+    for (const e of (timingExps || []) as any[]) {
+      const offset = e.winner_variant === "A" ? (e.scheduled_time_offset_a ?? 0) : (e.scheduled_time_offset_b ?? 0);
+      const tag = (mem || []).find((m: any) =>
+        String(m.condition || "").toLowerCase().includes((e.city || "").toLowerCase())
+      );
+      const slot = tag?.condition?.split(":")[1] || null;
+      const baseTime: string | null = slot && automationForCity
+        ? ((automationForCity[`${slot}_time`] as string | null) || "").slice(0, 5) || null
+        : null;
+      windows.push({
+        slot,
+        offset,
+        delta_pct: Number(e.delta_pct) || 0,
+        base_time: baseTime,
+        optimized_time: baseTime ? addMinutesToHHMM(baseTime, offset) : null,
+      });
+    }
+    setTimingWindows(windows);
     setLoading(false);
   };
 
@@ -164,6 +232,49 @@ export function GrowthInsights() {
           {syncing ? "Syncing…" : "Sync now"}
         </Button>
       </div>
+
+      {/* Optimal Posting Windows (timing experiments) */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Clock className="h-4 w-4 text-violet-400" /> Optimal Posting Windows
+          </CardTitle>
+          <CardDescription>
+            Timing tests pit Base − 15 min vs. Base + 15 min on the same content. The winner tilts future scheduling automatically.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {timingWindows.length === 0 ? (
+            <div className="text-sm text-muted-foreground">
+              No timing experiments concluded yet{activeCity.name ? ` for ${activeCity.name}` : ""}. The scheduler will start one automatically on a future slot.
+            </div>
+          ) : (
+            <ul className="space-y-2">
+              {timingWindows.slice(0, 5).map((w, i) => {
+                const sign = w.offset >= 0 ? "+" : "";
+                const slotLabel = w.slot ? w.slot[0].toUpperCase() + w.slot.slice(1) : "Slot";
+                const lift = Math.round(w.delta_pct);
+                return (
+                  <li key={i} className="flex items-center gap-3 p-3 rounded-md border border-border/40 bg-card/40">
+                    <div className="text-2xl">⏱️</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium">
+                        {w.optimized_time && w.base_time
+                          ? <>Intelligence suggests <strong>{w.optimized_time}</strong> is <strong>{lift}%</strong> more effective than {addMinutesToHHMM(w.base_time, 0)}{activeCity.name ? ` in ${activeCity.name}` : ""}.</>
+                          : <>{slotLabel} posts perform <strong>{lift}%</strong> better at base time {sign}{w.offset} min{activeCity.name ? ` in ${activeCity.name}` : ""}.</>}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground mt-0.5">
+                        Slot: {slotLabel} · Tilt: {sign}{w.offset} min · Auto-applied to future runs
+                      </div>
+                    </div>
+                    <Badge className="border bg-violet-500/15 text-violet-300 border-violet-500/30">+{lift}%</Badge>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Leaderboard */}
       <Card>

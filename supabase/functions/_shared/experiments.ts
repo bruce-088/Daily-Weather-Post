@@ -4,7 +4,7 @@
 // Used by auto-post-scheduler: after creating Post A, ~50% of the time
 // we also schedule Post B 60 minutes later with one variable changed.
 
-export type Variable = "hook" | "tone" | "visuals" | "voice";
+export type Variable = "hook" | "tone" | "visuals" | "voice" | "timing";
 export type VariantLabel = "A" | "B";
 
 export interface VariantMeta {
@@ -80,6 +80,9 @@ export async function createExperimentRow(
     variable: Variable;
     variantA: VariantMeta;
     variantB: VariantMeta;
+    testType?: "content" | "timing";
+    offsetA?: number | null;
+    offsetB?: number | null;
   },
 ): Promise<string | null> {
   const { data, error } = await supabase
@@ -92,6 +95,9 @@ export async function createExperimentRow(
       variant_b_meta: args.variantB,
       status: "gathering_data",
       conclude_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      test_type: args.testType || "content",
+      scheduled_time_offset_a: args.offsetA ?? null,
+      scheduled_time_offset_b: args.offsetB ?? null,
     })
     .select("id")
     .single();
@@ -102,9 +108,32 @@ export async function createExperimentRow(
   return data?.id ?? null;
 }
 
+/** Decide whether to run a TIMING experiment for this slot (~25%). */
+export async function shouldRunTimingExperiment(supabase: any, userId: string, city: string | null): Promise<boolean> {
+  const { count } = await supabase
+    .from("experiments")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("test_type", "timing")
+    .eq("status", "gathering_data");
+  if ((count ?? 0) >= 1) return false;
+  // Don't pile on if a recent timing test exists for this city in last 3 days.
+  const since = new Date(Date.now() - 3 * 86400_000).toISOString();
+  const { count: recent } = await supabase
+    .from("experiments")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("test_type", "timing")
+    .ilike("city", city || "")
+    .gte("created_at", since);
+  if ((recent ?? 0) >= 1) return false;
+  return Math.random() < 0.25;
+}
+
 export function variantValue(variable: Variable, meta: VariantMeta): string {
   if (variable === "hook") return meta.hook || "";
   if (variable === "tone") return meta.tone || "";
   if (variable === "voice") return meta.voice || "";
+  if (variable === "timing") return (meta as any).timing || "";
   return meta.visuals || "";
 }
