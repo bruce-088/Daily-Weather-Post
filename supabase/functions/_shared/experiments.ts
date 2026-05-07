@@ -4,7 +4,7 @@
 // Used by auto-post-scheduler: after creating Post A, ~50% of the time
 // we also schedule Post B 60 minutes later with one variable changed.
 
-export type Variable = "hook" | "tone" | "visuals" | "voice";
+export type Variable = "hook" | "tone" | "visuals" | "voice" | "timing";
 export type VariantLabel = "A" | "B";
 
 export interface VariantMeta {
