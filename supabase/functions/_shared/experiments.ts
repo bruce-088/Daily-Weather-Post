@@ -134,5 +134,6 @@ export function variantValue(variable: Variable, meta: VariantMeta): string {
   if (variable === "hook") return meta.hook || "";
   if (variable === "tone") return meta.tone || "";
   if (variable === "voice") return meta.voice || "";
+  if (variable === "timing") return (meta as any).timing || "";
   return meta.visuals || "";
 }
