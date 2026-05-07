@@ -233,6 +233,49 @@ export function GrowthInsights() {
         </Button>
       </div>
 
+      {/* Optimal Posting Windows (timing experiments) */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Clock className="h-4 w-4 text-violet-400" /> Optimal Posting Windows
+          </CardTitle>
+          <CardDescription>
+            Timing tests pit Base − 15 min vs. Base + 15 min on the same content. The winner tilts future scheduling automatically.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {timingWindows.length === 0 ? (
+            <div className="text-sm text-muted-foreground">
+              No timing experiments concluded yet{activeCity.name ? ` for ${activeCity.name}` : ""}. The scheduler will start one automatically on a future slot.
+            </div>
+          ) : (
+            <ul className="space-y-2">
+              {timingWindows.slice(0, 5).map((w, i) => {
+                const sign = w.offset >= 0 ? "+" : "";
+                const slotLabel = w.slot ? w.slot[0].toUpperCase() + w.slot.slice(1) : "Slot";
+                const lift = Math.round(w.delta_pct);
+                return (
+                  <li key={i} className="flex items-center gap-3 p-3 rounded-md border border-border/40 bg-card/40">
+                    <div className="text-2xl">⏱️</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium">
+                        {w.optimized_time && w.base_time
+                          ? <>Intelligence suggests <strong>{w.optimized_time}</strong> is <strong>{lift}%</strong> more effective than {addMinutesToHHMM(w.base_time, 0)}{activeCity.name ? ` in ${activeCity.name}` : ""}.</>
+                          : <>{slotLabel} posts perform <strong>{lift}%</strong> better at base time {sign}{w.offset} min{activeCity.name ? ` in ${activeCity.name}` : ""}.</>}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground mt-0.5">
+                        Slot: {slotLabel} · Tilt: {sign}{w.offset} min · Auto-applied to future runs
+                      </div>
+                    </div>
+                    <Badge className="border bg-violet-500/15 text-violet-300 border-violet-500/30">+{lift}%</Badge>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Leaderboard */}
       <Card>
         <CardHeader className="pb-3">
