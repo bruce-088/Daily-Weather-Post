@@ -433,11 +433,58 @@ Deno.serve(async (req) => {
             }
           }
 
-          // ── A/B EXPERIMENT PAIRING ──
-          // ~50% of the time create a Challenger (B) post 60min after the
-          // Control (A). One row per inserted A platform-row gets paired so the
-          // engine works even when a slot fans out to multiple platforms.
+          // ── TIMING EXPERIMENT PAIRING ──
+          // Same content, two times: A = base-15min (effectively "now" because the
+          // slot just triggered), B = base+15min (now + 30min). Picks ~25% of slots.
+          let timingExpRan = false;
           if (!dryRun && inserted && inserted.length > 0) {
+            try {
+              if (await shouldRunTimingExperiment(supabase, target.user_id, target.city)) {
+                const expId = await createExperimentRow(supabase, {
+                  userId: target.user_id,
+                  city: target.city,
+                  variable: "timing",
+                  variantA: { label: "Earlier", ...({ timing: "-15" } as any) } as any,
+                  variantB: { label: "Later", ...({ timing: "+15" } as any) } as any,
+                  testType: "timing",
+                  offsetA: -15,
+                  offsetB: 15,
+                });
+                if (expId) {
+                  await supabase.from("scheduled_posts").update({
+                    experiment_id: expId, experiment_variant: "A",
+                  }).in("id", inserted.map((r: any) => r.id));
+
+                  const bScheduledAt = new Date(now.getTime() + 30 * 60 * 1000 + 5_000).toISOString();
+                  const bRows = inserted.map((r: any) => ({
+                    user_id: target.user_id,
+                    city: target.city,
+                    city_id: target.city_id,
+                    automation_id: target.automation_id,
+                    platform: r.platform,
+                    scheduled_at: bScheduledAt,
+                    status: "pending",
+                    caption: slotMarker + " [exp:B] [timing:+15]",
+                    include_voiceover: voiceoverEnabled && VIDEO_PLATFORMS.has(r.platform),
+                    experiment_id: expId,
+                    experiment_variant: "B",
+                  }));
+                  const { error: bErr, data: bInserted } = await supabase
+                    .from("scheduled_posts").insert(bRows).select("id, platform");
+                  if (bErr) console.warn(`[experiments] timing B insert failed:`, bErr.message);
+                  else console.log(`[experiments] ⏱️  Timing exp ${expId} created; B rows: ${(bInserted || []).length}`);
+                  timingExpRan = true;
+                }
+              }
+            } catch (tExpErr) {
+              console.warn("[experiments] timing pairing exception:", tExpErr);
+            }
+          }
+
+          // ── A/B EXPERIMENT PAIRING (content) ──
+          // ~50% of the time create a Challenger (B) post 60min after the
+          // Control (A). Skipped if a timing experiment was created for this slot.
+          if (!dryRun && !timingExpRan && inserted && inserted.length > 0) {
             try {
               const userToneRaw = (settingsByUser.get(target.user_id) as any)?.caption_tone || "professional";
               if (await shouldRunExperiment(supabase, target.user_id)) {
