@@ -327,32 +327,7 @@ Deno.serve(async (req) => {
         }
 
         // Schedule slightly in the future to satisfy validate_scheduled_at trigger.
-        // ── TIMING TILT ──: if ai_memory has a winning "timing" offset for this user/city,
-        // shift the publish time by that many minutes (within sane bounds).
-        let timingTiltMin = 0;
-        try {
-          const { data: timingMem } = await supabase
-            .from("ai_memory")
-            .select("content, performance_score, city")
-            .eq("user_id", target.user_id)
-            .eq("memory_type", "timing")
-            .order("performance_score", { ascending: false })
-            .limit(10);
-          const cityMatches = (timingMem || []).filter((m: any) =>
-            !m.city || String(m.city).toLowerCase() === target.city.toLowerCase()
-          );
-          const top = cityMatches[0];
-          if (top?.content) {
-            const parsed = parseInt(String(top.content).replace(/[^-\d]/g, ""), 10);
-            if (!isNaN(parsed) && Math.abs(parsed) <= 30) {
-              timingTiltMin = parsed;
-              console.log(`[scheduler]   ⏱️  timing tilt: applying ${parsed >= 0 ? "+" : ""}${parsed}min from ai_memory winner (city=${target.city})`);
-            }
-          }
-        } catch (tErr) {
-          console.warn("[scheduler]   timing tilt lookup failed:", tErr);
-        }
-        const scheduledAt = new Date(now.getTime() + Math.max(5_000, timingTiltMin * 60_000)).toISOString();
+        const scheduledAt = new Date(now.getTime() + 5_000).toISOString();
 
         // Insert one scheduled_posts row per platform — process-scheduled-posts will execute them.
         const rows = period.platforms.map((platform) => ({
