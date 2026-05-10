@@ -1975,11 +1975,27 @@ Deno.serve(async (req) => {
         const _bgTheme = getWeatherTheme(weather.condition);
         trace("background_selected", { condition: weather.condition, video_keyword: _bgTheme.videoKeyword });
 
+        // ── AI Visual Optimization ──
+        // 1. Default style: "sky" (bright, motion-friendly).
+        // 2. If a winner exists in ai_memory (Δ>15% & ≥100 views), prefer it.
+        // 3. If this post is part of a "visuals" experiment, the variant meta wins.
+        let visualStyle = "sky";
+        try {
+          const top = await getTopVisualStyle(supabase, post.user_id);
+          if (top) visualStyle = top.style;
+        } catch (e) { console.warn("[visual] memory lookup failed:", e); }
+        if (experimentCtx?.variable === "visuals" && experimentCtx?.meta?.visuals) {
+          visualStyle = String(experimentCtx.meta.visuals);
+          console.log(`[visual] post ${post.id}: experiment override → visual_style=${visualStyle}`);
+        }
+        const visualMeta = expandVisualMeta(visualStyle);
+        trace("visual_style", visualMeta);
+
         // Try video generation once (with voiceover baked in if available)
-        console.log(`RENDER START: City: ${weather.city}, VoiceEnabled: ${voiceUrl ? "True" : "False"}`);
+        console.log(`RENDER START: City: ${weather.city}, VoiceEnabled: ${voiceUrl ? "True" : "False"}, VisualStyle: ${visualStyle}`);
         const video = await generateVideoWithFallback({
-          weather, timePeriod, voiceUrl, audioDurationSec: voiceAudioDurationSec,
-          creatomate: () => generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec),
+          weather, timePeriod, voiceUrl, audioDurationSec: voiceAudioDurationSec, visualStyle,
+          creatomate: () => generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec, visualStyle),
         });
         trace("video_render", { success: !!video, mime: video?.mimeType, provider: video?.provider });
 
