@@ -302,6 +302,19 @@ Deno.serve(async (req) => {
         } catch (e) {
           console.warn("[generate-caption] ai_memory lookup failed:", e);
         }
+
+        // ---- Predictive Creative Engine: getWinningStyleForCondition ----
+        // Use historical performance to choose visual_style + voice_tone + hook_type
+        // for this (condition, city) and inject as a directive.
+        try {
+          const condForRecipe = (conditions || "").toLowerCase().split(/[,;]/)[0]?.trim() || null;
+          const recipe = await getWinningStyleForCondition(svc, auth.userId, condForRecipe, city);
+          insightNote += formatRecipeDirective(recipe);
+          aiOptimized = true;
+          console.log(`[generate-caption] 🎯 recipe (${recipe.source}, Δ${recipe.delta_pct}%): ${recipe.visual_style}/${recipe.voice_tone}/${recipe.hook_type}`);
+        } catch (e) {
+          console.warn("[generate-caption] winning-recipe lookup failed:", e);
+        }
       }
     } catch (e) {
       console.warn("[generate-caption] insight lookup failed:", e);
