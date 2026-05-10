@@ -9,6 +9,7 @@ import {
   stripUnverifiedReferences,
 } from "../_shared/location-guard.ts";
 import { getTopPerformingPatterns, buildLearningPromptBlock } from "../_shared/learning-patterns.ts";
+import { getWinningStyleForCondition, formatRecipeDirective } from "../_shared/winning-recipes.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
