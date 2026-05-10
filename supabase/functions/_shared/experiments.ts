@@ -16,9 +16,34 @@ export interface VariantMeta {
 }
 
 const TONES = ["professional", "warm", "playful", "warning"];
-const VISUAL_STYLES = ["gradient", "stock-video"];
+// Expanded visual styles for the AI Visual Optimization system.
+// Each style is paired with a brightness/layout/motion profile via expandVisualMeta().
+export const VISUAL_STYLES = ["gradient", "sky", "cinematic", "minimal"];
 const HOOK_STYLES = ["statement", "question"];
 const VOICE_STYLES = ["calm", "energetic", "urgent"];
+
+export interface VisualMetadata {
+  visual_style: string;          // gradient | sky | cinematic | minimal
+  brightness_level: string;      // dark | medium | bright
+  layout_type: string;           // centered | split | minimal
+  motion_type: string;           // static | subtle_motion
+}
+
+/** Expand a visual_style string into its full metadata profile. */
+export function expandVisualMeta(style: string): VisualMetadata {
+  const s = (style || "sky").toLowerCase();
+  if (s === "gradient") {
+    return { visual_style: "gradient", brightness_level: "dark", layout_type: "centered", motion_type: "static" };
+  }
+  if (s === "cinematic") {
+    return { visual_style: "cinematic", brightness_level: "medium", layout_type: "split", motion_type: "subtle_motion" };
+  }
+  if (s === "minimal") {
+    return { visual_style: "minimal", brightness_level: "bright", layout_type: "minimal", motion_type: "static" };
+  }
+  // default: sky
+  return { visual_style: "sky", brightness_level: "bright", layout_type: "centered", motion_type: "subtle_motion" };
+}
 
 export function buildControlVariant(opts: {
   tone?: string | null;
