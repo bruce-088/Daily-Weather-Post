@@ -107,7 +107,7 @@ async function generateWithJSON2Video(
     : 12;
   const duration = Math.max(8, Math.min(40, Math.ceil(audioLen + 1.5)));
 
-  const bg = pickSkyGradient(cond);
+  const bg = pickBackgroundColor(cond, payload.visualStyle || null);
   const headline = `${city}${region ? ", " + region : ""}`;
   const sub = temp != null ? `${temp}°F · ${cond}` : cond;
   const breakdown = [
