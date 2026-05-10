@@ -1019,6 +1019,8 @@ async function generateFallbackImage(weather: WeatherResponse): Promise<{ data: 
   promptParts.push("- Tomorrow preview line: \"" + tomorrowLine + "\"");
   promptParts.push("");
   promptParts.push("STYLE: Clean, minimal, professional weather app aesthetic. No photographs. Sharp typography. Subtle depth with shadows and glow effects. Premium feel.");
+  promptParts.push("");
+  promptParts.push(buildCityVisualBlock(weather.city));
 
   const prompt = promptParts.join("\n");
 
