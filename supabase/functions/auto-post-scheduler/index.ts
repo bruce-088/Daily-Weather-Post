@@ -6,6 +6,7 @@ import {
   pickChallengerVariant,
   buildControlVariant,
   createExperimentRow,
+  getTopVisualStyle,
 } from "../_shared/experiments.ts";
 
 const corsHeaders = {
