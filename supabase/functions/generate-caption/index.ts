@@ -5,6 +5,7 @@ import { buildStyleAddendum, normalizeTone } from "../_shared/caption-style.ts";
 import {
   LOCATION_ACCURACY_RULES,
   buildVerifiedLandmarksBlock,
+  buildCityVisualBlock,
   validateCaptionLocation,
   stripUnverifiedReferences,
 } from "../_shared/location-guard.ts";
@@ -343,6 +344,8 @@ dynamic_handle: ${handle}
 extra_note: ${body.extra_note ?? body.extraNote ?? ""}${extremeNote}${styleNote}${variationNote}
 
 ${buildVerifiedLandmarksBlock(city)}
+
+${buildCityVisualBlock(city)}
 
 ${styleAddendum}${insightNote}`;
 
