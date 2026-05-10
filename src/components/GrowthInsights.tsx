@@ -387,6 +387,51 @@ export function GrowthInsights() {
         </CardContent>
       </Card>
 
+      {/* Visual Performance */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Palette className="h-4 w-4 text-fuchsia-400" /> Visual Performance
+          </CardTitle>
+          <CardDescription>
+            Which background theme keeps people from scrolling{activeCity.name ? ` in ${activeCity.name}` : ""}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {visualPerf.recommendation && (
+            <div className="rounded-md border border-fuchsia-500/30 bg-fuchsia-500/5 p-3 text-sm">
+              🎨 Recommended Style{activeCity.name ? ` for ${activeCity.name}` : ""}:{" "}
+              <strong>{visualPerf.recommendation.theme}</strong> — {visualPerf.recommendation.reason}
+            </div>
+          )}
+          {visualPerf.rows.length === 0 ? (
+            <div className="text-sm text-muted-foreground">
+              No visual data yet. New posts will be tagged with theme + color profile automatically.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {visualPerf.rows.map((r, i) => (
+                <div key={r.theme} className="p-3 rounded-md border border-border/40 bg-card/40">
+                  <div className="flex items-center gap-1.5">
+                    {i === 0 && <span>🏆</span>}
+                    <div className="text-sm font-medium">{r.theme}</div>
+                  </div>
+                  {r.colorProfile && (
+                    <Badge variant="outline" className="mt-1 text-[10px]">{r.colorProfile}</Badge>
+                  )}
+                  <div className="text-lg font-semibold mt-1">
+                    {r.avgRetention > 0 ? `${(r.avgRetention * 100).toFixed(1)}%` : fmt(Math.round(r.avgViews))}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground">
+                    {r.avgRetention > 0 ? "avg retention" : "avg views"} · {r.n} post{r.n === 1 ? "" : "s"}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Trend chart */}
       <Card>
         <CardHeader className="pb-3">
