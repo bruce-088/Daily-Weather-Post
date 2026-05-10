@@ -4,6 +4,7 @@ import { buildStyleAddendum, normalizeTone, appendVoiceCTA, isWeatherAlert } fro
 import {
   LOCATION_ACCURACY_RULES,
   buildVerifiedLandmarksBlock,
+  buildCityVisualBlock,
   validateCaptionLocation,
   stripUnverifiedReferences,
 } from "../_shared/location-guard.ts";
