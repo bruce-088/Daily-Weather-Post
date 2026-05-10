@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Trophy, TrendingUp, Sparkles, RefreshCw, ExternalLink, Eye, Heart, MessageCircle, Clock } from "lucide-react";
+import { Trophy, TrendingUp, Sparkles, RefreshCw, ExternalLink, Eye, Heart, MessageCircle, Clock, Palette } from "lucide-react";
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip as RTooltip, CartesianGrid,
 } from "recharts";
