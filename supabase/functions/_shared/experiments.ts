@@ -27,6 +27,9 @@ export interface VisualMetadata {
   brightness_level: string;      // dark | medium | bright
   layout_type: string;           // centered | split | minimal
   motion_type: string;           // static | subtle_motion
+  // ── Style Tags (Visual Engine Upgrade) ──
+  theme?: string;                // Dramatic-Realistic | Cinematic-Sky | Minimal-Gradient
+  color_profile?: string;        // High-Contrast | Soft-Pastel | Moody-Dark
 }
 
 /** Expand a visual_style string into its full metadata profile. */
@@ -43,6 +46,38 @@ export function expandVisualMeta(style: string): VisualMetadata {
   }
   // default: sky
   return { visual_style: "sky", brightness_level: "bright", layout_type: "centered", motion_type: "subtle_motion" };
+}
+
+/**
+ * Map a weather condition + time slot to a high-level visual Theme.
+ *  • Dramatic-Realistic → storms, heavy rain, snow
+ *  • Cinematic-Sky     → sunrise/sunset moments (morning/evening + clear)
+ *  • Minimal-Gradient  → everything else (clear days, mild conditions)
+ */
+export function classifyVisualTheme(condition: string | null | undefined, period: string | null | undefined): string {
+  const c = (condition || "").toLowerCase();
+  const p = (period || "").toLowerCase();
+  if (c.includes("storm") || c.includes("thunder") || c.includes("snow") || c.includes("hail") ||
+      c.includes("heavy rain") || (c.includes("rain") && !c.includes("light"))) {
+    return "Dramatic-Realistic";
+  }
+  if ((p === "morning" || p === "evening") && (c.includes("clear") || c.includes("sun") || c.includes("partly"))) {
+    return "Cinematic-Sky";
+  }
+  return "Minimal-Gradient";
+}
+
+/**
+ * Map (visual_style, theme) → color profile bucket used in the Visual Leaderboard.
+ *  • High-Contrast → cinematic / dramatic atmospheres
+ *  • Soft-Pastel   → minimal + bright sky
+ *  • Moody-Dark    → gradient / overcast / storm fallbacks
+ */
+export function classifyColorProfile(style: string, theme: string): string {
+  const s = (style || "").toLowerCase();
+  if (theme === "Dramatic-Realistic" || s === "cinematic") return "High-Contrast";
+  if (s === "minimal" || (s === "sky" && theme !== "Dramatic-Realistic")) return "Soft-Pastel";
+  return "Moody-Dark";
 }
 
 export function buildControlVariant(opts: {
@@ -192,4 +227,81 @@ export async function getTopVisualStyle(
   const style = String(row.content || "").trim().toLowerCase();
   if (!VISUAL_STYLES.includes(style)) return null;
   return { style, deltaPct: Number(row.performance_score) || 0, views: Number(row.views) || 0 };
+}
+
+/**
+ * Visual Engine Upgrade — decide whether the scheduler should FORCE a
+ * "visuals" experiment for this city/run. Triggers when:
+ *   • The city is brand new for this user (<5 successful posts), OR
+ *   • A new week has started (Monday morning) and no visuals experiment
+ *     has been run for this city in the last 7 days.
+ * Returns false if a visuals experiment is already gathering data.
+ */
+export async function shouldForceVisualTest(
+  supabase: any,
+  userId: string,
+  city: string | null,
+): Promise<boolean> {
+  if (!city) return false;
+  // Skip if a visuals experiment is already in flight for this user.
+  const { count: live } = await supabase
+    .from("experiments")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("variable_tested", "visuals")
+    .eq("status", "gathering_data");
+  if ((live ?? 0) > 0) return false;
+
+  // Has a visuals experiment run for this city in the last 7 days?
+  const since7 = new Date(Date.now() - 7 * 86400_000).toISOString();
+  const { count: recent } = await supabase
+    .from("experiments")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("variable_tested", "visuals")
+    .ilike("city", city)
+    .gte("created_at", since7);
+
+  // City freshness: how many successful posts does this city have?
+  const { count: cityPosts } = await supabase
+    .from("post_history")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .ilike("city", city)
+    .eq("status", "success");
+
+  const isNewCity = (cityPosts ?? 0) < 5;
+  const dow = new Date().getUTCDay(); // 0=Sun, 1=Mon
+  const isWeeklyKickoff = dow === 1; // Monday
+
+  if (isNewCity && (recent ?? 0) === 0) return true;
+  if (isWeeklyKickoff && (recent ?? 0) === 0) return true;
+  return false;
+}
+
+/**
+ * Pick a "Divergent" visual style — a winning style learned in any other
+ * city/condition that differs from `currentStyle`. Falls back to the next
+ * style in VISUAL_STYLES if no winner exists yet.
+ */
+export async function pickDivergentVisualStyle(
+  supabase: any,
+  userId: string,
+  currentStyle: string,
+): Promise<string> {
+  const cur = (currentStyle || "sky").toLowerCase();
+  const { data } = await supabase
+    .from("ai_memory")
+    .select("content, performance_score")
+    .eq("user_id", userId)
+    .eq("memory_type", "visual")
+    .order("performance_score", { ascending: false })
+    .limit(10);
+  for (const row of (data || []) as any[]) {
+    const s = String(row.content || "").trim().toLowerCase();
+    if (VISUAL_STYLES.includes(s) && s !== cur) return s;
+  }
+  // No memory yet — rotate to the next style in the canonical list.
+  const idx = VISUAL_STYLES.indexOf(cur);
+  return VISUAL_STYLES[(idx + 1) % VISUAL_STYLES.length];
 }

@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Trophy, TrendingUp, Sparkles, RefreshCw, ExternalLink, Eye, Heart, MessageCircle, Clock } from "lucide-react";
+import { Trophy, TrendingUp, Sparkles, RefreshCw, ExternalLink, Eye, Heart, MessageCircle, Clock, Palette } from "lucide-react";
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip as RTooltip, CartesianGrid,
 } from "recharts";
@@ -24,6 +24,7 @@ type PostRow = {
   comment_count: number | null;
   retention_rate: number | null;
   last_synced_at: string | null;
+  visual_metadata: any | null;
 };
 
 const fmt = (n: number | null | undefined) => (n ?? 0).toLocaleString();
@@ -84,7 +85,7 @@ export function GrowthInsights() {
     if (!user) { setLoading(false); return; }
     let q = supabase
       .from("post_history")
-      .select("id, caption, platform, city, condition, post_url, image_url, created_at, views_count, likes_count, comment_count, retention_rate, last_synced_at")
+      .select("id, caption, platform, city, condition, post_url, image_url, created_at, views_count, likes_count, comment_count, retention_rate, last_synced_at, visual_metadata")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(500);
@@ -213,6 +214,58 @@ export function GrowthInsights() {
     return { rows, insight };
   }, [posts]);
 
+  // ── Visual Performance: avg views/retention per Theme ──
+  const visualPerf = useMemo(() => {
+    const buckets: Record<string, { views: number; ret: number; retN: number; n: number; color: string | null }> = {};
+    for (const p of posts) {
+      const meta = (p.visual_metadata || {}) as any;
+      const theme = meta?.theme as string | undefined;
+      if (!theme) continue;
+      if (!buckets[theme]) buckets[theme] = { views: 0, ret: 0, retN: 0, n: 0, color: meta?.color_profile || null };
+      buckets[theme].views += p.views_count ?? 0;
+      buckets[theme].n += 1;
+      if (typeof p.retention_rate === "number") {
+        buckets[theme].ret += p.retention_rate;
+        buckets[theme].retN += 1;
+      }
+    }
+    const rows = Object.entries(buckets).map(([theme, v]) => ({
+      theme,
+      colorProfile: v.color,
+      avgViews: v.n ? v.views / v.n : 0,
+      avgRetention: v.retN ? v.ret / v.retN : 0,
+      n: v.n,
+    })).sort((a, b) => (b.avgRetention || b.avgViews) - (a.avgRetention || a.avgViews));
+
+    // Recommend a style based on the active city's most recent condition.
+    let recommendation: { theme: string; reason: string } | null = null;
+    const recent = posts.find((p) => p.condition);
+    const cond = (recent?.condition || "").toLowerCase();
+    let expectedTheme: string | null = null;
+    if (cond.includes("storm") || cond.includes("thunder") || cond.includes("snow") || cond.includes("rain")) {
+      expectedTheme = "Dramatic-Realistic";
+    } else if (cond.includes("clear") || cond.includes("sun") || cond.includes("partly")) {
+      expectedTheme = "Cinematic-Sky";
+    } else {
+      expectedTheme = "Minimal-Gradient";
+    }
+    const winner = rows[0];
+    if (winner && winner.n >= 2) {
+      if (winner.theme === expectedTheme) {
+        recommendation = {
+          theme: winner.theme,
+          reason: `Today's forecast (${recent?.condition || "current weather"}) aligns with your top theme.`,
+        };
+      } else {
+        recommendation = {
+          theme: winner.theme,
+          reason: `${winner.theme} is your highest-performing style — consider it over the default ${expectedTheme} for ${recent?.condition || "today's weather"}.`,
+        };
+      }
+    }
+    return { rows, recommendation };
+  }, [posts]);
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -330,6 +383,51 @@ export function GrowthInsights() {
                 );
               })}
             </ol>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Visual Performance */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Palette className="h-4 w-4 text-fuchsia-400" /> Visual Performance
+          </CardTitle>
+          <CardDescription>
+            Which background theme keeps people from scrolling{activeCity.name ? ` in ${activeCity.name}` : ""}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {visualPerf.recommendation && (
+            <div className="rounded-md border border-fuchsia-500/30 bg-fuchsia-500/5 p-3 text-sm">
+              🎨 Recommended Style{activeCity.name ? ` for ${activeCity.name}` : ""}:{" "}
+              <strong>{visualPerf.recommendation.theme}</strong> — {visualPerf.recommendation.reason}
+            </div>
+          )}
+          {visualPerf.rows.length === 0 ? (
+            <div className="text-sm text-muted-foreground">
+              No visual data yet. New posts will be tagged with theme + color profile automatically.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {visualPerf.rows.map((r, i) => (
+                <div key={r.theme} className="p-3 rounded-md border border-border/40 bg-card/40">
+                  <div className="flex items-center gap-1.5">
+                    {i === 0 && <span>🏆</span>}
+                    <div className="text-sm font-medium">{r.theme}</div>
+                  </div>
+                  {r.colorProfile && (
+                    <Badge variant="outline" className="mt-1 text-[10px]">{r.colorProfile}</Badge>
+                  )}
+                  <div className="text-lg font-semibold mt-1">
+                    {r.avgRetention > 0 ? `${(r.avgRetention * 100).toFixed(1)}%` : fmt(Math.round(r.avgViews))}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground">
+                    {r.avgRetention > 0 ? "avg retention" : "avg views"} · {r.n} post{r.n === 1 ? "" : "s"}
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </CardContent>
       </Card>

@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildStyleAddendum, normalizeTone, appendVoiceCTA, isWeatherAlert } from "../_shared/caption-style.ts";
 import { LOCATION_ACCURACY_RULES, validateCaptionLocation, buildVerifiedLandmarksBlock, stripUnverifiedReferences } from "../_shared/location-guard.ts";
 import { generateVideoWithFallback } from "../_shared/video-render.ts";
-import { expandVisualMeta, getTopVisualStyle } from "../_shared/experiments.ts";
+import { expandVisualMeta, getTopVisualStyle, classifyVisualTheme, classifyColorProfile } from "../_shared/experiments.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1988,7 +1988,10 @@ Deno.serve(async (req) => {
           visualStyle = String(experimentCtx.meta.visuals);
           console.log(`[visual] post ${post.id}: experiment override → visual_style=${visualStyle}`);
         }
-        const visualMeta = expandVisualMeta(visualStyle);
+        const baseMeta = expandVisualMeta(visualStyle);
+        const visualTheme = classifyVisualTheme(weather.condition, timePeriod);
+        const visualColorProfile = classifyColorProfile(visualStyle, visualTheme);
+        const visualMeta = { ...baseMeta, theme: visualTheme, color_profile: visualColorProfile };
         trace("visual_style", visualMeta);
 
         // Try video generation once (with voiceover baked in if available)

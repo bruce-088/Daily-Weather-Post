@@ -7,6 +7,8 @@ import {
   buildControlVariant,
   createExperimentRow,
   getTopVisualStyle,
+  shouldForceVisualTest,
+  pickDivergentVisualStyle,
 } from "../_shared/experiments.ts";
 
 const corsHeaders = {
@@ -488,7 +490,12 @@ Deno.serve(async (req) => {
           if (!dryRun && !timingExpRan && inserted && inserted.length > 0) {
             try {
               const userToneRaw = (settingsByUser.get(target.user_id) as any)?.caption_tone || "professional";
-              if (await shouldRunExperiment(supabase, target.user_id)) {
+
+              // ── Forced VISUAL test: new city OR Monday weekly kickoff ──
+              const forceVisuals = await shouldForceVisualTest(supabase, target.user_id, target.city);
+              const runRandom = !forceVisuals && (await shouldRunExperiment(supabase, target.user_id));
+
+              if (forceVisuals || runRandom) {
                 // Visual Optimization: prefer the top-performing visual style from
                 // ai_memory (gated by >15% delta + >=100 views) when one exists.
                 const topVisual = await getTopVisualStyle(supabase, target.user_id);
@@ -497,7 +504,21 @@ Deno.serve(async (req) => {
                   console.log(`[experiments] 🎨 Using top visual_style="${topVisual.style}" (Δ${topVisual.deltaPct.toFixed(1)}% / ${topVisual.views} views) as control`);
                 }
                 const control = buildControlVariant({ tone: userToneRaw, hook: "statement", visuals: baselineVisual });
-                const { variable, meta: challenger } = pickChallengerVariant(control);
+
+                let variable: any;
+                let challenger: any;
+                if (forceVisuals) {
+                  // Force a visuals test using a divergent winning style.
+                  const divergent = await pickDivergentVisualStyle(supabase, target.user_id, baselineVisual);
+                  variable = "visuals";
+                  challenger = { ...control, visuals: divergent, label: "Divergent" };
+                  console.log(`[experiments] 🎨 FORCED visuals test for "${target.city}" — A=${baselineVisual} vs B=${divergent}`);
+                } else {
+                  const picked = pickChallengerVariant(control);
+                  variable = picked.variable;
+                  challenger = picked.meta;
+                }
+
                 const expId = await createExperimentRow(supabase, {
                   userId: target.user_id,
                   city: target.city,

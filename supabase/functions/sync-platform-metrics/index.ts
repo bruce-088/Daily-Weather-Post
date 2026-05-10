@@ -194,18 +194,74 @@ Deno.serve(async (req) => {
     ttUpdated += r.updated; ttFailed += r.failed;
   }
 
+  // ── Visual Winner Analysis ──
+  // Flag any post with >50 views as a "Winning Visual Pattern" and persist
+  // its theme + color_profile in ai_memory so future generations can learn
+  // from the breakout. We dedupe by (user_id, theme, color_profile) and
+  // only insert when no row exists yet — keeps memory compact + readable.
+  let winnersFlagged = 0;
+  try {
+    // Pull post_history rows with metadata. We use post_history.views_count
+    // when present (kept in sync by sync-post-performance), and fall back to
+    // post_analytics.views for fresh syncs.
+    const { data: hot } = await supabase
+      .from("post_history")
+      .select("id, user_id, city, condition, views_count, visual_metadata")
+      .gte("created_at", since)
+      .gt("views_count", 50)
+      .not("visual_metadata", "is", null)
+      .limit(500);
+
+    for (const row of (hot || []) as any[]) {
+      const meta = (row.visual_metadata || {}) as any;
+      const theme = meta.theme as string | undefined;
+      const colorProfile = meta.color_profile as string | undefined;
+      const style = meta.visual_style as string | undefined;
+      if (!theme || !colorProfile || !style) continue;
+
+      // Already memorized this winning combo for this user?
+      const { count: existing } = await supabase
+        .from("ai_memory")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", row.user_id)
+        .eq("memory_type", "visual_winner")
+        .ilike("content", `%"theme":"${theme}"%`)
+        .ilike("content", `%"color_profile":"${colorProfile}"%`);
+      if ((existing ?? 0) > 0) continue;
+
+      const payload = JSON.stringify({
+        theme,
+        color_profile: colorProfile,
+        visual_style: style,
+        city: row.city || null,
+      });
+      const { error: memErr } = await supabase.from("ai_memory").insert({
+        user_id: row.user_id,
+        memory_type: "visual_winner",
+        content: payload,
+        performance_score: Number(row.views_count) || 0,
+        condition: (row.condition || "").toLowerCase() || null,
+        views: Number(row.views_count) || 0,
+      });
+      if (!memErr) winnersFlagged++;
+    }
+  } catch (e) {
+    console.warn("[sync-metrics] visual winner pass failed:", (e as Error).message);
+  }
+
   // Health ping
   await supabase.from("system_health").upsert({
     id: "sync-platform-metrics",
     last_run_at: new Date().toISOString(),
     last_status: "ok",
-    last_message: `youtube: ${ytUpdated}/${ytUpdated + ytFailed}, tiktok: ${ttUpdated}/${ttUpdated + ttFailed}`,
+    last_message: `youtube: ${ytUpdated}/${ytUpdated + ytFailed}, tiktok: ${ttUpdated}/${ttUpdated + ttFailed}, visual_winners: ${winnersFlagged}`,
   });
 
   return new Response(
     JSON.stringify({
       youtube: { updated: ytUpdated, failed: ytFailed },
       tiktok: { updated: ttUpdated, failed: ttFailed },
+      visual_winners_flagged: winnersFlagged,
     }),
     { headers: { ...corsHeaders, "Content-Type": "application/json" } },
   );
