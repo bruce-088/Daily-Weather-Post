@@ -2152,6 +2152,7 @@ Deno.serve(async (req) => {
           debug_trace: persistedTrace,
           experiment_id: experimentCtx?.id ?? null,
           experiment_variant: experimentCtx?.variant ?? null,
+          visual_metadata: visualMeta,
         }).select("id").single();
         if (historyErr) {
           console.error(`[process] post_history insert failed for ${post.id}:`, historyErr);
