@@ -214,6 +214,58 @@ export function GrowthInsights() {
     return { rows, insight };
   }, [posts]);
 
+  // ── Visual Performance: avg views/retention per Theme ──
+  const visualPerf = useMemo(() => {
+    const buckets: Record<string, { views: number; ret: number; retN: number; n: number; color: string | null }> = {};
+    for (const p of posts) {
+      const meta = (p.visual_metadata || {}) as any;
+      const theme = meta?.theme as string | undefined;
+      if (!theme) continue;
+      if (!buckets[theme]) buckets[theme] = { views: 0, ret: 0, retN: 0, n: 0, color: meta?.color_profile || null };
+      buckets[theme].views += p.views_count ?? 0;
+      buckets[theme].n += 1;
+      if (typeof p.retention_rate === "number") {
+        buckets[theme].ret += p.retention_rate;
+        buckets[theme].retN += 1;
+      }
+    }
+    const rows = Object.entries(buckets).map(([theme, v]) => ({
+      theme,
+      colorProfile: v.color,
+      avgViews: v.n ? v.views / v.n : 0,
+      avgRetention: v.retN ? v.ret / v.retN : 0,
+      n: v.n,
+    })).sort((a, b) => (b.avgRetention || b.avgViews) - (a.avgRetention || a.avgViews));
+
+    // Recommend a style based on the active city's most recent condition.
+    let recommendation: { theme: string; reason: string } | null = null;
+    const recent = posts.find((p) => p.condition);
+    const cond = (recent?.condition || "").toLowerCase();
+    let expectedTheme: string | null = null;
+    if (cond.includes("storm") || cond.includes("thunder") || cond.includes("snow") || cond.includes("rain")) {
+      expectedTheme = "Dramatic-Realistic";
+    } else if (cond.includes("clear") || cond.includes("sun") || cond.includes("partly")) {
+      expectedTheme = "Cinematic-Sky";
+    } else {
+      expectedTheme = "Minimal-Gradient";
+    }
+    const winner = rows[0];
+    if (winner && winner.n >= 2) {
+      if (winner.theme === expectedTheme) {
+        recommendation = {
+          theme: winner.theme,
+          reason: `Today's forecast (${recent?.condition || "current weather"}) aligns with your top theme.`,
+        };
+      } else {
+        recommendation = {
+          theme: winner.theme,
+          reason: `${winner.theme} is your highest-performing style — consider it over the default ${expectedTheme} for ${recent?.condition || "today's weather"}.`,
+        };
+      }
+    }
+    return { rows, recommendation };
+  }, [posts]);
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
