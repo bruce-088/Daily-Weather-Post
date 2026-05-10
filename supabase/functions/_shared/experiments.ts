@@ -162,3 +162,34 @@ export function variantValue(variable: Variable, meta: VariantMeta): string {
   if (variable === "timing") return (meta as any).timing || "";
   return meta.visuals || "";
 }
+
+/**
+ * Visual Optimization — return the top-performing visual_style for a user
+ * based on past experiment winners stored in ai_memory.
+ *
+ * Guardrails (per spec):
+ *   • performance_score (= win delta %) must be > 15
+ *   • the winning post must have at least 100 views
+ *
+ * Returns null when no winner clears the bar — caller should fall back to
+ * the user's existing default style.
+ */
+export async function getTopVisualStyle(
+  supabase: any,
+  userId: string,
+): Promise<{ style: string; deltaPct: number; views: number } | null> {
+  const { data, error } = await supabase
+    .from("ai_memory")
+    .select("content, performance_score, views, created_at")
+    .eq("user_id", userId)
+    .eq("memory_type", "visual")
+    .gt("performance_score", 15)
+    .gte("views", 100)
+    .order("performance_score", { ascending: false })
+    .limit(1);
+  if (error || !data || data.length === 0) return null;
+  const row: any = data[0];
+  const style = String(row.content || "").trim().toLowerCase();
+  if (!VISUAL_STYLES.includes(style)) return null;
+  return { style, deltaPct: Number(row.performance_score) || 0, views: Number(row.views) || 0 };
+}
