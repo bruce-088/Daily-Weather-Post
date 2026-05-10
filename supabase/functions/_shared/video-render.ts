@@ -35,6 +35,10 @@ export interface FallbackPayload {
   // Optional timeout for the primary provider (ms). Default: 180s
   // (Creatomate often needs >15s; keep generous so we don't fail healthy renders.)
   primaryTimeoutMs?: number;
+  // AI Visual Optimization — hint that drives JSON2Video background pick
+  // when the primary renderer falls through. Creatomate path already honors
+  // the user's visual style internally via its own builder.
+  visualStyle?: string | null;
 }
 
 const DEFAULT_TIMEOUT_MS = 180_000;
