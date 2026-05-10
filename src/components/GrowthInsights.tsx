@@ -24,6 +24,7 @@ type PostRow = {
   comment_count: number | null;
   retention_rate: number | null;
   last_synced_at: string | null;
+  visual_metadata: any | null;
 };
 
 const fmt = (n: number | null | undefined) => (n ?? 0).toLocaleString();
