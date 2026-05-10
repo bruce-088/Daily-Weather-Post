@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildStyleAddendum, normalizeTone, appendVoiceCTA, isWeatherAlert } from "../_shared/caption-style.ts";
 import { LOCATION_ACCURACY_RULES, validateCaptionLocation, buildVerifiedLandmarksBlock, stripUnverifiedReferences } from "../_shared/location-guard.ts";
 import { generateVideoWithFallback } from "../_shared/video-render.ts";
+import { expandVisualMeta, getTopVisualStyle } from "../_shared/experiments.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
