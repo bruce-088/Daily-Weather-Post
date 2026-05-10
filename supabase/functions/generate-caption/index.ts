@@ -5,6 +5,7 @@ import { buildStyleAddendum, normalizeTone } from "../_shared/caption-style.ts";
 import {
   LOCATION_ACCURACY_RULES,
   buildVerifiedLandmarksBlock,
+  buildCityVisualBlock,
   validateCaptionLocation,
   stripUnverifiedReferences,
 } from "../_shared/location-guard.ts";
