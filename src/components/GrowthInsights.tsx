@@ -85,7 +85,7 @@ export function GrowthInsights() {
     if (!user) { setLoading(false); return; }
     let q = supabase
       .from("post_history")
-      .select("id, caption, platform, city, condition, post_url, image_url, created_at, views_count, likes_count, comment_count, retention_rate, last_synced_at")
+      .select("id, caption, platform, city, condition, post_url, image_url, created_at, views_count, likes_count, comment_count, retention_rate, last_synced_at, visual_metadata")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(500);
