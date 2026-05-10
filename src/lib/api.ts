@@ -251,6 +251,22 @@ export interface ScheduledPostItem {
   error_message: string | null;
   caption: string | null;
   created_at: string;
+  experiment_id?: string | null;
+  experiment_variant?: string | null;
+  debug_trace?: {
+    ai_recipe?: {
+      visual_style: string;
+      voice_tone: string;
+      hook_type: string;
+      source: "city" | "global" | "tilt";
+      delta_pct: number;
+      reason: string;
+      condition: string | null;
+      city: string | null;
+      sample_size: number;
+    };
+    [k: string]: any;
+  } | null;
 }
 
 export async function createScheduledPost(

@@ -13,7 +13,13 @@ import {
   Save,
   X,
   CheckCircle2,
+  Sparkles,
 } from "lucide-react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -200,6 +206,63 @@ function PostRow({ post, onRefresh, onCancelRequest }: PostRowProps) {
                   </Badge>
                 ))}
               </div>
+              {post.debug_trace?.ai_recipe && (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary hover:bg-primary/20 transition-colors"
+                      title="Why this creative choice"
+                    >
+                      <Sparkles size={10} />
+                      AI Logic
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent side="top" align="start" className="w-72 text-xs space-y-2">
+                    <div className="flex items-center gap-1.5 font-semibold text-foreground">
+                      <Sparkles size={12} className="text-primary" />
+                      Predictive Recipe
+                      <Badge
+                        variant="outline"
+                        className="ml-auto text-[9px] capitalize border-primary/30 text-primary"
+                      >
+                        {post.debug_trace.ai_recipe.source}
+                      </Badge>
+                    </div>
+                    <p className="text-muted-foreground leading-snug">
+                      {post.debug_trace.ai_recipe.reason}
+                    </p>
+                    <div className="grid grid-cols-3 gap-1 pt-1 border-t border-border/50">
+                      <div>
+                        <div className="text-[9px] uppercase text-muted-foreground tracking-wide">Visual</div>
+                        <div className="font-mono text-[11px] capitalize text-foreground">
+                          {post.debug_trace.ai_recipe.visual_style}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[9px] uppercase text-muted-foreground tracking-wide">Voice</div>
+                        <div className="font-mono text-[11px] capitalize text-foreground">
+                          {post.debug_trace.ai_recipe.voice_tone}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[9px] uppercase text-muted-foreground tracking-wide">Hook</div>
+                        <div className="font-mono text-[11px] capitalize text-foreground">
+                          {post.debug_trace.ai_recipe.hook_type}
+                        </div>
+                      </div>
+                    </div>
+                    {post.debug_trace.ai_recipe.sample_size > 0 && (
+                      <div className="text-[10px] text-muted-foreground pt-1">
+                        Based on {post.debug_trace.ai_recipe.sample_size} past posts
+                        {post.debug_trace.ai_recipe.condition
+                          ? ` for "${post.debug_trace.ai_recipe.condition}" weather`
+                          : ""}.
+                      </div>
+                    )}
+                  </PopoverContent>
+                </Popover>
+              )}
             </div>
             <div className="flex items-center gap-x-3 gap-y-1.5 flex-wrap">
               <StatusPipeline stage={stage} />

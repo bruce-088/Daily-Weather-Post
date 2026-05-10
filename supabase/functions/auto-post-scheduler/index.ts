@@ -10,6 +10,7 @@ import {
   shouldForceVisualTest,
   pickDivergentVisualStyle,
 } from "../_shared/experiments.ts";
+import { getWinningStyleForCondition } from "../_shared/winning-recipes.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -410,6 +411,35 @@ Deno.serve(async (req) => {
           triggered += insertedCount;
           results.push(`${period.name}: queued ${insertedCount}${skippedCount ? ` (skipped ${skippedCount} dup)` : ""}`);
 
+          // ── PREDICTIVE CREATIVE ENGINE: stash AI recipe on each row ──
+          // Reads weather_cache for the city's current condition, computes the
+          // winning recipe, and writes it into debug_trace.ai_recipe so the
+          // Schedule UI can show "AI Logic" reasoning per post.
+          if (!dryRun && inserted && inserted.length > 0) {
+            try {
+              const { data: wc } = await supabase
+                .from("weather_cache")
+                .select("payload, fetched_at")
+                .ilike("city", target.city)
+                .order("fetched_at", { ascending: false })
+                .limit(1);
+              const cond =
+                (wc?.[0]?.payload as any)?.current?.condition ||
+                (wc?.[0]?.payload as any)?.condition ||
+                (wc?.[0]?.payload as any)?.weather?.[0]?.main ||
+                null;
+              const recipe = await getWinningStyleForCondition(
+                supabase, target.user_id, cond, target.city,
+              );
+              await supabase
+                .from("scheduled_posts")
+                .update({ debug_trace: { ai_recipe: recipe } })
+                .in("id", inserted.map((r: any) => r.id));
+              console.log(`[scheduler]   🎯 recipe attached (${recipe.source}, Δ${recipe.delta_pct}%): ${recipe.visual_style}/${recipe.voice_tone}/${recipe.hook_type}`);
+            } catch (recErr) {
+              console.warn("[scheduler]   recipe attach failed:", recErr);
+            }
+          }
           // ── JOB PIPELINE (opt-in via weather_settings.use_jobs_pipeline) ──
           // When enabled, also enqueue a generate_content job per inserted row.
           // The legacy cron continues to run unchanged — the job runner takes
