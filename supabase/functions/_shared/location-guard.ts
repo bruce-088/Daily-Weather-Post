@@ -42,6 +42,79 @@ export function verifiedLandmarksFor(city?: string | null): string[] {
   return VERIFIED_LANDMARKS[key] || [];
 }
 
+// ─────────────────────────────────────────────────────────────
+// City Visual Anchors — used to constrain IMAGE/VIDEO generation
+// prompts so AI never depicts foreign universities, skylines, or
+// landmarks. Curated per city; "avoid" lists common confusables.
+// ─────────────────────────────────────────────────────────────
+export interface CityVisualAnchor {
+  landmarks: string[];
+  avoid: string[];
+}
+
+export const CITY_VISUAL_ANCHORS: Record<string, CityVisualAnchor> = {
+  gainesville: {
+    landmarks: [
+      "University of Florida campus",
+      "Ben Hill Griffin Stadium (The Swamp)",
+      "UF campus oak trees",
+      "Depot Park",
+      "Downtown Gainesville",
+    ],
+    avoid: ["FSU", "Florida State", "UCF", "Miami campus", "Doak Campbell", "Tallahassee skyline"],
+  },
+  orlando: {
+    landmarks: [
+      "downtown Orlando skyline",
+      "Lake Eola fountain",
+      "theme park skyline silhouette",
+      "Winter Park tree-lined streets",
+    ],
+    avoid: ["UF campus", "The Swamp", "Tallahassee", "Miami skyline", "South Beach"],
+  },
+  miami: {
+    landmarks: ["South Beach", "Wynwood murals", "Brickell skyline", "Bayside Marketplace"],
+    avoid: ["Orlando theme parks", "UF campus", "Tallahassee", "Tampa skyline"],
+  },
+  tampa: {
+    landmarks: ["Tampa Bay waterfront", "Bayshore Boulevard", "Ybor City", "downtown Tampa skyline"],
+    avoid: ["Miami skyline", "Orlando theme parks", "UF campus", "South Beach"],
+  },
+};
+
+export function cityVisualAnchorsFor(city?: string | null): CityVisualAnchor | null {
+  const key = String(city || "").trim().toLowerCase();
+  return CITY_VISUAL_ANCHORS[key] || null;
+}
+
+/**
+ * Build a strict instruction block for image/video generation prompts.
+ * Inject this verbatim into any AI image-gen prompt that may include
+ * location imagery so the model only depicts the correct city.
+ */
+export function buildCityVisualBlock(city?: string | null): string {
+  const anchor = cityVisualAnchorsFor(city);
+  const cityName = String(city || "").trim();
+  if (!anchor) {
+    return [
+      "CITY VISUAL ACCURACY (strict):",
+      cityName
+        ? `- If any location imagery appears, it must visually represent ${cityName} only.`
+        : "- Do NOT depict any specific city, university, stadium, or landmark.",
+      "- Do NOT depict any university, stadium, skyline, or landmark from another city or state.",
+      "- When unsure, use generic weather/sky imagery with NO identifiable landmarks.",
+    ].join("\n");
+  }
+  return [
+    `CITY VISUAL ACCURACY for ${cityName} (strict — overrides style preferences):`,
+    `- If using location imagery, ONLY use landmarks associated with ${cityName}.`,
+    `- Approved visual anchors: ${anchor.landmarks.join(", ")}.`,
+    `- NEVER depict or reference: ${anchor.avoid.join(", ")}.`,
+    "- Do NOT invent skylines, campuses, stadiums, or signage from other cities.",
+    "- When in doubt, prefer generic sky/weather imagery over a wrong landmark.",
+  ].join("\n");
+}
+
 // In-memory rotation tracker — avoid picking the SAME landmark twice in a row
 // for the same city within a single edge-function instance lifetime.
 const lastPickByCity = new Map<string, string>();
