@@ -7,6 +7,8 @@ import {
   buildControlVariant,
   createExperimentRow,
   getTopVisualStyle,
+  shouldForceVisualTest,
+  pickDivergentVisualStyle,
 } from "../_shared/experiments.ts";
 
 const corsHeaders = {
