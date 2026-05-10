@@ -1065,6 +1065,7 @@ const Index = () => {
                   </p>
                 </div>
               </div>
+              <SmartInsightsCard />
               <GrowthInsights />
               <AnalyticsPanel />
             </div>
