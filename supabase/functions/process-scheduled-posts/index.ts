@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildStyleAddendum, normalizeTone, appendVoiceCTA, isWeatherAlert } from "../_shared/caption-style.ts";
 import { LOCATION_ACCURACY_RULES, validateCaptionLocation, buildVerifiedLandmarksBlock, stripUnverifiedReferences } from "../_shared/location-guard.ts";
 import { generateVideoWithFallback } from "../_shared/video-render.ts";
+import { expandVisualMeta, getTopVisualStyle } from "../_shared/experiments.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -917,7 +918,7 @@ async function storeVoiceAudio(supabase: any, userId: string, audio: Uint8Array)
   return signed.signedUrl;
 }
 
-async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null): Promise<{ data: Uint8Array; mimeType: string } | null> {
+async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null, visualStyle?: string | null): Promise<{ data: Uint8Array; mimeType: string } | null> {
   const apiKey = Deno.env.get("CREATOMATE_API_KEY");
   if (!apiKey) {
     console.error("CREATOMATE_API_KEY not configured");
@@ -925,11 +926,14 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
   }
 
   const compDuration = computeVideoDuration(audioDurationSec);
-  console.log(`Starting Creatomate render for ${weather.city} ${voiceUrl ? "(with voiceover)" : "(no voice)"} — composition ${compDuration.toFixed(2)}s (audio=${audioDurationSec ?? "n/a"}s)`);
+  console.log(`Starting Creatomate render for ${weather.city} ${voiceUrl ? "(with voiceover)" : "(no voice)"} — composition ${compDuration.toFixed(2)}s (audio=${audioDurationSec ?? "n/a"}s) — visualStyle=${visualStyle || "default"}`);
   const theme = getWeatherTheme(weather.condition);
-  const videoUrl = await fetchPexelsVideoUrl(theme.videoKeyword, weather.city, weather.stateOrRegion);
+  // AI Visual Optimization — "gradient" / "minimal" styles intentionally skip
+  // the Pexels stock-video background to keep the visual pure (gradient only).
+  const skipStockVideo = visualStyle === "gradient" || visualStyle === "minimal";
+  const videoUrl = skipStockVideo ? null : await fetchPexelsVideoUrl(theme.videoKeyword, weather.city, weather.stateOrRegion);
   if (!videoUrl) {
-    console.warn(`[render] Pexels background unavailable (keyword="${theme.videoKeyword}") — falling back to gradient (${theme.bg1} → ${theme.bg2})`);
+    console.warn(`[render] Pexels background unavailable (keyword="${theme.videoKeyword}", style="${visualStyle || "default"}") — falling back to gradient (${theme.bg1} → ${theme.bg2})`);
   } else {
     console.log(`[render] Pexels background acquired for "${theme.videoKeyword}"`);
   }
@@ -1971,11 +1975,27 @@ Deno.serve(async (req) => {
         const _bgTheme = getWeatherTheme(weather.condition);
         trace("background_selected", { condition: weather.condition, video_keyword: _bgTheme.videoKeyword });
 
+        // ── AI Visual Optimization ──
+        // 1. Default style: "sky" (bright, motion-friendly).
+        // 2. If a winner exists in ai_memory (Δ>15% & ≥100 views), prefer it.
+        // 3. If this post is part of a "visuals" experiment, the variant meta wins.
+        let visualStyle = "sky";
+        try {
+          const top = await getTopVisualStyle(supabase, post.user_id);
+          if (top) visualStyle = top.style;
+        } catch (e) { console.warn("[visual] memory lookup failed:", e); }
+        if (experimentCtx?.variable === "visuals" && experimentCtx?.meta?.visuals) {
+          visualStyle = String(experimentCtx.meta.visuals);
+          console.log(`[visual] post ${post.id}: experiment override → visual_style=${visualStyle}`);
+        }
+        const visualMeta = expandVisualMeta(visualStyle);
+        trace("visual_style", visualMeta);
+
         // Try video generation once (with voiceover baked in if available)
-        console.log(`RENDER START: City: ${weather.city}, VoiceEnabled: ${voiceUrl ? "True" : "False"}`);
+        console.log(`RENDER START: City: ${weather.city}, VoiceEnabled: ${voiceUrl ? "True" : "False"}, VisualStyle: ${visualStyle}`);
         const video = await generateVideoWithFallback({
-          weather, timePeriod, voiceUrl, audioDurationSec: voiceAudioDurationSec,
-          creatomate: () => generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec),
+          weather, timePeriod, voiceUrl, audioDurationSec: voiceAudioDurationSec, visualStyle,
+          creatomate: () => generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec, visualStyle),
         });
         trace("video_render", { success: !!video, mime: video?.mimeType, provider: video?.provider });
 
@@ -2132,6 +2152,7 @@ Deno.serve(async (req) => {
           debug_trace: persistedTrace,
           experiment_id: experimentCtx?.id ?? null,
           experiment_variant: experimentCtx?.variant ?? null,
+          visual_metadata: visualMeta,
         }).select("id").single();
         if (historyErr) {
           console.error(`[process] post_history insert failed for ${post.id}:`, historyErr);

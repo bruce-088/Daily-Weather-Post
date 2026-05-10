@@ -35,6 +35,10 @@ export interface FallbackPayload {
   // Optional timeout for the primary provider (ms). Default: 180s
   // (Creatomate often needs >15s; keep generous so we don't fail healthy renders.)
   primaryTimeoutMs?: number;
+  // AI Visual Optimization — hint that drives JSON2Video background pick
+  // when the primary renderer falls through. Creatomate path already honors
+  // the user's visual style internally via its own builder.
+  visualStyle?: string | null;
 }
 
 const DEFAULT_TIMEOUT_MS = 180_000;
@@ -103,7 +107,7 @@ async function generateWithJSON2Video(
     : 12;
   const duration = Math.max(8, Math.min(40, Math.ceil(audioLen + 1.5)));
 
-  const bg = pickSkyGradient(cond);
+  const bg = pickBackgroundColor(cond, payload.visualStyle || null);
   const headline = `${city}${region ? ", " + region : ""}`;
   const sub = temp != null ? `${temp}°F · ${cond}` : cond;
   const breakdown = [
@@ -207,4 +211,18 @@ function pickSkyGradient(condition: string): string {
   if (c.includes("cloud")) return "#475569";
   if (c.includes("fog") || c.includes("mist")) return "#64748b";
   return "#1e3a8a";
+}
+
+/**
+ * Visual Optimization: choose a background color that respects the
+ * requested visual_style (gradient | sky | cinematic | minimal). Falls
+ * back to the existing condition-driven gradient when no style provided.
+ */
+function pickBackgroundColor(condition: string, style: string | null): string {
+  const s = (style || "").toLowerCase();
+  if (s === "minimal") return "#f1f5f9";   // bright, high-contrast
+  if (s === "cinematic") return "#0b1220"; // deep moody backdrop
+  if (s === "sky") return "#1e3a8a";       // bright blue sky
+  // "gradient" or unspecified → existing condition-aware palette
+  return pickSkyGradient(condition);
 }

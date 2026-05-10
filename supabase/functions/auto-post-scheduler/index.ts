@@ -6,6 +6,7 @@ import {
   pickChallengerVariant,
   buildControlVariant,
   createExperimentRow,
+  getTopVisualStyle,
 } from "../_shared/experiments.ts";
 
 const corsHeaders = {
@@ -488,7 +489,14 @@ Deno.serve(async (req) => {
             try {
               const userToneRaw = (settingsByUser.get(target.user_id) as any)?.caption_tone || "professional";
               if (await shouldRunExperiment(supabase, target.user_id)) {
-                const control = buildControlVariant({ tone: userToneRaw, hook: "statement", visuals: "gradient" });
+                // Visual Optimization: prefer the top-performing visual style from
+                // ai_memory (gated by >15% delta + >=100 views) when one exists.
+                const topVisual = await getTopVisualStyle(supabase, target.user_id);
+                const baselineVisual = topVisual?.style || "sky";
+                if (topVisual) {
+                  console.log(`[experiments] 🎨 Using top visual_style="${topVisual.style}" (Δ${topVisual.deltaPct.toFixed(1)}% / ${topVisual.views} views) as control`);
+                }
+                const control = buildControlVariant({ tone: userToneRaw, hook: "statement", visuals: baselineVisual });
                 const { variable, meta: challenger } = pickChallengerVariant(control);
                 const expId = await createExperimentRow(supabase, {
                   userId: target.user_id,

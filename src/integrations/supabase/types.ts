@@ -626,6 +626,7 @@ export type Database = {
           temperature: number | null
           user_id: string | null
           views_count: number
+          visual_metadata: Json | null
           voice_attempts: number
           voice_error: string | null
           voice_status: string | null
@@ -655,6 +656,7 @@ export type Database = {
           temperature?: number | null
           user_id?: string | null
           views_count?: number
+          visual_metadata?: Json | null
           voice_attempts?: number
           voice_error?: string | null
           voice_status?: string | null
@@ -684,6 +686,7 @@ export type Database = {
           temperature?: number | null
           user_id?: string | null
           views_count?: number
+          visual_metadata?: Json | null
           voice_attempts?: number
           voice_error?: string | null
           voice_status?: string | null

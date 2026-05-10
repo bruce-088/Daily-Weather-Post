@@ -186,11 +186,13 @@ Deno.serve(async (req) => {
     });
 
     // AI Memory: persist winning content for future learning.
-    // hook/tone/voice/timing variables map directly; visuals winners are stored as 'script' style hints.
+    // hook/tone/voice/timing/visuals each map to their own memory_type so
+    // downstream consumers can fetch the right pattern.
     const memoryType = variable === "hook" ? "hook"
       : variable === "tone" ? "tone"
       : variable === "voice" ? "voice"
       : variable === "timing" ? "timing"
+      : variable === "visuals" ? "visual"
       : "script";
 
     // Pull condition + time_of_day + voice info from the winning post.
@@ -233,17 +235,25 @@ Deno.serve(async (req) => {
       ? [String(e.city || "").toLowerCase(), winnerSlot || ""].filter(Boolean).join(":")
       : winnerCondition;
 
-    await supabase.from("ai_memory").insert({
-      user_id: e.user_id,
-      memory_type: memoryType,
-      content: winnerVal,
-      performance_score: deltaPct,
-      condition: memCondition,
-      time_of_day: winnerTimeOfDay,
-      voice_id: winnerVoiceId,
-      voice_style: winnerVoiceStyle,
-      views: winnerViews,
-    });
+    // ── AI Visual Optimization guardrails ──
+    // Only persist visual winners that meet BOTH:
+    //   • performance improvement > 15%
+    //   • winning post has at least 100 views
+    if (variable === "visuals" && (deltaPct <= 15 || (winnerViews ?? 0) < 100)) {
+      console.log(`[experiments-resolve] skip visual memory: Δ=${deltaPct.toFixed(1)}% views=${winnerViews} (need >15% & ≥100)`);
+    } else {
+      await supabase.from("ai_memory").insert({
+        user_id: e.user_id,
+        memory_type: memoryType,
+        content: winnerVal,
+        performance_score: deltaPct,
+        condition: memCondition,
+        time_of_day: winnerTimeOfDay,
+        voice_id: winnerVoiceId,
+        voice_style: winnerVoiceStyle,
+        views: winnerViews,
+      });
+    }
   }
 
   await supabase.from("system_health").upsert({

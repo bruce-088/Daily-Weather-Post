@@ -16,9 +16,34 @@ export interface VariantMeta {
 }
 
 const TONES = ["professional", "warm", "playful", "warning"];
-const VISUAL_STYLES = ["gradient", "stock-video"];
+// Expanded visual styles for the AI Visual Optimization system.
+// Each style is paired with a brightness/layout/motion profile via expandVisualMeta().
+export const VISUAL_STYLES = ["gradient", "sky", "cinematic", "minimal"];
 const HOOK_STYLES = ["statement", "question"];
 const VOICE_STYLES = ["calm", "energetic", "urgent"];
+
+export interface VisualMetadata {
+  visual_style: string;          // gradient | sky | cinematic | minimal
+  brightness_level: string;      // dark | medium | bright
+  layout_type: string;           // centered | split | minimal
+  motion_type: string;           // static | subtle_motion
+}
+
+/** Expand a visual_style string into its full metadata profile. */
+export function expandVisualMeta(style: string): VisualMetadata {
+  const s = (style || "sky").toLowerCase();
+  if (s === "gradient") {
+    return { visual_style: "gradient", brightness_level: "dark", layout_type: "centered", motion_type: "static" };
+  }
+  if (s === "cinematic") {
+    return { visual_style: "cinematic", brightness_level: "medium", layout_type: "split", motion_type: "subtle_motion" };
+  }
+  if (s === "minimal") {
+    return { visual_style: "minimal", brightness_level: "bright", layout_type: "minimal", motion_type: "static" };
+  }
+  // default: sky
+  return { visual_style: "sky", brightness_level: "bright", layout_type: "centered", motion_type: "subtle_motion" };
+}
 
 export function buildControlVariant(opts: {
   tone?: string | null;
@@ -136,4 +161,35 @@ export function variantValue(variable: Variable, meta: VariantMeta): string {
   if (variable === "voice") return meta.voice || "";
   if (variable === "timing") return (meta as any).timing || "";
   return meta.visuals || "";
+}
+
+/**
+ * Visual Optimization — return the top-performing visual_style for a user
+ * based on past experiment winners stored in ai_memory.
+ *
+ * Guardrails (per spec):
+ *   • performance_score (= win delta %) must be > 15
+ *   • the winning post must have at least 100 views
+ *
+ * Returns null when no winner clears the bar — caller should fall back to
+ * the user's existing default style.
+ */
+export async function getTopVisualStyle(
+  supabase: any,
+  userId: string,
+): Promise<{ style: string; deltaPct: number; views: number } | null> {
+  const { data, error } = await supabase
+    .from("ai_memory")
+    .select("content, performance_score, views, created_at")
+    .eq("user_id", userId)
+    .eq("memory_type", "visual")
+    .gt("performance_score", 15)
+    .gte("views", 100)
+    .order("performance_score", { ascending: false })
+    .limit(1);
+  if (error || !data || data.length === 0) return null;
+  const row: any = data[0];
+  const style = String(row.content || "").trim().toLowerCase();
+  if (!VISUAL_STYLES.includes(style)) return null;
+  return { style, deltaPct: Number(row.performance_score) || 0, views: Number(row.views) || 0 };
 }
