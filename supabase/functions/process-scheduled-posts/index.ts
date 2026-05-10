@@ -917,7 +917,7 @@ async function storeVoiceAudio(supabase: any, userId: string, audio: Uint8Array)
   return signed.signedUrl;
 }
 
-async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null): Promise<{ data: Uint8Array; mimeType: string } | null> {
+async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null, visualStyle?: string | null): Promise<{ data: Uint8Array; mimeType: string } | null> {
   const apiKey = Deno.env.get("CREATOMATE_API_KEY");
   if (!apiKey) {
     console.error("CREATOMATE_API_KEY not configured");
@@ -925,11 +925,14 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
   }
 
   const compDuration = computeVideoDuration(audioDurationSec);
-  console.log(`Starting Creatomate render for ${weather.city} ${voiceUrl ? "(with voiceover)" : "(no voice)"} — composition ${compDuration.toFixed(2)}s (audio=${audioDurationSec ?? "n/a"}s)`);
+  console.log(`Starting Creatomate render for ${weather.city} ${voiceUrl ? "(with voiceover)" : "(no voice)"} — composition ${compDuration.toFixed(2)}s (audio=${audioDurationSec ?? "n/a"}s) — visualStyle=${visualStyle || "default"}`);
   const theme = getWeatherTheme(weather.condition);
-  const videoUrl = await fetchPexelsVideoUrl(theme.videoKeyword, weather.city, weather.stateOrRegion);
+  // AI Visual Optimization — "gradient" / "minimal" styles intentionally skip
+  // the Pexels stock-video background to keep the visual pure (gradient only).
+  const skipStockVideo = visualStyle === "gradient" || visualStyle === "minimal";
+  const videoUrl = skipStockVideo ? null : await fetchPexelsVideoUrl(theme.videoKeyword, weather.city, weather.stateOrRegion);
   if (!videoUrl) {
-    console.warn(`[render] Pexels background unavailable (keyword="${theme.videoKeyword}") — falling back to gradient (${theme.bg1} → ${theme.bg2})`);
+    console.warn(`[render] Pexels background unavailable (keyword="${theme.videoKeyword}", style="${visualStyle || "default"}") — falling back to gradient (${theme.bg1} → ${theme.bg2})`);
   } else {
     console.log(`[render] Pexels background acquired for "${theme.videoKeyword}"`);
   }
