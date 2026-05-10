@@ -27,6 +27,9 @@ export interface VisualMetadata {
   brightness_level: string;      // dark | medium | bright
   layout_type: string;           // centered | split | minimal
   motion_type: string;           // static | subtle_motion
+  // ── Style Tags (Visual Engine Upgrade) ──
+  theme?: string;                // Dramatic-Realistic | Cinematic-Sky | Minimal-Gradient
+  color_profile?: string;        // High-Contrast | Soft-Pastel | Moody-Dark
 }
 
 /** Expand a visual_style string into its full metadata profile. */
@@ -43,6 +46,38 @@ export function expandVisualMeta(style: string): VisualMetadata {
   }
   // default: sky
   return { visual_style: "sky", brightness_level: "bright", layout_type: "centered", motion_type: "subtle_motion" };
+}
+
+/**
+ * Map a weather condition + time slot to a high-level visual Theme.
+ *  • Dramatic-Realistic → storms, heavy rain, snow
+ *  • Cinematic-Sky     → sunrise/sunset moments (morning/evening + clear)
+ *  • Minimal-Gradient  → everything else (clear days, mild conditions)
+ */
+export function classifyVisualTheme(condition: string | null | undefined, period: string | null | undefined): string {
+  const c = (condition || "").toLowerCase();
+  const p = (period || "").toLowerCase();
+  if (c.includes("storm") || c.includes("thunder") || c.includes("snow") || c.includes("hail") ||
+      c.includes("heavy rain") || (c.includes("rain") && !c.includes("light"))) {
+    return "Dramatic-Realistic";
+  }
+  if ((p === "morning" || p === "evening") && (c.includes("clear") || c.includes("sun") || c.includes("partly"))) {
+    return "Cinematic-Sky";
+  }
+  return "Minimal-Gradient";
+}
+
+/**
+ * Map (visual_style, theme) → color profile bucket used in the Visual Leaderboard.
+ *  • High-Contrast → cinematic / dramatic atmospheres
+ *  • Soft-Pastel   → minimal + bright sky
+ *  • Moody-Dark    → gradient / overcast / storm fallbacks
+ */
+export function classifyColorProfile(style: string, theme: string): string {
+  const s = (style || "").toLowerCase();
+  if (theme === "Dramatic-Realistic" || s === "cinematic") return "High-Contrast";
+  if (s === "minimal" || (s === "sky" && theme !== "Dramatic-Realistic")) return "Soft-Pastel";
+  return "Moody-Dark";
 }
 
 export function buildControlVariant(opts: {
