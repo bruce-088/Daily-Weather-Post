@@ -212,3 +212,17 @@ function pickSkyGradient(condition: string): string {
   if (c.includes("fog") || c.includes("mist")) return "#64748b";
   return "#1e3a8a";
 }
+
+/**
+ * Visual Optimization: choose a background color that respects the
+ * requested visual_style (gradient | sky | cinematic | minimal). Falls
+ * back to the existing condition-driven gradient when no style provided.
+ */
+function pickBackgroundColor(condition: string, style: string | null): string {
+  const s = (style || "").toLowerCase();
+  if (s === "minimal") return "#f1f5f9";   // bright, high-contrast
+  if (s === "cinematic") return "#0b1220"; // deep moody backdrop
+  if (s === "sky") return "#1e3a8a";       // bright blue sky
+  // "gradient" or unspecified → existing condition-aware palette
+  return pickSkyGradient(condition);
+}
