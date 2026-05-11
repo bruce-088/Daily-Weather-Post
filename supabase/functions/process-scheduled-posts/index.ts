@@ -5,6 +5,7 @@ import { LOCATION_ACCURACY_RULES, validateCaptionLocation, buildVerifiedLandmark
 import { generateVideoWithFallback } from "../_shared/video-render.ts";
 import { expandVisualMeta, getTopVisualStyle, classifyVisualTheme, classifyColorProfile } from "../_shared/experiments.ts";
 import { getRecentStyles, enforceStyleRotation } from "../_shared/style-rotation.ts";
+import { selectContextualVisualStyle } from "../_shared/visual-selector.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
