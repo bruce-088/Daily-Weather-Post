@@ -320,9 +320,24 @@ export default function JobsDashboard() {
                   })}
                 </div>
                 {head.last_error && (
-                  <div className="mt-3 text-xs text-destructive font-mono space-y-0.5">
-                    <div className="font-semibold">⚠ Failed at: {stepLabel(head.type)}</div>
-                    <div className="truncate opacity-90">{head.last_error}</div>
+                  <div className="mt-3 flex items-start justify-between gap-3">
+                    <div className="text-xs text-destructive font-mono space-y-0.5 flex-1 min-w-0">
+                      <div className="font-semibold">⚠ Failed at: {stepLabel(head.type)}</div>
+                      <div className="truncate opacity-90">{head.last_error}</div>
+                      <div className="text-[10px] opacity-60">
+                        Retry re-runs only this step. Earlier successful steps (incl. cached video) are reused — no extra render credits.
+                      </div>
+                    </div>
+                    {(head.status === "failed" || head.status === "cancelled") && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="shrink-0"
+                        onClick={(e) => { e.stopPropagation(); requeueJob(head); }}
+                      >
+                        <RotateCcw className="h-3 w-3 mr-1" /> Retry Failed Step
+                      </Button>
+                    )}
                   </div>
                 )}
               </Card>
