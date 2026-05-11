@@ -652,6 +652,9 @@ Deno.serve(async (req) => {
                     console.warn(`[experiments] B-variant insert failed for exp ${expId}:`, bErr.message);
                   } else {
                     console.log(`[experiments] 🧪 Created exp ${expId} (var=${variable}); B rows: ${(bInserted || []).length}`);
+                    await enqueueExperimentBJobs(bInserted, bScheduledAt, {
+                      experiment_id: expId, experiment_kind: "content", experiment_variable: variable,
+                    });
                   }
                 }
               }
