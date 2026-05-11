@@ -732,6 +732,7 @@ export type Database = {
       scheduled_posts: {
         Row: {
           automation_id: string | null
+          cached_video_url: string | null
           caption: string | null
           city: string
           city_id: string | null
@@ -756,6 +757,7 @@ export type Database = {
         }
         Insert: {
           automation_id?: string | null
+          cached_video_url?: string | null
           caption?: string | null
           city: string
           city_id?: string | null
@@ -780,6 +782,7 @@ export type Database = {
         }
         Update: {
           automation_id?: string | null
+          cached_video_url?: string | null
           caption?: string | null
           city?: string
           city_id?: string | null

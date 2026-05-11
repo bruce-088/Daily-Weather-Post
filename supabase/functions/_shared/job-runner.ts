@@ -61,9 +61,13 @@ export interface JobStepResult {
 
 export type JobHandler = (ctx: JobContext) => Promise<JobStepResult>;
 
-// Exponential backoff: attempt 1 -> 30s, attempt 2 -> 2m
+// Smart Retry backoff per spec:
+//   1st retry (after attempt 1 failed) -> 2 minutes
+//   2nd retry (after attempt 2 failed) -> 5 minutes
+// Anything beyond is capped at 5 minutes.
 export function computeBackoffSeconds(attempts: number): number {
-  return Math.min(30 * Math.pow(4, Math.max(0, attempts - 1)), 600);
+  if (attempts <= 1) return 120;
+  return 300;
 }
 
 export interface RunnerOptions {
