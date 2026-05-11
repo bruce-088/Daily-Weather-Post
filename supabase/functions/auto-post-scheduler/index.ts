@@ -440,12 +440,12 @@ Deno.serve(async (req) => {
               console.warn("[scheduler]   recipe attach failed:", recErr);
             }
           }
-          // ── JOB PIPELINE (opt-in via weather_settings.use_jobs_pipeline) ──
-          // When enabled, also enqueue a generate_content job per inserted row.
-          // The legacy cron continues to run unchanged — the job runner takes
-          // ownership of execution by calling process-scheduled-posts itself.
-          const userSettings = settingsByUser.get(target.user_id);
-          if (!dryRun && userSettings?.use_jobs_pipeline === true && inserted && inserted.length > 0) {
+          // ── JOB PIPELINE (always-on) ──
+          // Enqueue a generate_content job per inserted scheduled_post row so the
+          // durable runner takes ownership of execution. The legacy cron path
+          // remains as a safety net — process-scheduled-posts has its own atomic
+          // claim lock so double-processing is impossible.
+          if (!dryRun && inserted && inserted.length > 0) {
             for (const row of inserted) {
               const { error: enqueueErr } = await supabase.rpc("enqueue_job", {
                 p_user_id: target.user_id,
