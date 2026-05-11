@@ -5,6 +5,7 @@ import { LOCATION_ACCURACY_RULES, validateCaptionLocation, buildVerifiedLandmark
 import { generateVideoWithFallback } from "../_shared/video-render.ts";
 import { expandVisualMeta, getTopVisualStyle, classifyVisualTheme, classifyColorProfile } from "../_shared/experiments.ts";
 import { getRecentStyles, enforceStyleRotation } from "../_shared/style-rotation.ts";
+import { selectContextualVisualStyle } from "../_shared/visual-selector.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1977,19 +1978,33 @@ Deno.serve(async (req) => {
         trace("background_selected", { condition: weather.condition, video_keyword: _bgTheme.videoKeyword });
 
         // ── AI Visual Optimization ──
-        // 1. Default style: "sky" (bright, motion-friendly).
-        // 2. If a winner exists in ai_memory (Δ>15% & ≥100 views), prefer it.
-        // 3. If this post is part of a "visuals" experiment, the variant meta wins.
+        // Priority: 1) experiment override 2) weather context 3) city context
+        // 4) top-performing style from history. Then rotation guard.
         let visualStyle = "sky";
+        let topPerfStyle: string | null = null;
         try {
           const top = await getTopVisualStyle(supabase, post.user_id);
-          if (top) visualStyle = top.style;
+          if (top) topPerfStyle = top.style;
         } catch (e) { console.warn("[visual] memory lookup failed:", e); }
+
         if (experimentCtx?.variable === "visuals" && experimentCtx?.meta?.visuals) {
           visualStyle = String(experimentCtx.meta.visuals);
           console.log(`[visual] post ${post.id}: experiment override → visual_style=${visualStyle}`);
           trace("visual_rotation", { skipped: true, reason: "experiment_override", style: visualStyle });
         } else {
+          // Context-aware selection (weather > city > performance).
+          const selection = selectContextualVisualStyle(weather.condition, weather.city, topPerfStyle);
+          visualStyle = selection.style;
+          console.log(`[visual] post ${post.id}: 🎯 contextual (${selection.source}) → ${selection.label} [${selection.style}] — ${selection.reason}`);
+          trace("visual_context", {
+            style: selection.style,
+            label: selection.label,
+            source: selection.source,
+            reason: selection.reason,
+            condition: weather.condition,
+            city: weather.city,
+            top_performer: topPerfStyle,
+          });
           // Visual Style Rotation Guard — avoid repetition fatigue.
           try {
             const recent = await getRecentStyles(supabase, post.user_id, 5);
