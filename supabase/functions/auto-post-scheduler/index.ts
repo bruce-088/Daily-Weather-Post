@@ -415,6 +415,8 @@ Deno.serve(async (req) => {
           // Reads weather_cache for the city's current condition, computes the
           // winning recipe, and writes it into debug_trace.ai_recipe so the
           // Schedule UI can show "AI Logic" reasoning per post.
+          let aiRecipeSummary: any = null;
+          let conditionAtSlot: string | null = null;
           if (!dryRun && inserted && inserted.length > 0) {
             try {
               const { data: wc } = await supabase
@@ -428,9 +430,17 @@ Deno.serve(async (req) => {
                 (wc?.[0]?.payload as any)?.condition ||
                 (wc?.[0]?.payload as any)?.weather?.[0]?.main ||
                 null;
+              conditionAtSlot = cond;
               const recipe = await getWinningStyleForCondition(
                 supabase, target.user_id, cond, target.city,
               );
+              aiRecipeSummary = {
+                source: recipe.source,
+                delta_pct: recipe.delta_pct,
+                visual_style: recipe.visual_style,
+                voice_tone: recipe.voice_tone,
+                hook_type: recipe.hook_type,
+              };
               await supabase
                 .from("scheduled_posts")
                 .update({ debug_trace: { ai_recipe: recipe } })
@@ -445,12 +455,31 @@ Deno.serve(async (req) => {
           // durable runner takes ownership of execution. The legacy cron path
           // remains as a safety net — process-scheduled-posts has its own atomic
           // claim lock so double-processing is impossible.
+          //
+          // Payload captures all metadata Analytics relies on so the Job
+          // Pipeline UI mirrors the legacy [auto:slot] / [exp:variant] tags.
+          const buildJobPayload = (extra: Record<string, unknown> = {}) => ({
+            source: "auto-scheduler",
+            slot: period.name,
+            slot_marker: slotMarker,
+            automation_id: target.automation_id ?? null,
+            city_id: target.city_id ?? null,
+            city: target.city,
+            include_voiceover: voiceoverEnabled,
+            condition: conditionAtSlot,
+            ai_recipe: aiRecipeSummary,
+            experiment_variant: "A",
+            ...extra,
+          });
           if (!dryRun && inserted && inserted.length > 0) {
             for (const row of inserted) {
               const { error: enqueueErr } = await supabase.rpc("enqueue_job", {
                 p_user_id: target.user_id,
                 p_type: "generate_content",
-                p_payload: { source: "auto-scheduler", slot: period.name },
+                p_payload: buildJobPayload({
+                  platform: row.platform,
+                  include_voiceover: voiceoverEnabled && VIDEO_PLATFORMS.has(row.platform),
+                }),
                 p_parent_job_id: null,
                 p_root_job_id: null,
                 p_scheduled_post_id: row.id,
@@ -461,10 +490,43 @@ Deno.serve(async (req) => {
               if (enqueueErr) {
                 console.error(`[scheduler]   ⚠️ enqueue_job failed for ${row.id}:`, enqueueErr.message);
               } else {
-                console.log(`[scheduler]   🧩 enqueued generate_content job for scheduled_post ${row.id}`);
+                console.log(`[scheduler]   🧩 enqueued generate_content job for scheduled_post ${row.id} [auto:${period.name}]`);
               }
             }
           }
+
+          // Helper used by both experiment branches below to enqueue B-variant
+          // jobs so the durable pipeline owns those posts too.
+          const enqueueExperimentBJobs = async (
+            bInserted: Array<{ id: string; platform: string }> | null | undefined,
+            bScheduledAt: string,
+            extra: Record<string, unknown>,
+          ) => {
+            if (!bInserted || bInserted.length === 0) return;
+            for (const row of bInserted) {
+              const { error: bEnqErr } = await supabase.rpc("enqueue_job", {
+                p_user_id: target.user_id,
+                p_type: "generate_content",
+                p_payload: buildJobPayload({
+                  platform: row.platform,
+                  include_voiceover: voiceoverEnabled && VIDEO_PLATFORMS.has(row.platform),
+                  experiment_variant: "B",
+                  ...extra,
+                }),
+                p_parent_job_id: null,
+                p_root_job_id: null,
+                p_scheduled_post_id: row.id,
+                p_city: target.city,
+                p_platform: row.platform,
+                p_scheduled_for: bScheduledAt,
+              });
+              if (bEnqErr) {
+                console.error(`[scheduler]   ⚠️ enqueue_job (exp:B) failed for ${row.id}:`, bEnqErr.message);
+              } else {
+                console.log(`[scheduler]   🧩 enqueued generate_content job for scheduled_post ${row.id} [auto:${period.name}] [exp:B]`);
+              }
+            }
+          };
 
           // ── TIMING EXPERIMENT PAIRING ──
           // Same content, two times: A = base-15min (effectively "now" because the
