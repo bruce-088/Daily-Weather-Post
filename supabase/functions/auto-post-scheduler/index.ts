@@ -567,7 +567,12 @@ Deno.serve(async (req) => {
                   const { error: bErr, data: bInserted } = await supabase
                     .from("scheduled_posts").insert(bRows).select("id, platform");
                   if (bErr) console.warn(`[experiments] timing B insert failed:`, bErr.message);
-                  else console.log(`[experiments] ⏱️  Timing exp ${expId} created; B rows: ${(bInserted || []).length}`);
+                  else {
+                    console.log(`[experiments] ⏱️  Timing exp ${expId} created; B rows: ${(bInserted || []).length}`);
+                    await enqueueExperimentBJobs(bInserted, bScheduledAt, {
+                      experiment_id: expId, experiment_kind: "timing", timing_offset_min: 15,
+                    });
+                  }
                   timingExpRan = true;
                 }
               }
