@@ -4,6 +4,7 @@ import { buildStyleAddendum, normalizeTone, appendVoiceCTA, isWeatherAlert } fro
 import { LOCATION_ACCURACY_RULES, validateCaptionLocation, buildVerifiedLandmarksBlock, stripUnverifiedReferences } from "../_shared/location-guard.ts";
 import { generateVideoWithFallback } from "../_shared/video-render.ts";
 import { expandVisualMeta, getTopVisualStyle, classifyVisualTheme, classifyColorProfile } from "../_shared/experiments.ts";
+import { getRecentStyles, enforceStyleRotation } from "../_shared/style-rotation.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
