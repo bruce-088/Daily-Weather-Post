@@ -6,6 +6,7 @@ import {
   LOCATION_ACCURACY_RULES,
   buildVerifiedLandmarksBlock,
   buildCityVisualBlock,
+  buildLocalIdentityBlock,
   validateCaptionLocation,
   stripUnverifiedReferences,
 } from "../_shared/location-guard.ts";
@@ -346,6 +347,8 @@ extra_note: ${body.extra_note ?? body.extraNote ?? ""}${extremeNote}${styleNote}
 ${buildVerifiedLandmarksBlock(city)}
 
 ${buildCityVisualBlock(city)}
+
+${buildLocalIdentityBlock(city)}
 
 ${styleAddendum}${insightNote}`;
 

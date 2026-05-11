@@ -115,6 +115,118 @@ export function buildCityVisualBlock(city?: string | null): string {
   ].join("\n");
 }
 
+// ─────────────────────────────────────────────────────────────
+// Local Identity + Brand Safety + Diversity rules.
+// Injected alongside CITY_VISUAL_ANCHORS into both image-gen and
+// caption prompts. Per-city "vibe" guidance keeps content locally
+// authentic while avoiding copyrighted/trademarked branding.
+// ─────────────────────────────────────────────────────────────
+export interface CityIdentity {
+  vibe: string;          // descriptive aesthetic / texture palette
+  prefer: string[];      // visual elements to lean into
+  avoid_brands: string[]; // brand-safety items to never depict/name
+}
+
+export const CITY_IDENTITIES: Record<string, CityIdentity> = {
+  gainesville: {
+    vibe: "college-town textures: brick buildings, mossy oak canopies, walkable campus settings, cozy academic feel",
+    prefer: [
+      "brick architecture",
+      "Spanish-moss-draped oak trees",
+      "tree-lined campus paths",
+      "warm afternoon light through canopy",
+      "small-town downtown storefronts",
+    ],
+    avoid_brands: [
+      "FSU logos / Seminoles iconography",
+      "UCF logos / Knights iconography",
+      "specific university trademarks, mascots, or wordmarks",
+      "official Gators logo lockups (use 'inspired by' UF aesthetic only)",
+    ],
+  },
+  orlando: {
+    vibe: "vibrant, high-energy: skylines, palm trees, theme-park-style horizons, Lake Eola fountain vibes",
+    prefer: [
+      "downtown skyline silhouettes",
+      "palm trees against sunset",
+      "fountain / lake reflections",
+      "playful pastel sunsets",
+      "wide horizons with distant theme-park-style structures",
+    ],
+    avoid_brands: [
+      "Disney / Mickey iconography or castle silhouettes",
+      "Universal Studios trademarks or globe",
+      "SeaWorld branding",
+      "any specific theme park logos, characters, or rides",
+    ],
+  },
+  miami: {
+    vibe: "art-deco coastal energy: pastel facades, neon, palms, ocean horizons, Wynwood mural color",
+    prefer: ["pastel art-deco facades", "neon-lit streets at dusk", "ocean + palm horizons", "vibrant mural color blocks"],
+    avoid_brands: ["specific hotel/club logos", "celebrity likenesses", "sports team trademarks"],
+  },
+  tampa: {
+    vibe: "bayfront calm: waterfront walks, sailboats, historic Ybor brick, soft Gulf light",
+    prefer: ["bayfront skyline", "sailboats on the water", "brick streets / historic architecture", "soft Gulf-coast pastel skies"],
+    avoid_brands: ["Buccaneers/Lightning logos", "specific stadium branding", "team mascots"],
+  },
+};
+
+export function cityIdentityFor(city?: string | null): CityIdentity | null {
+  const key = String(city || "").trim().toLowerCase();
+  return CITY_IDENTITIES[key] || null;
+}
+
+/**
+ * Build a Local Identity + Brand Safety + Diversity instruction block.
+ * Inject into image-gen AND caption prompts so the model knows which
+ * "vibe" to lean into and what trademarks to never depict or name.
+ */
+export function buildLocalIdentityBlock(city?: string | null): string {
+  const cityName = String(city || "").trim();
+  const identity = cityIdentityFor(city);
+
+  const lines: string[] = [];
+
+  // [LOCAL IDENTITY RULE] — per-city
+  if (identity && cityName) {
+    lines.push(`[LOCAL IDENTITY — ${cityName}]`);
+    lines.push(`- Vibe: ${identity.vibe}.`);
+    lines.push(`- Prefer: ${identity.prefer.join("; ")}.`);
+    lines.push(
+      `- Make local references feel "inspired by" ${cityName}, not a literal copy of any specific institution or property.`,
+    );
+  } else if (cityName) {
+    lines.push(`[LOCAL IDENTITY — ${cityName}]`);
+    lines.push(`- Lean into the authentic local vibe and texture of ${cityName}.`);
+    lines.push(`- Make references feel "inspired by" the area, not a copy of a specific property.`);
+  }
+
+  // [BRAND SAFETY CONSTRAINT] — global + per-city avoid lists
+  lines.push("");
+  lines.push("[BRAND SAFETY CONSTRAINT]");
+  lines.push("- Do NOT include copyrighted logos, registered trademarks, official wordmarks, or protected branding in any visual or text.");
+  lines.push("- Do NOT name or depict specific mascots, team logos, theme-park characters, or corporate iconography.");
+  lines.push("- Focus on the VIBE and AESTHETIC of the city — never the legal trademarks.");
+  if (identity?.avoid_brands?.length) {
+    lines.push(`- For ${cityName}, specifically avoid: ${identity.avoid_brands.join("; ")}.`);
+  }
+
+  // [DIVERSITY RULE] — prevent default-to-sky monotony
+  lines.push("");
+  lines.push("[DIVERSITY RULE]");
+  lines.push("- Do NOT default exclusively to plain \"sky\" visuals.");
+  lines.push(
+    cityName
+      ? `- If the weather is clear or mild, prioritize a ${cityName}-specific landscape, streetscape, or background to keep content fresh and local.`
+      : "- If the weather is clear or mild, prioritize a city-specific landscape or background to keep content fresh and local.",
+  );
+  lines.push("- Vary composition (skyline, street-level, nature, landmark vibe) across posts — avoid repeating the same framing.");
+
+  return lines.join("\n");
+}
+
+
 // In-memory rotation tracker — avoid picking the SAME landmark twice in a row
 // for the same city within a single edge-function instance lifetime.
 const lastPickByCity = new Map<string, string>();

@@ -5,6 +5,7 @@ import {
   LOCATION_ACCURACY_RULES,
   buildVerifiedLandmarksBlock,
   buildCityVisualBlock,
+  buildLocalIdentityBlock,
   validateCaptionLocation,
   stripUnverifiedReferences,
 } from "../_shared/location-guard.ts";
@@ -1021,6 +1022,8 @@ async function generateFallbackImage(weather: WeatherResponse): Promise<{ data: 
   promptParts.push("STYLE: Clean, minimal, professional weather app aesthetic. No photographs. Sharp typography. Subtle depth with shadows and glow effects. Premium feel.");
   promptParts.push("");
   promptParts.push(buildCityVisualBlock(weather.city));
+  promptParts.push("");
+  promptParts.push(buildLocalIdentityBlock(weather.city));
 
   const prompt = promptParts.join("\n");
 
