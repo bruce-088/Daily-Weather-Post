@@ -309,17 +309,20 @@ export default function JobsDashboard() {
                         ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
                         : "bg-muted text-muted-foreground border-border"
                       : "bg-muted/30 text-muted-foreground/50 border-border/40 border-dashed";
+                    const dur = step ? fmtDuration(step.started_at, step.completed_at) : null;
                     return (
-                      <div key={t} className={`px-2 py-1 rounded border text-xs font-mono ${tone}`}>
-                        {t.replace("_", " ")}
-                        {step && step.attempts > 1 && <span className="ml-1 opacity-60">×{step.attempts}</span>}
+                      <div key={t} className={`px-2 py-1 rounded border text-xs font-mono flex items-center gap-1.5 ${tone}`}>
+                        <span>{stepLabel(t)}</span>
+                        {dur && <span className="opacity-70">· {dur}</span>}
+                        {step && step.attempts > 1 && <span className="opacity-60">×{step.attempts}</span>}
                       </div>
                     );
                   })}
                 </div>
                 {head.last_error && (
-                  <div className="mt-3 text-xs text-destructive font-mono truncate">
-                    ⚠ {head.last_error}
+                  <div className="mt-3 text-xs text-destructive font-mono space-y-0.5">
+                    <div className="font-semibold">⚠ Failed at: {stepLabel(head.type)}</div>
+                    <div className="truncate opacity-90">{head.last_error}</div>
                   </div>
                 )}
               </Card>
