@@ -348,6 +348,8 @@ ${buildVerifiedLandmarksBlock(city)}
 
 ${buildCityVisualBlock(city)}
 
+${buildLocalIdentityBlock(city)}
+
 ${styleAddendum}${insightNote}`;
 
     const systemPrompt = `${SKYBRIEF_SYSTEM_PROMPT}\n\n${LOCATION_ACCURACY_RULES}`;
