@@ -79,6 +79,23 @@ function fmtRelative(iso: string | null): string {
   return new Date(iso).toLocaleString();
 }
 
+function fmtDuration(startISO: string | null, endISO: string | null): string | null {
+  if (!startISO) return null;
+  const start = new Date(startISO).getTime();
+  const end = endISO ? new Date(endISO).getTime() : Date.now();
+  const ms = Math.max(0, end - start);
+  if (ms < 1000) return `${ms}ms`;
+  const s = ms / 1000;
+  if (s < 60) return `${s.toFixed(s < 10 ? 1 : 0)}s`;
+  const m = Math.floor(s / 60);
+  const rem = Math.round(s - m * 60);
+  return `${m}m ${rem}s`;
+}
+
+function stepLabel(t: string): string {
+  return t.replace(/_/g, " ");
+}
+
 export default function JobsDashboard() {
   const navigate = useNavigate();
   const { toast } = useToast();
