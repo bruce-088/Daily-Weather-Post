@@ -79,6 +79,23 @@ function fmtRelative(iso: string | null): string {
   return new Date(iso).toLocaleString();
 }
 
+function fmtDuration(startISO: string | null, endISO: string | null): string | null {
+  if (!startISO) return null;
+  const start = new Date(startISO).getTime();
+  const end = endISO ? new Date(endISO).getTime() : Date.now();
+  const ms = Math.max(0, end - start);
+  if (ms < 1000) return `${ms}ms`;
+  const s = ms / 1000;
+  if (s < 60) return `${s.toFixed(s < 10 ? 1 : 0)}s`;
+  const m = Math.floor(s / 60);
+  const rem = Math.round(s - m * 60);
+  return `${m}m ${rem}s`;
+}
+
+function stepLabel(t: string): string {
+  return t.replace(/_/g, " ");
+}
+
 export default function JobsDashboard() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -292,17 +309,20 @@ export default function JobsDashboard() {
                         ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
                         : "bg-muted text-muted-foreground border-border"
                       : "bg-muted/30 text-muted-foreground/50 border-border/40 border-dashed";
+                    const dur = step ? fmtDuration(step.started_at, step.completed_at) : null;
                     return (
-                      <div key={t} className={`px-2 py-1 rounded border text-xs font-mono ${tone}`}>
-                        {t.replace("_", " ")}
-                        {step && step.attempts > 1 && <span className="ml-1 opacity-60">×{step.attempts}</span>}
+                      <div key={t} className={`px-2 py-1 rounded border text-xs font-mono flex items-center gap-1.5 ${tone}`}>
+                        <span>{stepLabel(t)}</span>
+                        {dur && <span className="opacity-70">· {dur}</span>}
+                        {step && step.attempts > 1 && <span className="opacity-60">×{step.attempts}</span>}
                       </div>
                     );
                   })}
                 </div>
                 {head.last_error && (
-                  <div className="mt-3 text-xs text-destructive font-mono truncate">
-                    ⚠ {head.last_error}
+                  <div className="mt-3 text-xs text-destructive font-mono space-y-0.5">
+                    <div className="font-semibold">⚠ Failed at: {stepLabel(head.type)}</div>
+                    <div className="truncate opacity-90">{head.last_error}</div>
                   </div>
                 )}
               </Card>
@@ -322,10 +342,17 @@ export default function JobsDashboard() {
           </SheetHeader>
           <ScrollArea className="flex-1 mt-4 pr-4">
             <div className="space-y-4">
-              {selectedChain.map((j) => (
+              {selectedChain.map((j) => {
+                const dur = fmtDuration(j.started_at, j.completed_at);
+                return (
                 <div key={j.id} className="border border-border rounded-lg p-3 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="font-mono text-sm">{j.type}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-sm">{stepLabel(j.type)}</span>
+                      {dur && (
+                        <span className="text-xs font-mono text-muted-foreground">· {dur}</span>
+                      )}
+                    </div>
                     {statusBadge(j.status)}
                   </div>
                   <div className="text-xs text-muted-foreground font-mono space-y-1">
@@ -333,17 +360,19 @@ export default function JobsDashboard() {
                     <div>Scheduled: {fmtRelative(j.scheduled_for)}</div>
                     {j.started_at && <div>Started: {fmtRelative(j.started_at)}</div>}
                     {j.completed_at && <div>Completed: {fmtRelative(j.completed_at)}</div>}
+                    {dur && <div>Duration: {dur}</div>}
                     {j.locked_by && <div>Locked by: {j.locked_by}</div>}
                   </div>
                   {j.last_error && (
-                    <div className="text-xs text-destructive bg-destructive/10 p-2 rounded font-mono whitespace-pre-wrap">
-                      {j.last_error}
+                    <div className="text-xs text-destructive bg-destructive/10 p-2 rounded font-mono space-y-1">
+                      <div className="font-semibold">Failed step: {stepLabel(j.type)}</div>
+                      <div className="whitespace-pre-wrap opacity-90">{j.last_error}</div>
                     </div>
                   )}
                   <div className="flex gap-2 pt-1">
                     {(j.status === "failed" || j.status === "cancelled") && (
-                      <Button size="sm" variant="outline" onClick={() => requeueJob(j)}>
-                        <RotateCcw className="h-3 w-3 mr-1" /> Requeue
+                      <Button size="sm" variant="outline" onClick={() => requeueJob(j)} title="Re-run only this step — earlier successful steps are not repeated">
+                        <RotateCcw className="h-3 w-3 mr-1" /> Retry this step
                       </Button>
                     )}
                     {(j.status === "pending" || j.status === "retrying") && (
@@ -353,7 +382,8 @@ export default function JobsDashboard() {
                     )}
                   </div>
                 </div>
-              ))}
+                );
+              })}
 
               {selectedLogs.length > 0 && (
                 <div>
