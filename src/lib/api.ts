@@ -278,14 +278,58 @@ export async function createScheduledPost(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return false;
 
-  const { error } = await supabase.from("scheduled_posts").insert({
-    city,
-    scheduled_at: scheduledAt,
-    platform,
-    user_id: user.id,
-    ...(caption ? { caption } : {}),
-  });
-  return !error;
+  const { data: inserted, error } = await supabase
+    .from("scheduled_posts")
+    .insert({
+      city,
+      scheduled_at: scheduledAt,
+      platform,
+      user_id: user.id,
+      ...(caption ? { caption } : {}),
+    })
+    .select("id")
+    .maybeSingle();
+  if (error) return false;
+  if (inserted?.id) {
+    await enqueueGenerateContentJob({
+      userId: user.id,
+      scheduledPostId: inserted.id,
+      city,
+      platform,
+      scheduledFor: scheduledAt,
+      source: "manual-create",
+    });
+  }
+  return true;
+}
+
+// Enqueue a generate_content job for a scheduled_post. Best-effort:
+// failures are logged but never block the user-facing schedule action,
+// since the legacy cron still picks up the row as a safety net.
+async function enqueueGenerateContentJob(args: {
+  userId: string;
+  scheduledPostId: string;
+  city: string;
+  platform: string;
+  scheduledFor: string;
+  source: string;
+}) {
+  try {
+    const { error } = await supabase.rpc("enqueue_job", {
+      p_user_id: args.userId,
+      p_type: "generate_content",
+      p_payload: { source: args.source },
+      p_parent_job_id: null,
+      p_root_job_id: null,
+      p_scheduled_post_id: args.scheduledPostId,
+      p_city: args.city,
+      p_platform: args.platform,
+      p_scheduled_for: args.scheduledFor,
+    });
+    if (error) console.warn("[api] enqueue_job failed:", error.message);
+  } catch (e) {
+    console.warn("[api] enqueue_job threw:", e);
+  }
 }
 
 export async function fetchScheduledPosts(): Promise<ScheduledPostItem[]> {
