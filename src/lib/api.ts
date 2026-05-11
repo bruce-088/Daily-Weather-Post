@@ -374,14 +374,29 @@ export async function duplicateScheduledPost(post: ScheduledPostItem): Promise<b
   const oneHourFromNow = Date.now() + 60 * 60 * 1000;
   const newScheduledAt = new Date(Math.max(original + 60 * 60 * 1000, oneHourFromNow)).toISOString();
 
-  const { error } = await supabase.from("scheduled_posts").insert({
-    city: post.city,
-    scheduled_at: newScheduledAt,
-    platform: post.platform,
-    user_id: user.id,
-    ...(post.caption ? { caption: post.caption } : {}),
-  });
-  return !error;
+  const { data: inserted, error } = await supabase
+    .from("scheduled_posts")
+    .insert({
+      city: post.city,
+      scheduled_at: newScheduledAt,
+      platform: post.platform,
+      user_id: user.id,
+      ...(post.caption ? { caption: post.caption } : {}),
+    })
+    .select("id")
+    .maybeSingle();
+  if (error) return false;
+  if (inserted?.id) {
+    await enqueueGenerateContentJob({
+      userId: user.id,
+      scheduledPostId: inserted.id,
+      city: post.city,
+      platform: post.platform,
+      scheduledFor: newScheduledAt,
+      source: "manual-duplicate",
+    });
+  }
+  return true;
 }
 
 /**
@@ -391,15 +406,28 @@ export async function duplicateScheduledPost(post: ScheduledPostItem): Promise<b
  */
 export async function retryScheduledPost(id: string): Promise<boolean> {
   const newScheduledAt = new Date(Date.now() + 2 * 60 * 1000).toISOString();
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from("scheduled_posts")
     .update({
       status: "pending",
       error_message: null,
       scheduled_at: newScheduledAt,
     })
-    .eq("id", id);
-  return !error;
+    .eq("id", id)
+    .select("id, user_id, city, platform")
+    .maybeSingle();
+  if (error) return false;
+  if (updated?.id && updated.user_id) {
+    await enqueueGenerateContentJob({
+      userId: updated.user_id,
+      scheduledPostId: updated.id,
+      city: updated.city,
+      platform: updated.platform,
+      scheduledFor: newScheduledAt,
+      source: "manual-retry",
+    });
+  }
+  return true;
 }
 
 // --- Caption Generation ---
