@@ -1988,6 +1988,29 @@ Deno.serve(async (req) => {
         if (experimentCtx?.variable === "visuals" && experimentCtx?.meta?.visuals) {
           visualStyle = String(experimentCtx.meta.visuals);
           console.log(`[visual] post ${post.id}: experiment override → visual_style=${visualStyle}`);
+          trace("visual_rotation", { skipped: true, reason: "experiment_override", style: visualStyle });
+        } else {
+          // Visual Style Rotation Guard — avoid repetition fatigue.
+          try {
+            const recent = await getRecentStyles(supabase, post.user_id, 5);
+            const decision = enforceStyleRotation(visualStyle, recent);
+            if (decision.forced) {
+              console.log(`[visual] post ${post.id}: 🔄 rotation forced — ${decision.reason}`);
+            } else {
+              console.log(`[visual] post ${post.id}: rotation OK — ${decision.reason}`);
+            }
+            visualStyle = decision.style;
+            trace("visual_rotation", {
+              forced: decision.forced,
+              preferred: decision.preferred,
+              chosen: decision.style,
+              pool_label: decision.pool_label,
+              recent: decision.recent,
+              reason: decision.reason,
+            });
+          } catch (e) {
+            console.warn("[visual] rotation guard failed:", e);
+          }
         }
         const baseMeta = expandVisualMeta(visualStyle);
         const visualTheme = classifyVisualTheme(weather.condition, timePeriod);
