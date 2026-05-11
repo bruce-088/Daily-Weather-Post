@@ -2033,13 +2033,61 @@ Deno.serve(async (req) => {
         const visualMeta = { ...baseMeta, theme: visualTheme, color_profile: visualColorProfile };
         trace("visual_style", visualMeta);
 
-        // Try video generation once (with voiceover baked in if available)
-        console.log(`RENDER START: City: ${weather.city}, VoiceEnabled: ${voiceUrl ? "True" : "False"}, VisualStyle: ${visualStyle}`);
-        const video = await generateVideoWithFallback({
-          weather, timePeriod, voiceUrl, audioDurationSec: voiceAudioDurationSec, visualStyle,
-          creatomate: () => generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec, visualStyle),
-        });
-        trace("video_render", { success: !!video, mime: video?.mimeType, provider: video?.provider });
+        // Credit Protection: if a previous attempt already rendered a video,
+        // reuse it instead of paying for another render.
+        let video: { data: Uint8Array; mimeType: string; provider?: string } | null = null;
+        const cachedVideoUrl: string | null = (post as any).cached_video_url ?? null;
+        if (cachedVideoUrl) {
+          try {
+            console.log(`[render] reusing cached video for post ${post.id}: ${cachedVideoUrl.slice(0, 80)}…`);
+            const dl = await fetch(cachedVideoUrl);
+            if (dl.ok) {
+              const ab = await dl.arrayBuffer();
+              if (ab.byteLength > 0) {
+                video = { data: new Uint8Array(ab), mimeType: "video/mp4", provider: "cache" };
+                trace("video_render", { reused: true, bytes: ab.byteLength });
+              }
+            } else {
+              console.warn(`[render] cached video fetch failed (${dl.status}) — will re-render`);
+            }
+          } catch (e) {
+            console.warn("[render] cached video reuse failed:", (e as Error).message);
+          }
+        }
+        if (!video) {
+          // Try video generation once (with voiceover baked in if available)
+          console.log(`RENDER START: City: ${weather.city}, VoiceEnabled: ${voiceUrl ? "True" : "False"}, VisualStyle: ${visualStyle}`);
+          video = await generateVideoWithFallback({
+            weather, timePeriod, voiceUrl, audioDurationSec: voiceAudioDurationSec, visualStyle,
+            creatomate: () => generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec, visualStyle),
+          });
+          trace("video_render", { success: !!video, mime: video?.mimeType, provider: video?.provider });
+          // Persist for retry credit-protection
+          if (video && video.data.byteLength > 0) {
+            try {
+              const path = `${post.user_id}/render-${post.id}-${Date.now()}.mp4`;
+              const { error: upErr } = await supabase.storage
+                .from("weather-videos")
+                .upload(path, video.data, { contentType: video.mimeType, upsert: true });
+              if (!upErr) {
+                const { data: signed } = await supabase.storage
+                  .from("weather-videos")
+                  .createSignedUrl(path, 60 * 60 * 24); // 24h
+                if (signed?.signedUrl) {
+                  await supabase
+                    .from("scheduled_posts")
+                    .update({ cached_video_url: signed.signedUrl })
+                    .eq("id", post.id);
+                  console.log(`[render] cached video URL saved for post ${post.id}`);
+                }
+              } else {
+                console.warn("[render] cache upload failed:", upErr.message);
+              }
+            } catch (e) {
+              console.warn("[render] cache persist failed:", (e as Error).message);
+            }
+          }
+        }
 
         let publishedPostUrl: string | null = null;
         // Map of platform -> external/post id, used to seed post_analytics rows.
