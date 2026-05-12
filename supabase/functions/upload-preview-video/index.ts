@@ -14,7 +14,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { storage_path, title, description, caption } = await req.json();
+    const { storage_path, title, description, caption, city_id, city: cityNameIn, state: stateIn } = await req.json();
 
     if (!storage_path) {
       throw new Error("storage_path is required");
