@@ -44,9 +44,30 @@ interface SystemLogRow {
   context: Record<string, unknown> | null;
 }
 
-const TYPE_ORDER = ["generate_content", "generate_voice", "render_video", "publish_post"] as const;
+const TYPE_ORDER = ["generate_content", "generate_voice", "render_video", "publish_post", "analyze_performance"] as const;
 const STATUS_OPTIONS = ["all", "pending", "retrying", "processing", "succeeded", "failed", "cancelled"];
 const TYPE_OPTIONS = ["all", ...TYPE_ORDER];
+
+function engineStateBadge(payload: Record<string, unknown> | null | undefined) {
+  const p = (payload ?? {}) as any;
+  const state = p.engine_state as string | undefined;
+  if (state === "optimized") {
+    const ref = p.reference_job ? ` · ${p.reference_job}` : "";
+    return (
+      <Badge variant="outline" className="font-mono text-[10px] gap-1 border-emerald-500/40 text-emerald-300 bg-emerald-500/10" title={`Reusing patterns from a recent winning job${ref}`}>
+        🟢 Optimized{ref}
+      </Badge>
+    );
+  }
+  if (state === "experiment") {
+    return (
+      <Badge variant="outline" className="font-mono text-[10px] gap-1 border-amber-500/40 text-amber-300 bg-amber-500/10" title="Testing a new combination to beat past jobs">
+        🧪 Experiment
+      </Badge>
+    );
+  }
+  return null;
+}
 
 function statusBadge(status: string) {
   const map: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; icon: any; label: string }> = {
