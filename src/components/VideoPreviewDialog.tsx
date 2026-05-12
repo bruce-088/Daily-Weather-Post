@@ -177,7 +177,8 @@ export function VideoPreviewDialog({
   const postSinglePlatform = async (platformId: string) => {
     updatePlatform(platformId, { status: "posting", message: `Posting to ${platformId}…` });
     try {
-      const result = await triggerDailyPost(undefined, [platformId], voice);
+      console.log("[manual-post]", { platform: platformId, city_id: city?.id, city: city?.name, state: city?.state });
+      const result = await triggerDailyPost(undefined, [platformId], voice, city);
       if (result.success) {
         updatePlatform(platformId, { status: "success", message: result.message || "Posted successfully" });
       } else {
