@@ -737,10 +737,17 @@ function clampVoiceParam(n: any, min: number, max: number, fallback: number): nu
   return Math.min(max, Math.max(min, v));
 }
 
-async function generateVoiceScript(weather: WeatherResponse, tone?: string, platforms?: string[]): Promise<string> {
+async function generateVoiceScript(
+  weather: WeatherResponse,
+  tone?: string,
+  platforms?: string[],
+  ctaOpts?: { subscribeCta?: boolean; city?: string | null },
+): Promise<string> {
   const fallback = `Good day, ${weather.city}. Expect ${weather.description.toLowerCase()} with a high near ${weather.temperature} degrees today.`;
+  const ctaCity = ctaOpts?.city ?? weather.city;
+  const subscribeCta = ctaOpts?.subscribeCta ?? false;
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) return appendVoiceCTA(fallback, { tone, platforms });
+  if (!LOVABLE_API_KEY) return appendVoiceCTA(fallback, { tone, platforms, subscribeCta, city: ctaCity });
   const userPrompt = [
     `City: ${weather.city}`,
     `Condition: ${weather.description}`,
@@ -776,7 +783,7 @@ async function generateVoiceScript(weather: WeatherResponse, tone?: string, plat
         ],
       }),
     });
-    if (!res.ok) { console.error("[voice] script AI failed:", res.status); return appendVoiceCTA(fallback, { tone, platforms, alertMode }); }
+    if (!res.ok) { console.error("[voice] script AI failed:", res.status); return appendVoiceCTA(fallback, { tone, platforms, alertMode, subscribeCta, city: ctaCity }); }
     const data = await res.json();
     const script = data?.choices?.[0]?.message?.content?.trim() || fallback;
     const validation = validateCaptionLocation(script, weather.city);
@@ -785,10 +792,10 @@ async function generateVoiceScript(weather: WeatherResponse, tone?: string, plat
       console.warn(`[voice] foreign landmarks in script for ${weather.city}:`, validation.hits, "— sanitizing");
       finalScript = stripUnverifiedReferences(script, weather.city);
     }
-    return appendVoiceCTA(finalScript, { tone, platforms, alertMode });
+    return appendVoiceCTA(finalScript, { tone, platforms, alertMode, subscribeCta, city: ctaCity });
   } catch (e) {
     console.error("[voice] script error:", e);
-    return appendVoiceCTA(fallback, { tone, platforms, alertMode });
+    return appendVoiceCTA(fallback, { tone, platforms, alertMode, subscribeCta, city: ctaCity });
   }
 }
 
