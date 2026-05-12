@@ -543,6 +543,57 @@ export type Database = {
         }
         Relationships: []
       }
+      pipeline_reflections: {
+        Row: {
+          city: string | null
+          created_at: string
+          engagement: number
+          hook_type: string | null
+          id: string
+          job_id: string | null
+          performance: string
+          recommendation: string | null
+          scheduled_post_id: string | null
+          user_avg_views: number
+          user_id: string
+          views: number
+          visual_style: string | null
+          voice_tone: string | null
+        }
+        Insert: {
+          city?: string | null
+          created_at?: string
+          engagement?: number
+          hook_type?: string | null
+          id?: string
+          job_id?: string | null
+          performance?: string
+          recommendation?: string | null
+          scheduled_post_id?: string | null
+          user_avg_views?: number
+          user_id: string
+          views?: number
+          visual_style?: string | null
+          voice_tone?: string | null
+        }
+        Update: {
+          city?: string | null
+          created_at?: string
+          engagement?: number
+          hook_type?: string | null
+          id?: string
+          job_id?: string | null
+          performance?: string
+          recommendation?: string | null
+          scheduled_post_id?: string | null
+          user_avg_views?: number
+          user_id?: string
+          views?: number
+          visual_style?: string | null
+          voice_tone?: string | null
+        }
+        Relationships: []
+      }
       post_analytics: {
         Row: {
           comments: number
