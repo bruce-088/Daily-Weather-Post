@@ -14,7 +14,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { storage_path, title, description, caption } = await req.json();
+    const { storage_path, title, description, caption, city_id, city: cityNameIn, state: stateIn } = await req.json();
 
     if (!storage_path) {
       throw new Error("storage_path is required");
@@ -52,6 +52,18 @@ Deno.serve(async (req) => {
     console.log(`Downloaded preview video: ${videoData.byteLength} bytes`);
 
     // Upload to YouTube via shared adapter
+    // Resolve effective city: prefer explicit city_id from the global header,
+    // then fall back to the city/state hint, then the title prefix.
+    let resolvedCityId: string | null = city_id ?? null;
+    let resolvedCityName: string | null = cityNameIn ?? null;
+    if (resolvedCityId) {
+      const { data: cityRow } = await supabase
+        .from("cities").select("id, name, state").eq("id", resolvedCityId).maybeSingle();
+      if (cityRow) { resolvedCityName = cityRow.name; }
+    }
+    if (!resolvedCityName) resolvedCityName = title?.split(" Weather")?.[0] || "Unknown";
+    console.log(`[upload-preview-video] city_id=${resolvedCityId ?? "-"} city=${resolvedCityName} state=${stateIn ?? "-"}`);
+
     const result = await postToPlatform(
       "youtube",
       supabase,
@@ -59,6 +71,8 @@ Deno.serve(async (req) => {
       videoData,
       title || "Weather Update",
       description || caption || "Daily weather update",
+      "video/mp4",
+      resolvedCityId,
     );
 
     if (!result.success) {
@@ -67,14 +81,14 @@ Deno.serve(async (req) => {
 
     console.log("YouTube Short published from preview! Video ID:", result.id);
 
-    // Log to post history
-    const city = title?.split(" Weather")?.[0] || "Unknown";
     await supabase.from("post_history").insert({
       status: "success",
       platform: "youtube",
-      city,
+      city: resolvedCityName,
       caption,
       user_id: userId,
+      external_id: result.id ?? null,
+      post_url: result.id ? `https://www.youtube.com/watch?v=${result.id}` : null,
     });
 
     // Clean up the preview file

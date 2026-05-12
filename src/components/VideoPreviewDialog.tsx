@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Play, Upload, RefreshCw, X, Loader2, Pencil, Eye, Download, Send, Mic, Pause } from "lucide-react";
 import { generatePreview, uploadPreviewVideo, triggerDailyPost } from "@/lib/api";
-import type { PreviewResult, VoiceOptions } from "@/lib/api";
+import type { PreviewResult, VoiceOptions, CityContext } from "@/lib/api";
 import {
   PostProgressPanel,
   buildInitialStates,
@@ -31,6 +31,8 @@ interface VideoPreviewDialogProps {
   style?: string;
   /** AI voiceover options forwarded to preview + post */
   voice?: VoiceOptions;
+  /** Active city from the global header — single source of truth for preview + publish */
+  city?: CityContext | null;
 }
 
 export function VideoPreviewDialog({
@@ -43,6 +45,7 @@ export function VideoPreviewDialog({
   onPosted,
   style = "standard",
   voice,
+  city,
 }: VideoPreviewDialogProps) {
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -117,7 +120,8 @@ export function VideoPreviewDialog({
     const voiceTimer = voice?.enabled ? setTimeout(() => setGenStage("voice"), 8000) : null;
 
     try {
-      const result = await generatePreview({ style, variation, voice });
+      console.log("[preview] generating", { city_id: city?.id, city: city?.name, state: city?.state });
+      const result = await generatePreview({ style, variation, voice, city });
       if (result.success && (result.video_url || result.image_url)) {
         setPreview(result);
         if (variation) {
@@ -144,10 +148,12 @@ export function VideoPreviewDialog({
     if (!preview?.storage_path || !preview?.weather) return;
     setUploading(true);
     try {
-      const title = `${preview.weather.city} Weather Today — ${preview.weather.temperature}°F ${preview.weather.condition}`;
+      const cityName = city?.name || preview.weather.city;
+      const title = `${cityName} Weather Today — ${preview.weather.temperature}°F ${preview.weather.condition}`;
       const captionToUse = editedCaption || preview.caption;
-      const desc = captionToUse || `Weather update for ${preview.weather.city}: ${preview.weather.temperature}°F, ${preview.weather.description}`;
-      const result = await uploadPreviewVideo(preview.storage_path, title, desc, captionToUse);
+      const desc = captionToUse || `Weather update for ${cityName}: ${preview.weather.temperature}°F, ${preview.weather.description}`;
+      console.log("[preview] uploading", { city_id: city?.id, city: cityName });
+      const result = await uploadPreviewVideo(preview.storage_path, title, desc, captionToUse, city);
 
       if (result.success) {
         toast.success(result.message);
@@ -171,7 +177,8 @@ export function VideoPreviewDialog({
   const postSinglePlatform = async (platformId: string) => {
     updatePlatform(platformId, { status: "posting", message: `Posting to ${platformId}…` });
     try {
-      const result = await triggerDailyPost(undefined, [platformId], voice);
+      console.log("[manual-post]", { platform: platformId, city_id: city?.id, city: city?.name, state: city?.state });
+      const result = await triggerDailyPost(undefined, [platformId], voice, city);
       if (result.success) {
         updatePlatform(platformId, { status: "success", message: result.message || "Posted successfully" });
       } else {
@@ -249,6 +256,15 @@ export function VideoPreviewDialog({
             {isPostFlow ? "Review Before Posting" : preview?.content_type === "image" ? "Image Preview" : "Video Preview"}
           </DialogTitle>
         </DialogHeader>
+
+        {(city?.name || city?.id) && (
+          <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs flex items-center justify-between">
+            <span className="text-muted-foreground">Active city</span>
+            <span className="font-medium text-foreground">
+              {city?.name || "(unnamed)"}{city?.state ? `, ${city.state}` : ""}
+            </span>
+          </div>
+        )}
 
         <div className="space-y-4">
           {/* Generate button */}

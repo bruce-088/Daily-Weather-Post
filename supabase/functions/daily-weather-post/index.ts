@@ -1237,6 +1237,9 @@ Deno.serve(async (req) => {
     let style = "standard";
     let variation = false;
     let voiceOpts: VoiceOptions = { enabled: false };
+    let requestedCityId: string | null = null;
+    let requestedCityName: string | null = null;
+    let requestedCityState: string | null = null;
     try {
       const body = await req.clone().json();
       if (body?.mode === "preview") mode = "preview";
@@ -1244,6 +1247,9 @@ Deno.serve(async (req) => {
       if (body?.platforms && Array.isArray(body.platforms)) selectedPlatforms = body.platforms;
       if (typeof body?.style === "string") style = body.style;
       if (body?.variation === true) variation = true;
+      if (typeof body?.city_id === "string") requestedCityId = body.city_id;
+      if (typeof body?.city === "string") requestedCityName = body.city;
+      if (typeof body?.state === "string") requestedCityState = body.state;
       if (body?.voice && typeof body.voice === "object") {
         voiceOpts = {
           enabled: !!body.voice.enabled,
@@ -1252,7 +1258,7 @@ Deno.serve(async (req) => {
         };
       }
     } catch { /* no body is fine */ }
-    console.log(`[daily-weather-post] mode=${mode} style=${style} variation=${variation} voice=${voiceOpts.enabled}`);
+    console.log(`[daily-weather-post] mode=${mode} style=${style} variation=${variation} voice=${voiceOpts.enabled} city_id=${requestedCityId ?? "-"} city=${requestedCityName ?? "-"}`);
 
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -1275,12 +1281,33 @@ Deno.serve(async (req) => {
       throw new Error("No weather settings found. Please configure your settings first.");
     }
 
+    // === City context (single source of truth) ===
+    // The selected city in the global header is the authoritative input.
+    // If the request supplied a city_id, look it up. Otherwise honor city/state.
+    // Fall back to weather_settings ONLY when nothing is supplied (legacy callers).
+    let resolvedCityId: string | null = requestedCityId;
+    let resolvedCityName: string = requestedCityName || settings.city;
+    let resolvedCityState: string | null = requestedCityState ?? settings.state ?? null;
+    if (requestedCityId) {
+      const { data: cityRow } = await supabase
+        .from("cities")
+        .select("id, name, state")
+        .eq("id", requestedCityId)
+        .maybeSingle();
+      if (cityRow) {
+        resolvedCityId = cityRow.id;
+        resolvedCityName = cityRow.name;
+        resolvedCityState = cityRow.state ?? null;
+      }
+    }
+    console.log(`[daily-weather-post] resolved city: ${resolvedCityName}${resolvedCityState ? ", " + resolvedCityState : ""} (id=${resolvedCityId ?? "-"})`);
+
     const openWeatherApiKey = Deno.env.get("OPENWEATHER_API_KEY");
     if (!openWeatherApiKey) {
       throw new Error("OpenWeatherMap API key not configured as a backend secret.");
     }
 
-    const weather = await fetchWeatherData(settings.state ? settings.city + "," + settings.state : settings.city, openWeatherApiKey);
+    const weather = await fetchWeatherData(resolvedCityState ? resolvedCityName + "," + resolvedCityState : resolvedCityName, openWeatherApiKey);
 
     // Generate caption via SkyBrief prompt
     let caption: string | null = null;
@@ -1499,7 +1526,57 @@ Deno.serve(async (req) => {
       }
     };
 
-    let connectedAdapters = getConnectedAdapters(settings as Record<string, unknown>);
+    // Determine which platforms have a usable connection. We start with the
+    // legacy `weather_settings` token columns (single-channel installs) and
+    // then merge in any rows from `social_accounts` — including city-scoped
+    // rows mapped to the resolved city. This prevents false "No social
+    // platforms connected" errors when the user only has city-mapped channels.
+    const augmentedSettings: Record<string, unknown> = { ...(settings as Record<string, unknown>) };
+    try {
+      const { data: socialRows } = await supabase
+        .from("social_accounts")
+        .select("platform, access_token, refresh_token, token_expires_at, city_id, account_name, account_external_id")
+        .eq("user_id", userId);
+      const rows = socialRows ?? [];
+      const platformsConnected = new Set<string>();
+      const youtubeRouting: Array<Record<string, any>> = [];
+      for (const r of rows) {
+        const cityMatches = !r.city_id || r.city_id === resolvedCityId;
+        if (!cityMatches) continue;
+        if (r.access_token || r.refresh_token) {
+          platformsConnected.add(r.platform);
+          if (r.platform === "youtube") {
+            youtubeRouting.push({
+              account: r.account_name || r.account_external_id || "(unnamed)",
+              external_id: r.account_external_id,
+              scope: r.city_id ? "city" : "shared",
+              expired: r.token_expires_at ? new Date(r.token_expires_at).getTime() < Date.now() : false,
+            });
+          }
+        }
+      }
+      // Reflect connection state into the synthetic settings so adapter.isConnected() returns true.
+      if (platformsConnected.has("youtube")) {
+        augmentedSettings.youtube_access_token = augmentedSettings.youtube_access_token || "social";
+        augmentedSettings.youtube_refresh_token = augmentedSettings.youtube_refresh_token || "social";
+      }
+      if (platformsConnected.has("tiktok")) {
+        augmentedSettings.tiktok_access_token = augmentedSettings.tiktok_access_token || "social";
+        augmentedSettings.tiktok_refresh_token = augmentedSettings.tiktok_refresh_token || "social";
+      }
+      if (platformsConnected.has("twitter")) {
+        augmentedSettings.twitter_access_token = augmentedSettings.twitter_access_token || "social";
+        augmentedSettings.twitter_access_token_secret = augmentedSettings.twitter_access_token_secret || "social";
+      }
+      if (platformsConnected.has("linkedin")) {
+        augmentedSettings.linkedin_access_token = augmentedSettings.linkedin_access_token || "social";
+      }
+      console.log(`[daily-weather-post] connection map (city=${resolvedCityName}, id=${resolvedCityId ?? "-"}): platforms=${[...platformsConnected].join(",") || "none"}, youtube_routing=${JSON.stringify(youtubeRouting)}`);
+    } catch (e) {
+      console.warn("[daily-weather-post] failed to load social_accounts for connection check:", e);
+    }
+
+    let connectedAdapters = getConnectedAdapters(augmentedSettings);
     // Filter to only selected platforms if specified
     if (selectedPlatforms && selectedPlatforms.length > 0) {
       connectedAdapters = connectedAdapters.filter((a) => selectedPlatforms!.includes(a.name));
@@ -1507,7 +1584,8 @@ Deno.serve(async (req) => {
 
     if (connectedAdapters.length === 0) {
       status = "pending";
-      errorMessage = "No social platforms connected — connect YouTube, TikTok, or Instagram in Settings";
+      const requested = selectedPlatforms?.length ? ` (${selectedPlatforms.join(", ")})` : "";
+      errorMessage = `No social platforms connected for ${resolvedCityName}${requested} — open Settings → Channels and either connect a shared account or assign one to this city.`;
     } else if (!video) {
       // === FALLBACK: Generate static image when video fails ===
       console.log("Video generation failed, attempting fallback image...");
@@ -1536,7 +1614,7 @@ Deno.serve(async (req) => {
         for (const adapter of connectedAdapters) {
           if (imageCapablePlatforms.includes(adapter.name)) {
             try {
-              const token = await adapter.getValidToken(supabase, userId);
+              const token = await adapter.getValidToken(supabase, userId, resolvedCityId);
               if (!token) {
                 console.error(`${adapter.name}: failed to get token for image post`);
                 recordResult(adapter.name, false, "Auth token missing");
@@ -1593,7 +1671,7 @@ Deno.serve(async (req) => {
       const desc = caption || "Weather update for " + weather.city + ": " + weather.temperature + "\u00B0F, " + weather.description;
 
       for (const adapter of connectedAdapters) {
-        const result = await postToPlatform(adapter.name, supabase, userId, video.data, title, desc, video.mimeType);
+        const result = await postToPlatform(adapter.name, supabase, userId, video.data, title, desc, video.mimeType, resolvedCityId);
         if (result.success) {
           platform = adapter.name;
           status = "success";
