@@ -310,10 +310,11 @@ export function VideoPreviewDialog({
           </DialogTitle>
         </DialogHeader>
 
+        {/* Target City — prominent verification banner */}
         {(city?.name || city?.id) && (
-          <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs flex items-center justify-between">
-            <span className="text-muted-foreground">Active city</span>
-            <span className="font-medium text-foreground">
+          <div className="rounded-lg border border-primary/30 bg-primary/10 px-4 py-2.5 text-sm flex items-center justify-between">
+            <span className="text-primary/80 font-medium">Target City</span>
+            <span className="font-semibold text-foreground">
               {city?.name || "(unnamed)"}{city?.state ? `, ${city.state}` : ""}
             </span>
           </div>
