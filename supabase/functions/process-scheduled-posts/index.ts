@@ -2163,21 +2163,31 @@ Deno.serve(async (req) => {
         // Map of platform -> external/post id, used to seed post_analytics rows.
         const platformExternalIds: Record<string, string> = {};
 
+        let videoPostedAny = false;
+        const platformErrors: string[] = [];
         if (video) {
           // Video succeeded — post to all platforms
           for (const platformName of platformsToPost) {
             const result = await postToPlatform(platformName, supabase, post.user_id, video.data, title, desc, video.mimeType, post.city_id || null);
-            if (result.success) {
-              console.log(`Scheduled post ${post.id}: ${platformName} published, ID: ${result.id}`);
-              if (platformName === "youtube" && result.id) {
+            if (result.success && result.id) {
+              videoPostedAny = true;
+              console.log(`[publish] ${platformName} OK id=${result.id} post=${post.id}`);
+              if (platformName === "youtube") {
                 platformExternalIds["youtube"] = result.id;
                 if (!publishedPostUrl) publishedPostUrl = `https://www.youtube.com/watch?v=${result.id}`;
-              } else if (platformName === "tiktok" && result.id) {
+              } else if (platformName === "tiktok") {
                 platformExternalIds["tiktok"] = result.id;
                 if (!publishedPostUrl) publishedPostUrl = `https://www.tiktok.com/video/${result.id}`;
-              } else if (result.id) {
+              } else {
                 platformExternalIds[platformName] = result.id;
               }
+            } else if (result.success && !result.id) {
+              // Adapter reported success but returned no ID — treat as a hard failure.
+              const msg = `${platformName} returned success without a video ID`;
+              console.error(`[publish] ${msg} post=${post.id}`);
+              platformErrors.push(msg);
+              errorMessage = msg;
+              await notifyFailure("upload", `${platformName} upload failed`, msg, { platform: platformName });
             } else {
               errorMessage = result.error || `${platformName} upload failed`;
               // Detect expired/invalid YouTube auth (token refresh failed) and surface
