@@ -289,6 +289,9 @@ export function VideoPreviewDialog({
       setPreview(null);
       setIsEditingCaption(false);
       setAutoGenerateTriggered(false);
+      setBundleInvalidated(false);
+      setInvalidationReason(null);
+      setPreviewCity(null);
       setPlatformStates([]);
       setPhase("validating");
       onOpenChange(false);
