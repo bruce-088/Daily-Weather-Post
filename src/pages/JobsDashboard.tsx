@@ -194,8 +194,8 @@ export default function JobsDashboard() {
     const { data } = await supabase
       .from("system_logs")
       .select("*")
-      .in("type", ["job_generate_content", "job_generate_voice", "job_render_video", "job_publish_post",
-                   "job_generate_content_failed", "job_generate_voice_failed", "job_render_video_failed", "job_publish_post_failed"])
+      .in("type", ["job_generate_content", "job_generate_voice", "job_render_video", "job_publish_post", "job_analyze_performance",
+                   "job_generate_content_failed", "job_generate_voice_failed", "job_render_video_failed", "job_publish_post_failed", "job_analyze_performance_failed"])
       .order("created_at", { ascending: false })
       .limit(200);
     const filtered = (data ?? []).filter((row: any) => {
