@@ -178,6 +178,13 @@ export interface PreviewResult {
   caption?: string | null;
   error?: string;
   resolved_city?: { id: string | null; name: string; state: string | null } | null;
+  /** Locked preview bundle id — pass to publishPreviewBundle to guarantee
+   * "what you previewed = what gets posted". */
+  bundle_id?: string | null;
+  /** Source of the visual: creatomate | gemini | fallback_template */
+  visual_source?: string | null;
+  /** True when a bundle row was successfully written for this preview */
+  locked?: boolean;
 }
 
 export async function generatePreview(opts?: {
