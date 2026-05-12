@@ -5,8 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Play, Upload, RefreshCw, X, Loader2, Pencil, Eye, Download, Send, Mic, Pause } from "lucide-react";
-import { generatePreview, uploadPreviewVideo, triggerDailyPost } from "@/lib/api";
+import { Play, Upload, RefreshCw, X, Loader2, Pencil, Eye, Download, Send, Mic, Pause, Lock, AlertTriangle } from "lucide-react";
+import { generatePreview, uploadPreviewVideo, publishPreviewBundle, triggerDailyPost } from "@/lib/api";
 import type { PreviewResult, VoiceOptions, CityContext } from "@/lib/api";
 import {
   PostProgressPanel,
@@ -62,6 +62,12 @@ export function VideoPreviewDialog({
   const [phase, setPhase] = useState<"validating" | "ready" | "posting" | "complete">("validating");
   const [posting, setPosting] = useState(false);
 
+  // Bundle invalidation tracking — preview is "locked" until something
+  // material changes (caption edited, city switched, manual regenerate).
+  const [previewCity, setPreviewCity] = useState<{ id?: string | null; name?: string | null } | null>(null);
+  const [bundleInvalidated, setBundleInvalidated] = useState(false);
+  const [invalidationReason, setInvalidationReason] = useState<string | null>(null);
+
   const isPostFlow = !!(postPlatforms && postPlatforms.length > 0);
 
   // Build / refresh validation states whenever preview content type or selected platforms change
@@ -89,6 +95,30 @@ export function VideoPreviewDialog({
     }
   }, [preview?.caption]);
 
+  // Invalidate bundle if user edits caption away from the locked text
+  useEffect(() => {
+    if (!preview?.bundle_id) return;
+    if (editedCaption && preview.caption && editedCaption.trim() !== preview.caption.trim()) {
+      if (!bundleInvalidated) {
+        setBundleInvalidated(true);
+        setInvalidationReason("Caption was edited — regenerate preview to lock new caption.");
+      }
+    }
+  }, [editedCaption, preview?.caption, preview?.bundle_id, bundleInvalidated]);
+
+  // Invalidate bundle if the active city changes after preview was generated
+  useEffect(() => {
+    if (!preview?.bundle_id || !previewCity) return;
+    const sameId = (city?.id ?? null) === (previewCity.id ?? null);
+    const sameName = (city?.name ?? null) === (previewCity.name ?? null);
+    if (!sameId || !sameName) {
+      if (!bundleInvalidated) {
+        setBundleInvalidated(true);
+        setInvalidationReason("Active city changed — regenerate preview before posting.");
+      }
+    }
+  }, [city?.id, city?.name, preview?.bundle_id, previewCity, bundleInvalidated]);
+
   // Auto-generate when opened via "Post Now" flow
   useEffect(() => {
     if (open && isPostFlow && !preview && !generating && !autoGenerateTriggered) {
@@ -112,6 +142,9 @@ export function VideoPreviewDialog({
     setGenStage("video");
     setPreview(null);
     setIsEditingCaption(false);
+    // Reset lock state — a fresh preview always starts locked
+    setBundleInvalidated(false);
+    setInvalidationReason(null);
 
     // After ~25s, if still generating, switch label to image-fallback hint.
     // The edge function tries video first via Creatomate; if that fails it
@@ -124,6 +157,7 @@ export function VideoPreviewDialog({
       const result = await generatePreview({ style, variation, voice, city });
       if (result.success && (result.video_url || result.image_url)) {
         setPreview(result);
+        setPreviewCity({ id: city?.id ?? null, name: city?.name ?? result.weather?.city ?? null });
         if (variation) {
           toast.success("✨ New variation ready!");
         } else {
@@ -177,8 +211,24 @@ export function VideoPreviewDialog({
   const postSinglePlatform = async (platformId: string) => {
     updatePlatform(platformId, { status: "posting", message: `Posting to ${platformId}…` });
     try {
-      console.log("[manual-post]", { platform: platformId, city_id: city?.id, city: city?.name, state: city?.state });
-      const result = await triggerDailyPost(undefined, [platformId], voice, city);
+      console.log("[manual-post]", { platform: platformId, city_id: city?.id, bundle_id: preview?.bundle_id });
+      // Deterministic publish path: if we have a locked bundle, publish the
+      // exact preview asset. Otherwise (legacy preview without bundle) fall
+      // back to the regenerate-and-post flow.
+      let result: { success: boolean; message: string };
+      if (preview?.bundle_id && !bundleInvalidated) {
+        const r = await publishPreviewBundle(preview.bundle_id, [platformId]);
+        const platformResult = r.results?.find((x) => x.platform === platformId);
+        result = {
+          success: !!platformResult?.success,
+          message: platformResult?.success
+            ? `Posted to ${platformId}${platformResult.url ? ` — ${platformResult.url}` : ""}`
+            : (platformResult?.error || r.message || "Post failed"),
+        };
+      } else {
+        const r = await triggerDailyPost(undefined, [platformId], voice, city);
+        result = { success: r.success, message: r.message };
+      }
       if (result.success) {
         updatePlatform(platformId, { status: "success", message: result.message || "Posted successfully" });
       } else {
@@ -239,6 +289,9 @@ export function VideoPreviewDialog({
       setPreview(null);
       setIsEditingCaption(false);
       setAutoGenerateTriggered(false);
+      setBundleInvalidated(false);
+      setInvalidationReason(null);
+      setPreviewCity(null);
       setPlatformStates([]);
       setPhase("validating");
       onOpenChange(false);
@@ -323,6 +376,41 @@ export function VideoPreviewDialog({
                   />
                 ) : null}
               </div>
+
+              {/* Source + lock indicator — proves what will be published */}
+              {(preview.bundle_id || preview.visual_source) && (
+                <div className="flex items-center justify-between rounded-lg border border-border/30 bg-secondary/20 px-3 py-2">
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-muted-foreground">Source</span>
+                    <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
+                      {preview.visual_source === "creatomate"
+                        ? "Creatomate"
+                        : preview.visual_source === "gemini"
+                        ? "Gemini fallback"
+                        : preview.visual_source || "Static template"}
+                    </Badge>
+                  </div>
+                  {bundleInvalidated ? (
+                    <div className="flex items-center gap-1.5 text-[11px] text-yellow-500">
+                      <AlertTriangle size={12} /> Stale — regenerate
+                    </div>
+                  ) : preview.bundle_id ? (
+                    <div className="flex items-center gap-1.5 text-[11px] text-emerald-500">
+                      <Lock size={12} /> Preview locked
+                    </div>
+                  ) : null}
+                </div>
+              )}
+              {bundleInvalidated && invalidationReason && (
+                <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 px-3 py-2 text-[11px] text-yellow-500">
+                  {invalidationReason}
+                </div>
+              )}
+              {preview.bundle_id && !bundleInvalidated && (
+                <p className="text-[11px] text-muted-foreground">
+                  This exact version will be published — no re-generation, no drift.
+                </p>
+              )}
 
               {/* Weather info badges */}
               {preview.weather && (
@@ -473,8 +561,14 @@ export function VideoPreviewDialog({
                   <Button
                     size="sm"
                     onClick={handlePostToPlatforms}
-                    disabled={isBusy || blockingError || postablePlatforms.length === 0}
-                    title={blockingError ? "Resolve connection errors before posting" : undefined}
+                    disabled={isBusy || blockingError || postablePlatforms.length === 0 || bundleInvalidated}
+                    title={
+                      bundleInvalidated
+                        ? (invalidationReason || "Regenerate preview before posting")
+                        : blockingError
+                        ? "Resolve connection errors before posting"
+                        : undefined
+                    }
                     className="gap-1.5 text-xs"
                   >
                     <Send size={14} /> Post ({postablePlatforms.length})

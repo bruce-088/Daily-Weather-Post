@@ -1416,6 +1416,50 @@ Deno.serve(async (req) => {
 
     // === PREVIEW MODE ===
     if (mode === "preview") {
+      // Helper: insert a preview_bundle row and return its id. Best-effort —
+      // failures don't block returning the preview to the user, but we log so
+      // we can investigate. The bundle is the contract used by publish later.
+      const insertBundle = async (args: {
+        contentType: "video" | "image";
+        storageBucket: string;
+        storagePath: string;
+        assetUrl: string;
+        visualSource: string;
+        bytes: number;
+      }): Promise<string | null> => {
+        if (!userId) return null;
+        try {
+          // Cheap content fingerprint — combine the asset path, byte size and
+          // caption so we can detect drift between preview and published asset.
+          const hashInput = `${args.storagePath}|${args.bytes}|${(caption || "").slice(0, 200)}`;
+          const hashBuf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(hashInput));
+          const contentHash = Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2, "0")).join("").slice(0, 32);
+          const { data, error } = await supabase.from("preview_bundles").insert({
+            user_id: userId,
+            city_id: resolvedCityId ?? null,
+            city: weather?.city ?? null,
+            state: (weather as any)?.stateOrRegion ?? null,
+            weather_snapshot: weather as any,
+            caption_text: caption ?? null,
+            voice_script: voiceScript ?? null,
+            visual_source: args.visualSource,
+            content_type: args.contentType,
+            storage_bucket: args.storageBucket,
+            storage_path: args.storagePath,
+            asset_url: args.assetUrl,
+            audio_url: voiceUrl ?? null,
+            render_config: { style: (body as any)?.style ?? "standard", time_period: timePeriod ?? null },
+            content_hash: contentHash,
+            status: "locked",
+          }).select("id").maybeSingle();
+          if (error) { console.warn("[preview-bundle] insert failed:", error.message); return null; }
+          return data?.id ?? null;
+        } catch (e) {
+          console.warn("[preview-bundle] insert threw:", (e as Error).message);
+          return null;
+        }
+      };
+
       if (video && userId) {
         // Video preview path
         const fileName = userId + "/preview-" + Date.now() + ".mp4";
@@ -1440,7 +1484,18 @@ Deno.serve(async (req) => {
           throw new Error("Failed to create signed URL for preview video");
         }
 
-        console.log("Preview video stored with signed URL");
+        const visualSource = (video as any)?.source === "creatomate" ? "creatomate"
+          : (video as any)?.source ? String((video as any).source) : "creatomate";
+        const bundleId = await insertBundle({
+          contentType: "video",
+          storageBucket: "weather-videos",
+          storagePath: fileName,
+          assetUrl: signedUrlData.signedUrl,
+          visualSource,
+          bytes: video.data.byteLength,
+        });
+
+        console.log("Preview video stored with signed URL", { bundleId, visualSource });
         return new Response(
           JSON.stringify({
             success: true,
@@ -1452,7 +1507,9 @@ Deno.serve(async (req) => {
             caption,
             audio_url: voiceUrl,
             voice_script: voiceScript,
-
+            bundle_id: bundleId,
+            visual_source: visualSource,
+            locked: !!bundleId,
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
@@ -1487,7 +1544,17 @@ Deno.serve(async (req) => {
         throw new Error("Failed to create signed URL for preview image");
       }
 
-      console.log("Preview image stored with signed URL");
+      const visualSource = "gemini";
+      const bundleId = await insertBundle({
+        contentType: "image",
+        storageBucket: "generated-images",
+        storagePath: imgFileName,
+        assetUrl: imgSignedData.signedUrl,
+        visualSource,
+        bytes: fallbackImage.data.byteLength,
+      });
+
+      console.log("Preview image stored with signed URL", { bundleId, visualSource });
       return new Response(
         JSON.stringify({
           success: true,
@@ -1499,7 +1566,9 @@ Deno.serve(async (req) => {
           caption,
           audio_url: voiceUrl,
           voice_script: voiceScript,
-
+          bundle_id: bundleId,
+          visual_source: visualSource,
+          locked: !!bundleId,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
