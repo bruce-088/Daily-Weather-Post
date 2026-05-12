@@ -1526,7 +1526,57 @@ Deno.serve(async (req) => {
       }
     };
 
-    let connectedAdapters = getConnectedAdapters(settings as Record<string, unknown>);
+    // Determine which platforms have a usable connection. We start with the
+    // legacy `weather_settings` token columns (single-channel installs) and
+    // then merge in any rows from `social_accounts` — including city-scoped
+    // rows mapped to the resolved city. This prevents false "No social
+    // platforms connected" errors when the user only has city-mapped channels.
+    const augmentedSettings: Record<string, unknown> = { ...(settings as Record<string, unknown>) };
+    try {
+      const { data: socialRows } = await supabase
+        .from("social_accounts")
+        .select("platform, access_token, refresh_token, token_expires_at, city_id, account_name, account_external_id")
+        .eq("user_id", userId);
+      const rows = socialRows ?? [];
+      const platformsConnected = new Set<string>();
+      const youtubeRouting: Array<Record<string, any>> = [];
+      for (const r of rows) {
+        const cityMatches = !r.city_id || r.city_id === resolvedCityId;
+        if (!cityMatches) continue;
+        if (r.access_token || r.refresh_token) {
+          platformsConnected.add(r.platform);
+          if (r.platform === "youtube") {
+            youtubeRouting.push({
+              account: r.account_name || r.account_external_id || "(unnamed)",
+              external_id: r.account_external_id,
+              scope: r.city_id ? "city" : "shared",
+              expired: r.token_expires_at ? new Date(r.token_expires_at).getTime() < Date.now() : false,
+            });
+          }
+        }
+      }
+      // Reflect connection state into the synthetic settings so adapter.isConnected() returns true.
+      if (platformsConnected.has("youtube")) {
+        augmentedSettings.youtube_access_token = augmentedSettings.youtube_access_token || "social";
+        augmentedSettings.youtube_refresh_token = augmentedSettings.youtube_refresh_token || "social";
+      }
+      if (platformsConnected.has("tiktok")) {
+        augmentedSettings.tiktok_access_token = augmentedSettings.tiktok_access_token || "social";
+        augmentedSettings.tiktok_refresh_token = augmentedSettings.tiktok_refresh_token || "social";
+      }
+      if (platformsConnected.has("twitter")) {
+        augmentedSettings.twitter_access_token = augmentedSettings.twitter_access_token || "social";
+        augmentedSettings.twitter_access_token_secret = augmentedSettings.twitter_access_token_secret || "social";
+      }
+      if (platformsConnected.has("linkedin")) {
+        augmentedSettings.linkedin_access_token = augmentedSettings.linkedin_access_token || "social";
+      }
+      console.log(`[daily-weather-post] connection map (city=${resolvedCityName}, id=${resolvedCityId ?? "-"}): platforms=${[...platformsConnected].join(",") || "none"}, youtube_routing=${JSON.stringify(youtubeRouting)}`);
+    } catch (e) {
+      console.warn("[daily-weather-post] failed to load social_accounts for connection check:", e);
+    }
+
+    let connectedAdapters = getConnectedAdapters(augmentedSettings);
     // Filter to only selected platforms if specified
     if (selectedPlatforms && selectedPlatforms.length > 0) {
       connectedAdapters = connectedAdapters.filter((a) => selectedPlatforms!.includes(a.name));
@@ -1534,7 +1584,8 @@ Deno.serve(async (req) => {
 
     if (connectedAdapters.length === 0) {
       status = "pending";
-      errorMessage = "No social platforms connected — connect YouTube, TikTok, or Instagram in Settings";
+      const requested = selectedPlatforms?.length ? ` (${selectedPlatforms.join(", ")})` : "";
+      errorMessage = `No social platforms connected for ${resolvedCityName}${requested} — open Settings → Channels and either connect a shared account or assign one to this city.`;
     } else if (!video) {
       // === FALLBACK: Generate static image when video fails ===
       console.log("Video generation failed, attempting fallback image...");
