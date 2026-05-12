@@ -526,6 +526,27 @@ export function VideoPreviewDialog({
                   )}
                 </div>
               )}
+              {/* Lock status + AI Tip — shown when preview is ready to post */}
+              {isPostFlow && preview?.bundle_id && !bundleInvalidated && (
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex items-center gap-2 text-[11px] text-emerald-500">
+                    <Lock size={12} />
+                    <span className="font-medium">Preview locked: what you see is what will be posted.</span>
+                  </div>
+                  {aiTip && (
+                    <div className="flex items-start gap-1.5 text-[11px] text-primary/80">
+                      <Sparkles size={12} className="shrink-0 mt-0.5" />
+                      <span>{aiTip}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+              {isPostFlow && bundleInvalidated && (
+                <div className="flex items-center gap-2 text-[11px] text-yellow-500 pt-1">
+                  <AlertTriangle size={12} />
+                  <span className="font-medium">Preview stale: regenerate before posting.</span>
+                </div>
+              )}
             </>
           )}
         </div>
