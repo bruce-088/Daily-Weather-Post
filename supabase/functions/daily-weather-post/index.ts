@@ -1526,7 +1526,9 @@ Deno.serve(async (req) => {
 
       // Image preview fallback
       console.log("Video generation failed for preview, trying enhanced image fallback...");
+      const imgRenderStart = Date.now();
       const fallbackImage = await generateFallbackImage(weather);
+      const imgRenderElapsedSec = ((Date.now() - imgRenderStart) / 1000);
       if (!fallbackImage || !userId) {
         throw new Error("Failed to generate both video and image for preview");
       }
@@ -1561,9 +1563,10 @@ Deno.serve(async (req) => {
         assetUrl: imgSignedData.signedUrl,
         visualSource,
         bytes: fallbackImage.data.byteLength,
+        renderTime: imgRenderElapsedSec,
       });
 
-      console.log("Preview image stored with signed URL", { bundleId, visualSource });
+      console.log("Preview image stored with signed URL", { bundleId, visualSource, renderTime: imgRenderElapsedSec });
       return new Response(
         JSON.stringify({
           success: true,
@@ -1577,6 +1580,7 @@ Deno.serve(async (req) => {
           voice_script: voiceScript,
           bundle_id: bundleId,
           visual_source: visualSource,
+          render_time: imgRenderElapsedSec,
           locked: !!bundleId,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
