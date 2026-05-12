@@ -933,11 +933,31 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
   // AI Visual Optimization — "gradient" / "minimal" styles intentionally skip
   // the Pexels stock-video background to keep the visual pure (gradient only).
   const skipStockVideo = visualStyle === "gradient" || visualStyle === "minimal";
-  const videoUrl = skipStockVideo ? null : await fetchPexelsVideoUrl(theme.videoKeyword, weather.city, weather.stateOrRegion);
+  let videoUrl = skipStockVideo ? null : await fetchPexelsVideoUrl(theme.videoKeyword, weather.city, weather.stateOrRegion);
+  // ── Pre-render asset validation ──
+  // Make sure the background URL is non-empty AND actually reachable. If the
+  // HEAD probe fails, we drop it and let Creatomate render the gradient-only
+  // template instead of a black screen from a broken asset.
+  if (videoUrl && (typeof videoUrl !== "string" || !/^https?:\/\//i.test(videoUrl))) {
+    console.warn(`[render] background URL invalid format — dropping: ${String(videoUrl).slice(0, 80)}`);
+    videoUrl = null;
+  }
+  if (videoUrl) {
+    try {
+      const probe = await fetch(videoUrl, { method: "HEAD" });
+      if (!probe.ok) {
+        console.warn(`[render] background HEAD probe failed (${probe.status}) — falling back to gradient`);
+        videoUrl = null;
+      }
+    } catch (e) {
+      console.warn(`[render] background HEAD probe error — falling back to gradient:`, (e as Error).message);
+      videoUrl = null;
+    }
+  }
   if (!videoUrl) {
-    console.warn(`[render] Pexels background unavailable (keyword="${theme.videoKeyword}", style="${visualStyle || "default"}") — falling back to gradient (${theme.bg1} → ${theme.bg2})`);
+    console.warn(`[render] Pexels background unavailable (keyword="${theme.videoKeyword}", style="${visualStyle || "default"}") — using safe gradient (${theme.bg1} → ${theme.bg2})`);
   } else {
-    console.log(`[render] Pexels background acquired for "${theme.videoKeyword}"`);
+    console.log(`[render] Pexels background validated for "${theme.videoKeyword}"`);
   }
   const source = buildCreatomateSource(weather, videoUrl, timePeriod, voiceUrl, audioDurationSec);
 
