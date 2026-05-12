@@ -433,6 +433,17 @@ const VOICE_CTAS_BY_TONE: Record<CaptionTone, string[]> = {
 // with the like to keep the engagement signal consistent.
 const ALERT_CTA = "Like and subscribe for safety updates!";
 
+// ---------- SUBSCRIBE + NOTIFICATION BELL CTAs ----------
+// Used when the user has the "Include Subscribe CTA in every post" growth
+// toggle enabled (default ON). Rotates daily across 3 variants and
+// interpolates the active city name so the ask feels local.
+// {city} is replaced with the active city or "your area" if missing.
+const SUBSCRIBE_NOTIFY_CTAS: string[] = [
+  "Subscribe and hit the bell for daily {city} updates.",
+  "Stay ahead of the storm — subscribe and turn on notifications.",
+  "Don't miss tomorrow's forecast — hit subscribe and the notification bell!",
+];
+
 /**
  * Returns true when the platform is audio-first and a spoken CTA makes sense.
  * Twitter / LinkedIn / Instagram videos are typically scrolled muted, so we
