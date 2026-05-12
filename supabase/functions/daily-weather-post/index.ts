@@ -1408,10 +1408,12 @@ Deno.serve(async (req) => {
 
     // Generate video (with voice baked in if available). Composition length is sized
     // dynamically from the audio duration so the voiceover + CTA always finish in full.
+    const renderStart = Date.now();
     const video = await generateVideoWithFallback({
       weather, timePeriod, voiceUrl, audioDurationSec: voiceAudioDurationSec,
       creatomate: () => generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec),
     });
+    const renderElapsedSec = ((Date.now() - renderStart) / 1000);
 
 
     // === PREVIEW MODE ===
