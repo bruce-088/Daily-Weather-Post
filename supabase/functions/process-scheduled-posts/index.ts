@@ -670,6 +670,39 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
       enter: { type: "scale", start_scale: "20%", duration: 0.45 } },
   );
 
+  // === SUBSCRIBE + NOTIFICATION BELL END-SCREEN (last 3s) ===
+  // Pulsing red Subscribe pill + shaking bell icon, branded "@SkyBrief{City}".
+  // Lands at the same time the voiceover asks for the subscribe + bell.
+  const subStart = Math.max(0.5, D - 3.0);
+  const subDur = Math.max(0.5, D - subStart);
+  const cityHandle = (weather.city || "").replace(/[^A-Za-z0-9]/g, "");
+  const handleText = cityHandle ? `Subscribe to @SkyBrief${cityHandle}` : "Subscribe for daily weather";
+  elements.push(
+    // Red Subscribe pill (pulse via scale animation)
+    { type: "shape", track: nt(), time: subStart, duration: subDur, shape_type: "rectangle",
+      width: 720, height: 130, x: "50%", y: "94%",
+      fill_color: "#ff0000", border_radius: "65",
+      shadow: "0px 6px 18px rgba(255,0,0,0.45)",
+      enter: { type: "scale", start_scale: "60%", duration: 0.5 },
+      animations: [{ type: "scale", start_scale: "100%", end_scale: "108%", duration: 0.6, easing: "ease-in-out", reversed: false }] },
+    { type: "text", track: nt(), time: subStart, duration: subDur, text: "▶  SUBSCRIBE",
+      font_family: "Inter", font_weight: "900", font_size: "52", fill_color: "#ffffff", letter_spacing: "4%",
+      x: "44%", y: "94%", x_alignment: "50%", y_alignment: "50%" },
+    // Shaking bell badge to the right of the pill
+    { type: "shape", track: nt(), time: subStart, duration: subDur, shape_type: "ellipse",
+      width: 110, height: 110, x: "70%", y: "94%", fill_color: "#ffffff",
+      shadow: "0px 4px 12px rgba(0,0,0,0.35)",
+      animations: [{ type: "rotate", start_angle: "-15deg", end_angle: "15deg", duration: 0.25, easing: "ease-in-out" }] },
+    { type: "text", track: nt(), time: subStart, duration: subDur, text: "🔔",
+      font_size: "70", x: "70%", y: "94%", x_alignment: "50%", y_alignment: "50%",
+      animations: [{ type: "rotate", start_angle: "-15deg", end_angle: "15deg", duration: 0.25, easing: "ease-in-out" }] },
+    // Channel handle line above the pill
+    { type: "text", track: nt(), time: subStart, duration: subDur, text: handleText,
+      font_family: "Inter", font_weight: "700", font_size: "30", fill_color: "#ffffff", letter_spacing: "3%",
+      x: "50%", y: "89%", x_alignment: "50%", y_alignment: "50%",
+      shadow: "0px 2px 4px rgba(0,0,0,0.6)", enter: { type: "fade", duration: 0.4 } },
+  );
+
   // === AI VOICEOVER (optional) ===
   // Plays from t=0.5s on its own track. We do NOT trim the audio track — its duration
   // mirrors the real audio length so the CTA always finishes. The composition (D) is
