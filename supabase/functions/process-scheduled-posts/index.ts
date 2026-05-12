@@ -1011,7 +1011,19 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
         return null;
       }
       const arrayBuf = await videoRes.arrayBuffer();
-      console.log(`Video downloaded: ${arrayBuf.byteLength} bytes`);
+      const reportedDurationSec = typeof statusData.duration === "number" ? statusData.duration : null;
+      console.log(`Video downloaded: ${arrayBuf.byteLength} bytes, reported duration ${reportedDurationSec ?? "?"}s`);
+      // ── Render validation: reject false-positive successes ──
+      const MIN_BYTES = 50_000;     // <50KB → almost certainly empty/black
+      const MIN_DURATION_SEC = 5;
+      if (arrayBuf.byteLength < MIN_BYTES) {
+        console.error(`[render] REJECTED: video too small (${arrayBuf.byteLength} bytes < ${MIN_BYTES})`);
+        return null;
+      }
+      if (reportedDurationSec !== null && reportedDurationSec < MIN_DURATION_SEC) {
+        console.error(`[render] REJECTED: video too short (${reportedDurationSec}s < ${MIN_DURATION_SEC}s)`);
+        return null;
+      }
       return { data: new Uint8Array(arrayBuf), mimeType: "video/mp4" };
     }
 
