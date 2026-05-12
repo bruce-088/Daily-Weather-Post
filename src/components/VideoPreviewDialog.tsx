@@ -95,6 +95,30 @@ export function VideoPreviewDialog({
     }
   }, [preview?.caption]);
 
+  // Invalidate bundle if user edits caption away from the locked text
+  useEffect(() => {
+    if (!preview?.bundle_id) return;
+    if (editedCaption && preview.caption && editedCaption.trim() !== preview.caption.trim()) {
+      if (!bundleInvalidated) {
+        setBundleInvalidated(true);
+        setInvalidationReason("Caption was edited — regenerate preview to lock new caption.");
+      }
+    }
+  }, [editedCaption, preview?.caption, preview?.bundle_id, bundleInvalidated]);
+
+  // Invalidate bundle if the active city changes after preview was generated
+  useEffect(() => {
+    if (!preview?.bundle_id || !previewCity) return;
+    const sameId = (city?.id ?? null) === (previewCity.id ?? null);
+    const sameName = (city?.name ?? null) === (previewCity.name ?? null);
+    if (!sameId || !sameName) {
+      if (!bundleInvalidated) {
+        setBundleInvalidated(true);
+        setInvalidationReason("Active city changed — regenerate preview before posting.");
+      }
+    }
+  }, [city?.id, city?.name, preview?.bundle_id, previewCity, bundleInvalidated]);
+
   // Auto-generate when opened via "Post Now" flow
   useEffect(() => {
     if (open && isPostFlow && !preview && !generating && !autoGenerateTriggered) {
