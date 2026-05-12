@@ -1614,7 +1614,7 @@ Deno.serve(async (req) => {
         for (const adapter of connectedAdapters) {
           if (imageCapablePlatforms.includes(adapter.name)) {
             try {
-              const token = await adapter.getValidToken(supabase, userId);
+              const token = await adapter.getValidToken(supabase, userId, resolvedCityId);
               if (!token) {
                 console.error(`${adapter.name}: failed to get token for image post`);
                 recordResult(adapter.name, false, "Auth token missing");
