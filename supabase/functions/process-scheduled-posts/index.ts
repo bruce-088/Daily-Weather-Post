@@ -2291,9 +2291,14 @@ Deno.serve(async (req) => {
               }
             }
 
-            if (!postedAny && !errorMessage) {
-              errorMessage = "No image-capable platforms in selection — video generation failed";
+            if (!postedAny) {
+              postStatus = "failed";
+              if (!errorMessage) errorMessage = "No image-capable platforms in selection — video generation failed";
             }
+          }
+          if (!fallbackImage) {
+            postStatus = "failed";
+          }
           }
         }
 
