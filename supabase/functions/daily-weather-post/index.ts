@@ -1671,7 +1671,7 @@ Deno.serve(async (req) => {
       const desc = caption || "Weather update for " + weather.city + ": " + weather.temperature + "\u00B0F, " + weather.description;
 
       for (const adapter of connectedAdapters) {
-        const result = await postToPlatform(adapter.name, supabase, userId, video.data, title, desc, video.mimeType);
+        const result = await postToPlatform(adapter.name, supabase, userId, video.data, title, desc, video.mimeType, resolvedCityId);
         if (result.success) {
           platform = adapter.name;
           status = "success";
