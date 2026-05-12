@@ -37,6 +37,7 @@ export async function loadSettings(): Promise<{ settings: AutomationSettings; ti
       voiceoverStability: Number((data as any).voiceover_stability ?? 0.55),
       voiceoverSimilarity: Number((data as any).voiceover_similarity ?? 0.78),
       captionTone: ((data as any).caption_tone as any) || "professional",
+      subscribeCtaEnabled: (data as any).subscribe_cta_enabled !== false,
     },
     tiktokConnected: !!(data as any).tiktok_connected,
     youtubeConnected: !!(data as any).youtube_connected,
