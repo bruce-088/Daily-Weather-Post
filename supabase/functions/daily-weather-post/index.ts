@@ -1237,6 +1237,9 @@ Deno.serve(async (req) => {
     let style = "standard";
     let variation = false;
     let voiceOpts: VoiceOptions = { enabled: false };
+    let requestedCityId: string | null = null;
+    let requestedCityName: string | null = null;
+    let requestedCityState: string | null = null;
     try {
       const body = await req.clone().json();
       if (body?.mode === "preview") mode = "preview";
@@ -1244,6 +1247,9 @@ Deno.serve(async (req) => {
       if (body?.platforms && Array.isArray(body.platforms)) selectedPlatforms = body.platforms;
       if (typeof body?.style === "string") style = body.style;
       if (body?.variation === true) variation = true;
+      if (typeof body?.city_id === "string") requestedCityId = body.city_id;
+      if (typeof body?.city === "string") requestedCityName = body.city;
+      if (typeof body?.state === "string") requestedCityState = body.state;
       if (body?.voice && typeof body.voice === "object") {
         voiceOpts = {
           enabled: !!body.voice.enabled,
@@ -1252,7 +1258,7 @@ Deno.serve(async (req) => {
         };
       }
     } catch { /* no body is fine */ }
-    console.log(`[daily-weather-post] mode=${mode} style=${style} variation=${variation} voice=${voiceOpts.enabled}`);
+    console.log(`[daily-weather-post] mode=${mode} style=${style} variation=${variation} voice=${voiceOpts.enabled} city_id=${requestedCityId ?? "-"} city=${requestedCityName ?? "-"}`);
 
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -1275,12 +1281,33 @@ Deno.serve(async (req) => {
       throw new Error("No weather settings found. Please configure your settings first.");
     }
 
+    // === City context (single source of truth) ===
+    // The selected city in the global header is the authoritative input.
+    // If the request supplied a city_id, look it up. Otherwise honor city/state.
+    // Fall back to weather_settings ONLY when nothing is supplied (legacy callers).
+    let resolvedCityId: string | null = requestedCityId;
+    let resolvedCityName: string = requestedCityName || settings.city;
+    let resolvedCityState: string | null = requestedCityState ?? settings.state ?? null;
+    if (requestedCityId) {
+      const { data: cityRow } = await supabase
+        .from("cities")
+        .select("id, name, state")
+        .eq("id", requestedCityId)
+        .maybeSingle();
+      if (cityRow) {
+        resolvedCityId = cityRow.id;
+        resolvedCityName = cityRow.name;
+        resolvedCityState = cityRow.state ?? null;
+      }
+    }
+    console.log(`[daily-weather-post] resolved city: ${resolvedCityName}${resolvedCityState ? ", " + resolvedCityState : ""} (id=${resolvedCityId ?? "-"})`);
+
     const openWeatherApiKey = Deno.env.get("OPENWEATHER_API_KEY");
     if (!openWeatherApiKey) {
       throw new Error("OpenWeatherMap API key not configured as a backend secret.");
     }
 
-    const weather = await fetchWeatherData(settings.state ? settings.city + "," + settings.state : settings.city, openWeatherApiKey);
+    const weather = await fetchWeatherData(resolvedCityState ? resolvedCityName + "," + resolvedCityState : resolvedCityName, openWeatherApiKey);
 
     // Generate caption via SkyBrief prompt
     let caption: string | null = null;
