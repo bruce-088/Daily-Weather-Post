@@ -1694,14 +1694,18 @@ Deno.serve(async (req) => {
 
         // Look up the user's caption tone preference
         let captionTone: string = "professional";
+        let subscribeCtaEnabled = true;
         try {
           const { data: toneSettings } = await supabase
             .from("weather_settings")
-            .select("caption_tone")
+            .select("caption_tone, subscribe_cta_enabled")
             .eq("user_id", post.user_id)
             .limit(1)
             .maybeSingle();
           if ((toneSettings as any)?.caption_tone) captionTone = (toneSettings as any).caption_tone;
+          if (typeof (toneSettings as any)?.subscribe_cta_enabled === "boolean") {
+            subscribeCtaEnabled = (toneSettings as any).subscribe_cta_enabled;
+          }
         } catch { /* ignore */ }
 
         // ── A/B EXPERIMENT VARIANT OVERRIDE ──
