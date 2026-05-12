@@ -558,8 +558,14 @@ export function VideoPreviewDialog({
                   <Button
                     size="sm"
                     onClick={handlePostToPlatforms}
-                    disabled={isBusy || blockingError || postablePlatforms.length === 0}
-                    title={blockingError ? "Resolve connection errors before posting" : undefined}
+                    disabled={isBusy || blockingError || postablePlatforms.length === 0 || bundleInvalidated}
+                    title={
+                      bundleInvalidated
+                        ? (invalidationReason || "Regenerate preview before posting")
+                        : blockingError
+                        ? "Resolve connection errors before posting"
+                        : undefined
+                    }
                     className="gap-1.5 text-xs"
                   >
                     <Send size={14} /> Post ({postablePlatforms.length})
