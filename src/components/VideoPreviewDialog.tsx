@@ -31,6 +31,8 @@ interface VideoPreviewDialogProps {
   style?: string;
   /** AI voiceover options forwarded to preview + post */
   voice?: VoiceOptions;
+  /** Active city from the global header — single source of truth for preview + publish */
+  city?: CityContext | null;
 }
 
 export function VideoPreviewDialog({
@@ -43,6 +45,7 @@ export function VideoPreviewDialog({
   onPosted,
   style = "standard",
   voice,
+  city,
 }: VideoPreviewDialogProps) {
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [generating, setGenerating] = useState(false);
