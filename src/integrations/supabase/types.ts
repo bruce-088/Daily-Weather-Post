@@ -1214,6 +1214,7 @@ export type Database = {
           morning_skip_date: string | null
           post_time: string
           state: string | null
+          subscribe_cta_enabled: boolean
           tiktok_access_token: string | null
           tiktok_api_key: string | null
           tiktok_connected: boolean | null
@@ -1269,6 +1270,7 @@ export type Database = {
           morning_skip_date?: string | null
           post_time?: string
           state?: string | null
+          subscribe_cta_enabled?: boolean
           tiktok_access_token?: string | null
           tiktok_api_key?: string | null
           tiktok_connected?: boolean | null
@@ -1324,6 +1326,7 @@ export type Database = {
           morning_skip_date?: string | null
           post_time?: string
           state?: string | null
+          subscribe_cta_enabled?: boolean
           tiktok_access_token?: string | null
           tiktok_api_key?: string | null
           tiktok_connected?: boolean | null

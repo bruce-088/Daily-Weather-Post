@@ -88,6 +88,7 @@ const DEFAULT_SETTINGS: AutomationSettings = {
   voiceoverStability: 0.55,
   voiceoverSimilarity: 0.78,
   captionTone: "professional",
+  subscribeCtaEnabled: true,
 };
 
 const Index = () => {

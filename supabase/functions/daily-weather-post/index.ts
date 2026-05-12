@@ -523,11 +523,25 @@ function voiceSettingsForTone(tone?: string) {
 }
 
 /** Generate a short, spoken-feeling voice script (1-2 sentences). */
-async function generateVoiceScript(weather: WeatherResponse, tone?: string, platforms?: string[]): Promise<string> {
+async function generateVoiceScript(
+  weather: WeatherResponse,
+  tone?: string,
+  platforms?: string[],
+  ctaOpts?: { subscribeCta?: boolean; city?: string | null },
+): Promise<string> {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   // Fallback if AI gateway is unavailable — still useful, deterministic
   const fallback = `Good day, ${weather.city}. Expect ${weather.description.toLowerCase()} with a high near ${weather.temperature} degrees today.`;
-  if (!LOVABLE_API_KEY) return fallback;
+  const ctaCity = ctaOpts?.city ?? weather.city;
+  const subscribeCta = ctaOpts?.subscribeCta ?? false;
+  if (!LOVABLE_API_KEY) {
+    const alertMode = isWeatherAlert({
+      condition: weather.description,
+      temperature: weather.temperature,
+      rainChance: weather.rainChance,
+    });
+    return appendVoiceCTA(fallback, { tone, platforms, alertMode, subscribeCta, city: ctaCity });
+  }
 
   const toneHint =
     tone === "energetic" ? "Upbeat and lively, with energy."
@@ -585,12 +599,13 @@ async function generateVoiceScript(weather: WeatherResponse, tone?: string, plat
     }
     // Append tone-matched, rotating spoken CTA for audio-first platforms (YouTube / TikTok).
     // Switches to the ultra-short safety CTA when weather conditions qualify as an alert.
+    // When subscribeCta is enabled (Growth toggle), the new Subscribe + Bell pool is used.
     const alertMode = isWeatherAlert({
       condition: weather.description,
       temperature: weather.temperature,
       rainChance: weather.rainChance,
     });
-    return appendVoiceCTA(finalScript, { tone, platforms, alertMode });
+    return appendVoiceCTA(finalScript, { tone, platforms, alertMode, subscribeCta, city: ctaCity });
   } catch (e) {
     console.error("Voice script error:", e);
     const alertMode = isWeatherAlert({
@@ -598,7 +613,7 @@ async function generateVoiceScript(weather: WeatherResponse, tone?: string, plat
       temperature: weather.temperature,
       rainChance: weather.rainChance,
     });
-    return appendVoiceCTA(fallback, { tone, platforms, alertMode });
+    return appendVoiceCTA(fallback, { tone, platforms, alertMode, subscribeCta, city: ctaCity });
   }
 }
 
@@ -843,9 +858,6 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
   );
 
   // === FINAL "LIKE" PULSE BADGE ===
-  // Appears for the last ~2.5s of the video as the voiceover asks for the
-  // like. Positioned top-right so it doesn't fight the centered CTA panel.
-  // Scale-enter gives it a small "pulse-in" feel without needing keyframes.
   const likeStart = Math.max(0.5, D - 2.5);
   const likeDur = Math.max(0.5, D - likeStart);
   elements.push(
@@ -857,6 +869,34 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
       font_family: "Inter", font_weight: "800", font_size: "44", fill_color: "#0f172a",
       x: "82%", y: "9%", x_alignment: "50%", y_alignment: "50%",
       enter: { type: "scale", start_scale: "20%", duration: 0.45 } },
+  );
+
+  // === SUBSCRIBE + NOTIFICATION BELL END-SCREEN (last 3s) ===
+  const subStart = Math.max(0.5, D - 3.0);
+  const subDur = Math.max(0.5, D - subStart);
+  const cityHandle = (weather.city || "").replace(/[^A-Za-z0-9]/g, "");
+  const handleText = cityHandle ? `Subscribe to @SkyBrief${cityHandle}` : "Subscribe for daily weather";
+  elements.push(
+    { type: "shape", track: nt(), time: subStart, duration: subDur, shape_type: "rectangle",
+      width: 720, height: 130, x: "50%", y: "94%",
+      fill_color: "#ff0000", border_radius: "65",
+      shadow: "0px 6px 18px rgba(255,0,0,0.45)",
+      enter: { type: "scale", start_scale: "60%", duration: 0.5 },
+      animations: [{ type: "scale", start_scale: "100%", end_scale: "108%", duration: 0.6, easing: "ease-in-out" }] },
+    { type: "text", track: nt(), time: subStart, duration: subDur, text: "▶  SUBSCRIBE",
+      font_family: "Inter", font_weight: "900", font_size: "52", fill_color: "#ffffff", letter_spacing: "4%",
+      x: "44%", y: "94%", x_alignment: "50%", y_alignment: "50%" },
+    { type: "shape", track: nt(), time: subStart, duration: subDur, shape_type: "ellipse",
+      width: 110, height: 110, x: "70%", y: "94%", fill_color: "#ffffff",
+      shadow: "0px 4px 12px rgba(0,0,0,0.35)",
+      animations: [{ type: "rotate", start_angle: "-15deg", end_angle: "15deg", duration: 0.25, easing: "ease-in-out" }] },
+    { type: "text", track: nt(), time: subStart, duration: subDur, text: "🔔",
+      font_size: "70", x: "70%", y: "94%", x_alignment: "50%", y_alignment: "50%",
+      animations: [{ type: "rotate", start_angle: "-15deg", end_angle: "15deg", duration: 0.25, easing: "ease-in-out" }] },
+    { type: "text", track: nt(), time: subStart, duration: subDur, text: handleText,
+      font_family: "Inter", font_weight: "700", font_size: "30", fill_color: "#ffffff", letter_spacing: "3%",
+      x: "50%", y: "89%", x_alignment: "50%", y_alignment: "50%",
+      shadow: "0px 2px 4px rgba(0,0,0,0.6)", enter: { type: "fade", duration: 0.4 } },
   );
 
   // === AI VOICE NARRATION TRACK ===
@@ -1389,7 +1429,10 @@ Deno.serve(async (req) => {
     let voiceAudioDurationSec: number | null = null;
     if (voiceOpts.enabled && userId) {
       console.log("Voice enabled — generating script + TTS audio");
-      voiceScript = await generateVoiceScript(weather, voiceOpts.tone, selectedPlatforms);
+      voiceScript = await generateVoiceScript(weather, voiceOpts.tone, selectedPlatforms, {
+        subscribeCta: (settings as any)?.subscribe_cta_enabled !== false,
+        city: weather.city,
+      });
       console.log("Voice script:", voiceScript);
       const audioBytes = await generateVoiceAudio(voiceScript, voiceOpts);
       if (audioBytes) {

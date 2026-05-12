@@ -66,4 +66,6 @@ export interface AutomationSettings {
   voiceoverSimilarity: number;  // 0–1 (default 0.78) — higher = closer to original voice
   // AI caption "Voice & Tone" preset
   captionTone: "professional" | "hype" | "funny" | "local_legend";
+  // Growth: append "Subscribe + hit the bell" CTA to every voiceover (default ON)
+  subscribeCtaEnabled: boolean;
 }

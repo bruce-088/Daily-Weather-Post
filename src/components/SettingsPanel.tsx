@@ -930,6 +930,23 @@ export function SettingsPanel({
                 The AI also auto-adjusts the greeting by time of day, surfaces life tips (umbrella, jacket, hydration) when weather demands it, and appends 3–5 weather-aware hashtags.
               </p>
             </div>
+
+            {/* Growth: Subscribe + Notification Bell CTA */}
+            <div className="flex items-start justify-between gap-3 pt-3 border-t border-border/30">
+              <div className="space-y-0.5">
+                <Label htmlFor="subscribe-cta" className="text-sm cursor-pointer">
+                  Include Subscribe CTA in every post
+                </Label>
+                <p className="text-[10px] text-muted-foreground">
+                  Adds a rotating "subscribe & hit the bell" line to the voiceover plus an animated end-screen badge with @SkyBrief{"{City}"} branding. YouTube & TikTok only.
+                </p>
+              </div>
+              <Switch
+                id="subscribe-cta"
+                checked={settings.subscribeCtaEnabled !== false}
+                onCheckedChange={(v) => update("subscribeCtaEnabled", v)}
+              />
+            </div>
           </CardContent>
         </Card>
       )}

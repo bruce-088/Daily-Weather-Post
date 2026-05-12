@@ -37,6 +37,7 @@ export async function loadSettings(): Promise<{ settings: AutomationSettings; ti
       voiceoverStability: Number((data as any).voiceover_stability ?? 0.55),
       voiceoverSimilarity: Number((data as any).voiceover_similarity ?? 0.78),
       captionTone: ((data as any).caption_tone as any) || "professional",
+      subscribeCtaEnabled: (data as any).subscribe_cta_enabled !== false,
     },
     tiktokConnected: !!(data as any).tiktok_connected,
     youtubeConnected: !!(data as any).youtube_connected,
@@ -85,6 +86,7 @@ export async function saveSettings(settings: AutomationSettings): Promise<boolea
     voiceover_stability: typeof settings.voiceoverStability === "number" ? settings.voiceoverStability : 0.55,
     voiceover_similarity: typeof settings.voiceoverSimilarity === "number" ? settings.voiceoverSimilarity : 0.78,
     caption_tone: settings.captionTone || "professional",
+    subscribe_cta_enabled: settings.subscribeCtaEnabled !== false,
     user_id: user.id,
   };
 

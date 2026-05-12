@@ -1,0 +1,1 @@
+ALTER TABLE public.weather_settings ADD COLUMN IF NOT EXISTS subscribe_cta_enabled boolean NOT NULL DEFAULT true;
