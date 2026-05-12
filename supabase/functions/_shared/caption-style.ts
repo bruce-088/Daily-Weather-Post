@@ -465,6 +465,10 @@ export function buildVoiceCTA(opts: {
   tone?: CaptionTone | string | null;
   platforms?: Array<Platform | string> | null;
   alertMode?: boolean;
+  /** Force the Subscribe + Notification Bell CTA pool (Growth toggle). */
+  subscribeCta?: boolean;
+  /** Active city name for {city} interpolation in the subscribe CTA. */
+  city?: string | null;
 }): string | null {
   const platforms = (opts.platforms || []).map((p) => normalizePlatform(p));
   const anyAudio = platforms.some(platformWantsVoiceCTA);
@@ -472,14 +476,20 @@ export function buildVoiceCTA(opts: {
 
   if (opts.alertMode) return ALERT_CTA;
 
-  const tone = normalizeTone(opts.tone);
-  const pool = VOICE_CTAS_BY_TONE[tone] || VOICE_CTAS_BY_TONE.professional;
-
-  // Rotate by day-of-year (UTC) so the same day yields the same CTA across
-  // calls within that day, but the next day picks the next variant.
+  // Day-of-year rotation so all calls within a single UTC day pick the same
+  // line, but it varies day-to-day.
   const now = new Date();
   const startOfYear = Date.UTC(now.getUTCFullYear(), 0, 0);
   const dayOfYear = Math.floor((now.getTime() - startOfYear) / 86400000);
+
+  if (opts.subscribeCta) {
+    const cityToken = (opts.city && String(opts.city).trim()) || "your area";
+    const tmpl = SUBSCRIBE_NOTIFY_CTAS[dayOfYear % SUBSCRIBE_NOTIFY_CTAS.length];
+    return tmpl.replace(/\{city\}/g, cityToken);
+  }
+
+  const tone = normalizeTone(opts.tone);
+  const pool = VOICE_CTAS_BY_TONE[tone] || VOICE_CTAS_BY_TONE.professional;
   return pool[dayOfYear % pool.length];
 }
 
@@ -517,6 +527,8 @@ export function appendVoiceCTA(
     tone?: CaptionTone | string | null;
     platforms?: Array<Platform | string> | null;
     alertMode?: boolean;
+    subscribeCta?: boolean;
+    city?: string | null;
     /** Max words allowed in the weather-summary portion (before the CTA). Default 25. */
     maxSummaryWords?: number;
   },
