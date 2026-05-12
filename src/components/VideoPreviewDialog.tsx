@@ -257,6 +257,15 @@ export function VideoPreviewDialog({
           </DialogTitle>
         </DialogHeader>
 
+        {(city?.name || city?.id) && (
+          <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs flex items-center justify-between">
+            <span className="text-muted-foreground">Active city</span>
+            <span className="font-medium text-foreground">
+              {city?.name || "(unnamed)"}{city?.state ? `, ${city.state}` : ""}
+            </span>
+          </div>
+        )}
+
         <div className="space-y-4">
           {/* Generate button */}
           {!preview && !generating && (
