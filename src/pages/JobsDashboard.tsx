@@ -247,7 +247,7 @@ export default function JobsDashboard() {
             <div>
               <h1 className="text-2xl font-bold tracking-tight">Job Pipeline</h1>
               <p className="text-sm text-muted-foreground font-mono">
-                Durable, retryable workflow for content → voice → render → publish
+                Durable, retryable: content → voice → render → publish → analyze (24h)
               </p>
             </div>
           </div>
