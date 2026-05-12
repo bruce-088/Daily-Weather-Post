@@ -933,11 +933,31 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
   // AI Visual Optimization — "gradient" / "minimal" styles intentionally skip
   // the Pexels stock-video background to keep the visual pure (gradient only).
   const skipStockVideo = visualStyle === "gradient" || visualStyle === "minimal";
-  const videoUrl = skipStockVideo ? null : await fetchPexelsVideoUrl(theme.videoKeyword, weather.city, weather.stateOrRegion);
+  let videoUrl = skipStockVideo ? null : await fetchPexelsVideoUrl(theme.videoKeyword, weather.city, weather.stateOrRegion);
+  // ── Pre-render asset validation ──
+  // Make sure the background URL is non-empty AND actually reachable. If the
+  // HEAD probe fails, we drop it and let Creatomate render the gradient-only
+  // template instead of a black screen from a broken asset.
+  if (videoUrl && (typeof videoUrl !== "string" || !/^https?:\/\//i.test(videoUrl))) {
+    console.warn(`[render] background URL invalid format — dropping: ${String(videoUrl).slice(0, 80)}`);
+    videoUrl = null;
+  }
+  if (videoUrl) {
+    try {
+      const probe = await fetch(videoUrl, { method: "HEAD" });
+      if (!probe.ok) {
+        console.warn(`[render] background HEAD probe failed (${probe.status}) — falling back to gradient`);
+        videoUrl = null;
+      }
+    } catch (e) {
+      console.warn(`[render] background HEAD probe error — falling back to gradient:`, (e as Error).message);
+      videoUrl = null;
+    }
+  }
   if (!videoUrl) {
-    console.warn(`[render] Pexels background unavailable (keyword="${theme.videoKeyword}", style="${visualStyle || "default"}") — falling back to gradient (${theme.bg1} → ${theme.bg2})`);
+    console.warn(`[render] Pexels background unavailable (keyword="${theme.videoKeyword}", style="${visualStyle || "default"}") — using safe gradient (${theme.bg1} → ${theme.bg2})`);
   } else {
-    console.log(`[render] Pexels background acquired for "${theme.videoKeyword}"`);
+    console.log(`[render] Pexels background validated for "${theme.videoKeyword}"`);
   }
   const source = buildCreatomateSource(weather, videoUrl, timePeriod, voiceUrl, audioDurationSec);
 
@@ -1003,7 +1023,23 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
     const statusData = await statusRes.json();
     console.log(`Render ${renderId} status: ${statusData.status} (poll ${i + 1}/16, ~${(i + 1) * 5}s)`);
 
+    // ── Detect partial success / asset-load errors ──
+    // Creatomate sometimes returns status=succeeded but flags asset failures
+    // in `warnings`, `error_message`, or a non-"completed" sub-state. Treat
+    // any of those as a hard failure so we never publish a black screen.
+    const warnings: any[] = Array.isArray(statusData.warnings) ? statusData.warnings : [];
+    const assetIssue =
+      (statusData.error_message && String(statusData.error_message).length > 0) ||
+      warnings.some((w) => {
+        const s = JSON.stringify(w).toLowerCase();
+        return s.includes("asset") || s.includes("source") || s.includes("download") || s.includes("load");
+      });
+
     if (statusData.status === "succeeded" && statusData.url) {
+      if (assetIssue) {
+        console.error(`[render] REJECTED: Creatomate reported asset load issue — error="${statusData.error_message ?? ""}" warnings=${JSON.stringify(warnings).slice(0, 300)}`);
+        return null;
+      }
       console.log("Render complete, downloading video...");
       const videoRes = await fetch(statusData.url);
       if (!videoRes.ok) {
@@ -1027,8 +1063,8 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
       return { data: new Uint8Array(arrayBuf), mimeType: "video/mp4" };
     }
 
-    if (statusData.status === "failed") {
-      console.error("Creatomate render failed:", statusData.error_message || "unknown error");
+    if (statusData.status === "failed" || statusData.status === "partial") {
+      console.error(`[render] Creatomate ${statusData.status}:`, statusData.error_message || "unknown error");
       return null;
     }
   }
