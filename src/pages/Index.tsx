@@ -1132,6 +1132,10 @@ const Index = () => {
         onPosted={loadHistory}
         style={cardStyle}
         voice={voiceOptions}
+        city={(() => {
+          const c = userCities.find((x) => x.id === activeCityId);
+          return c ? { id: c.id, name: c.name, state: c.state || null } : null;
+        })()}
       />
 
       <footer className="border-t border-border/50 py-4 px-6 flex items-center justify-center gap-4 text-xs text-muted-foreground">
