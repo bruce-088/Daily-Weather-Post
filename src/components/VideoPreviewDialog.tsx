@@ -142,6 +142,9 @@ export function VideoPreviewDialog({
     setGenStage("video");
     setPreview(null);
     setIsEditingCaption(false);
+    // Reset lock state — a fresh preview always starts locked
+    setBundleInvalidated(false);
+    setInvalidationReason(null);
 
     // After ~25s, if still generating, switch label to image-fallback hint.
     // The edge function tries video first via Creatomate; if that fails it
@@ -154,6 +157,7 @@ export function VideoPreviewDialog({
       const result = await generatePreview({ style, variation, voice, city });
       if (result.success && (result.video_url || result.image_url)) {
         setPreview(result);
+        setPreviewCity({ id: city?.id ?? null, name: city?.name ?? result.weather?.city ?? null });
         if (variation) {
           toast.success("✨ New variation ready!");
         } else {
