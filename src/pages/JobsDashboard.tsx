@@ -308,10 +308,11 @@ export default function JobsDashboard() {
                 onClick={() => openDrilldown(rootId)}
               >
                 <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 flex-wrap">
                     {statusBadge(head.status)}
                     <span className="font-mono text-sm">{head.city ?? "—"}</span>
                     {head.platform && <Badge variant="outline" className="font-mono text-xs">{head.platform}</Badge>}
+                    {engineStateBadge(chain.find((c) => c.type === "generate_content")?.payload ?? head.payload)}
                   </div>
                   <span className="text-xs text-muted-foreground font-mono">{fmtRelative(head.created_at)}</span>
                 </div>
