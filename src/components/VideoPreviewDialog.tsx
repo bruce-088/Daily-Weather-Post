@@ -120,7 +120,8 @@ export function VideoPreviewDialog({
     const voiceTimer = voice?.enabled ? setTimeout(() => setGenStage("voice"), 8000) : null;
 
     try {
-      const result = await generatePreview({ style, variation, voice });
+      console.log("[preview] generating", { city_id: city?.id, city: city?.name, state: city?.state });
+      const result = await generatePreview({ style, variation, voice, city });
       if (result.success && (result.video_url || result.image_url)) {
         setPreview(result);
         if (variation) {
