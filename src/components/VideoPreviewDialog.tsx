@@ -210,8 +210,6 @@ export function VideoPreviewDialog({
 
   const postSinglePlatform = async (platformId: string) => {
     updatePlatform(platformId, { status: "posting", message: `Posting to ${platformId}…` });
-  const postSinglePlatform = async (platformId: string) => {
-    updatePlatform(platformId, { status: "posting", message: `Posting to ${platformId}…` });
     try {
       console.log("[manual-post]", { platform: platformId, city_id: city?.id, bundle_id: preview?.bundle_id });
       // Deterministic publish path: if we have a locked bundle, publish the
