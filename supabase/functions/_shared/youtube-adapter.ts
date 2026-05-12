@@ -268,6 +268,42 @@ export class YouTubeAdapter implements PlatformAdapter {
 
     const result = await uploadRes.json();
     console.log("YouTube upload success! Video ID:", result.id);
+
+    // === AUTOMATED FIRST COMMENT ===
+    // Posts a top-level comment on the freshly-uploaded Short. YouTube's API
+    // does NOT expose programmatic pinning, so creators may want to manually
+    // pin this from YouTube Studio. We post regardless so the prompt exists.
+    try {
+      const cityForComment = extractCityFromTitle(title) || "your area";
+      const commentText = `🔔 Subscribe for daily ${cityForComment} weather! What's the weather like where you are today?`;
+      const commentRes = await fetch(
+        "https://www.googleapis.com/youtube/v3/commentThreads?part=snippet",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            snippet: {
+              videoId: result.id,
+              topLevelComment: {
+                snippet: { textOriginal: commentText },
+              },
+            },
+          }),
+        },
+      );
+      if (commentRes.ok) {
+        console.log(`YouTube first-comment posted on ${result.id}`);
+      } else {
+        const errText = await commentRes.text().catch(() => "");
+        console.warn(`YouTube first-comment failed (${commentRes.status}): ${errText.slice(0, 200)}`);
+      }
+    } catch (e) {
+      console.warn("YouTube first-comment error:", (e as Error).message);
+    }
+
     return { id: result.id };
   }
 }
