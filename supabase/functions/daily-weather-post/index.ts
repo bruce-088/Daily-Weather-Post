@@ -1500,9 +1500,10 @@ Deno.serve(async (req) => {
           assetUrl: signedUrlData.signedUrl,
           visualSource,
           bytes: video.data.byteLength,
+          renderTime: renderElapsedSec,
         });
 
-        console.log("Preview video stored with signed URL", { bundleId, visualSource });
+        console.log("Preview video stored with signed URL", { bundleId, visualSource, renderTime: renderElapsedSec });
         return new Response(
           JSON.stringify({
             success: true,
@@ -1516,6 +1517,7 @@ Deno.serve(async (req) => {
             voice_script: voiceScript,
             bundle_id: bundleId,
             visual_source: visualSource,
+            render_time: renderElapsedSec,
             locked: !!bundleId,
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
