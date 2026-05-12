@@ -1023,7 +1023,23 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
     const statusData = await statusRes.json();
     console.log(`Render ${renderId} status: ${statusData.status} (poll ${i + 1}/16, ~${(i + 1) * 5}s)`);
 
+    // ── Detect partial success / asset-load errors ──
+    // Creatomate sometimes returns status=succeeded but flags asset failures
+    // in `warnings`, `error_message`, or a non-"completed" sub-state. Treat
+    // any of those as a hard failure so we never publish a black screen.
+    const warnings: any[] = Array.isArray(statusData.warnings) ? statusData.warnings : [];
+    const assetIssue =
+      (statusData.error_message && String(statusData.error_message).length > 0) ||
+      warnings.some((w) => {
+        const s = JSON.stringify(w).toLowerCase();
+        return s.includes("asset") || s.includes("source") || s.includes("download") || s.includes("load");
+      });
+
     if (statusData.status === "succeeded" && statusData.url) {
+      if (assetIssue) {
+        console.error(`[render] REJECTED: Creatomate reported asset load issue — error="${statusData.error_message ?? ""}" warnings=${JSON.stringify(warnings).slice(0, 300)}`);
+        return null;
+      }
       console.log("Render complete, downloading video...");
       const videoRes = await fetch(statusData.url);
       if (!videoRes.ok) {
@@ -1047,8 +1063,8 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
       return { data: new Uint8Array(arrayBuf), mimeType: "video/mp4" };
     }
 
-    if (statusData.status === "failed") {
-      console.error("Creatomate render failed:", statusData.error_message || "unknown error");
+    if (statusData.status === "failed" || statusData.status === "partial") {
+      console.error(`[render] Creatomate ${statusData.status}:`, statusData.error_message || "unknown error");
       return null;
     }
   }
