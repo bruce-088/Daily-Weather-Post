@@ -62,6 +62,12 @@ export function VideoPreviewDialog({
   const [phase, setPhase] = useState<"validating" | "ready" | "posting" | "complete">("validating");
   const [posting, setPosting] = useState(false);
 
+  // Bundle invalidation tracking — preview is "locked" until something
+  // material changes (caption edited, city switched, manual regenerate).
+  const [previewCity, setPreviewCity] = useState<{ id?: string | null; name?: string | null } | null>(null);
+  const [bundleInvalidated, setBundleInvalidated] = useState(false);
+  const [invalidationReason, setInvalidationReason] = useState<string | null>(null);
+
   const isPostFlow = !!(postPlatforms && postPlatforms.length > 0);
 
   // Build / refresh validation states whenever preview content type or selected platforms change
