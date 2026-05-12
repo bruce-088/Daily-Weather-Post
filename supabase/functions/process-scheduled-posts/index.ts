@@ -2190,6 +2190,8 @@ Deno.serve(async (req) => {
               await notifyFailure("upload", `${platformName} upload failed`, msg, { platform: platformName });
             } else {
               errorMessage = result.error || `${platformName} upload failed`;
+              platformErrors.push(`${platformName}: ${errorMessage}`);
+              console.error(`[publish] ${platformName} FAILED post=${post.id}: ${errorMessage}`);
               // Detect expired/invalid YouTube auth (token refresh failed) and surface
               // a clear, actionable in-app notification so users know to reconnect.
               const errLower = (errorMessage || "").toLowerCase();
@@ -2212,6 +2214,16 @@ Deno.serve(async (req) => {
                 await notifyFailure("upload", `${platformName} upload failed`, errorMessage, { platform: platformName });
               }
             }
+          }
+          // CRITICAL: only consider this a successful publish if at least one
+          // platform actually returned a valid upload result. Otherwise the
+          // job pipeline would treat token/upload failures as a success.
+          if (!videoPostedAny) {
+            postStatus = "failed";
+            if (!errorMessage) errorMessage = platformErrors.join(" | ") || "All platform uploads failed";
+          } else if (platformErrors.length > 0) {
+            // Partial: some succeeded, some failed. Keep status posted but record the failures.
+            errorMessage = `Partial publish — ${platformErrors.join(" | ")}`;
           }
         } else {
           // Video failed — fallback to image for image-capable platforms
