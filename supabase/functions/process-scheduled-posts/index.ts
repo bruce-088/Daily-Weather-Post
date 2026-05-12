@@ -1916,7 +1916,7 @@ Deno.serve(async (req) => {
             trace("voice_config", { voice_id: voiceId, speed: voiceSpeed, stability: voiceStability, similarity: voiceSimilarity });
 
             console.log(`[process] post ${post.id}: VOICE: generating script`);
-            const script = await generateVoiceScript(weather, captionTone, platformsToPost);
+            const script = await generateVoiceScript(weather, captionTone, platformsToPost, { subscribeCta: subscribeCtaEnabled, city: weather.city });
             console.log(`[process] post ${post.id}: VOICE: script="${script}"`);
 
             const ttsOpts = { speed: voiceSpeed, stability: voiceStability, similarity: voiceSimilarity };
