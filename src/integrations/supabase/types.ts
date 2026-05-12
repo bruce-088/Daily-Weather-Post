@@ -671,6 +671,8 @@ export type Database = {
           next_retry_at: string | null
           platform: string | null
           post_url: string | null
+          preview_bundle_id: string | null
+          published_visual_source: string | null
           retention_rate: number | null
           retry_count: number
           status: string
@@ -701,6 +703,8 @@ export type Database = {
           next_retry_at?: string | null
           platform?: string | null
           post_url?: string | null
+          preview_bundle_id?: string | null
+          published_visual_source?: string | null
           retention_rate?: number | null
           retry_count?: number
           status?: string
@@ -731,6 +735,8 @@ export type Database = {
           next_retry_at?: string | null
           platform?: string | null
           post_url?: string | null
+          preview_bundle_id?: string | null
+          published_visual_source?: string | null
           retention_rate?: number | null
           retry_count?: number
           status?: string
@@ -777,6 +783,84 @@ export type Database = {
           post_id?: string | null
           tone?: string | null
           user_id?: string
+        }
+        Relationships: []
+      }
+      preview_bundles: {
+        Row: {
+          asset_url: string | null
+          audio_url: string | null
+          background_url: string | null
+          caption_text: string | null
+          city: string | null
+          city_id: string | null
+          consumed_at: string | null
+          content_hash: string | null
+          content_type: string
+          created_at: string
+          expires_at: string
+          generated_at: string
+          id: string
+          render_config: Json
+          state: string | null
+          status: string
+          storage_bucket: string | null
+          storage_path: string | null
+          template_id: string | null
+          user_id: string
+          visual_source: string
+          voice_script: string | null
+          weather_snapshot: Json
+        }
+        Insert: {
+          asset_url?: string | null
+          audio_url?: string | null
+          background_url?: string | null
+          caption_text?: string | null
+          city?: string | null
+          city_id?: string | null
+          consumed_at?: string | null
+          content_hash?: string | null
+          content_type?: string
+          created_at?: string
+          expires_at?: string
+          generated_at?: string
+          id?: string
+          render_config?: Json
+          state?: string | null
+          status?: string
+          storage_bucket?: string | null
+          storage_path?: string | null
+          template_id?: string | null
+          user_id: string
+          visual_source?: string
+          voice_script?: string | null
+          weather_snapshot?: Json
+        }
+        Update: {
+          asset_url?: string | null
+          audio_url?: string | null
+          background_url?: string | null
+          caption_text?: string | null
+          city?: string | null
+          city_id?: string | null
+          consumed_at?: string | null
+          content_hash?: string | null
+          content_type?: string
+          created_at?: string
+          expires_at?: string
+          generated_at?: string
+          id?: string
+          render_config?: Json
+          state?: string | null
+          status?: string
+          storage_bucket?: string | null
+          storage_path?: string | null
+          template_id?: string | null
+          user_id?: string
+          visual_source?: string
+          voice_script?: string | null
+          weather_snapshot?: Json
         }
         Relationships: []
       }
