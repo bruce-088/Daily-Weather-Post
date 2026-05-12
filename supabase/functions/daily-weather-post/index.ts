@@ -1408,10 +1408,12 @@ Deno.serve(async (req) => {
 
     // Generate video (with voice baked in if available). Composition length is sized
     // dynamically from the audio duration so the voiceover + CTA always finish in full.
+    const renderStart = Date.now();
     const video = await generateVideoWithFallback({
       weather, timePeriod, voiceUrl, audioDurationSec: voiceAudioDurationSec,
       creatomate: () => generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec),
     });
+    const renderElapsedSec = ((Date.now() - renderStart) / 1000);
 
 
     // === PREVIEW MODE ===
@@ -1426,6 +1428,7 @@ Deno.serve(async (req) => {
         assetUrl: string;
         visualSource: string;
         bytes: number;
+        renderTime?: number;
       }): Promise<string | null> => {
         if (!userId) return null;
         try {
@@ -1448,7 +1451,11 @@ Deno.serve(async (req) => {
             storage_path: args.storagePath,
             asset_url: args.assetUrl,
             audio_url: voiceUrl ?? null,
-            render_config: { style: (body as any)?.style ?? "standard", time_period: timePeriod ?? null },
+            render_config: {
+              style: (body as any)?.style ?? "standard",
+              time_period: timePeriod ?? null,
+              render_time_sec: args.renderTime ?? null,
+            },
             content_hash: contentHash,
             status: "locked",
           }).select("id").maybeSingle();
@@ -1493,9 +1500,10 @@ Deno.serve(async (req) => {
           assetUrl: signedUrlData.signedUrl,
           visualSource,
           bytes: video.data.byteLength,
+          renderTime: renderElapsedSec,
         });
 
-        console.log("Preview video stored with signed URL", { bundleId, visualSource });
+        console.log("Preview video stored with signed URL", { bundleId, visualSource, renderTime: renderElapsedSec });
         return new Response(
           JSON.stringify({
             success: true,
@@ -1509,6 +1517,7 @@ Deno.serve(async (req) => {
             voice_script: voiceScript,
             bundle_id: bundleId,
             visual_source: visualSource,
+            render_time: renderElapsedSec,
             locked: !!bundleId,
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -1517,7 +1526,9 @@ Deno.serve(async (req) => {
 
       // Image preview fallback
       console.log("Video generation failed for preview, trying enhanced image fallback...");
+      const imgRenderStart = Date.now();
       const fallbackImage = await generateFallbackImage(weather);
+      const imgRenderElapsedSec = ((Date.now() - imgRenderStart) / 1000);
       if (!fallbackImage || !userId) {
         throw new Error("Failed to generate both video and image for preview");
       }
@@ -1552,9 +1563,10 @@ Deno.serve(async (req) => {
         assetUrl: imgSignedData.signedUrl,
         visualSource,
         bytes: fallbackImage.data.byteLength,
+        renderTime: imgRenderElapsedSec,
       });
 
-      console.log("Preview image stored with signed URL", { bundleId, visualSource });
+      console.log("Preview image stored with signed URL", { bundleId, visualSource, renderTime: imgRenderElapsedSec });
       return new Response(
         JSON.stringify({
           success: true,
@@ -1568,6 +1580,7 @@ Deno.serve(async (req) => {
           voice_script: voiceScript,
           bundle_id: bundleId,
           visual_source: visualSource,
+          render_time: imgRenderElapsedSec,
           locked: !!bundleId,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
