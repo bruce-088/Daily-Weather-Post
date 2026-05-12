@@ -523,11 +523,25 @@ function voiceSettingsForTone(tone?: string) {
 }
 
 /** Generate a short, spoken-feeling voice script (1-2 sentences). */
-async function generateVoiceScript(weather: WeatherResponse, tone?: string, platforms?: string[]): Promise<string> {
+async function generateVoiceScript(
+  weather: WeatherResponse,
+  tone?: string,
+  platforms?: string[],
+  ctaOpts?: { subscribeCta?: boolean; city?: string | null },
+): Promise<string> {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   // Fallback if AI gateway is unavailable — still useful, deterministic
   const fallback = `Good day, ${weather.city}. Expect ${weather.description.toLowerCase()} with a high near ${weather.temperature} degrees today.`;
-  if (!LOVABLE_API_KEY) return fallback;
+  const ctaCity = ctaOpts?.city ?? weather.city;
+  const subscribeCta = ctaOpts?.subscribeCta ?? false;
+  if (!LOVABLE_API_KEY) {
+    const alertMode = isWeatherAlert({
+      condition: weather.description,
+      temperature: weather.temperature,
+      rainChance: weather.rainChance,
+    });
+    return appendVoiceCTA(fallback, { tone, platforms, alertMode, subscribeCta, city: ctaCity });
+  }
 
   const toneHint =
     tone === "energetic" ? "Upbeat and lively, with energy."
@@ -585,12 +599,13 @@ async function generateVoiceScript(weather: WeatherResponse, tone?: string, plat
     }
     // Append tone-matched, rotating spoken CTA for audio-first platforms (YouTube / TikTok).
     // Switches to the ultra-short safety CTA when weather conditions qualify as an alert.
+    // When subscribeCta is enabled (Growth toggle), the new Subscribe + Bell pool is used.
     const alertMode = isWeatherAlert({
       condition: weather.description,
       temperature: weather.temperature,
       rainChance: weather.rainChance,
     });
-    return appendVoiceCTA(finalScript, { tone, platforms, alertMode });
+    return appendVoiceCTA(finalScript, { tone, platforms, alertMode, subscribeCta, city: ctaCity });
   } catch (e) {
     console.error("Voice script error:", e);
     const alertMode = isWeatherAlert({
@@ -598,7 +613,7 @@ async function generateVoiceScript(weather: WeatherResponse, tone?: string, plat
       temperature: weather.temperature,
       rainChance: weather.rainChance,
     });
-    return appendVoiceCTA(fallback, { tone, platforms, alertMode });
+    return appendVoiceCTA(fallback, { tone, platforms, alertMode, subscribeCta, city: ctaCity });
   }
 }
 
