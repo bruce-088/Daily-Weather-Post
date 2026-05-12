@@ -148,16 +148,52 @@ const publishPost: JobHandler = async ({ job, supabase, log }): Promise<JobStepR
 
   const { data: post } = await supabase
     .from("scheduled_posts")
-    .select("status, error_message, scheduled_at")
+    .select("status, error_message, scheduled_at, platform, city, user_id")
     .eq("id", job.scheduled_post_id)
     .maybeSingle();
   if (post && (post.status === "failed" || post.status === "failed_precheck")) {
-    throw new Error(`Scheduled post ended in ${post.status}: ${post.error_message ?? "unknown"}`);
+    throw new Error(`publish_post FAILED — scheduled_post status=${post.status}: ${post.error_message ?? "unknown"}`);
+  }
+
+  // Belt-and-suspenders: even if scheduled_posts.status is "posted", verify
+  // that at least one post_history row was actually created with status=success
+  // AND has an external_id (videoId/postId). This catches false-positive
+  // success when an upstream adapter returned ok without a real upload.
+  const sinceIso = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+  const { data: histories } = await supabase
+    .from("post_history")
+    .select("id, platform, status, external_id, error_message, created_at")
+    .eq("user_id", job.user_id)
+    .eq("city", post?.city ?? "")
+    .gte("created_at", sinceIso)
+    .order("created_at", { ascending: false })
+    .limit(20);
+  const rows = histories ?? [];
+  const successWithId = rows.find((r: any) => r.status === "success" && r.external_id);
+  const anySuccess = rows.find((r: any) => r.status === "success");
+  await log("Publish verification", {
+    scheduled_post_status: post?.status ?? null,
+    history_rows: rows.length,
+    success_with_external_id: !!successWithId,
+    platforms_attempted: rows.map((r: any) => `${r.platform}:${r.status}${r.external_id ? `(id=${r.external_id})` : ""}`),
+    error_message: post?.error_message ?? null,
+  });
+  if (!successWithId) {
+    const reason = anySuccess
+      ? `publish_post FAILED — platform reported success but returned no external id. error=${post?.error_message ?? "unknown"}`
+      : `publish_post FAILED — no successful platform upload. error=${post?.error_message ?? "unknown"}`;
+    throw new Error(reason);
   }
 
   // ── Schedule the hidden 5th step 24h from now ──
   return {
-    output: { final_status: post?.status ?? "unknown" },
+    output: {
+      final_status: post?.status ?? "unknown",
+      published_platforms: rows.filter((r: any) => r.status === "success").map((r: any) => r.platform),
+      external_ids: rows
+        .filter((r: any) => r.status === "success" && r.external_id)
+        .map((r: any) => ({ platform: r.platform, id: r.external_id })),
+    },
     next: { type: "analyze_performance", delaySeconds: REFLECTION_DELAY_SECONDS },
   };
 };
