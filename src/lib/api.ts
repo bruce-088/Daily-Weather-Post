@@ -127,15 +127,30 @@ export interface VoiceOptions {
   tone?: "conversational" | "energetic" | "news";
 }
 
+export interface CityContext {
+  id?: string | null;
+  name?: string | null;
+  state?: string | null;
+}
+
+function applyCityContext(body: Record<string, any>, city?: CityContext | null) {
+  if (!city) return;
+  if (city.id) body.city_id = city.id;
+  if (city.name) body.city = city.name;
+  if (city.state) body.state = city.state;
+}
+
 export async function triggerDailyPost(
   timePeriod?: string,
   platforms?: string[],
   voice?: VoiceOptions,
+  city?: CityContext | null,
 ): Promise<{ success: boolean; message: string }> {
   const body: Record<string, any> = {};
   if (timePeriod) body.time_period = timePeriod;
   if (platforms && platforms.length > 0) body.platforms = platforms;
   if (voice?.enabled) body.voice = voice;
+  applyCityContext(body, city);
 
   const { data, error } = await supabase.functions.invoke("daily-weather-post", {
     body: Object.keys(body).length > 0 ? body : undefined,
@@ -162,12 +177,14 @@ export interface PreviewResult {
   weather?: any;
   caption?: string | null;
   error?: string;
+  resolved_city?: { id: string | null; name: string; state: string | null } | null;
 }
 
 export async function generatePreview(opts?: {
   style?: string;
   variation?: boolean;
   voice?: VoiceOptions;
+  city?: CityContext | null;
 }): Promise<PreviewResult> {
   const body: Record<string, any> = {
     mode: "preview",
@@ -175,6 +192,7 @@ export async function generatePreview(opts?: {
     variation: !!opts?.variation,
   };
   if (opts?.voice?.enabled) body.voice = opts.voice;
+  applyCityContext(body, opts?.city);
 
   const { data, error } = await supabase.functions.invoke("daily-weather-post", {
     body,
@@ -192,9 +210,12 @@ export async function uploadPreviewVideo(
   title: string,
   description: string,
   caption?: string | null,
+  city?: CityContext | null,
 ): Promise<{ success: boolean; message: string; youtube_video_id?: string }> {
+  const body: Record<string, any> = { storage_path: storagePath, title, description, caption };
+  applyCityContext(body, city);
   const { data, error } = await supabase.functions.invoke("upload-preview-video", {
-    body: { storage_path: storagePath, title, description, caption },
+    body,
   });
 
   if (error) {
