@@ -5,8 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Play, Upload, RefreshCw, X, Loader2, Pencil, Eye, Download, Send, Mic, Pause } from "lucide-react";
-import { generatePreview, uploadPreviewVideo, triggerDailyPost } from "@/lib/api";
+import { Play, Upload, RefreshCw, X, Loader2, Pencil, Eye, Download, Send, Mic, Pause, Lock, AlertTriangle } from "lucide-react";
+import { generatePreview, uploadPreviewVideo, publishPreviewBundle, triggerDailyPost } from "@/lib/api";
 import type { PreviewResult, VoiceOptions, CityContext } from "@/lib/api";
 import {
   PostProgressPanel,
