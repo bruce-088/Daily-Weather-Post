@@ -148,10 +148,12 @@ export function VideoPreviewDialog({
     if (!preview?.storage_path || !preview?.weather) return;
     setUploading(true);
     try {
-      const title = `${preview.weather.city} Weather Today — ${preview.weather.temperature}°F ${preview.weather.condition}`;
+      const cityName = city?.name || preview.weather.city;
+      const title = `${cityName} Weather Today — ${preview.weather.temperature}°F ${preview.weather.condition}`;
       const captionToUse = editedCaption || preview.caption;
-      const desc = captionToUse || `Weather update for ${preview.weather.city}: ${preview.weather.temperature}°F, ${preview.weather.description}`;
-      const result = await uploadPreviewVideo(preview.storage_path, title, desc, captionToUse);
+      const desc = captionToUse || `Weather update for ${cityName}: ${preview.weather.temperature}°F, ${preview.weather.description}`;
+      console.log("[preview] uploading", { city_id: city?.id, city: cityName });
+      const result = await uploadPreviewVideo(preview.storage_path, title, desc, captionToUse, city);
 
       if (result.success) {
         toast.success(result.message);
