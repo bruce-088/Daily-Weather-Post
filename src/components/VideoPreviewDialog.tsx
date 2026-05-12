@@ -374,6 +374,41 @@ export function VideoPreviewDialog({
                 ) : null}
               </div>
 
+              {/* Source + lock indicator — proves what will be published */}
+              {(preview.bundle_id || preview.visual_source) && (
+                <div className="flex items-center justify-between rounded-lg border border-border/30 bg-secondary/20 px-3 py-2">
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-muted-foreground">Source</span>
+                    <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
+                      {preview.visual_source === "creatomate"
+                        ? "Creatomate"
+                        : preview.visual_source === "gemini"
+                        ? "Gemini fallback"
+                        : preview.visual_source || "Static template"}
+                    </Badge>
+                  </div>
+                  {bundleInvalidated ? (
+                    <div className="flex items-center gap-1.5 text-[11px] text-yellow-500">
+                      <AlertTriangle size={12} /> Stale — regenerate
+                    </div>
+                  ) : preview.bundle_id ? (
+                    <div className="flex items-center gap-1.5 text-[11px] text-emerald-500">
+                      <Lock size={12} /> Preview locked
+                    </div>
+                  ) : null}
+                </div>
+              )}
+              {bundleInvalidated && invalidationReason && (
+                <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 px-3 py-2 text-[11px] text-yellow-500">
+                  {invalidationReason}
+                </div>
+              )}
+              {preview.bundle_id && !bundleInvalidated && (
+                <p className="text-[11px] text-muted-foreground">
+                  This exact version will be published — no re-generation, no drift.
+                </p>
+              )}
+
               {/* Weather info badges */}
               {preview.weather && (
                 <div className="flex items-center gap-2 flex-wrap">
