@@ -6,7 +6,8 @@ export type JobType =
   | "generate_content"
   | "generate_voice"
   | "render_video"
-  | "publish_post";
+  | "publish_post"
+  | "analyze_performance";
 
 export type JobStatus =
   | "pending"

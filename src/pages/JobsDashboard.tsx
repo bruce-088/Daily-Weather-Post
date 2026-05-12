@@ -44,9 +44,30 @@ interface SystemLogRow {
   context: Record<string, unknown> | null;
 }
 
-const TYPE_ORDER = ["generate_content", "generate_voice", "render_video", "publish_post"] as const;
+const TYPE_ORDER = ["generate_content", "generate_voice", "render_video", "publish_post", "analyze_performance"] as const;
 const STATUS_OPTIONS = ["all", "pending", "retrying", "processing", "succeeded", "failed", "cancelled"];
 const TYPE_OPTIONS = ["all", ...TYPE_ORDER];
+
+function engineStateBadge(payload: Record<string, unknown> | null | undefined) {
+  const p = (payload ?? {}) as any;
+  const state = p.engine_state as string | undefined;
+  if (state === "optimized") {
+    const ref = p.reference_job ? ` · ${p.reference_job}` : "";
+    return (
+      <Badge variant="outline" className="font-mono text-[10px] gap-1 border-emerald-500/40 text-emerald-300 bg-emerald-500/10" title={`Reusing patterns from a recent winning job${ref}`}>
+        🟢 Optimized{ref}
+      </Badge>
+    );
+  }
+  if (state === "experiment") {
+    return (
+      <Badge variant="outline" className="font-mono text-[10px] gap-1 border-amber-500/40 text-amber-300 bg-amber-500/10" title="Testing a new combination to beat past jobs">
+        🧪 Experiment
+      </Badge>
+    );
+  }
+  return null;
+}
 
 function statusBadge(status: string) {
   const map: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; icon: any; label: string }> = {
@@ -173,8 +194,8 @@ export default function JobsDashboard() {
     const { data } = await supabase
       .from("system_logs")
       .select("*")
-      .in("type", ["job_generate_content", "job_generate_voice", "job_render_video", "job_publish_post",
-                   "job_generate_content_failed", "job_generate_voice_failed", "job_render_video_failed", "job_publish_post_failed"])
+      .in("type", ["job_generate_content", "job_generate_voice", "job_render_video", "job_publish_post", "job_analyze_performance",
+                   "job_generate_content_failed", "job_generate_voice_failed", "job_render_video_failed", "job_publish_post_failed", "job_analyze_performance_failed"])
       .order("created_at", { ascending: false })
       .limit(200);
     const filtered = (data ?? []).filter((row: any) => {
@@ -226,7 +247,7 @@ export default function JobsDashboard() {
             <div>
               <h1 className="text-2xl font-bold tracking-tight">Job Pipeline</h1>
               <p className="text-sm text-muted-foreground font-mono">
-                Durable, retryable workflow for content → voice → render → publish
+                Durable, retryable: content → voice → render → publish → analyze (24h)
               </p>
             </div>
           </div>
@@ -287,10 +308,11 @@ export default function JobsDashboard() {
                 onClick={() => openDrilldown(rootId)}
               >
                 <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 flex-wrap">
                     {statusBadge(head.status)}
                     <span className="font-mono text-sm">{head.city ?? "—"}</span>
                     {head.platform && <Badge variant="outline" className="font-mono text-xs">{head.platform}</Badge>}
+                    {engineStateBadge(chain.find((c) => c.type === "generate_content")?.payload ?? head.payload)}
                   </div>
                   <span className="text-xs text-muted-foreground font-mono">{fmtRelative(head.created_at)}</span>
                 </div>
