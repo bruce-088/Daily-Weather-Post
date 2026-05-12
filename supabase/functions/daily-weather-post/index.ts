@@ -1428,6 +1428,7 @@ Deno.serve(async (req) => {
         assetUrl: string;
         visualSource: string;
         bytes: number;
+        renderTime?: number;
       }): Promise<string | null> => {
         if (!userId) return null;
         try {
@@ -1450,7 +1451,11 @@ Deno.serve(async (req) => {
             storage_path: args.storagePath,
             asset_url: args.assetUrl,
             audio_url: voiceUrl ?? null,
-            render_config: { style: (body as any)?.style ?? "standard", time_period: timePeriod ?? null },
+            render_config: {
+              style: (body as any)?.style ?? "standard",
+              time_period: timePeriod ?? null,
+              render_time_sec: args.renderTime ?? null,
+            },
             content_hash: contentHash,
             status: "locked",
           }).select("id").maybeSingle();
