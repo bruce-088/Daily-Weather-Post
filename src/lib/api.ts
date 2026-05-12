@@ -212,6 +212,33 @@ export async function generatePreview(opts?: {
   return data as PreviewResult;
 }
 
+export interface PublishBundleResult {
+  success: boolean;
+  message: string;
+  bundle_id?: string;
+  visual_source?: string | null;
+  results?: Array<{ platform: string; success: boolean; id?: string | null; url?: string | null; error?: string }>;
+}
+
+/** Publish a locked preview bundle to one or more platforms.
+ * The edge function downloads the EXACT preview asset (no regeneration). */
+export async function publishPreviewBundle(
+  bundleId: string,
+  platforms: string[],
+): Promise<PublishBundleResult> {
+  const { data, error } = await supabase.functions.invoke("publish-preview-bundle", {
+    body: { bundle_id: bundleId, platforms },
+  });
+  if (error) return { success: false, message: error.message || "Failed to publish preview" };
+  return {
+    success: !!data?.success,
+    message: data?.message || data?.error || "Unknown response",
+    bundle_id: data?.bundle_id,
+    visual_source: data?.visual_source,
+    results: data?.results,
+  };
+}
+
 export async function uploadPreviewVideo(
   storagePath: string,
   title: string,
