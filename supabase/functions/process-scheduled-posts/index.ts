@@ -2299,7 +2299,6 @@ Deno.serve(async (req) => {
           if (!fallbackImage) {
             postStatus = "failed";
           }
-          }
         }
 
         if (!errorMessage) {
