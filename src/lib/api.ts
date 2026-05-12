@@ -185,6 +185,8 @@ export interface PreviewResult {
   visual_source?: string | null;
   /** True when a bundle row was successfully written for this preview */
   locked?: boolean;
+  /** Render/generation elapsed time in seconds (0.5 = half second, 45 = slow creatomate). */
+  render_time?: number;
 }
 
 export async function generatePreview(opts?: {
