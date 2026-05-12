@@ -1011,7 +1011,19 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
         return null;
       }
       const arrayBuf = await videoRes.arrayBuffer();
-      console.log(`Video downloaded: ${arrayBuf.byteLength} bytes`);
+      const reportedDurationSec = typeof statusData.duration === "number" ? statusData.duration : null;
+      console.log(`Video downloaded: ${arrayBuf.byteLength} bytes, reported duration ${reportedDurationSec ?? "?"}s`);
+      // ── Render validation: reject false-positive successes ──
+      const MIN_BYTES = 50_000;     // <50KB → almost certainly empty/black
+      const MIN_DURATION_SEC = 5;
+      if (arrayBuf.byteLength < MIN_BYTES) {
+        console.error(`[render] REJECTED: video too small (${arrayBuf.byteLength} bytes < ${MIN_BYTES})`);
+        return null;
+      }
+      if (reportedDurationSec !== null && reportedDurationSec < MIN_DURATION_SEC) {
+        console.error(`[render] REJECTED: video too short (${reportedDurationSec}s < ${MIN_DURATION_SEC}s)`);
+        return null;
+      }
       return { data: new Uint8Array(arrayBuf), mimeType: "video/mp4" };
     }
 
@@ -2033,8 +2045,21 @@ Deno.serve(async (req) => {
         const visualMeta = { ...baseMeta, theme: visualTheme, color_profile: visualColorProfile };
         trace("visual_style", visualMeta);
 
+        // ── Retry-aware visual fallback ──
+        // retry 1 → re-run pipeline (regenerates Pexels background lookup)
+        // retry 2 → force a safe gradient template (skips stock video entirely)
+        const attemptNum = (post as any).retry_count ?? 0;
+        if (attemptNum >= 2 && visualStyle !== "gradient") {
+          console.log(`[render] retry ${attemptNum}: forcing safe gradient template (was ${visualStyle})`);
+          trace("visual_retry_fallback", { previous: visualStyle, forced: "gradient", attempt: attemptNum });
+          visualStyle = "gradient";
+        }
+
+        const MIN_VIDEO_BYTES = 50_000;
+
         // Credit Protection: if a previous attempt already rendered a video,
-        // reuse it instead of paying for another render.
+        // reuse it instead of paying for another render — but only if it
+        // passes the same validity bar we apply to fresh renders.
         let video: { data: Uint8Array; mimeType: string; provider?: string } | null = null;
         const cachedVideoUrl: string | null = (post as any).cached_video_url ?? null;
         if (cachedVideoUrl) {
@@ -2043,9 +2068,11 @@ Deno.serve(async (req) => {
             const dl = await fetch(cachedVideoUrl);
             if (dl.ok) {
               const ab = await dl.arrayBuffer();
-              if (ab.byteLength > 0) {
+              if (ab.byteLength >= MIN_VIDEO_BYTES) {
                 video = { data: new Uint8Array(ab), mimeType: "video/mp4", provider: "cache" };
                 trace("video_render", { reused: true, bytes: ab.byteLength });
+              } else {
+                console.warn(`[render] cached video rejected (${ab.byteLength} bytes < ${MIN_VIDEO_BYTES}) — re-rendering`);
               }
             } else {
               console.warn(`[render] cached video fetch failed (${dl.status}) — will re-render`);
@@ -2057,13 +2084,20 @@ Deno.serve(async (req) => {
         if (!video) {
           // Try video generation once (with voiceover baked in if available)
           console.log(`RENDER START: City: ${weather.city}, VoiceEnabled: ${voiceUrl ? "True" : "False"}, VisualStyle: ${visualStyle}`);
-          video = await generateVideoWithFallback({
+          const rendered = await generateVideoWithFallback({
             weather, timePeriod, voiceUrl, audioDurationSec: voiceAudioDurationSec, visualStyle,
             creatomate: () => generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec, visualStyle),
           });
-          trace("video_render", { success: !!video, mime: video?.mimeType, provider: video?.provider });
-          // Persist for retry credit-protection
-          if (video && video.data.byteLength > 0) {
+          // ── Post-render validation: reject empty/tiny outputs ──
+          if (rendered && rendered.data.byteLength >= MIN_VIDEO_BYTES) {
+            video = rendered;
+          } else if (rendered) {
+            console.error(`[render] REJECTED post-render: ${rendered.data.byteLength} bytes < ${MIN_VIDEO_BYTES}`);
+            trace("video_render_rejected", { bytes: rendered.data.byteLength, provider: rendered.provider });
+          }
+          trace("video_render", { success: !!video, mime: video?.mimeType, provider: video?.provider, bytes: video?.data.byteLength });
+          // Persist for retry credit-protection (only validated videos)
+          if (video && video.data.byteLength >= MIN_VIDEO_BYTES) {
             try {
               const path = `${post.user_id}/render-${post.id}-${Date.now()}.mp4`;
               const { error: upErr } = await supabase.storage
