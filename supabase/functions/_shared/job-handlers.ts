@@ -1,22 +1,28 @@
-// Step handlers for the 4 pipeline job types.
+// Step handlers for the pipeline job types.
 //
-// Implementation strategy (incremental):
-// - The 4 types are real, separately retryable, observable jobs.
-// - For now, `generate_content` chains through to `publish_post` by delegating
-//   the heavy lifting to the existing `process-scheduled-posts` function via
-//   a single internal call on the publish step. This lets us land the job
-//   system end-to-end without rewriting 2000 lines of pipeline code.
-// - Each handler can be replaced with native logic later without touching
-//   the runner, scheduler, or dashboard.
+// Pipeline:
+//   generate_content → generate_voice → render_video → publish_post → analyze_performance
+//
+// `generate_content` is also where the AUTONOMOUS LOOP closes: before the
+// content is generated, it reads the last 3 `pipeline_reflections` for the
+// city and injects them as recommendations + an `engine_state` flag
+// ("optimized" if today's recipe matches a recent winner, "experiment" if
+// we're deliberately trying something new).
+//
+// `analyze_performance` is the hidden 5th step — scheduled 24h after a
+// successful publish — that fetches the published post's stats, compares
+// them to the user's rolling average, and writes a `pipeline_reflections`
+// row that future `generate_content` jobs will read from.
 
 import type { JobContext, JobHandler, JobStepResult, JobType } from "./job-runner.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
+// 24h delay between publish and the reflection step.
+const REFLECTION_DELAY_SECONDS = 24 * 60 * 60;
+
 // ───────────────── generate_content ─────────────────
-// Validates that a scheduled_post + city + weather settings exist.
-// Output: { validated: true } — chains to generate_voice.
 const generateContent: JobHandler = async ({ job, supabase, log }): Promise<JobStepResult> => {
   const scheduledPostId = job.scheduled_post_id;
   if (!scheduledPostId) {
@@ -24,7 +30,7 @@ const generateContent: JobHandler = async ({ job, supabase, log }): Promise<JobS
   }
   const { data: post, error } = await supabase
     .from("scheduled_posts")
-    .select("id, user_id, city, platform, scheduled_at, include_voiceover, status")
+    .select("id, user_id, city, platform, scheduled_at, include_voiceover, status, debug_trace")
     .eq("id", scheduledPostId)
     .maybeSingle();
   if (error) throw new Error(`Failed to load scheduled_post: ${error.message}`);
@@ -33,22 +39,77 @@ const generateContent: JobHandler = async ({ job, supabase, log }): Promise<JobS
     await log("Scheduled post already succeeded — skipping job chain");
     return { done: true };
   }
-  await log("Content prerequisites validated", { city: post.city, platform: post.platform });
+
+  // ── AUTONOMOUS LOOP: read last 3 reflections for this city ──
+  const { data: reflections } = await supabase
+    .from("pipeline_reflections")
+    .select("visual_style, voice_tone, hook_type, performance, views, user_avg_views, recommendation, created_at")
+    .eq("user_id", job.user_id)
+    .eq("city", post.city)
+    .order("created_at", { ascending: false })
+    .limit(3);
+
+  const recipe = (post.debug_trace as any)?.ai_recipe ?? null;
+  const reflectionList = (reflections ?? []) as any[];
+
+  // engine_state: "optimized" if today's recipe matches any recent HIGH winner;
+  //               "experiment" if it diverges from all recent records.
+  let engineState: "optimized" | "experiment" = "experiment";
+  let referenceJob: string | null = null;
+  if (recipe && reflectionList.length > 0) {
+    const winner = reflectionList.find(
+      (r) =>
+        r.performance === "high" &&
+        (r.visual_style === recipe.visual_style ||
+          r.voice_tone === recipe.voice_tone ||
+          r.hook_type === recipe.hook_type),
+    );
+    if (winner) {
+      engineState = "optimized";
+      referenceJob = `${winner.visual_style}/${winner.voice_tone}`;
+    }
+  }
+
+  // Build a short hint string for downstream caption/visual prompts.
+  const hints = reflectionList.map((r) => {
+    const tag = r.performance === "high" ? "✓" : r.performance === "low" ? "✗" : "•";
+    return `${tag} ${r.visual_style ?? "?"}/${r.voice_tone ?? "?"}/${r.hook_type ?? "?"} → ${Math.round(r.views)} views (avg ${Math.round(r.user_avg_views)}). ${r.recommendation ?? ""}`.trim();
+  });
+
+  // Persist the engine state on the scheduled_post so the publish step + UI
+  // can read it without re-querying reflections.
+  const updatedTrace = {
+    ...((post.debug_trace as any) ?? {}),
+    engine_state: engineState,
+    reflection_hints: hints,
+    reference_job: referenceJob,
+  };
+  await supabase
+    .from("scheduled_posts")
+    .update({ debug_trace: updatedTrace })
+    .eq("id", post.id);
+
+  await log("Content prerequisites validated", {
+    city: post.city,
+    platform: post.platform,
+    engine_state: engineState,
+    reflections_used: hints.length,
+  });
 
   return {
     output: {
       city: post.city,
       platform: post.platform,
       include_voiceover: post.include_voiceover,
+      engine_state: engineState,
+      reflection_hints: hints,
+      reference_job: referenceJob,
     },
     next: { type: "generate_voice" },
   };
 };
 
 // ───────────────── generate_voice ─────────────────
-// In v1: a no-op pass-through (voice generation lives inside the
-// existing pipeline). The job exists so retries/observability work
-// when we move voice out into its own step.
 const generateVoice: JobHandler = async ({ job, log }): Promise<JobStepResult> => {
   const includeVoice = job.payload.include_voiceover === true;
   await log(includeVoice ? "Voice will be generated by publish step" : "No voiceover requested");
@@ -56,16 +117,12 @@ const generateVoice: JobHandler = async ({ job, log }): Promise<JobStepResult> =
 };
 
 // ───────────────── render_video ─────────────────
-// Same approach as generate_voice — placeholder until rendering is split out.
 const renderVideo: JobHandler = async ({ log }): Promise<JobStepResult> => {
   await log("Render will be performed by publish step");
   return { next: { type: "publish_post" } };
 };
 
 // ───────────────── publish_post ─────────────────
-// Delegates to the existing process-scheduled-posts function for ONE
-// specific scheduled_post_id. This keeps proven logic working while
-// the job system handles locking, retries, notifications, and timeline.
 const publishPost: JobHandler = async ({ job, supabase, log }): Promise<JobStepResult> => {
   if (!job.scheduled_post_id) throw new Error("publish_post requires scheduled_post_id");
 
@@ -89,16 +146,137 @@ const publishPost: JobHandler = async ({ job, supabase, log }): Promise<JobStepR
   }
   await log("Publish delegated to process-scheduled-posts", { status: res.status });
 
-  // Verify the scheduled_post actually moved out of pending/processing
   const { data: post } = await supabase
     .from("scheduled_posts")
-    .select("status, error_message")
+    .select("status, error_message, scheduled_at")
     .eq("id", job.scheduled_post_id)
     .maybeSingle();
   if (post && (post.status === "failed" || post.status === "failed_precheck")) {
     throw new Error(`Scheduled post ended in ${post.status}: ${post.error_message ?? "unknown"}`);
   }
-  return { output: { final_status: post?.status ?? "unknown" }, done: true };
+
+  // ── Schedule the hidden 5th step 24h from now ──
+  return {
+    output: { final_status: post?.status ?? "unknown" },
+    next: { type: "analyze_performance", delaySeconds: REFLECTION_DELAY_SECONDS },
+  };
+};
+
+// ───────────────── analyze_performance ─────────────────
+// Fetches the most recent post_history + post_analytics for this scheduled
+// post, compares views to the user's rolling 30-day average, and writes a
+// pipeline_reflections row that future generate_content jobs will read.
+const analyzePerformance: JobHandler = async ({ job, supabase, log }): Promise<JobStepResult> => {
+  if (!job.scheduled_post_id) {
+    await log("analyze_performance skipped — no scheduled_post_id");
+    return { done: true };
+  }
+
+  const { data: sp } = await supabase
+    .from("scheduled_posts")
+    .select("id, user_id, city, scheduled_at, debug_trace")
+    .eq("id", job.scheduled_post_id)
+    .maybeSingle();
+  if (!sp) {
+    await log("analyze_performance skipped — scheduled_post not found");
+    return { done: true };
+  }
+
+  const recipe = (sp.debug_trace as any)?.ai_recipe ?? {};
+  const visualStyle = recipe.visual_style ?? null;
+  const voiceTone = recipe.voice_tone ?? null;
+  const hookType = recipe.hook_type ?? null;
+
+  // Find the post_history row created by process-scheduled-posts. We
+  // correlate by user + city + a window around scheduled_at.
+  const scheduledMs = new Date(sp.scheduled_at).getTime();
+  const windowStart = new Date(scheduledMs - 30 * 60 * 1000).toISOString();
+  const windowEnd = new Date(scheduledMs + 4 * 60 * 60 * 1000).toISOString();
+  const { data: histories } = await supabase
+    .from("post_history")
+    .select("id, views_count, likes_count, comment_count, created_at, status")
+    .eq("user_id", sp.user_id)
+    .eq("city", sp.city)
+    .gte("created_at", windowStart)
+    .lte("created_at", windowEnd)
+    .order("created_at", { ascending: false })
+    .limit(3);
+
+  const successHistory = (histories ?? []).find((h: any) => h.status === "success") ?? null;
+
+  // Aggregate analytics from all platforms tied to this post.
+  let views = successHistory?.views_count ?? 0;
+  let engagement =
+    (successHistory?.likes_count ?? 0) + (successHistory?.comment_count ?? 0);
+
+  if (successHistory?.id) {
+    const { data: analytics } = await supabase
+      .from("post_analytics")
+      .select("views, likes, comments, shares")
+      .eq("post_id", successHistory.id);
+    if (analytics && analytics.length > 0) {
+      views = analytics.reduce((s: number, a: any) => s + (a.views ?? 0), 0);
+      engagement = analytics.reduce(
+        (s: number, a: any) => s + (a.likes ?? 0) + (a.comments ?? 0) + (a.shares ?? 0),
+        0,
+      );
+    }
+  }
+
+  // Rolling 30-day average views for this user.
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const { data: avgRows } = await supabase
+    .from("post_analytics")
+    .select("views")
+    .eq("user_id", sp.user_id)
+    .gte("created_at", since);
+  const avgList = (avgRows ?? []) as any[];
+  const userAvg = avgList.length
+    ? avgList.reduce((s, a) => s + (a.views ?? 0), 0) / avgList.length
+    : 0;
+
+  let performance: "high" | "low" | "unknown" = "unknown";
+  let recommendation: string | null = null;
+  if (avgList.length >= 3 && views > 0) {
+    if (views >= userAvg * 1.1) {
+      performance = "high";
+      recommendation = `Reuse ${visualStyle ?? "this visual"} + ${voiceTone ?? "this voice"} for next ${sp.city} job — outperformed avg by ${Math.round(((views - userAvg) / Math.max(userAvg, 1)) * 100)}%.`;
+    } else if (views <= userAvg * 0.9) {
+      performance = "low";
+      recommendation = `Avoid ${visualStyle ?? "this visual"}/${voiceTone ?? "this voice"} combo — underperformed by ${Math.round(((userAvg - views) / Math.max(userAvg, 1)) * 100)}%. Force a variation next run.`;
+    } else {
+      performance = "unknown";
+      recommendation = "On-par with average — no strong signal.";
+    }
+  } else {
+    recommendation = "Not enough baseline data to classify yet.";
+  }
+
+  await supabase.from("pipeline_reflections").insert({
+    user_id: sp.user_id,
+    city: sp.city,
+    scheduled_post_id: sp.id,
+    job_id: job.id,
+    visual_style: visualStyle,
+    voice_tone: voiceTone,
+    hook_type: hookType,
+    views: Math.round(views),
+    engagement: Math.round(engagement),
+    user_avg_views: userAvg,
+    performance,
+    recommendation,
+  });
+
+  await log(`Reflection: ${performance} (${Math.round(views)} vs avg ${Math.round(userAvg)})`, {
+    visual_style: visualStyle,
+    voice_tone: voiceTone,
+    hook_type: hookType,
+  });
+
+  return {
+    output: { performance, views: Math.round(views), user_avg_views: userAvg },
+    done: true,
+  };
 };
 
 export const handlers: Record<JobType, JobHandler> = {
@@ -106,4 +284,5 @@ export const handlers: Record<JobType, JobHandler> = {
   generate_voice: generateVoice,
   render_video: renderVideo,
   publish_post: publishPost,
+  analyze_performance: analyzePerformance,
 };
