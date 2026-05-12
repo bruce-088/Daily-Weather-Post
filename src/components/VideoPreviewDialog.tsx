@@ -210,9 +210,27 @@ export function VideoPreviewDialog({
 
   const postSinglePlatform = async (platformId: string) => {
     updatePlatform(platformId, { status: "posting", message: `Posting to ${platformId}…` });
+  const postSinglePlatform = async (platformId: string) => {
+    updatePlatform(platformId, { status: "posting", message: `Posting to ${platformId}…` });
     try {
-      console.log("[manual-post]", { platform: platformId, city_id: city?.id, city: city?.name, state: city?.state });
-      const result = await triggerDailyPost(undefined, [platformId], voice, city);
+      console.log("[manual-post]", { platform: platformId, city_id: city?.id, bundle_id: preview?.bundle_id });
+      // Deterministic publish path: if we have a locked bundle, publish the
+      // exact preview asset. Otherwise (legacy preview without bundle) fall
+      // back to the regenerate-and-post flow.
+      let result: { success: boolean; message: string };
+      if (preview?.bundle_id && !bundleInvalidated) {
+        const r = await publishPreviewBundle(preview.bundle_id, [platformId]);
+        const platformResult = r.results?.find((x) => x.platform === platformId);
+        result = {
+          success: !!platformResult?.success,
+          message: platformResult?.success
+            ? `Posted to ${platformId}${platformResult.url ? ` — ${platformResult.url}` : ""}`
+            : (platformResult?.error || r.message || "Post failed"),
+        };
+      } else {
+        const r = await triggerDailyPost(undefined, [platformId], voice, city);
+        result = { success: r.success, message: r.message };
+      }
       if (result.success) {
         updatePlatform(platformId, { status: "success", message: result.message || "Posted successfully" });
       } else {
