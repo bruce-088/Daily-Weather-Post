@@ -42,38 +42,76 @@ export interface FallbackPayload {
 }
 
 const DEFAULT_TIMEOUT_MS = 180_000;
+// A render that completes in <2s almost always means Creatomate short-circuited
+// (auth error, empty body, etc.) — treat as a failed attempt, never as success.
+const MIN_WALL_DURATION_MS = 2_000;
 
 export async function generateVideoWithFallback(
   payload: FallbackPayload,
 ): Promise<RenderBytes | null> {
   const timeoutMs = payload.primaryTimeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const hasCreatomateKey = !!Deno.env.get("CREATOMATE_API_KEY");
+  console.log(
+    `[render] creatomate_request_sent=${hasCreatomateKey} visual_style=${payload.visualStyle ?? "default"} voice_url=${payload.voiceUrl ? "present" : "none"} audio_dur=${payload.audioDurationSec ?? "n/a"}s timeout=${timeoutMs}ms`,
+  );
 
-  // ---- Primary: Creatomate ----
-  try {
-    const timeout = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error(`creatomate timeout after ${timeoutMs}ms`)), timeoutMs)
-    );
-    const result = await Promise.race([payload.creatomate(), timeout]);
-    if (result && result.data && result.data.byteLength > 0) {
-      console.log("Render provider: creatomate");
-      return { ...result, provider: "creatomate" };
+  // ---- Primary: Creatomate (always attempted, with one retry) ----
+  const MAX_ATTEMPTS = 2;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const startedAt = Date.now();
+    try {
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`creatomate timeout after ${timeoutMs}ms`)),
+          timeoutMs,
+        ),
+      );
+      const result = await Promise.race([payload.creatomate(), timeout]);
+      const wallMs = Date.now() - startedAt;
+      const bytes = result?.data?.byteLength ?? 0;
+      console.log(
+        `[render] creatomate attempt=${attempt}/${MAX_ATTEMPTS} wall=${wallMs}ms bytes=${bytes} ok=${!!(result && bytes > 0)}`,
+      );
+      if (result && bytes > 0) {
+        if (wallMs < MIN_WALL_DURATION_MS) {
+          // Too fast to be a real render — almost certainly a short-circuit.
+          // Reject and retry rather than publishing a bad asset.
+          console.error(
+            `[render] REJECTED: creatomate finished in ${wallMs}ms (<${MIN_WALL_DURATION_MS}ms). Treating as failure.`,
+          );
+        } else {
+          console.log(`[render] Render provider: creatomate (attempt ${attempt})`);
+          return { ...result, provider: "creatomate" };
+        }
+      } else if (!result) {
+        console.error(`[render] creatomate returned null on attempt ${attempt}`);
+      } else {
+        console.error(`[render] creatomate returned empty bytes on attempt ${attempt}`);
+      }
+    } catch (error) {
+      const wallMs = Date.now() - startedAt;
+      console.error(
+        `[render] creatomate attempt=${attempt}/${MAX_ATTEMPTS} wall=${wallMs}ms ERROR:`,
+        (error as Error).message,
+      );
     }
-    throw new Error("creatomate returned empty result");
-  } catch (error) {
-    console.error("Creatomate failed:", (error as Error).message);
+    if (attempt < MAX_ATTEMPTS) {
+      console.log(`[render] retrying creatomate (attempt ${attempt + 1}/${MAX_ATTEMPTS})...`);
+    }
   }
 
-  // ---- Fallback: JSON2Video ----
+  // ---- Fallback: JSON2Video (only after Creatomate truly failed) ----
+  console.warn("[render] Creatomate failed all attempts — falling back to JSON2Video");
   try {
     const fallback = await generateWithJSON2Video(payload);
     if (fallback && fallback.data.byteLength > 0) {
-      console.log("Render provider: json2video");
+      console.log("[render] Render provider: json2video");
       return { ...fallback, provider: "json2video" };
     }
-    console.error("JSON2Video returned empty result");
+    console.error("[render] JSON2Video returned empty result");
     return null;
   } catch (error) {
-    console.error("JSON2Video failed:", (error as Error).message);
+    console.error("[render] JSON2Video failed:", (error as Error).message);
     return null;
   }
 }

@@ -940,6 +940,9 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
 
 
   const requestBody = JSON.stringify({ output_format: "mp4", ...source });
+  console.log(
+    `[render] creatomate_request_sent=true template_id=${(source as any)?.template_id ?? "inline_source"} background_url=${videoUrl ? String(videoUrl).split("?")[0] : "(gradient)"} audio_url=${voiceUrl ? String(voiceUrl).split("?")[0] : "(none)"} audio_dur=${audioDurationSec ?? "n/a"}s comp_dur=${compDuration.toFixed(2)}s`,
+  );
   console.log("Creatomate request body (first 300 chars):", requestBody.substring(0, 300));
 
   const renderRes = await fetch("https://api.creatomate.com/v2/renders", {
