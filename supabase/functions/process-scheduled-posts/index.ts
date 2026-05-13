@@ -527,12 +527,14 @@ function estimateMp3DurationSeconds(byteLength: number | null | undefined): numb
  */
 const VOICE_START = 0.5;        // seconds — when voice element starts
 const VOICE_TAIL_PAD = 1.5;     // seconds — silence held after voice ends
-const MIN_VIDEO_DURATION = 10;  // seconds — hard floor
+const MIN_VIDEO_DURATION = 12;  // seconds — retention sweet spot floor
+const MAX_VIDEO_DURATION = 15;  // seconds — short enough to invite re-watch loops
 
 function computeVideoDuration(audioDurationSec: number | null | undefined): number {
   const audio = typeof audioDurationSec === "number" && isFinite(audioDurationSec) && audioDurationSec > 0 ? audioDurationSec : 0;
   const target = audio > 0 ? VOICE_START + audio + VOICE_TAIL_PAD : MIN_VIDEO_DURATION;
-  return Math.max(target, MIN_VIDEO_DURATION);
+  // Clamp into the 12–15s retention window so the video loops well.
+  return Math.min(MAX_VIDEO_DURATION, Math.max(MIN_VIDEO_DURATION, target));
 }
 
 function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | null, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null): object {
@@ -567,14 +569,32 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
     else periodLabel = "🌙  EVENING UPDATE";
   }
 
+  // === BACKGROUND with Ken Burns slow zoom (100% → 110%) — keeps motion alive
+  // even when the source is a still image, which is critical for retention.
+  const kenBurns = { type: "scale" as const, start_scale: "100%", end_scale: "110%", duration: dur(10.0), easing: "linear" };
   const elements: any[] = [
     ...(videoUrl ? [
-      { type: "video", track: nt(), time: 0, duration: dur(10.0), source: videoUrl, width: "100%", height: "100%", x: "50%", y: "50%", fit: "cover" },
+      { type: "video", track: nt(), time: 0, duration: dur(10.0), source: videoUrl, width: "100%", height: "100%", x: "50%", y: "50%", fit: "cover",
+        animations: [kenBurns] },
     ] : [
-      { type: "shape", track: nt(), time: 0, duration: dur(10.0), shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%", fill_color: `linear-gradient(170deg, ${theme.bg1} 0%, ${theme.bg2} 50%, ${theme.bg1} 100%)` },
+      { type: "shape", track: nt(), time: 0, duration: dur(10.0), shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%", fill_color: `linear-gradient(170deg, ${theme.bg1} 0%, ${theme.bg2} 50%, ${theme.bg1} 100%)`,
+        animations: [kenBurns] },
     ]),
+    // === Bottom-up shadow gradient — guarantees white text legibility on any
+    // bright background. Layered above the background but below all content.
     { type: "shape", track: nt(), time: 0, duration: dur(10.0), shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%",
-      fill_color: "linear-gradient(180deg, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.25) 40%, rgba(0,0,0,0.25) 60%, rgba(0,0,0,0.45) 100%)" },
+      fill_color: "linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.20) 30%, rgba(0,0,0,0.30) 65%, rgba(0,0,0,0.75) 100%)" },
+    // Weather particle / shimmer overlay — three soft, drifting orbs that
+    // gently pulse to keep the eye moving across the frame.
+    { type: "shape", track: nt(), time: 0, duration: dur(10.0), shape_type: "ellipse", width: 220, height: 220, x: "20%", y: "30%",
+      fill_color: "rgba(255,255,255,0.10)",
+      animations: [{ type: "scale", start_scale: "80%", end_scale: "120%", duration: 4.0, easing: "ease-in-out" }] },
+    { type: "shape", track: nt(), time: 0.5, duration: dur(9.5), shape_type: "ellipse", width: 160, height: 160, x: "78%", y: "55%",
+      fill_color: "rgba(255,255,255,0.08)",
+      animations: [{ type: "scale", start_scale: "120%", end_scale: "85%", duration: 5.0, easing: "ease-in-out" }] },
+    { type: "shape", track: nt(), time: 1.0, duration: dur(9.0), shape_type: "ellipse", width: 280, height: 280, x: "30%", y: "78%",
+      fill_color: "rgba(255,255,255,0.06)",
+      animations: [{ type: "scale", start_scale: "90%", end_scale: "115%", duration: 6.0, easing: "ease-in-out" }] },
     { type: "shape", track: nt(), time: 0, duration: dur(10.0), shape_type: "ellipse", width: 1400, height: 1400, x: "75%", y: "30%", fill_color: theme.glow1,
       animations: [{ type: "scale", start_scale: "95%", end_scale: "108%", duration: dur(10.0), easing: "linear" }] },
     { type: "text", track: nt(), time: 0, duration: dur(10.0), text: "SKYBRIEF", font_family: "Inter", font_weight: "700", font_size: "42", fill_color: "#ffffff", letter_spacing: "18%",
@@ -591,7 +611,7 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
 
     { type: "shape", track: nt(), time: 0.2, duration: dur(9.8), shape_type: "rectangle", width: 800, height: 200, x: "50%", y: "18%",
       fill_color: "rgba(0,0,0,0.35)", border_radius: "14", enter: { type: "fade", duration: 0.4 } },
-    { type: "text", track: nt(), time: 0.3, duration: dur(9.7), text: weather.city.toUpperCase(), font_family: "Inter", font_weight: "800", font_size: "76", fill_color: "#ffffff",
+    { type: "text", track: nt(), time: 0.3, duration: dur(9.7), text: weather.city.toUpperCase(), font_family: "Inter", font_weight: "800", font_size: "88", fill_color: "#ffffff",
       x: "50%", y: "16%", x_alignment: "50%", y_alignment: "50%", shadow: "0px 2px 4px rgba(0,0,0,0.5)", enter: { type: "slide", direction: "up", duration: 0.5 } },
     { type: "text", track: nt(), time: 0.5, duration: dur(9.5), text: `${weather.stateOrRegion}  ·  ${dateStr}`, font_family: "Inter", font_weight: "500", font_size: "30", fill_color: "rgba(255,255,255,0.65)",
       x: "50%", y: "21%", x_alignment: "50%", y_alignment: "50%", shadow: "0px 2px 4px rgba(0,0,0,0.5)", enter: { type: "fade", duration: 0.5 } },

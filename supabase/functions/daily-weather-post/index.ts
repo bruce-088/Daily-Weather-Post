@@ -691,12 +691,14 @@ function estimateMp3DurationSeconds(byteLength: number | null | undefined): numb
  */
 const VOICE_START = 0.5;        // seconds — when voice element starts
 const VOICE_TAIL_PAD = 1.5;     // seconds — silence held after voice ends
-const MIN_VIDEO_DURATION = 10;  // seconds — hard floor
+const MIN_VIDEO_DURATION = 12;  // seconds — retention sweet spot floor
+const MAX_VIDEO_DURATION = 15;  // seconds — short enough to invite re-watch loops
 
 function computeVideoDuration(audioDurationSec: number | null | undefined): number {
   const audio = typeof audioDurationSec === "number" && isFinite(audioDurationSec) && audioDurationSec > 0 ? audioDurationSec : 0;
   const target = audio > 0 ? VOICE_START + audio + VOICE_TAIL_PAD : MIN_VIDEO_DURATION;
-  return Math.max(target, MIN_VIDEO_DURATION);
+  // Clamp into the 12–15s retention window so the video loops well.
+  return Math.min(MAX_VIDEO_DURATION, Math.max(MIN_VIDEO_DURATION, target));
 }
 
 function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | null, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null): object {
@@ -741,19 +743,35 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
   const bgGradient = "linear-gradient(170deg, " + theme.bg1 + " 0%, " + theme.bg2 + " 50%, " + theme.bg1 + " 100%)";
   const logoUrl = "https://pewdswjhsesfondewucc.supabase.co/storage/v1/object/public/brand-assets/skybrief-icon.png";
 
+  // === BACKGROUND with Ken Burns slow zoom (100% → 110%) — keeps motion alive
+  // even when the source is a still image, which is critical for retention.
+  const kenBurns = { type: "scale" as const, start_scale: "100%", end_scale: "110%", duration: dur(10.0), easing: "linear" };
   const elements: any[] = [
     // === BACKGROUND ===
     ...(videoUrl ? [
-      { type: "video", track: nt(), time: 0, duration: dur(10.0), source: videoUrl, width: "100%", height: "100%", x: "50%", y: "50%", fit: "cover" },
+      { type: "video", track: nt(), time: 0, duration: dur(10.0), source: videoUrl, width: "100%", height: "100%", x: "50%", y: "50%", fit: "cover",
+        animations: [kenBurns] },
     ] : [
-      { type: "shape", track: nt(), time: 0, duration: dur(10.0), shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%", fill_color: bgGradient },
+      { type: "shape", track: nt(), time: 0, duration: dur(10.0), shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%", fill_color: bgGradient,
+        animations: [kenBurns] },
     ]),
 
-    // === 3-ZONE GRADIENT OVERLAY (stronger for readability) ===
+    // === BOTTOM-UP SHADOW GRADIENT — guarantees white text legibility ===
     { type: "shape", track: nt(), time: 0, duration: dur(10.0), shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%",
-      fill_color: "linear-gradient(180deg, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.30) 35%, rgba(0,0,0,0.30) 55%, rgba(0,0,0,0.55) 100%)" },
+      fill_color: "linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.25) 30%, rgba(0,0,0,0.35) 65%, rgba(0,0,0,0.80) 100%)" },
 
-    // Subtle glow
+    // === WEATHER PARTICLE / SHIMMER OVERLAY (drifting orbs for motion) ===
+    { type: "shape", track: nt(), time: 0, duration: dur(10.0), shape_type: "ellipse", width: 260, height: 260, x: "20%", y: "30%",
+      fill_color: "rgba(255,255,255,0.10)",
+      animations: [{ type: "scale", start_scale: "80%", end_scale: "120%", duration: 4.0, easing: "ease-in-out" }] },
+    { type: "shape", track: nt(), time: 0.5, duration: dur(9.5), shape_type: "ellipse", width: 200, height: 200, x: "78%", y: "55%",
+      fill_color: "rgba(255,255,255,0.08)",
+      animations: [{ type: "scale", start_scale: "120%", end_scale: "85%", duration: 5.0, easing: "ease-in-out" }] },
+    { type: "shape", track: nt(), time: 1.0, duration: dur(9.0), shape_type: "ellipse", width: 320, height: 320, x: "30%", y: "78%",
+      fill_color: "rgba(255,255,255,0.06)",
+      animations: [{ type: "scale", start_scale: "90%", end_scale: "115%", duration: 6.0, easing: "ease-in-out" }] },
+
+    // Subtle theme glow
     { type: "shape", track: nt(), time: 0, duration: dur(10.0), shape_type: "ellipse", width: 1800, height: 1800, x: "75%", y: "30%", fill_color: theme.glow1,
       animations: [{ type: "scale", start_scale: "95%", end_scale: "108%", duration: dur(10.0), easing: "linear" }] },
 
@@ -781,7 +799,7 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
       enter: { type: "fade", duration: 0.4 } },
 
     // === CITY + DATE ===
-    { type: "text", track: nt(), time: 0.3, duration: dur(9.7), text: cityUpper, font_family: "Inter", font_weight: "800", font_size: "96", fill_color: "#ffffff",
+    { type: "text", track: nt(), time: 0.3, duration: dur(9.7), text: cityUpper, font_family: "Inter", font_weight: "800", font_size: "112", fill_color: "#ffffff",
       x: "50%", y: "15%", x_alignment: "50%", y_alignment: "50%", shadow: "0px 2px 4px rgba(0,0,0,0.5)", enter: { type: "slide", direction: "up", duration: 0.5 } },
     { type: "text", track: nt(), time: 0.5, duration: dur(9.5), text: regionDate, font_family: "Inter", font_weight: "600", font_size: "40", fill_color: "rgba(255,255,255,0.70)",
       x: "50%", y: "20%", x_alignment: "50%", y_alignment: "50%", shadow: "0px 2px 4px rgba(0,0,0,0.5)", enter: { type: "fade", duration: 0.5 } },
