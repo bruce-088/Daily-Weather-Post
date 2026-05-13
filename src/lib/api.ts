@@ -228,17 +228,29 @@ export interface PublishBundleResult {
   results?: Array<{ platform: string; success: boolean; id?: string | null; url?: string | null; error?: string }>;
 }
 
-/** GUARDRAIL: Direct bundle publish is no longer allowed from the UI.
- * All manual posts (including bundle publishes) must flow through the job
- * pipeline via `triggerManualPipelinePost`, which references the locked
- * bundle id via debug_trace.preview_bundle_id. */
+/** When USE_PIPELINE_FOR_MANUAL_POSTS=true, direct bundle publish is forbidden.
+ * When the flag is false (default), invokes the legacy publish-preview-bundle
+ * edge function so existing posting keeps working during gradual rollout. */
 export async function publishPreviewBundle(
-  _bundleId: string,
-  _platforms: string[],
+  bundleId: string,
+  platforms: string[],
 ): Promise<PublishBundleResult> {
-  const msg = "Publishing outside pipeline is not allowed — use triggerManualPipelinePost()";
-  console.error("[guardrail] " + msg);
-  throw new Error(msg);
+  if (FeatureFlags.USE_PIPELINE_FOR_MANUAL_POSTS) {
+    const msg = "Publishing outside pipeline is not allowed — use triggerManualPipelinePost()";
+    console.error("[guardrail] " + msg);
+    throw new Error(msg);
+  }
+  const { data, error } = await supabase.functions.invoke("publish-preview-bundle", {
+    body: { bundle_id: bundleId, platforms },
+  });
+  if (error) return { success: false, message: error.message || "Failed to publish" };
+  return {
+    success: !!data?.success,
+    message: data?.message || data?.error || "Published",
+    bundle_id: data?.bundle_id,
+    visual_source: data?.visual_source ?? null,
+    results: data?.results,
+  };
 }
 
 export async function uploadPreviewVideo(
