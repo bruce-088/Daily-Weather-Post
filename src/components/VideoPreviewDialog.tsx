@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Play, Upload, RefreshCw, X, Loader2, Pencil, Eye, Download, Send, Mic, Pause, Lock, AlertTriangle, Sparkles, Volume2, VolumeX } from "lucide-react";
-import { generatePreview, uploadPreviewVideo, triggerManualPipelinePost, publishPreviewBundle, triggerDailyPost, triggerManualABPost } from "@/lib/api";
+import { generatePreview, uploadPreviewVideo, triggerManualPipelinePost, publishPreviewBundle, triggerDailyPost } from "@/lib/api";
 import type { PreviewResult, VoiceOptions, CityContext } from "@/lib/api";
 import { calculatePreviewHealth } from "@/lib/postHealth";
 import { FeatureFlags } from "@/lib/featureFlags";
