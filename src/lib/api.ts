@@ -493,6 +493,139 @@ export async function retryScheduledPost(id: string): Promise<boolean> {
   return true;
 }
 
+// --- Manual Post via Job Pipeline ---
+//
+// Replaces the legacy "generate → render → publish directly" path. Creates a
+// scheduled_post (status=pending, scheduled_at = now+30s to satisfy the
+// validate_scheduled_at trigger), enqueues a generate_content job, and polls
+// until the row reaches a terminal status. The full pipeline runs:
+//   generate_content → generate_voice → render_video → publish_post
+// Voice + render gating in process-scheduled-posts and video-render guarantee
+// no silent / instant-fallback shortcuts. Identical behaviour to automated.
+export interface ManualPipelineResult {
+  success: boolean;
+  message: string;
+  scheduledPostId?: string;
+  status?: string;
+  error?: string;
+  externalUrl?: string | null;
+  onPhase?: never;
+}
+
+export async function triggerManualPipelinePost(
+  platform: string,
+  voice: VoiceOptions | undefined,
+  city: CityContext | null | undefined,
+  caption: string | null | undefined,
+  opts?: {
+    onPhase?: (phase: "creating" | "queued" | "running" | "publishing", detail?: string) => void;
+    bundleId?: string | null;
+    timeoutMs?: number;
+  }
+): Promise<ManualPipelineResult> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, message: "Not signed in" };
+  if (!city?.name) return { success: false, message: "No active city" };
+
+  opts?.onPhase?.("creating", "Creating job…");
+
+  const scheduledAtIso = new Date(Date.now() + 30 * 1000).toISOString();
+  const cityName = city.state ? `${city.name}, ${city.state}` : city.name;
+
+  const debugTrace: Record<string, unknown> = { source: "manual_post" };
+  if (opts?.bundleId) debugTrace.preview_bundle_id = opts.bundleId;
+
+  const { data: inserted, error: insErr } = await supabase
+    .from("scheduled_posts")
+    .insert({
+      user_id: user.id,
+      city: cityName,
+      city_id: city.id ?? null,
+      scheduled_at: scheduledAtIso,
+      platform,
+      status: "pending",
+      include_voiceover: !!voice?.enabled,
+      ...(caption ? { caption } : {}),
+      debug_trace: debugTrace as any,
+    })
+    .select("id")
+    .maybeSingle();
+  if (insErr || !inserted?.id) {
+    return { success: false, message: insErr?.message || "Failed to create job" };
+  }
+
+  await enqueueGenerateContentJob({
+    userId: user.id,
+    scheduledPostId: inserted.id,
+    city: cityName,
+    platform,
+    scheduledFor: scheduledAtIso,
+    source: "manual-post-now",
+  });
+
+  opts?.onPhase?.("queued", "Queued — running pipeline…");
+
+  // Poll the scheduled_post until terminal. Pipeline can take 60–120s.
+  const timeoutMs = opts?.timeoutMs ?? 5 * 60 * 1000;
+  const startedAt = Date.now();
+  let lastStatus = "pending";
+  while (Date.now() - startedAt < timeoutMs) {
+    await new Promise((r) => setTimeout(r, 4000));
+    const { data: row } = await supabase
+      .from("scheduled_posts")
+      .select("status, error_message")
+      .eq("id", inserted.id)
+      .maybeSingle();
+    const status = (row?.status as string) ?? "pending";
+    if (status !== lastStatus) {
+      lastStatus = status;
+      if (status === "processing") opts?.onPhase?.("running", "Rendering video…");
+      else if (status === "rendering") opts?.onPhase?.("running", "Rendering video…");
+      else if (status === "publishing") opts?.onPhase?.("publishing", "Publishing to platform…");
+    }
+    if (status === "posted" || status === "succeeded") {
+      // Lookup external_id from post_history for the URL
+      const { data: hist } = await supabase
+        .from("post_history")
+        .select("external_id")
+        .eq("user_id", user.id)
+        .eq("city", cityName)
+        .eq("platform", platform)
+        .eq("status", "success")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const externalUrl = hist?.external_id
+        ? platform === "youtube"
+          ? `https://youtube.com/shorts/${hist.external_id}`
+          : null
+        : null;
+      return {
+        success: true,
+        message: `Posted to ${platform}${externalUrl ? ` — ${externalUrl}` : ""}`,
+        scheduledPostId: inserted.id,
+        status,
+        externalUrl,
+      };
+    }
+    if (status === "failed" || status === "failed_precheck" || status === "cancelled") {
+      return {
+        success: false,
+        message: row?.error_message || `Pipeline ${status}`,
+        scheduledPostId: inserted.id,
+        status,
+        error: row?.error_message ?? undefined,
+      };
+    }
+  }
+  return {
+    success: false,
+    message: "Pipeline timed out waiting for completion",
+    scheduledPostId: inserted.id,
+    status: lastStatus,
+  };
+}
+
 // --- Caption Generation ---
 
 export async function generateCaption(
