@@ -295,7 +295,20 @@ export interface PostHistoryItem {
   voice_status?: string | null;
   voice_error?: string | null;
   voice_attempts?: number | null;
-  debug_trace?: { steps?: Array<{ ts: string; step: string; detail?: any }>; captured_at?: string } | null;
+  debug_trace?: {
+    steps?: Array<{ ts: string; step: string; detail?: any }>;
+    captured_at?: string;
+    execution_mode?: "pipeline" | "legacy" | string;
+    ab_test_variant?: "A" | "B" | string | null;
+    render_engine?: string | null;
+    source?: string;
+    [k: string]: any;
+  } | null;
+  // Convenience pass-throughs for the debug label row
+  external_id?: string | null;
+  health_score?: number | null;
+  published_visual_source?: string | null;
+  experiment_variant?: string | null;
 }
 
 export async function fetchPostHistory(limit = 10, offset = 0): Promise<PostHistoryItem[]> {
