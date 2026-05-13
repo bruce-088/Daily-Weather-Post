@@ -1427,7 +1427,10 @@ Deno.serve(async (req) => {
     // Estimated voiceover audio duration (seconds). Drives the dynamic composition length
     // so the full voiceover + CTA is never cut off. null = no voiceover (use 10s minimum).
     let voiceAudioDurationSec: number | null = null;
+    let voiceAttempted = false;
+    let voiceFailed = false;
     if (voiceOpts.enabled && userId) {
+      voiceAttempted = true;
       console.log("Voice enabled — generating script + TTS audio");
       voiceScript = await generateVoiceScript(weather, voiceOpts.tone, selectedPlatforms, {
         subscribeCta: (settings as any)?.subscribe_cta_enabled !== false,
@@ -1443,8 +1446,12 @@ Deno.serve(async (req) => {
           voiceUrl = stored.signedUrl;
           voiceStoragePath = stored.storagePath;
           console.log("Voice audio stored at:", voiceStoragePath);
+        } else {
+          voiceFailed = true;
+          console.warn("Voice audio storage failed — preview will be silent");
         }
       } else {
+        voiceFailed = true;
         console.warn("Voice audio generation failed — continuing without voiceover");
       }
     }
