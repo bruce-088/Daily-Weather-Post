@@ -10,6 +10,7 @@ import { generatePreview, uploadPreviewVideo, triggerManualPipelinePost, publish
 import type { PreviewResult, VoiceOptions, CityContext } from "@/lib/api";
 import { calculatePreviewHealth } from "@/lib/postHealth";
 import { FeatureFlags } from "@/lib/featureFlags";
+import { DebugLabels } from "@/components/DebugLabels";
 import { Progress } from "@/components/ui/progress";
 import { Check, XCircle } from "lucide-react";
 import {
