@@ -443,6 +443,28 @@ export function VideoPreviewDialog({
                 </div>
               )}
 
+              {/* Audio status indicator */}
+              {(preview.voice_attempted || preview.audio_url) && (
+                <div className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs ${
+                  preview.audio_url
+                    ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-400"
+                    : "border-yellow-500/40 bg-yellow-500/10 text-yellow-400"
+                }`}>
+                  {preview.audio_url ? (
+                    <>
+                      <Volume2 size={14} />
+                      <span className="font-medium">Audio attached</span>
+                      <span className="text-muted-foreground">— voiceover will play in render</span>
+                    </>
+                  ) : (
+                    <>
+                      <VolumeX size={14} />
+                      <span className="font-medium">Audio generation failed — render will be silent.</span>
+                    </>
+                  )}
+                </div>
+              )}
+
               {/* AI Voice preview */}
               {preview.audio_url && (
                 <div className="rounded-lg border border-white/10 bg-secondary/30 p-3 space-y-2">
