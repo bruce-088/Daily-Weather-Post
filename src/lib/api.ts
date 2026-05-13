@@ -587,7 +587,7 @@ export async function triggerManualPipelinePost(
       // Lookup external_id from post_history for the URL
       const { data: hist } = await supabase
         .from("post_history")
-        .select("external_id, posted_at")
+        .select("external_id")
         .eq("user_id", user.id)
         .eq("city", cityName)
         .eq("platform", platform)
