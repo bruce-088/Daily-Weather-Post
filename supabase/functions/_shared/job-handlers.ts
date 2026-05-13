@@ -126,6 +126,23 @@ const renderVideo: JobHandler = async ({ log }): Promise<JobStepResult> => {
 const publishPost: JobHandler = async ({ job, supabase, log }): Promise<JobStepResult> => {
   if (!job.scheduled_post_id) throw new Error("publish_post requires scheduled_post_id");
 
+  // Pre-flight: log the voice asset that will be used (and gate on it when
+  // voiceover is required). Catches "silent video" bugs before we burn a render.
+  const { data: preflight } = await supabase
+    .from("scheduled_posts")
+    .select("include_voiceover, voiceover_url, voice_status")
+    .eq("id", job.scheduled_post_id)
+    .maybeSingle();
+  const voiceUrl = preflight?.voiceover_url ?? null;
+  console.log(
+    `[publish_post] job=${job.id} post=${job.scheduled_post_id} include_voiceover=${preflight?.include_voiceover === true} voice_url=${voiceUrl ? voiceUrl.split("?")[0] : "(none)"} voice_status=${preflight?.voice_status ?? "n/a"}`,
+  );
+  await log("Voice asset pre-flight", {
+    include_voiceover: preflight?.include_voiceover === true,
+    has_voice_url: !!voiceUrl,
+    voice_status: preflight?.voice_status ?? null,
+  });
+
   const url = `${SUPABASE_URL}/functions/v1/process-scheduled-posts`;
   const res = await fetch(url, {
     method: "POST",

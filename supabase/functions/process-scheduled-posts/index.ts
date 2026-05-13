@@ -2060,8 +2060,39 @@ Deno.serve(async (req) => {
           console.log(`[process] post ${post.id}: VOICE: disabled (row.include_voiceover=${post.include_voiceover}, settings.enable_voiceover=${settingsEnabled})`);
         }
 
+        // === VOICE ASSET VALIDATION (pre-render gate) ===
+        // If voiceover was requested but no audio was produced, FAIL the job
+        // immediately — never render a silent video.
         if (wantVoice && !voiceUrl) {
-          console.warn(`[process] post ${post.id}: VOICE: no audio attached after all attempts — rendering silent`);
+          const reason = voiceError || "Voiceover requested but audio file was not generated";
+          console.error(`[process] post ${post.id}: VOICE: CRITICAL — refusing to render silent video. reason=${reason}`);
+          trace("voice_result", { status: "failed", attempts: voiceAttemptsCount, error: reason, has_audio: false, fatal: true });
+          throw new Error(`Voiceover required but missing — ${reason}`);
+        }
+        // Reachability HEAD check — make sure Creatomate can actually fetch the audio.
+        if (voiceUrl) {
+          try {
+            const probe = await Promise.race([
+              fetch(voiceUrl, { method: "HEAD" }),
+              new Promise<Response>((_, rej) => setTimeout(() => rej(new Error("audio HEAD timeout")), 8000)),
+            ]) as Response;
+            if (!probe.ok) {
+              throw new Error(`audio_url HEAD ${probe.status}`);
+            }
+            console.log(`[process] post ${post.id}: VOICE: audio_url reachable (${probe.status}) ${voiceUrl.split("?")[0]}`);
+          } catch (probeErr) {
+            const reason = probeErr instanceof Error ? probeErr.message : String(probeErr);
+            if (wantVoice || post.include_voiceover === true) {
+              console.error(`[process] post ${post.id}: VOICE: audio_url unreachable — failing instead of rendering silent (${reason})`);
+              trace("voice_result", { status: "failed", error: `audio unreachable: ${reason}`, has_audio: false, fatal: true });
+              throw new Error(`Voiceover audio_url unreachable — ${reason}`);
+            }
+            // Pre-attached audio that's stale: drop it and continue silently.
+            console.warn(`[process] post ${post.id}: VOICE: pre-attached audio unreachable — dropping (${reason})`);
+            voiceUrl = null;
+            voiceStatus = "failed";
+            voiceError = `audio unreachable: ${reason}`;
+          }
         }
         trace("voice_result", { status: voiceStatus, attempts: voiceAttemptsCount, error: voiceError, has_audio: !!voiceUrl });
 
@@ -2164,6 +2195,7 @@ Deno.serve(async (req) => {
         if (!video) {
           // Try video generation once (with voiceover baked in if available)
           console.log(`RENDER START: City: ${weather.city}, VoiceEnabled: ${voiceUrl ? "True" : "False"}, VisualStyle: ${visualStyle}`);
+          console.log(`[publish] post ${post.id}: AUDIO_URL → ${voiceUrl ? voiceUrl.split("?")[0] : "(none)"} duration=${voiceAudioDurationSec ?? "n/a"}s`);
           const rendered = await generateVideoWithFallback({
             weather, timePeriod, voiceUrl, audioDurationSec: voiceAudioDurationSec, visualStyle,
             creatomate: () => generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec, visualStyle),
