@@ -25,7 +25,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import type { PostHistoryItem } from "@/lib/api";
-import { triggerDailyPost } from "@/lib/api";
+import { triggerManualPipelinePost } from "@/lib/api";
 import { toast } from "sonner";
 
 interface PlatformBrand {
