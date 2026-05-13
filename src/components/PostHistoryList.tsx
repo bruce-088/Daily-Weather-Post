@@ -364,6 +364,29 @@ export function PostHistoryList({ posts, loading, onReuse, onChanged }: PostHist
                           </p>
                         )}
 
+                        {/* Debug execution labels (gated by SHOW_DEBUG_LABELS) */}
+                        <DebugLabels
+                          size="xs"
+                          className="mt-1.5"
+                          mode={(post.debug_trace?.execution_mode as any) ?? null}
+                          abVariant={
+                            (post.debug_trace?.ab_test_variant as any) ??
+                            post.experiment_variant ??
+                            null
+                          }
+                          renderEngine={
+                            (post.debug_trace?.render_engine as any) ??
+                            post.published_visual_source ??
+                            null
+                          }
+                          voiceOn={
+                            post.voice_status
+                              ? post.voice_status === "success" || post.voice_status === "retried"
+                              : null
+                          }
+                          healthScore={post.health_score ?? null}
+                        />
+
                         {/* Quick actions */}
                         <div className="flex items-center gap-1.5 mt-2">
                           <Button
