@@ -1630,6 +1630,8 @@ Deno.serve(async (req) => {
           caption,
           audio_url: voiceUrl,
           voice_script: voiceScript,
+          voice_attempted: voiceAttempted,
+          voice_failed: voiceAttempted && !voiceUrl,
           bundle_id: bundleId,
           visual_source: visualSource,
           render_time: imgRenderElapsedSec,
