@@ -8,6 +8,9 @@ import { toast } from "sonner";
 import { Play, Upload, RefreshCw, X, Loader2, Pencil, Eye, Download, Send, Mic, Pause, Lock, AlertTriangle, Sparkles, Volume2, VolumeX } from "lucide-react";
 import { generatePreview, uploadPreviewVideo, triggerManualPipelinePost } from "@/lib/api";
 import type { PreviewResult, VoiceOptions, CityContext } from "@/lib/api";
+import { calculatePreviewHealth } from "@/lib/postHealth";
+import { Progress } from "@/components/ui/progress";
+import { Check, XCircle } from "lucide-react";
 import {
   PostProgressPanel,
   buildInitialStates,
