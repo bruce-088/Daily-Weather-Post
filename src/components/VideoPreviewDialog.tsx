@@ -241,34 +241,54 @@ export function VideoPreviewDialog({
   };
 
   const postSinglePlatform = async (platformId: string) => {
-    updatePlatform(platformId, { status: "posting", message: "Creating job…" });
+    const usePipeline = FeatureFlags.USE_PIPELINE_FOR_MANUAL_POSTS;
+    updatePlatform(platformId, {
+      status: "posting",
+      message: usePipeline ? "Creating job…" : "Posting…",
+    });
     try {
-      console.log("[manual-post→pipeline]", {
+      console.log("[manual-post]", {
         platform: platformId,
+        path: usePipeline ? "pipeline" : "legacy",
         city_id: city?.id,
         bundle_id: preview?.bundle_id,
         voice: !!voice?.enabled,
       });
       const captionToUse = (editedCaption || preview?.caption || "").trim() || null;
-      const result = await triggerManualPipelinePost(
-        platformId,
-        voice,
-        city ?? null,
-        captionToUse,
-        {
-          bundleId: preview?.bundle_id && !bundleInvalidated ? preview.bundle_id : null,
-          onPhase: (_phase, detail) => {
-            updatePlatform(platformId, { status: "posting", message: detail || "Running pipeline…" });
+
+      if (usePipeline) {
+        const result = await triggerManualPipelinePost(
+          platformId,
+          voice,
+          city ?? null,
+          captionToUse,
+          {
+            bundleId: preview?.bundle_id && !bundleInvalidated ? preview.bundle_id : null,
+            onPhase: (_phase, detail) => {
+              updatePlatform(platformId, { status: "posting", message: detail || "Running pipeline…" });
+            },
           },
-        },
-      );
+        );
+        if (result.success) {
+          updatePlatform(platformId, { status: "success", message: result.message || "Posted successfully" });
+        } else {
+          updatePlatform(platformId, { status: "failed", message: result.message || "Pipeline failed" });
+        }
+        return;
+      }
+
+      // Legacy path: prefer locked bundle publish, fall back to daily-weather-post.
+      const bundleId = preview?.bundle_id && !bundleInvalidated ? preview.bundle_id : null;
+      const result = bundleId
+        ? await publishPreviewBundle(bundleId, [platformId])
+        : await triggerDailyPost(undefined, [platformId], voice, city ?? null);
       if (result.success) {
         updatePlatform(platformId, { status: "success", message: result.message || "Posted successfully" });
       } else {
-        updatePlatform(platformId, { status: "failed", message: result.message || "Pipeline failed" });
+        updatePlatform(platformId, { status: "failed", message: result.message || "Post failed" });
       }
     } catch (err: any) {
-      updatePlatform(platformId, { status: "failed", message: err?.message || "Pipeline failed" });
+      updatePlatform(platformId, { status: "failed", message: err?.message || "Post failed" });
     }
   };
 
