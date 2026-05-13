@@ -912,9 +912,15 @@ export function VideoPreviewDialog({
                   <Button
                     size="sm"
                     onClick={handlePostToPlatforms}
-                    disabled={isBusy || blockingError || postablePlatforms.length === 0 || bundleInvalidated || (FeatureFlags.ENABLE_POST_HEALTH_SCORE && health.blocked)}
+                    disabled={
+                      isBusy || blockingError || postablePlatforms.length === 0 || bundleInvalidated ||
+                      (FeatureFlags.ENABLE_POST_HEALTH_SCORE && health.blocked) ||
+                      (FeatureFlags.ENABLE_AB_TESTING && abEnabled && !selectedVariant)
+                    }
                     title={
-                      FeatureFlags.ENABLE_POST_HEALTH_SCORE && health.blocked
+                      FeatureFlags.ENABLE_AB_TESTING && abEnabled && !selectedVariant
+                        ? "Pick Variant A or B before posting"
+                        : FeatureFlags.ENABLE_POST_HEALTH_SCORE && health.blocked
                         ? `Post quality too low (${health.score}/100) — fix before publishing`
                         : bundleInvalidated
                         ? (invalidationReason || "Regenerate preview before posting")
@@ -924,7 +930,10 @@ export function VideoPreviewDialog({
                     }
                     className="gap-1.5 text-xs"
                   >
-                    <Send size={14} /> Post ({postablePlatforms.length})
+                    <Send size={14} />
+                    {FeatureFlags.ENABLE_AB_TESTING && abEnabled && selectedVariant
+                      ? `Post Variant ${selectedVariant} (${postablePlatforms.length})`
+                      : `Post (${postablePlatforms.length})`}
                   </Button>
                 ) : preview?.content_type !== "image" ? (
                   <Button
