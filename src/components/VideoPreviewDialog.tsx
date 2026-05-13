@@ -676,29 +676,81 @@ export function VideoPreviewDialog({
                           <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
                             Rollout mode
                           </Label>
-                          <Select value={abRollout} onValueChange={(v) => setAbRollout(v as RolloutMode)}>
-                            <SelectTrigger className="h-9 text-xs">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="manual_select_winner" className="text-xs">
-                                Manual: I pick the winner
-                              </SelectItem>
-                              <SelectItem value="auto_rotate_variants" className="text-xs">
-                                Auto: rotate to winner
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
+                          <div className="h-9 rounded-md border border-border bg-muted/40 px-3 flex items-center text-xs text-muted-foreground">
+                            Manual winner selection
+                          </div>
                         </div>
                       </div>
                       <p className="text-[11px] text-muted-foreground italic">
                         {EXPERIMENT_TYPE_DESCRIPTIONS[abType]}
                       </p>
+
+                      {/* Hook test: editable A/B text inputs */}
+                      {abType === "hook_test" && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <Label htmlFor="hook-a" className="text-[11px] uppercase tracking-wide text-sky-400">
+                              Hook A — first voiceover line
+                            </Label>
+                            <Textarea
+                              id="hook-a"
+                              value={hookA}
+                              onChange={(e) => setHookA(e.target.value)}
+                              className="min-h-[60px] text-xs bg-background/40 border-sky-500/20"
+                              placeholder="e.g. Here's your forecast."
+                              maxLength={140}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label htmlFor="hook-b" className="text-[11px] uppercase tracking-wide text-fuchsia-400">
+                              Hook B — first voiceover line
+                            </Label>
+                            <Textarea
+                              id="hook-b"
+                              value={hookB}
+                              onChange={(e) => setHookB(e.target.value)}
+                              className="min-h-[60px] text-xs bg-background/40 border-fuchsia-500/20"
+                              placeholder="e.g. Don't leave the house yet —"
+                              maxLength={140}
+                            />
+                          </div>
+                        </div>
+                      )}
+
                       <ABComparePanel
                         type={abType}
                         variantA={variantPair.variantA}
                         variantB={variantPair.variantB}
                       />
+
+                      {/* Manual winner selection — only the chosen variant publishes */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button
+                          type="button"
+                          variant={selectedVariant === "A" ? "default" : "outline"}
+                          size="sm"
+                          className={`text-xs ${selectedVariant === "A" ? "bg-sky-500 hover:bg-sky-600" : "border-sky-500/30 text-sky-400 hover:bg-sky-500/10"}`}
+                          onClick={() => setSelectedVariant("A")}
+                          disabled={abType === "hook_test" && !hookA.trim()}
+                        >
+                          {selectedVariant === "A" ? "✓ Variant A selected" : "Select Variant A for Post"}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={selectedVariant === "B" ? "default" : "outline"}
+                          size="sm"
+                          className={`text-xs ${selectedVariant === "B" ? "bg-fuchsia-500 hover:bg-fuchsia-600" : "border-fuchsia-500/30 text-fuchsia-400 hover:bg-fuchsia-500/10"}`}
+                          onClick={() => setSelectedVariant("B")}
+                          disabled={abType === "hook_test" && !hookB.trim()}
+                        >
+                          {selectedVariant === "B" ? "✓ Variant B selected" : "Select Variant B for Post"}
+                        </Button>
+                      </div>
+                      {!selectedVariant && (
+                        <p className="text-[11px] text-amber-400 flex items-center gap-1.5">
+                          <AlertTriangle size={11} /> Pick a variant before posting — only the selected one will publish.
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
