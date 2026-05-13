@@ -2425,6 +2425,35 @@ Deno.serve(async (req) => {
           Object.values(platformExternalIds)[0] ||
           null;
 
+        // ── Post Health Score (0–100) ──
+        // Mirrors the breakdown shown in the Review Modal so manual + automated
+        // posts can be compared apples-to-apples in the History UI.
+        const placeholderRe = /\{\{|\}\}|\[city\]|\[temperature\]|\bTODO\b|\bLorem ipsum\b|undefined|\bNaN\b/i;
+        const captionPresent = !!caption && caption.trim().length > 0;
+        const captionClean = captionPresent && !placeholderRe.test(caption);
+        const ctaIncluded = (post.include_voiceover === true) || /subscribe|notification|bell/i.test(caption || "");
+        const isVideoPlatform = ["youtube", "tiktok", "instagram", "linkedin"].includes(post.platform);
+        const breakdownItems = [
+          { key: "video", label: "Video asset", earned: postStatus === "posted" && isVideoPlatform ? 15 : 0, max: 15 },
+          { key: "render_time", label: "Real render (>2s)", earned: postStatus === "posted" && isVideoPlatform ? 10 : 0, max: 10 },
+          { key: "voice", label: "Voiceover audio", earned: voiceUrl ? 15 : 0, max: 15 },
+          { key: "audio_duration", label: "Audio duration", earned: voiceUrl ? 5 : 0, max: 5 },
+          { key: "caption", label: "Caption", earned: captionPresent ? 10 : 0, max: 10 },
+          { key: "caption_clean", label: "No placeholders", earned: captionClean ? 10 : 0, max: 10 },
+          { key: "platforms", label: "Target platform", earned: post.platform ? 10 : 0, max: 10 },
+          { key: "aspect", label: "Vertical (9:16)", earned: isVideoPlatform ? 5 : 0, max: 5 },
+          { key: "pipeline", label: "Pipeline clean", earned: postStatus === "posted" ? 10 : 0, max: 10 },
+          { key: "cta", label: "Subscribe CTA", earned: ctaIncluded ? 5 : 0, max: 5 },
+          { key: "duration", label: "Duration 12–15s", earned: isVideoPlatform && postStatus === "posted" ? 5 : 0, max: 5 },
+        ];
+        const healthScore = breakdownItems.reduce((s, i) => s + i.earned, 0);
+        const healthTier =
+          healthScore >= 85 ? "excellent" :
+          healthScore >= 70 ? "good" :
+          healthScore >= 50 ? "needs_improvement" : "do_not_post";
+        const healthBreakdown = { score: healthScore, tier: healthTier, items: breakdownItems };
+        console.log(`[process] post ${post.id}: health_score=${healthScore} (${healthTier})`);
+
         const { data: historyRow, error: historyErr } = await supabase.from("post_history").insert({
           status: historyStatus, platform: post.platform, city: weather.city,
           temperature: weather.temperature, condition: weather.condition,
@@ -2438,6 +2467,8 @@ Deno.serve(async (req) => {
           experiment_id: experimentCtx?.id ?? null,
           experiment_variant: experimentCtx?.variant ?? null,
           visual_metadata: visualMeta,
+          health_score: healthScore,
+          health_breakdown: healthBreakdown,
         }).select("id").single();
         if (historyErr) {
           console.error(`[process] post_history insert failed for ${post.id}:`, historyErr);
