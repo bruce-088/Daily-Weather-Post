@@ -217,23 +217,17 @@ export interface PublishBundleResult {
   results?: Array<{ platform: string; success: boolean; id?: string | null; url?: string | null; error?: string }>;
 }
 
-/** Publish a locked preview bundle to one or more platforms.
- * The edge function downloads the EXACT preview asset (no regeneration). */
+/** GUARDRAIL: Direct bundle publish is no longer allowed from the UI.
+ * All manual posts (including bundle publishes) must flow through the job
+ * pipeline via `triggerManualPipelinePost`, which references the locked
+ * bundle id via debug_trace.preview_bundle_id. */
 export async function publishPreviewBundle(
-  bundleId: string,
-  platforms: string[],
+  _bundleId: string,
+  _platforms: string[],
 ): Promise<PublishBundleResult> {
-  const { data, error } = await supabase.functions.invoke("publish-preview-bundle", {
-    body: { bundle_id: bundleId, platforms },
-  });
-  if (error) return { success: false, message: error.message || "Failed to publish preview" };
-  return {
-    success: !!data?.success,
-    message: data?.message || data?.error || "Unknown response",
-    bundle_id: data?.bundle_id,
-    visual_source: data?.visual_source,
-    results: data?.results,
-  };
+  const msg = "Publishing outside pipeline is not allowed — use triggerManualPipelinePost()";
+  console.error("[guardrail] " + msg);
+  throw new Error(msg);
 }
 
 export async function uploadPreviewVideo(
