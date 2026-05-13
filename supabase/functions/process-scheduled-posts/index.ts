@@ -527,12 +527,14 @@ function estimateMp3DurationSeconds(byteLength: number | null | undefined): numb
  */
 const VOICE_START = 0.5;        // seconds — when voice element starts
 const VOICE_TAIL_PAD = 1.5;     // seconds — silence held after voice ends
-const MIN_VIDEO_DURATION = 10;  // seconds — hard floor
+const MIN_VIDEO_DURATION = 12;  // seconds — retention sweet spot floor
+const MAX_VIDEO_DURATION = 15;  // seconds — short enough to invite re-watch loops
 
 function computeVideoDuration(audioDurationSec: number | null | undefined): number {
   const audio = typeof audioDurationSec === "number" && isFinite(audioDurationSec) && audioDurationSec > 0 ? audioDurationSec : 0;
   const target = audio > 0 ? VOICE_START + audio + VOICE_TAIL_PAD : MIN_VIDEO_DURATION;
-  return Math.max(target, MIN_VIDEO_DURATION);
+  // Clamp into the 12–15s retention window so the video loops well.
+  return Math.min(MAX_VIDEO_DURATION, Math.max(MIN_VIDEO_DURATION, target));
 }
 
 function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | null, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null): object {
