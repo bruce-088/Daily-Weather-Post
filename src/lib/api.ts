@@ -538,7 +538,10 @@ export async function triggerManualPipelinePost(
   const scheduledAtIso = new Date(Date.now() + 30 * 1000).toISOString();
   const cityName = city.state ? `${city.name}, ${city.state}` : city.name;
 
-  const debugTrace: Record<string, unknown> = { source: "manual_post" };
+  const debugTrace: Record<string, unknown> = {
+    source: "manual_post",
+    execution_mode: "pipeline",
+  };
   if (opts?.bundleId) debugTrace.preview_bundle_id = opts.bundleId;
 
   const { data: inserted, error: insErr } = await supabase
