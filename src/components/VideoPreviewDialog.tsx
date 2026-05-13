@@ -158,6 +158,16 @@ export function VideoPreviewDialog({
     [platformStates],
   );
 
+  // Post Health Score (0–100). Recomputed whenever preview, platforms or voice change.
+  const health = useMemo(
+    () =>
+      calculatePreviewHealth(preview, postablePlatforms, {
+        voiceRequested: !!voice?.enabled,
+        ctaEnabled: true,
+      }),
+    [preview, postablePlatforms, voice?.enabled],
+  );
+
   const handleGenerate = async (variation = false) => {
     setGenerating(true);
     setGenStage("video");
