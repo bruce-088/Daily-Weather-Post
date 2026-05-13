@@ -629,6 +629,74 @@ export function VideoPreviewDialog({
                   )}
                 </div>
               )}
+
+              {/* A/B testing — gated by FeatureFlags.ENABLE_AB_TESTING */}
+              {isPostFlow && FeatureFlags.ENABLE_AB_TESTING && !(phase === "posting" || phase === "complete") && (
+                <div className="rounded-xl border border-sky-500/20 bg-sky-500/5 px-4 py-3 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="ab-toggle" className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                        🧪 Create A/B variants
+                      </Label>
+                      <p className="text-[11px] text-muted-foreground">
+                        Publishes two variants through the same pipeline for safe head-to-head testing.
+                      </p>
+                    </div>
+                    <Switch id="ab-toggle" checked={abEnabled} onCheckedChange={setAbEnabled} />
+                  </div>
+
+                  {abEnabled && (
+                    <div className="space-y-3 pt-1 border-t border-sky-500/15">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-3">
+                        <div className="space-y-1">
+                          <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                            Experiment type
+                          </Label>
+                          <Select value={abType} onValueChange={(v) => setAbType(v as ExperimentType)}>
+                            <SelectTrigger className="h-9 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {(Object.keys(EXPERIMENT_TYPE_LABELS) as ExperimentType[]).map((t) => (
+                                <SelectItem key={t} value={t} className="text-xs">
+                                  {EXPERIMENT_TYPE_LABELS[t]}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                            Rollout mode
+                          </Label>
+                          <Select value={abRollout} onValueChange={(v) => setAbRollout(v as RolloutMode)}>
+                            <SelectTrigger className="h-9 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="manual_select_winner" className="text-xs">
+                                Manual: I pick the winner
+                              </SelectItem>
+                              <SelectItem value="auto_rotate_variants" className="text-xs">
+                                Auto: rotate to winner
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground italic">
+                        {EXPERIMENT_TYPE_DESCRIPTIONS[abType]}
+                      </p>
+                      <ABComparePanel
+                        type={abType}
+                        variantA={variantPair.variantA}
+                        variantB={variantPair.variantB}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Lock status + AI Tip — shown when preview is ready to post */}
               {isPostFlow && preview?.bundle_id && !bundleInvalidated && (
                 <div className="space-y-1.5 pt-1">
