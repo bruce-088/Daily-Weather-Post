@@ -606,7 +606,7 @@ export function VideoPreviewDialog({
               )}
 
               {/* Post Health Score — quality gate (0–100) */}
-              {isPostFlow && (
+              {isPostFlow && FeatureFlags.ENABLE_POST_HEALTH_SCORE && (
                 <div
                   className={`rounded-xl border px-4 py-3 space-y-2.5 ${
                     health.tier === "excellent"
