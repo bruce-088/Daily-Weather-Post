@@ -540,6 +540,19 @@ export async function triggerManualPipelinePost(
     onPhase?: (phase: "creating" | "queued" | "running" | "publishing", detail?: string) => void;
     bundleId?: string | null;
     timeoutMs?: number;
+    /**
+     * Optional A/B experiment metadata. When provided, creates an
+     * `experiments` row first and tags the scheduled_post with
+     * experiment_id + variant_id so the resolver can score it later.
+     * Only the selected variant publishes (Phase 1: manual winner mode).
+     */
+    experiment?: {
+      type: "hook_test" | "cta_test" | "background_test";
+      selectedVariant: "A" | "B";
+      variantA: Record<string, unknown>;
+      variantB: Record<string, unknown>;
+      rolloutMode?: "manual_select_winner" | "auto_rotate_variants";
+    } | null;
   }
 ): Promise<ManualPipelineResult> {
   const { data: { user } } = await supabase.auth.getUser();
@@ -557,19 +570,60 @@ export async function triggerManualPipelinePost(
   };
   if (opts?.bundleId) debugTrace.preview_bundle_id = opts.bundleId;
 
+  // Phase 1: A/B in manual-winner mode — only the selected variant publishes.
+  // We still create an `experiments` row so analytics can attribute the post
+  // to a hook_test / cta_test / background_test for later comparison.
+  let experimentId: string | null = null;
+  if (opts?.experiment) {
+    const e = opts.experiment;
+    const { data: exp } = await supabase
+      .from("experiments")
+      .insert({
+        user_id: user.id,
+        city: cityName,
+        city_id: city.id ?? null,
+        platform,
+        experiment_type: e.type,
+        variable_tested: e.type,
+        rollout_mode: e.rolloutMode ?? "manual_select_winner",
+        scheduled_slot: "manual",
+        variant_a_meta: e.variantA as any,
+        variant_b_meta: e.variantB as any,
+        status: "gathering_data",
+        conclude_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        test_type: "content",
+      })
+      .select("id")
+      .maybeSingle();
+    experimentId = exp?.id ?? null;
+    debugTrace.source = "manual_post_ab";
+    debugTrace.ab_test_variant = e.selectedVariant;
+    debugTrace.experiment_id = experimentId;
+    debugTrace.experiment_type = e.type;
+    debugTrace.variant_payload = e.selectedVariant === "A" ? e.variantA : e.variantB;
+    debugTrace.rollout_mode = e.rolloutMode ?? "manual_select_winner";
+  }
+
+  const insertPayload: Record<string, unknown> = {
+    user_id: user.id,
+    city: cityName,
+    city_id: city.id ?? null,
+    scheduled_at: scheduledAtIso,
+    platform,
+    status: "pending",
+    include_voiceover: !!voice?.enabled,
+    debug_trace: debugTrace,
+  };
+  if (caption) insertPayload.caption = caption;
+  if (opts?.experiment && experimentId) {
+    insertPayload.experiment_id = experimentId;
+    insertPayload.experiment_variant = opts.experiment.selectedVariant;
+    insertPayload.variant_id = opts.experiment.selectedVariant;
+  }
+
   const { data: inserted, error: insErr } = await supabase
     .from("scheduled_posts")
-    .insert({
-      user_id: user.id,
-      city: cityName,
-      city_id: city.id ?? null,
-      scheduled_at: scheduledAtIso,
-      platform,
-      status: "pending",
-      include_voiceover: !!voice?.enabled,
-      ...(caption ? { caption } : {}),
-      debug_trace: debugTrace as any,
-    })
+    .insert(insertPayload as any)
     .select("id")
     .maybeSingle();
   if (insErr || !inserted?.id) {
@@ -582,7 +636,7 @@ export async function triggerManualPipelinePost(
     city: cityName,
     platform,
     scheduledFor: scheduledAtIso,
-    source: "manual-post-now",
+    source: opts?.experiment ? `manual-ab-${opts.experiment.selectedVariant}` : "manual-post-now",
   });
 
   opts?.onPhase?.("queued", "Queued — running pipeline…");
