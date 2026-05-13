@@ -6,11 +6,21 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Play, Upload, RefreshCw, X, Loader2, Pencil, Eye, Download, Send, Mic, Pause, Lock, AlertTriangle, Sparkles, Volume2, VolumeX } from "lucide-react";
-import { generatePreview, uploadPreviewVideo, triggerManualPipelinePost, publishPreviewBundle, triggerDailyPost } from "@/lib/api";
+import { generatePreview, uploadPreviewVideo, triggerManualPipelinePost, publishPreviewBundle, triggerDailyPost, triggerManualABPost } from "@/lib/api";
 import type { PreviewResult, VoiceOptions, CityContext } from "@/lib/api";
 import { calculatePreviewHealth } from "@/lib/postHealth";
 import { FeatureFlags } from "@/lib/featureFlags";
 import { DebugLabels } from "@/components/DebugLabels";
+import { ABComparePanel } from "@/components/ABComparePanel";
+import {
+  buildVariantPair,
+  EXPERIMENT_TYPE_LABELS,
+  EXPERIMENT_TYPE_DESCRIPTIONS,
+  type ExperimentType,
+  type RolloutMode,
+} from "@/lib/abVariants";
+import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { Check, XCircle } from "lucide-react";
 import {
@@ -72,6 +82,12 @@ export function VideoPreviewDialog({
   const [previewCity, setPreviewCity] = useState<{ id?: string | null; name?: string | null } | null>(null);
   const [bundleInvalidated, setBundleInvalidated] = useState(false);
   const [invalidationReason, setInvalidationReason] = useState<string | null>(null);
+
+  // A/B testing — gated by FeatureFlags.ENABLE_AB_TESTING
+  const [abEnabled, setAbEnabled] = useState(false);
+  const [abType, setAbType] = useState<ExperimentType>("hook_test");
+  const [abRollout, setAbRollout] = useState<RolloutMode>("manual_select_winner");
+  const variantPair = useMemo(() => buildVariantPair(abType), [abType]);
 
   const isPostFlow = !!(postPlatforms && postPlatforms.length > 0);
 
