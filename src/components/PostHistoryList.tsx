@@ -27,6 +27,7 @@ import {
 import type { PostHistoryItem } from "@/lib/api";
 import { triggerManualPipelinePost } from "@/lib/api";
 import { toast } from "sonner";
+import { DebugLabels } from "@/components/DebugLabels";
 
 interface PlatformBrand {
   icon: React.ElementType;
