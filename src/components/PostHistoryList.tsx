@@ -124,13 +124,19 @@ export function PostHistoryList({ posts, loading, onReuse, onChanged }: PostHist
       return;
     }
     setRepostingId(post.id);
-    const res = await triggerDailyPost(undefined, [post.platform]);
-    setRepostingId(null);
-    if (res.success) {
-      toast.success(`Reposting to ${PLATFORM_BRAND[post.platform]?.label || post.platform}…`);
-      onChanged?.();
-    } else {
-      toast.error(res.message || "Repost failed");
+    toast.info(`Creating job for ${PLATFORM_BRAND[post.platform]?.label || post.platform}…`);
+    try {
+      const res = await triggerManualPipelinePost(post.platform, undefined, null, post.caption ?? null);
+      if (res.success) {
+        toast.success(res.message || `Reposted to ${PLATFORM_BRAND[post.platform]?.label || post.platform}`);
+        onChanged?.();
+      } else {
+        toast.error(res.message || "Repost failed");
+      }
+    } catch (e: any) {
+      toast.error(e?.message || "Repost failed");
+    } finally {
+      setRepostingId(null);
     }
   };
 
@@ -140,13 +146,19 @@ export function PostHistoryList({ posts, loading, onReuse, onChanged }: PostHist
       return;
     }
     setRetryingId(post.id);
-    const res = await triggerDailyPost(undefined, [post.platform]);
-    setRetryingId(null);
-    if (res.success) {
-      toast.success(`Retrying ${PLATFORM_BRAND[post.platform]?.label || post.platform}…`);
-      onChanged?.();
-    } else {
-      toast.error(res.message || "Retry failed");
+    toast.info(`Creating job for ${PLATFORM_BRAND[post.platform]?.label || post.platform}…`);
+    try {
+      const res = await triggerManualPipelinePost(post.platform, undefined, null, post.caption ?? null);
+      if (res.success) {
+        toast.success(res.message || `Retried ${PLATFORM_BRAND[post.platform]?.label || post.platform}`);
+        onChanged?.();
+      } else {
+        toast.error(res.message || "Retry failed");
+      }
+    } catch (e: any) {
+      toast.error(e?.message || "Retry failed");
+    } finally {
+      setRetryingId(null);
     }
   };
 
