@@ -51,4 +51,7 @@ export const FeatureFlags = {
   get ENABLE_AB_TESTING() {
     return isFeatureEnabled("ENABLE_AB_TESTING");
   },
+  get SHOW_DEBUG_LABELS() {
+    return isFeatureEnabled("SHOW_DEBUG_LABELS");
+  },
 };
