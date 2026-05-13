@@ -295,7 +295,20 @@ export interface PostHistoryItem {
   voice_status?: string | null;
   voice_error?: string | null;
   voice_attempts?: number | null;
-  debug_trace?: { steps?: Array<{ ts: string; step: string; detail?: any }>; captured_at?: string } | null;
+  debug_trace?: {
+    steps?: Array<{ ts: string; step: string; detail?: any }>;
+    captured_at?: string;
+    execution_mode?: "pipeline" | "legacy" | string;
+    ab_test_variant?: "A" | "B" | string | null;
+    render_engine?: string | null;
+    source?: string;
+    [k: string]: any;
+  } | null;
+  // Convenience pass-throughs for the debug label row
+  external_id?: string | null;
+  health_score?: number | null;
+  published_visual_source?: string | null;
+  experiment_variant?: string | null;
 }
 
 export async function fetchPostHistory(limit = 10, offset = 0): Promise<PostHistoryItem[]> {
@@ -538,7 +551,10 @@ export async function triggerManualPipelinePost(
   const scheduledAtIso = new Date(Date.now() + 30 * 1000).toISOString();
   const cityName = city.state ? `${city.name}, ${city.state}` : city.name;
 
-  const debugTrace: Record<string, unknown> = { source: "manual_post" };
+  const debugTrace: Record<string, unknown> = {
+    source: "manual_post",
+    execution_mode: "pipeline",
+  };
   if (opts?.bundleId) debugTrace.preview_bundle_id = opts.bundleId;
 
   const { data: inserted, error: insErr } = await supabase

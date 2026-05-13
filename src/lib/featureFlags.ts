@@ -12,12 +12,16 @@
 export type FeatureFlagName =
   | "USE_PIPELINE_FOR_MANUAL_POSTS"
   | "ENABLE_POST_HEALTH_SCORE"
-  | "ENABLE_AB_TESTING";
+  | "ENABLE_AB_TESTING"
+  | "SHOW_DEBUG_LABELS";
 
 const DEFAULTS: Record<FeatureFlagName, boolean> = {
   USE_PIPELINE_FOR_MANUAL_POSTS: false,
   ENABLE_POST_HEALTH_SCORE: false,
   ENABLE_AB_TESTING: false,
+  // On by default for now (preview/admin mode). Disable via
+  // localStorage.setItem("ff:SHOW_DEBUG_LABELS","false") to silence pills.
+  SHOW_DEBUG_LABELS: true,
 };
 
 function readOverride(name: FeatureFlagName): boolean | null {
@@ -46,5 +50,8 @@ export const FeatureFlags = {
   },
   get ENABLE_AB_TESTING() {
     return isFeatureEnabled("ENABLE_AB_TESTING");
+  },
+  get SHOW_DEBUG_LABELS() {
+    return isFeatureEnabled("SHOW_DEBUG_LABELS");
   },
 };

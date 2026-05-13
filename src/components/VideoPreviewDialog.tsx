@@ -10,6 +10,7 @@ import { generatePreview, uploadPreviewVideo, triggerManualPipelinePost, publish
 import type { PreviewResult, VoiceOptions, CityContext } from "@/lib/api";
 import { calculatePreviewHealth } from "@/lib/postHealth";
 import { FeatureFlags } from "@/lib/featureFlags";
+import { DebugLabels } from "@/components/DebugLabels";
 import { Progress } from "@/components/ui/progress";
 import { Check, XCircle } from "lucide-react";
 import {
@@ -677,6 +678,18 @@ export function VideoPreviewDialog({
                 </div>
               )}
             </>
+          )}
+
+          {/* Debug execution labels — pipeline vs legacy, A/B variant, render engine, voice, health. */}
+          {isPostFlow && (preview?.video_url || preview?.image_url) && (
+            <DebugLabels
+              size="xs"
+              mode={FeatureFlags.USE_PIPELINE_FOR_MANUAL_POSTS ? "pipeline" : "legacy"}
+              renderEngine={preview?.visual_source ?? null}
+              voiceOn={!!voice?.enabled}
+              healthScore={FeatureFlags.ENABLE_POST_HEALTH_SCORE ? health.score : undefined}
+              className="pt-1"
+            />
           )}
         </div>
 
