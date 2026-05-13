@@ -142,30 +142,19 @@ function applyCityContext(body: Record<string, any>, city?: CityContext | null) 
   if (city.state) body.state = city.state;
 }
 
+// GUARDRAIL: Direct publish to daily-weather-post is no longer allowed from
+// the UI. All manual posts must go through `triggerManualPipelinePost` so the
+// job pipeline (generate_content → generate_voice → render_video → publish_post)
+// is the single execution path.
 export async function triggerDailyPost(
-  timePeriod?: string,
-  platforms?: string[],
-  voice?: VoiceOptions,
-  city?: CityContext | null,
+  _timePeriod?: string,
+  _platforms?: string[],
+  _voice?: VoiceOptions,
+  _city?: CityContext | null,
 ): Promise<{ success: boolean; message: string }> {
-  const body: Record<string, any> = {};
-  if (timePeriod) body.time_period = timePeriod;
-  if (platforms && platforms.length > 0) body.platforms = platforms;
-  if (voice?.enabled) body.voice = voice;
-  applyCityContext(body, city);
-
-  const { data, error } = await supabase.functions.invoke("daily-weather-post", {
-    body: Object.keys(body).length > 0 ? body : undefined,
-  });
-
-  if (error) {
-    return { success: false, message: error.message || "Failed to trigger post" };
-  }
-
-  return {
-    success: data?.success ?? false,
-    message: data?.message || data?.error || "Unknown response",
-  };
+  const msg = "Publishing outside pipeline is not allowed — use triggerManualPipelinePost()";
+  console.error("[guardrail] " + msg);
+  throw new Error(msg);
 }
 
 export interface PreviewResult {
