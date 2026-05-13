@@ -532,23 +532,22 @@ export async function triggerManualPipelinePost(
   const scheduledAtIso = new Date(Date.now() + 30 * 1000).toISOString();
   const cityName = city.state ? `${city.name}, ${city.state}` : city.name;
 
-  const insertPayload: Record<string, unknown> = {
-    user_id: user.id,
-    city: cityName,
-    city_id: city.id ?? null,
-    scheduled_at: scheduledAtIso,
-    platform,
-    status: "pending",
-    include_voiceover: !!voice?.enabled,
-    ...(caption ? { caption } : {}),
-    ...(opts?.bundleId
-      ? { debug_trace: { source: "manual_post", preview_bundle_id: opts.bundleId } }
-      : { debug_trace: { source: "manual_post" } }),
-  };
+  const debugTrace: Record<string, unknown> = { source: "manual_post" };
+  if (opts?.bundleId) debugTrace.preview_bundle_id = opts.bundleId;
 
   const { data: inserted, error: insErr } = await supabase
     .from("scheduled_posts")
-    .insert(insertPayload)
+    .insert({
+      user_id: user.id,
+      city: cityName,
+      city_id: city.id ?? null,
+      scheduled_at: scheduledAtIso,
+      platform,
+      status: "pending",
+      include_voiceover: !!voice?.enabled,
+      ...(caption ? { caption } : {}),
+      debug_trace: debugTrace as any,
+    })
     .select("id")
     .maybeSingle();
   if (insErr || !inserted?.id) {
