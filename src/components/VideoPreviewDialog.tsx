@@ -8,6 +8,9 @@ import { toast } from "sonner";
 import { Play, Upload, RefreshCw, X, Loader2, Pencil, Eye, Download, Send, Mic, Pause, Lock, AlertTriangle, Sparkles, Volume2, VolumeX } from "lucide-react";
 import { generatePreview, uploadPreviewVideo, triggerManualPipelinePost } from "@/lib/api";
 import type { PreviewResult, VoiceOptions, CityContext } from "@/lib/api";
+import { calculatePreviewHealth } from "@/lib/postHealth";
+import { Progress } from "@/components/ui/progress";
+import { Check, XCircle } from "lucide-react";
 import {
   PostProgressPanel,
   buildInitialStates,
@@ -153,6 +156,16 @@ export function VideoPreviewDialog({
         .filter((p) => p.status === "ready" || p.status === "requires-video")
         .map((p) => p.id),
     [platformStates],
+  );
+
+  // Post Health Score (0–100). Recomputed whenever preview, platforms or voice change.
+  const health = useMemo(
+    () =>
+      calculatePreviewHealth(preview, postablePlatforms, {
+        voiceRequested: !!voice?.enabled,
+        ctaEnabled: true,
+      }),
+    [preview, postablePlatforms, voice?.enabled],
   );
 
   const handleGenerate = async (variation = false) => {
@@ -570,6 +583,78 @@ export function VideoPreviewDialog({
                   <span className="font-medium">Preview stale: regenerate before posting.</span>
                 </div>
               )}
+
+              {/* Post Health Score — quality gate (0–100) */}
+              {isPostFlow && (
+                <div
+                  className={`rounded-xl border px-4 py-3 space-y-2.5 ${
+                    health.tier === "excellent"
+                      ? "border-emerald-500/30 bg-emerald-500/5"
+                      : health.tier === "good"
+                      ? "border-sky-500/30 bg-sky-500/5"
+                      : health.tier === "needs_improvement"
+                      ? "border-yellow-500/30 bg-yellow-500/5"
+                      : "border-red-500/40 bg-red-500/10"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-foreground uppercase tracking-wide">
+                        Post Health Score
+                      </span>
+                      <Badge
+                        className={`text-[10px] uppercase tracking-wide ${
+                          health.tier === "excellent"
+                            ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                            : health.tier === "good"
+                            ? "bg-sky-500/15 text-sky-400 border-sky-500/30"
+                            : health.tier === "needs_improvement"
+                            ? "bg-yellow-500/15 text-yellow-400 border-yellow-500/30"
+                            : "bg-red-500/15 text-red-400 border-red-500/30"
+                        }`}
+                      >
+                        {health.tierEmoji} {health.tierLabel}
+                      </Badge>
+                    </div>
+                    <span className="text-lg font-mono font-bold text-foreground">
+                      {health.score}
+                      <span className="text-xs text-muted-foreground font-normal">/100</span>
+                    </span>
+                  </div>
+                  <Progress value={health.score} className="h-1.5" />
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1 pt-1">
+                    {health.breakdown.map((item) => (
+                      <div
+                        key={item.key}
+                        className="flex items-center gap-1.5 text-[11px]"
+                        title={item.detail || item.label}
+                      >
+                        {item.ok ? (
+                          <Check size={11} className="text-emerald-400 shrink-0" />
+                        ) : (
+                          <XCircle size={11} className="text-red-400/80 shrink-0" />
+                        )}
+                        <span
+                          className={item.ok ? "text-foreground/80" : "text-muted-foreground line-through"}
+                        >
+                          {item.label}
+                        </span>
+                        <span className="text-muted-foreground/70 ml-auto font-mono">
+                          {item.earned}/{item.max}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  {health.blocked && (
+                    <div className="flex items-center gap-2 pt-1 text-[11px] text-red-400 border-t border-red-500/20">
+                      <AlertTriangle size={12} />
+                      <span className="font-medium">
+                        Post quality too low — fix before publishing (min score 60).
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           )}
         </div>
@@ -621,9 +706,11 @@ export function VideoPreviewDialog({
                   <Button
                     size="sm"
                     onClick={handlePostToPlatforms}
-                    disabled={isBusy || blockingError || postablePlatforms.length === 0 || bundleInvalidated}
+                    disabled={isBusy || blockingError || postablePlatforms.length === 0 || bundleInvalidated || health.blocked}
                     title={
-                      bundleInvalidated
+                      health.blocked
+                        ? `Post quality too low (${health.score}/100) — fix before publishing`
+                        : bundleInvalidated
                         ? (invalidationReason || "Regenerate preview before posting")
                         : blockingError
                         ? "Resolve connection errors before posting"

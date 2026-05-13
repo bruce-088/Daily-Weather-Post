@@ -663,6 +663,8 @@ export type Database = {
           experiment_id: string | null
           experiment_variant: string | null
           external_id: string | null
+          health_breakdown: Json | null
+          health_score: number | null
           id: string
           image_url: string | null
           last_attempt_at: string | null
@@ -695,6 +697,8 @@ export type Database = {
           experiment_id?: string | null
           experiment_variant?: string | null
           external_id?: string | null
+          health_breakdown?: Json | null
+          health_score?: number | null
           id?: string
           image_url?: string | null
           last_attempt_at?: string | null
@@ -727,6 +731,8 @@ export type Database = {
           experiment_id?: string | null
           experiment_variant?: string | null
           external_id?: string | null
+          health_breakdown?: Json | null
+          health_score?: number | null
           id?: string
           image_url?: string | null
           last_attempt_at?: string | null
