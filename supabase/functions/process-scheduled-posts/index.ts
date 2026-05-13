@@ -2466,6 +2466,7 @@ Deno.serve(async (req) => {
           debug_trace: persistedTrace,
           experiment_id: experimentCtx?.id ?? null,
           experiment_variant: experimentCtx?.variant ?? null,
+          variant_id: (post as any).variant_id ?? experimentCtx?.variant ?? null,
           visual_metadata: visualMeta,
           health_score: healthScore,
           health_breakdown: healthBreakdown,

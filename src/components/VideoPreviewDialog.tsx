@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Play, Upload, RefreshCw, X, Loader2, Pencil, Eye, Download, Send, Mic, Pause, Lock, AlertTriangle, Sparkles, Volume2, VolumeX } from "lucide-react";
-import { generatePreview, uploadPreviewVideo, triggerManualPipelinePost, publishPreviewBundle, triggerDailyPost, triggerManualABPost } from "@/lib/api";
+import { generatePreview, uploadPreviewVideo, triggerManualPipelinePost, publishPreviewBundle, triggerDailyPost } from "@/lib/api";
 import type { PreviewResult, VoiceOptions, CityContext } from "@/lib/api";
 import { calculatePreviewHealth } from "@/lib/postHealth";
 import { FeatureFlags } from "@/lib/featureFlags";
@@ -86,8 +86,28 @@ export function VideoPreviewDialog({
   // A/B testing — gated by FeatureFlags.ENABLE_AB_TESTING
   const [abEnabled, setAbEnabled] = useState(false);
   const [abType, setAbType] = useState<ExperimentType>("hook_test");
-  const [abRollout, setAbRollout] = useState<RolloutMode>("manual_select_winner");
-  const variantPair = useMemo(() => buildVariantPair(abType), [abType]);
+  // Phase 1: rollout mode is locked to manual winner selection.
+  const abRollout: RolloutMode = "manual_select_winner";
+  const defaultPair = useMemo(() => buildVariantPair(abType), [abType]);
+  // Editable hooks for hook_test; canned values for other types.
+  const [hookA, setHookA] = useState<string>(defaultPair.variantA.hook_line || "");
+  const [hookB, setHookB] = useState<string>(defaultPair.variantB.hook_line || "");
+  const [selectedVariant, setSelectedVariant] = useState<"A" | "B" | null>(null);
+  useEffect(() => {
+    setHookA(defaultPair.variantA.hook_line || "");
+    setHookB(defaultPair.variantB.hook_line || "");
+    setSelectedVariant(null);
+  }, [abType, defaultPair]);
+  useEffect(() => {
+    if (!abEnabled) setSelectedVariant(null);
+  }, [abEnabled]);
+  const variantPair = useMemo(() => {
+    if (abType !== "hook_test") return defaultPair;
+    return {
+      variantA: { ...defaultPair.variantA, hook_line: hookA, label: "Hook A" },
+      variantB: { ...defaultPair.variantB, hook_line: hookB, label: "Hook B" },
+    };
+  }, [abType, defaultPair, hookA, hookB]);
 
   const isPostFlow = !!(postPlatforms && postPlatforms.length > 0);
 
@@ -275,34 +295,19 @@ export function VideoPreviewDialog({
       });
       const captionToUse = (editedCaption || preview?.caption || "").trim() || null;
 
-      if (useAB) {
-        const result = await triggerManualABPost({
-          platform: platformId,
-          voice,
-          city: city ?? null,
-          caption: captionToUse,
-          experimentType: abType,
-          rolloutMode: abRollout,
-          variantA: variantPair.variantA,
-          variantB: variantPair.variantB,
-          scheduledSlot: "manual",
-          bundleId: preview?.bundle_id && !bundleInvalidated ? preview.bundle_id : null,
-        });
-        if (result.success) {
-          updatePlatform(platformId, {
-            status: "success",
-            message: result.message || "A/B variants queued",
-          });
-        } else {
-          updatePlatform(platformId, {
-            status: "failed",
-            message: result.message || "A/B post failed",
-          });
-        }
-        return;
-      }
+      // Phase 1: A/B publishes ONLY the manually-selected variant. Both
+      // variant payloads are recorded on the experiment row for analytics.
+      const experimentArg = useAB && selectedVariant
+        ? {
+            type: abType,
+            selectedVariant,
+            variantA: variantPair.variantA as Record<string, unknown>,
+            variantB: variantPair.variantB as Record<string, unknown>,
+            rolloutMode: abRollout,
+          }
+        : null;
 
-      if (usePipeline) {
+      if (usePipeline || useAB) {
         const result = await triggerManualPipelinePost(
           platformId,
           voice,
@@ -310,13 +315,15 @@ export function VideoPreviewDialog({
           captionToUse,
           {
             bundleId: preview?.bundle_id && !bundleInvalidated ? preview.bundle_id : null,
+            experiment: experimentArg,
             onPhase: (_phase, detail) => {
               updatePlatform(platformId, { status: "posting", message: detail || "Running pipeline…" });
             },
           },
         );
         if (result.success) {
-          updatePlatform(platformId, { status: "success", message: result.message || "Posted successfully" });
+          const tag = useAB ? ` (Variant ${selectedVariant})` : "";
+          updatePlatform(platformId, { status: "success", message: (result.message || "Posted successfully") + tag });
         } else {
           updatePlatform(platformId, { status: "failed", message: result.message || "Pipeline failed" });
         }
@@ -669,29 +676,81 @@ export function VideoPreviewDialog({
                           <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
                             Rollout mode
                           </Label>
-                          <Select value={abRollout} onValueChange={(v) => setAbRollout(v as RolloutMode)}>
-                            <SelectTrigger className="h-9 text-xs">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="manual_select_winner" className="text-xs">
-                                Manual: I pick the winner
-                              </SelectItem>
-                              <SelectItem value="auto_rotate_variants" className="text-xs">
-                                Auto: rotate to winner
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
+                          <div className="h-9 rounded-md border border-border bg-muted/40 px-3 flex items-center text-xs text-muted-foreground">
+                            Manual winner selection
+                          </div>
                         </div>
                       </div>
                       <p className="text-[11px] text-muted-foreground italic">
                         {EXPERIMENT_TYPE_DESCRIPTIONS[abType]}
                       </p>
+
+                      {/* Hook test: editable A/B text inputs */}
+                      {abType === "hook_test" && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <Label htmlFor="hook-a" className="text-[11px] uppercase tracking-wide text-sky-400">
+                              Hook A — first voiceover line
+                            </Label>
+                            <Textarea
+                              id="hook-a"
+                              value={hookA}
+                              onChange={(e) => setHookA(e.target.value)}
+                              className="min-h-[60px] text-xs bg-background/40 border-sky-500/20"
+                              placeholder="e.g. Here's your forecast."
+                              maxLength={140}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label htmlFor="hook-b" className="text-[11px] uppercase tracking-wide text-fuchsia-400">
+                              Hook B — first voiceover line
+                            </Label>
+                            <Textarea
+                              id="hook-b"
+                              value={hookB}
+                              onChange={(e) => setHookB(e.target.value)}
+                              className="min-h-[60px] text-xs bg-background/40 border-fuchsia-500/20"
+                              placeholder="e.g. Don't leave the house yet —"
+                              maxLength={140}
+                            />
+                          </div>
+                        </div>
+                      )}
+
                       <ABComparePanel
                         type={abType}
                         variantA={variantPair.variantA}
                         variantB={variantPair.variantB}
                       />
+
+                      {/* Manual winner selection — only the chosen variant publishes */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button
+                          type="button"
+                          variant={selectedVariant === "A" ? "default" : "outline"}
+                          size="sm"
+                          className={`text-xs ${selectedVariant === "A" ? "bg-sky-500 hover:bg-sky-600" : "border-sky-500/30 text-sky-400 hover:bg-sky-500/10"}`}
+                          onClick={() => setSelectedVariant("A")}
+                          disabled={abType === "hook_test" && !hookA.trim()}
+                        >
+                          {selectedVariant === "A" ? "✓ Variant A selected" : "Select Variant A for Post"}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={selectedVariant === "B" ? "default" : "outline"}
+                          size="sm"
+                          className={`text-xs ${selectedVariant === "B" ? "bg-fuchsia-500 hover:bg-fuchsia-600" : "border-fuchsia-500/30 text-fuchsia-400 hover:bg-fuchsia-500/10"}`}
+                          onClick={() => setSelectedVariant("B")}
+                          disabled={abType === "hook_test" && !hookB.trim()}
+                        >
+                          {selectedVariant === "B" ? "✓ Variant B selected" : "Select Variant B for Post"}
+                        </Button>
+                      </div>
+                      {!selectedVariant && (
+                        <p className="text-[11px] text-amber-400 flex items-center gap-1.5">
+                          <AlertTriangle size={11} /> Pick a variant before posting — only the selected one will publish.
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -853,9 +912,15 @@ export function VideoPreviewDialog({
                   <Button
                     size="sm"
                     onClick={handlePostToPlatforms}
-                    disabled={isBusy || blockingError || postablePlatforms.length === 0 || bundleInvalidated || (FeatureFlags.ENABLE_POST_HEALTH_SCORE && health.blocked)}
+                    disabled={
+                      isBusy || blockingError || postablePlatforms.length === 0 || bundleInvalidated ||
+                      (FeatureFlags.ENABLE_POST_HEALTH_SCORE && health.blocked) ||
+                      (FeatureFlags.ENABLE_AB_TESTING && abEnabled && !selectedVariant)
+                    }
                     title={
-                      FeatureFlags.ENABLE_POST_HEALTH_SCORE && health.blocked
+                      FeatureFlags.ENABLE_AB_TESTING && abEnabled && !selectedVariant
+                        ? "Pick Variant A or B before posting"
+                        : FeatureFlags.ENABLE_POST_HEALTH_SCORE && health.blocked
                         ? `Post quality too low (${health.score}/100) — fix before publishing`
                         : bundleInvalidated
                         ? (invalidationReason || "Regenerate preview before posting")
@@ -865,7 +930,10 @@ export function VideoPreviewDialog({
                     }
                     className="gap-1.5 text-xs"
                   >
-                    <Send size={14} /> Post ({postablePlatforms.length})
+                    <Send size={14} />
+                    {FeatureFlags.ENABLE_AB_TESTING && abEnabled && selectedVariant
+                      ? `Post Variant ${selectedVariant} (${postablePlatforms.length})`
+                      : `Post (${postablePlatforms.length})`}
                   </Button>
                 ) : preview?.content_type !== "image" ? (
                   <Button
