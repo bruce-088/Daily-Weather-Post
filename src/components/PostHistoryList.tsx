@@ -118,15 +118,23 @@ export function PostHistoryList({ posts, loading, onReuse, onChanged }: PostHist
     return Array.from(map.values()).sort((a, b) => b.date.getTime() - a.date.getTime());
   }, [posts]);
 
+  const cityFromPost = (post: PostHistoryItem) => {
+    const raw = (post.city || "").trim();
+    if (!raw) return null;
+    const [name, ...rest] = raw.split(",").map((s) => s.trim()).filter(Boolean);
+    return { id: null, name, state: rest.join(", ") || null };
+  };
+
   const handleRepost = async (post: PostHistoryItem) => {
     if (!post.platform) {
       toast.error("Cannot repost — original platform unknown");
       return;
     }
+    const city = cityFromPost(post);
     setRepostingId(post.id);
     toast.info(`Creating job for ${PLATFORM_BRAND[post.platform]?.label || post.platform}…`);
     try {
-      const res = await triggerManualPipelinePost(post.platform, undefined, null, post.caption ?? null);
+      const res = await triggerManualPipelinePost(post.platform, undefined, city, post.caption ?? null);
       if (res.success) {
         toast.success(res.message || `Reposted to ${PLATFORM_BRAND[post.platform]?.label || post.platform}`);
         onChanged?.();
@@ -145,10 +153,11 @@ export function PostHistoryList({ posts, loading, onReuse, onChanged }: PostHist
       toast.error("Cannot retry — original platform unknown");
       return;
     }
+    const city = cityFromPost(post);
     setRetryingId(post.id);
     toast.info(`Creating job for ${PLATFORM_BRAND[post.platform]?.label || post.platform}…`);
     try {
-      const res = await triggerManualPipelinePost(post.platform, undefined, null, post.caption ?? null);
+      const res = await triggerManualPipelinePost(post.platform, undefined, city, post.caption ?? null);
       if (res.success) {
         toast.success(res.message || `Retried ${PLATFORM_BRAND[post.platform]?.label || post.platform}`);
         onChanged?.();
