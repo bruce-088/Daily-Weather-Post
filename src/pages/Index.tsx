@@ -61,7 +61,7 @@ import { fetchUserCities, getActiveCityId, setActiveCityId, type UserCity } from
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useWeather } from "@/hooks/useWeather";
-import { loadSettings, saveSettings, triggerDailyPost, fetchPostHistory, fetchScheduledPosts, generateCaption, type VoiceOptions } from "@/lib/api";
+import { loadSettings, saveSettings, fetchPostHistory, fetchScheduledPosts, generateCaption, type VoiceOptions } from "@/lib/api";
 import type { AspectRatio, AutomationSettings } from "@/types/weather";
 import type { PostHistoryItem, ScheduledPostItem } from "@/lib/api";
 

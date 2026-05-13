@@ -25,7 +25,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import type { PostHistoryItem } from "@/lib/api";
-import { triggerDailyPost } from "@/lib/api";
+import { triggerManualPipelinePost } from "@/lib/api";
 import { toast } from "sonner";
 
 interface PlatformBrand {
@@ -118,19 +118,33 @@ export function PostHistoryList({ posts, loading, onReuse, onChanged }: PostHist
     return Array.from(map.values()).sort((a, b) => b.date.getTime() - a.date.getTime());
   }, [posts]);
 
+  const cityFromPost = (post: PostHistoryItem) => {
+    const raw = (post.city || "").trim();
+    if (!raw) return null;
+    const [name, ...rest] = raw.split(",").map((s) => s.trim()).filter(Boolean);
+    return { id: null, name, state: rest.join(", ") || null };
+  };
+
   const handleRepost = async (post: PostHistoryItem) => {
     if (!post.platform) {
       toast.error("Cannot repost — original platform unknown");
       return;
     }
+    const city = cityFromPost(post);
     setRepostingId(post.id);
-    const res = await triggerDailyPost(undefined, [post.platform]);
-    setRepostingId(null);
-    if (res.success) {
-      toast.success(`Reposting to ${PLATFORM_BRAND[post.platform]?.label || post.platform}…`);
-      onChanged?.();
-    } else {
-      toast.error(res.message || "Repost failed");
+    toast.info(`Creating job for ${PLATFORM_BRAND[post.platform]?.label || post.platform}…`);
+    try {
+      const res = await triggerManualPipelinePost(post.platform, undefined, city, post.caption ?? null);
+      if (res.success) {
+        toast.success(res.message || `Reposted to ${PLATFORM_BRAND[post.platform]?.label || post.platform}`);
+        onChanged?.();
+      } else {
+        toast.error(res.message || "Repost failed");
+      }
+    } catch (e: any) {
+      toast.error(e?.message || "Repost failed");
+    } finally {
+      setRepostingId(null);
     }
   };
 
@@ -139,14 +153,21 @@ export function PostHistoryList({ posts, loading, onReuse, onChanged }: PostHist
       toast.error("Cannot retry — original platform unknown");
       return;
     }
+    const city = cityFromPost(post);
     setRetryingId(post.id);
-    const res = await triggerDailyPost(undefined, [post.platform]);
-    setRetryingId(null);
-    if (res.success) {
-      toast.success(`Retrying ${PLATFORM_BRAND[post.platform]?.label || post.platform}…`);
-      onChanged?.();
-    } else {
-      toast.error(res.message || "Retry failed");
+    toast.info(`Creating job for ${PLATFORM_BRAND[post.platform]?.label || post.platform}…`);
+    try {
+      const res = await triggerManualPipelinePost(post.platform, undefined, city, post.caption ?? null);
+      if (res.success) {
+        toast.success(res.message || `Retried ${PLATFORM_BRAND[post.platform]?.label || post.platform}`);
+        onChanged?.();
+      } else {
+        toast.error(res.message || "Retry failed");
+      }
+    } catch (e: any) {
+      toast.error(e?.message || "Retry failed");
+    } finally {
+      setRetryingId(null);
     }
   };
 
