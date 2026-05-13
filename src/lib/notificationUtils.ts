@@ -64,11 +64,17 @@ export async function retryFailedPlatforms(meta: NotificationMeta | null): Promi
     return { ok: false, error: "Nothing to retry" };
   }
   try {
-    const body: Record<string, unknown> = { platforms: meta.failures };
-    if (meta.slot) body.time_period = meta.slot;
-    const { data, error } = await supabase.functions.invoke("daily-weather-post", { body });
-    if (error) return { ok: false, error: error.message };
-    return { ok: !!(data as { success?: boolean })?.success };
+    // GUARDRAIL: route every retry through the job pipeline (one platform per job).
+    const { triggerManualPipelinePost } = await import("@/lib/api");
+    let okCount = 0;
+    const errors: string[] = [];
+    for (const platform of meta.failures) {
+      const r = await triggerManualPipelinePost(platform, undefined, null, null);
+      if (r.success) okCount += 1;
+      else errors.push(`${platform}: ${r.message}`);
+    }
+    if (okCount === meta.failures.length) return { ok: true };
+    return { ok: okCount > 0, error: errors.join("; ") || "Some platforms failed" };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Retry failed" };
   }
