@@ -781,7 +781,7 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
       enter: { type: "fade", duration: 0.4 } },
 
     // === CITY + DATE ===
-    { type: "text", track: nt(), time: 0.3, duration: dur(9.7), text: cityUpper, font_family: "Inter", font_weight: "800", font_size: "96", fill_color: "#ffffff",
+    { type: "text", track: nt(), time: 0.3, duration: dur(9.7), text: cityUpper, font_family: "Inter", font_weight: "800", font_size: "112", fill_color: "#ffffff",
       x: "50%", y: "15%", x_alignment: "50%", y_alignment: "50%", shadow: "0px 2px 4px rgba(0,0,0,0.5)", enter: { type: "slide", direction: "up", duration: 0.5 } },
     { type: "text", track: nt(), time: 0.5, duration: dur(9.5), text: regionDate, font_family: "Inter", font_weight: "600", font_size: "40", fill_color: "rgba(255,255,255,0.70)",
       x: "50%", y: "20%", x_alignment: "50%", y_alignment: "50%", shadow: "0px 2px 4px rgba(0,0,0,0.5)", enter: { type: "fade", duration: 0.5 } },
