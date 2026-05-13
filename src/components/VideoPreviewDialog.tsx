@@ -86,8 +86,28 @@ export function VideoPreviewDialog({
   // A/B testing — gated by FeatureFlags.ENABLE_AB_TESTING
   const [abEnabled, setAbEnabled] = useState(false);
   const [abType, setAbType] = useState<ExperimentType>("hook_test");
-  const [abRollout, setAbRollout] = useState<RolloutMode>("manual_select_winner");
-  const variantPair = useMemo(() => buildVariantPair(abType), [abType]);
+  // Phase 1: rollout mode is locked to manual winner selection.
+  const abRollout: RolloutMode = "manual_select_winner";
+  const defaultPair = useMemo(() => buildVariantPair(abType), [abType]);
+  // Editable hooks for hook_test; canned values for other types.
+  const [hookA, setHookA] = useState<string>(defaultPair.variantA.hook_line || "");
+  const [hookB, setHookB] = useState<string>(defaultPair.variantB.hook_line || "");
+  const [selectedVariant, setSelectedVariant] = useState<"A" | "B" | null>(null);
+  useEffect(() => {
+    setHookA(defaultPair.variantA.hook_line || "");
+    setHookB(defaultPair.variantB.hook_line || "");
+    setSelectedVariant(null);
+  }, [abType, defaultPair]);
+  useEffect(() => {
+    if (!abEnabled) setSelectedVariant(null);
+  }, [abEnabled]);
+  const variantPair = useMemo(() => {
+    if (abType !== "hook_test") return defaultPair;
+    return {
+      variantA: { ...defaultPair.variantA, hook_line: hookA, label: "Hook A" },
+      variantB: { ...defaultPair.variantB, hook_line: hookB, label: "Hook B" },
+    };
+  }, [abType, defaultPair, hookA, hookB]);
 
   const isPostFlow = !!(postPlatforms && postPlatforms.length > 0);
 
