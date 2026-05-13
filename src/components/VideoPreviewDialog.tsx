@@ -727,9 +727,9 @@ export function VideoPreviewDialog({
                   <Button
                     size="sm"
                     onClick={handlePostToPlatforms}
-                    disabled={isBusy || blockingError || postablePlatforms.length === 0 || bundleInvalidated || health.blocked}
+                    disabled={isBusy || blockingError || postablePlatforms.length === 0 || bundleInvalidated || (FeatureFlags.ENABLE_POST_HEALTH_SCORE && health.blocked)}
                     title={
-                      health.blocked
+                      FeatureFlags.ENABLE_POST_HEALTH_SCORE && health.blocked
                         ? `Post quality too low (${health.score}/100) — fix before publishing`
                         : bundleInvalidated
                         ? (invalidationReason || "Regenerate preview before posting")
