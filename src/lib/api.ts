@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { AutomationSettings, WeatherData } from "@/types/weather";
+import { FeatureFlags } from "@/lib/featureFlags";
 
 export async function loadSettings(): Promise<{ settings: AutomationSettings; tiktokConnected: boolean; youtubeConnected: boolean; youtubeExpired: boolean; twitterConnected: boolean; linkedinConnected: boolean } | null> {
   const { data, error } = await supabase
