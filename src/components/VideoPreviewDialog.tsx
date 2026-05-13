@@ -275,34 +275,19 @@ export function VideoPreviewDialog({
       });
       const captionToUse = (editedCaption || preview?.caption || "").trim() || null;
 
-      if (useAB) {
-        const result = await triggerManualABPost({
-          platform: platformId,
-          voice,
-          city: city ?? null,
-          caption: captionToUse,
-          experimentType: abType,
-          rolloutMode: abRollout,
-          variantA: variantPair.variantA,
-          variantB: variantPair.variantB,
-          scheduledSlot: "manual",
-          bundleId: preview?.bundle_id && !bundleInvalidated ? preview.bundle_id : null,
-        });
-        if (result.success) {
-          updatePlatform(platformId, {
-            status: "success",
-            message: result.message || "A/B variants queued",
-          });
-        } else {
-          updatePlatform(platformId, {
-            status: "failed",
-            message: result.message || "A/B post failed",
-          });
-        }
-        return;
-      }
+      // Phase 1: A/B publishes ONLY the manually-selected variant. Both
+      // variant payloads are recorded on the experiment row for analytics.
+      const experimentArg = useAB && selectedVariant
+        ? {
+            type: abType,
+            selectedVariant,
+            variantA: variantPair.variantA as Record<string, unknown>,
+            variantB: variantPair.variantB as Record<string, unknown>,
+            rolloutMode: abRollout,
+          }
+        : null;
 
-      if (usePipeline) {
+      if (usePipeline || useAB) {
         const result = await triggerManualPipelinePost(
           platformId,
           voice,
@@ -310,13 +295,15 @@ export function VideoPreviewDialog({
           captionToUse,
           {
             bundleId: preview?.bundle_id && !bundleInvalidated ? preview.bundle_id : null,
+            experiment: experimentArg,
             onPhase: (_phase, detail) => {
               updatePlatform(platformId, { status: "posting", message: detail || "Running pipeline…" });
             },
           },
         );
         if (result.success) {
-          updatePlatform(platformId, { status: "success", message: result.message || "Posted successfully" });
+          const tag = useAB ? ` (Variant ${selectedVariant})` : "";
+          updatePlatform(platformId, { status: "success", message: (result.message || "Posted successfully") + tag });
         } else {
           updatePlatform(platformId, { status: "failed", message: result.message || "Pipeline failed" });
         }
