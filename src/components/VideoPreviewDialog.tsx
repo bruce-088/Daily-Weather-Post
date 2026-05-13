@@ -6,9 +6,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Play, Upload, RefreshCw, X, Loader2, Pencil, Eye, Download, Send, Mic, Pause, Lock, AlertTriangle, Sparkles, Volume2, VolumeX } from "lucide-react";
-import { generatePreview, uploadPreviewVideo, triggerManualPipelinePost } from "@/lib/api";
+import { generatePreview, uploadPreviewVideo, triggerManualPipelinePost, publishPreviewBundle, triggerDailyPost } from "@/lib/api";
 import type { PreviewResult, VoiceOptions, CityContext } from "@/lib/api";
 import { calculatePreviewHealth } from "@/lib/postHealth";
+import { FeatureFlags } from "@/lib/featureFlags";
 import { Progress } from "@/components/ui/progress";
 import { Check, XCircle } from "lucide-react";
 import {
@@ -240,34 +241,54 @@ export function VideoPreviewDialog({
   };
 
   const postSinglePlatform = async (platformId: string) => {
-    updatePlatform(platformId, { status: "posting", message: "Creating job…" });
+    const usePipeline = FeatureFlags.USE_PIPELINE_FOR_MANUAL_POSTS;
+    updatePlatform(platformId, {
+      status: "posting",
+      message: usePipeline ? "Creating job…" : "Posting…",
+    });
     try {
-      console.log("[manual-post→pipeline]", {
+      console.log("[manual-post]", {
         platform: platformId,
+        path: usePipeline ? "pipeline" : "legacy",
         city_id: city?.id,
         bundle_id: preview?.bundle_id,
         voice: !!voice?.enabled,
       });
       const captionToUse = (editedCaption || preview?.caption || "").trim() || null;
-      const result = await triggerManualPipelinePost(
-        platformId,
-        voice,
-        city ?? null,
-        captionToUse,
-        {
-          bundleId: preview?.bundle_id && !bundleInvalidated ? preview.bundle_id : null,
-          onPhase: (_phase, detail) => {
-            updatePlatform(platformId, { status: "posting", message: detail || "Running pipeline…" });
+
+      if (usePipeline) {
+        const result = await triggerManualPipelinePost(
+          platformId,
+          voice,
+          city ?? null,
+          captionToUse,
+          {
+            bundleId: preview?.bundle_id && !bundleInvalidated ? preview.bundle_id : null,
+            onPhase: (_phase, detail) => {
+              updatePlatform(platformId, { status: "posting", message: detail || "Running pipeline…" });
+            },
           },
-        },
-      );
+        );
+        if (result.success) {
+          updatePlatform(platformId, { status: "success", message: result.message || "Posted successfully" });
+        } else {
+          updatePlatform(platformId, { status: "failed", message: result.message || "Pipeline failed" });
+        }
+        return;
+      }
+
+      // Legacy path: prefer locked bundle publish, fall back to daily-weather-post.
+      const bundleId = preview?.bundle_id && !bundleInvalidated ? preview.bundle_id : null;
+      const result = bundleId
+        ? await publishPreviewBundle(bundleId, [platformId])
+        : await triggerDailyPost(undefined, [platformId], voice, city ?? null);
       if (result.success) {
         updatePlatform(platformId, { status: "success", message: result.message || "Posted successfully" });
       } else {
-        updatePlatform(platformId, { status: "failed", message: result.message || "Pipeline failed" });
+        updatePlatform(platformId, { status: "failed", message: result.message || "Post failed" });
       }
     } catch (err: any) {
-      updatePlatform(platformId, { status: "failed", message: err?.message || "Pipeline failed" });
+      updatePlatform(platformId, { status: "failed", message: err?.message || "Post failed" });
     }
   };
 
@@ -585,7 +606,7 @@ export function VideoPreviewDialog({
               )}
 
               {/* Post Health Score — quality gate (0–100) */}
-              {isPostFlow && (
+              {isPostFlow && FeatureFlags.ENABLE_POST_HEALTH_SCORE && (
                 <div
                   className={`rounded-xl border px-4 py-3 space-y-2.5 ${
                     health.tier === "excellent"
@@ -706,9 +727,9 @@ export function VideoPreviewDialog({
                   <Button
                     size="sm"
                     onClick={handlePostToPlatforms}
-                    disabled={isBusy || blockingError || postablePlatforms.length === 0 || bundleInvalidated || health.blocked}
+                    disabled={isBusy || blockingError || postablePlatforms.length === 0 || bundleInvalidated || (FeatureFlags.ENABLE_POST_HEALTH_SCORE && health.blocked)}
                     title={
-                      health.blocked
+                      FeatureFlags.ENABLE_POST_HEALTH_SCORE && health.blocked
                         ? `Post quality too low (${health.score}/100) — fix before publishing`
                         : bundleInvalidated
                         ? (invalidationReason || "Regenerate preview before posting")

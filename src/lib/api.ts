@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { AutomationSettings, WeatherData } from "@/types/weather";
+import { FeatureFlags } from "@/lib/featureFlags";
 
 export async function loadSettings(): Promise<{ settings: AutomationSettings; tiktokConnected: boolean; youtubeConnected: boolean; youtubeExpired: boolean; twitterConnected: boolean; linkedinConnected: boolean } | null> {
   const { data, error } = await supabase
@@ -142,19 +143,29 @@ function applyCityContext(body: Record<string, any>, city?: CityContext | null) 
   if (city.state) body.state = city.state;
 }
 
-// GUARDRAIL: Direct publish to daily-weather-post is no longer allowed from
-// the UI. All manual posts must go through `triggerManualPipelinePost` so the
-// job pipeline (generate_content → generate_voice → render_video → publish_post)
-// is the single execution path.
+// When USE_PIPELINE_FOR_MANUAL_POSTS=true, direct publish is forbidden — all
+// manual posts MUST go through `triggerManualPipelinePost`. When the flag is
+// false (default), the legacy direct invoke of `daily-weather-post` is kept
+// alive for backwards compatibility / gradual rollout.
 export async function triggerDailyPost(
-  _timePeriod?: string,
-  _platforms?: string[],
-  _voice?: VoiceOptions,
-  _city?: CityContext | null,
+  timePeriod?: string,
+  platforms?: string[],
+  voice?: VoiceOptions,
+  city?: CityContext | null,
 ): Promise<{ success: boolean; message: string }> {
-  const msg = "Publishing outside pipeline is not allowed — use triggerManualPipelinePost()";
-  console.error("[guardrail] " + msg);
-  throw new Error(msg);
+  if (FeatureFlags.USE_PIPELINE_FOR_MANUAL_POSTS) {
+    const msg = "Publishing outside pipeline is not allowed — use triggerManualPipelinePost()";
+    console.error("[guardrail] " + msg);
+    throw new Error(msg);
+  }
+  const body: Record<string, any> = { mode: "post-now" };
+  if (timePeriod) body.time_period = timePeriod;
+  if (platforms?.length) body.platforms = platforms;
+  if (voice?.enabled) body.voice = voice;
+  applyCityContext(body, city);
+  const { data, error } = await supabase.functions.invoke("daily-weather-post", { body });
+  if (error) return { success: false, message: error.message || "Failed to post" };
+  return { success: !!data?.success, message: data?.message || data?.error || "Posted" };
 }
 
 export interface PreviewResult {
@@ -217,17 +228,29 @@ export interface PublishBundleResult {
   results?: Array<{ platform: string; success: boolean; id?: string | null; url?: string | null; error?: string }>;
 }
 
-/** GUARDRAIL: Direct bundle publish is no longer allowed from the UI.
- * All manual posts (including bundle publishes) must flow through the job
- * pipeline via `triggerManualPipelinePost`, which references the locked
- * bundle id via debug_trace.preview_bundle_id. */
+/** When USE_PIPELINE_FOR_MANUAL_POSTS=true, direct bundle publish is forbidden.
+ * When the flag is false (default), invokes the legacy publish-preview-bundle
+ * edge function so existing posting keeps working during gradual rollout. */
 export async function publishPreviewBundle(
-  _bundleId: string,
-  _platforms: string[],
+  bundleId: string,
+  platforms: string[],
 ): Promise<PublishBundleResult> {
-  const msg = "Publishing outside pipeline is not allowed — use triggerManualPipelinePost()";
-  console.error("[guardrail] " + msg);
-  throw new Error(msg);
+  if (FeatureFlags.USE_PIPELINE_FOR_MANUAL_POSTS) {
+    const msg = "Publishing outside pipeline is not allowed — use triggerManualPipelinePost()";
+    console.error("[guardrail] " + msg);
+    throw new Error(msg);
+  }
+  const { data, error } = await supabase.functions.invoke("publish-preview-bundle", {
+    body: { bundle_id: bundleId, platforms },
+  });
+  if (error) return { success: false, message: error.message || "Failed to publish" };
+  return {
+    success: !!data?.success,
+    message: data?.message || data?.error || "Published",
+    bundle_id: data?.bundle_id,
+    visual_source: data?.visual_source ?? null,
+    results: data?.results,
+  };
 }
 
 export async function uploadPreviewVideo(
