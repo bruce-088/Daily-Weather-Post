@@ -259,19 +259,48 @@ export function VideoPreviewDialog({
 
   const postSinglePlatform = async (platformId: string) => {
     const usePipeline = FeatureFlags.USE_PIPELINE_FOR_MANUAL_POSTS;
+    const useAB = FeatureFlags.ENABLE_AB_TESTING && abEnabled;
     updatePlatform(platformId, {
       status: "posting",
-      message: usePipeline ? "Creating job…" : "Posting…",
+      message: useAB ? "Creating A/B experiment…" : usePipeline ? "Creating job…" : "Posting…",
     });
     try {
       console.log("[manual-post]", {
         platform: platformId,
-        path: usePipeline ? "pipeline" : "legacy",
+        path: useAB ? "pipeline-ab" : usePipeline ? "pipeline" : "legacy",
+        ab_type: useAB ? abType : undefined,
         city_id: city?.id,
         bundle_id: preview?.bundle_id,
         voice: !!voice?.enabled,
       });
       const captionToUse = (editedCaption || preview?.caption || "").trim() || null;
+
+      if (useAB) {
+        const result = await triggerManualABPost({
+          platform: platformId,
+          voice,
+          city: city ?? null,
+          caption: captionToUse,
+          experimentType: abType,
+          rolloutMode: abRollout,
+          variantA: variantPair.variantA,
+          variantB: variantPair.variantB,
+          scheduledSlot: "manual",
+          bundleId: preview?.bundle_id && !bundleInvalidated ? preview.bundle_id : null,
+        });
+        if (result.success) {
+          updatePlatform(platformId, {
+            status: "success",
+            message: result.message || "A/B variants queued",
+          });
+        } else {
+          updatePlatform(platformId, {
+            status: "failed",
+            message: result.message || "A/B post failed",
+          });
+        }
+        return;
+      }
 
       if (usePipeline) {
         const result = await triggerManualPipelinePost(
