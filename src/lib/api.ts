@@ -648,6 +648,166 @@ export async function triggerManualPipelinePost(
   };
 }
 
+// --- Manual A/B Pipeline Post ---
+//
+// Creates an `experiments` row + two `scheduled_posts` (variant A & B) linked
+// by `experiment_id` / `variant_id`. Both variants enqueue through the same
+// generate_content job — no shortcuts, no direct publish. Variant payload is
+// stored on the experiment row and propagated to debug_trace so downstream
+// pipeline steps can apply hook / cta / background overrides.
+import type { ExperimentType, RolloutMode, VariantPayload } from "@/lib/abVariants";
+import { assertVariantScope } from "@/lib/abVariants";
+
+export interface ManualABResult {
+  success: boolean;
+  message: string;
+  experimentId?: string;
+  scheduledPostIdA?: string;
+  scheduledPostIdB?: string;
+  error?: string;
+}
+
+export async function triggerManualABPost(args: {
+  platform: string;
+  voice: VoiceOptions | undefined;
+  city: CityContext | null | undefined;
+  caption: string | null | undefined;
+  experimentType: ExperimentType;
+  rolloutMode: RolloutMode;
+  variantA: VariantPayload;
+  variantB: VariantPayload;
+  scheduledSlot?: string | null;
+  bundleId?: string | null;
+}): Promise<ManualABResult> {
+  if (!FeatureFlags.ENABLE_AB_TESTING) {
+    return { success: false, message: "A/B testing flag is disabled" };
+  }
+  try {
+    assertVariantScope(args.experimentType, args.variantA);
+    assertVariantScope(args.experimentType, args.variantB);
+  } catch (err: any) {
+    return { success: false, message: err?.message || "Variant validation failed" };
+  }
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, message: "Not signed in" };
+  if (!args.city?.name) return { success: false, message: "No active city" };
+
+  const cityName = args.city.state ? `${args.city.name}, ${args.city.state}` : args.city.name;
+  // Stagger A → B by 30s so both still satisfy the future-scheduled trigger
+  // and so platform rate-limits don't fire two uploads simultaneously.
+  const scheduledA = new Date(Date.now() + 30 * 1000).toISOString();
+  const scheduledB = new Date(Date.now() + 60 * 1000).toISOString();
+
+  // 1) Create experiment row
+  const { data: exp, error: expErr } = await supabase
+    .from("experiments")
+    .insert({
+      user_id: user.id,
+      city: cityName,
+      city_id: args.city.id ?? null,
+      platform: args.platform,
+      experiment_type: args.experimentType,
+      variable_tested: args.experimentType,
+      rollout_mode: args.rolloutMode,
+      scheduled_slot: args.scheduledSlot ?? "manual",
+      variant_a_meta: args.variantA as any,
+      variant_b_meta: args.variantB as any,
+      status: "gathering_data",
+      conclude_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      test_type: "content",
+    })
+    .select("id")
+    .maybeSingle();
+  if (expErr || !exp?.id) {
+    return { success: false, message: expErr?.message || "Failed to create experiment" };
+  }
+
+  const buildTrace = (variantId: "A" | "B", payload: VariantPayload) => ({
+    source: "manual_post_ab",
+    execution_mode: "pipeline",
+    ab_test_variant: variantId,
+    experiment_id: exp.id,
+    experiment_type: args.experimentType,
+    variant_payload: payload,
+    ...(args.bundleId ? { preview_bundle_id: args.bundleId } : {}),
+  });
+
+  // 2) Insert both scheduled posts
+  const { data: rows, error: spErr } = await supabase
+    .from("scheduled_posts")
+    .insert([
+      {
+        user_id: user.id,
+        city: cityName,
+        city_id: args.city.id ?? null,
+        scheduled_at: scheduledA,
+        platform: args.platform,
+        status: "pending",
+        include_voiceover: !!args.voice?.enabled,
+        experiment_id: exp.id,
+        experiment_variant: "A",
+        variant_id: "A",
+        ...(args.caption ? { caption: args.caption } : {}),
+        debug_trace: buildTrace("A", args.variantA) as any,
+      },
+      {
+        user_id: user.id,
+        city: cityName,
+        city_id: args.city.id ?? null,
+        scheduled_at: scheduledB,
+        platform: args.platform,
+        status: "pending",
+        include_voiceover: !!args.voice?.enabled,
+        experiment_id: exp.id,
+        experiment_variant: "B",
+        variant_id: "B",
+        ...(args.caption ? { caption: args.caption } : {}),
+        debug_trace: buildTrace("B", args.variantB) as any,
+      },
+    ])
+    .select("id, variant_id");
+  if (spErr || !rows || rows.length !== 2) {
+    return {
+      success: false,
+      message: spErr?.message || "Failed to insert variants",
+      experimentId: exp.id,
+    };
+  }
+
+  const aRow = rows.find((r) => r.variant_id === "A");
+  const bRow = rows.find((r) => r.variant_id === "B");
+
+  // 3) Update experiment with the post ids for resolver
+  if (aRow?.id && bRow?.id) {
+    await supabase
+      .from("experiments")
+      .update({ scheduled_post_id_a: aRow.id, scheduled_post_id_b: bRow.id })
+      .eq("id", exp.id);
+  }
+
+  // 4) Enqueue generate_content for both — same pipeline as a normal post
+  for (const row of rows) {
+    if (!row.id) continue;
+    await enqueueGenerateContentJob({
+      userId: user.id,
+      scheduledPostId: row.id,
+      city: cityName,
+      platform: args.platform,
+      scheduledFor: row.variant_id === "A" ? scheduledA : scheduledB,
+      source: `manual-ab-${row.variant_id}`,
+    });
+  }
+
+  return {
+    success: true,
+    message: `A/B experiment queued — variants A and B running through pipeline`,
+    experimentId: exp.id,
+    scheduledPostIdA: aRow?.id,
+    scheduledPostIdB: bRow?.id,
+  };
+}
+
 // --- Caption Generation ---
 
 export async function generateCaption(
