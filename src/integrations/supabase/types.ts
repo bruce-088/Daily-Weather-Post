@@ -232,16 +232,21 @@ export type Database = {
       experiments: {
         Row: {
           city: string | null
+          city_id: string | null
           conclude_at: string
           concluded_at: string | null
           created_at: string
           delta_pct: number | null
+          experiment_type: string | null
           id: string
           insight_generated: boolean
+          platform: string | null
           post_id_a: string | null
           post_id_b: string | null
+          rollout_mode: string
           scheduled_post_id_a: string | null
           scheduled_post_id_b: string | null
+          scheduled_slot: string | null
           scheduled_time_offset_a: number | null
           scheduled_time_offset_b: number | null
           status: string
@@ -255,16 +260,21 @@ export type Database = {
         }
         Insert: {
           city?: string | null
+          city_id?: string | null
           conclude_at?: string
           concluded_at?: string | null
           created_at?: string
           delta_pct?: number | null
+          experiment_type?: string | null
           id?: string
           insight_generated?: boolean
+          platform?: string | null
           post_id_a?: string | null
           post_id_b?: string | null
+          rollout_mode?: string
           scheduled_post_id_a?: string | null
           scheduled_post_id_b?: string | null
+          scheduled_slot?: string | null
           scheduled_time_offset_a?: number | null
           scheduled_time_offset_b?: number | null
           status?: string
@@ -278,16 +288,21 @@ export type Database = {
         }
         Update: {
           city?: string | null
+          city_id?: string | null
           conclude_at?: string
           concluded_at?: string | null
           created_at?: string
           delta_pct?: number | null
+          experiment_type?: string | null
           id?: string
           insight_generated?: boolean
+          platform?: string | null
           post_id_a?: string | null
           post_id_b?: string | null
+          rollout_mode?: string
           scheduled_post_id_a?: string | null
           scheduled_post_id_b?: string | null
+          scheduled_slot?: string | null
           scheduled_time_offset_a?: number | null
           scheduled_time_offset_b?: number | null
           status?: string
@@ -596,6 +611,8 @@ export type Database = {
       }
       post_analytics: {
         Row: {
+          avg_percentage_viewed: number | null
+          avg_view_duration_sec: number | null
           comments: number
           condition: string | null
           created_at: string
@@ -608,12 +625,15 @@ export type Database = {
           platform: string
           post_id: string | null
           shares: number
+          subscribers_gained: number | null
           time_of_day: string | null
           tone: string | null
           user_id: string
           views: number
         }
         Insert: {
+          avg_percentage_viewed?: number | null
+          avg_view_duration_sec?: number | null
           comments?: number
           condition?: string | null
           created_at?: string
@@ -626,12 +646,15 @@ export type Database = {
           platform: string
           post_id?: string | null
           shares?: number
+          subscribers_gained?: number | null
           time_of_day?: string | null
           tone?: string | null
           user_id: string
           views?: number
         }
         Update: {
+          avg_percentage_viewed?: number | null
+          avg_view_duration_sec?: number | null
           comments?: number
           condition?: string | null
           created_at?: string
@@ -644,6 +667,7 @@ export type Database = {
           platform?: string
           post_id?: string | null
           shares?: number
+          subscribers_gained?: number | null
           time_of_day?: string | null
           tone?: string | null
           user_id?: string
@@ -680,6 +704,7 @@ export type Database = {
           status: string
           temperature: number | null
           user_id: string | null
+          variant_id: string | null
           views_count: number
           visual_metadata: Json | null
           voice_attempts: number
@@ -714,6 +739,7 @@ export type Database = {
           status?: string
           temperature?: number | null
           user_id?: string | null
+          variant_id?: string | null
           views_count?: number
           visual_metadata?: Json | null
           voice_attempts?: number
@@ -748,6 +774,7 @@ export type Database = {
           status?: string
           temperature?: number | null
           user_id?: string | null
+          variant_id?: string | null
           views_count?: number
           visual_metadata?: Json | null
           voice_attempts?: number
@@ -891,6 +918,7 @@ export type Database = {
           scheduled_at: string
           status: string
           user_id: string
+          variant_id: string | null
           voice_attempts: number
           voice_error: string | null
           voice_status: string | null
@@ -916,6 +944,7 @@ export type Database = {
           scheduled_at: string
           status?: string
           user_id: string
+          variant_id?: string | null
           voice_attempts?: number
           voice_error?: string | null
           voice_status?: string | null
@@ -941,6 +970,7 @@ export type Database = {
           scheduled_at?: string
           status?: string
           user_id?: string
+          variant_id?: string | null
           voice_attempts?: number
           voice_error?: string | null
           voice_status?: string | null

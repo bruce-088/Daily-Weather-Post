@@ -6,11 +6,21 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Play, Upload, RefreshCw, X, Loader2, Pencil, Eye, Download, Send, Mic, Pause, Lock, AlertTriangle, Sparkles, Volume2, VolumeX } from "lucide-react";
-import { generatePreview, uploadPreviewVideo, triggerManualPipelinePost, publishPreviewBundle, triggerDailyPost } from "@/lib/api";
+import { generatePreview, uploadPreviewVideo, triggerManualPipelinePost, publishPreviewBundle, triggerDailyPost, triggerManualABPost } from "@/lib/api";
 import type { PreviewResult, VoiceOptions, CityContext } from "@/lib/api";
 import { calculatePreviewHealth } from "@/lib/postHealth";
 import { FeatureFlags } from "@/lib/featureFlags";
 import { DebugLabels } from "@/components/DebugLabels";
+import { ABComparePanel } from "@/components/ABComparePanel";
+import {
+  buildVariantPair,
+  EXPERIMENT_TYPE_LABELS,
+  EXPERIMENT_TYPE_DESCRIPTIONS,
+  type ExperimentType,
+  type RolloutMode,
+} from "@/lib/abVariants";
+import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { Check, XCircle } from "lucide-react";
 import {
@@ -72,6 +82,12 @@ export function VideoPreviewDialog({
   const [previewCity, setPreviewCity] = useState<{ id?: string | null; name?: string | null } | null>(null);
   const [bundleInvalidated, setBundleInvalidated] = useState(false);
   const [invalidationReason, setInvalidationReason] = useState<string | null>(null);
+
+  // A/B testing — gated by FeatureFlags.ENABLE_AB_TESTING
+  const [abEnabled, setAbEnabled] = useState(false);
+  const [abType, setAbType] = useState<ExperimentType>("hook_test");
+  const [abRollout, setAbRollout] = useState<RolloutMode>("manual_select_winner");
+  const variantPair = useMemo(() => buildVariantPair(abType), [abType]);
 
   const isPostFlow = !!(postPlatforms && postPlatforms.length > 0);
 
@@ -243,19 +259,48 @@ export function VideoPreviewDialog({
 
   const postSinglePlatform = async (platformId: string) => {
     const usePipeline = FeatureFlags.USE_PIPELINE_FOR_MANUAL_POSTS;
+    const useAB = FeatureFlags.ENABLE_AB_TESTING && abEnabled;
     updatePlatform(platformId, {
       status: "posting",
-      message: usePipeline ? "Creating job…" : "Posting…",
+      message: useAB ? "Creating A/B experiment…" : usePipeline ? "Creating job…" : "Posting…",
     });
     try {
       console.log("[manual-post]", {
         platform: platformId,
-        path: usePipeline ? "pipeline" : "legacy",
+        path: useAB ? "pipeline-ab" : usePipeline ? "pipeline" : "legacy",
+        ab_type: useAB ? abType : undefined,
         city_id: city?.id,
         bundle_id: preview?.bundle_id,
         voice: !!voice?.enabled,
       });
       const captionToUse = (editedCaption || preview?.caption || "").trim() || null;
+
+      if (useAB) {
+        const result = await triggerManualABPost({
+          platform: platformId,
+          voice,
+          city: city ?? null,
+          caption: captionToUse,
+          experimentType: abType,
+          rolloutMode: abRollout,
+          variantA: variantPair.variantA,
+          variantB: variantPair.variantB,
+          scheduledSlot: "manual",
+          bundleId: preview?.bundle_id && !bundleInvalidated ? preview.bundle_id : null,
+        });
+        if (result.success) {
+          updatePlatform(platformId, {
+            status: "success",
+            message: result.message || "A/B variants queued",
+          });
+        } else {
+          updatePlatform(platformId, {
+            status: "failed",
+            message: result.message || "A/B post failed",
+          });
+        }
+        return;
+      }
 
       if (usePipeline) {
         const result = await triggerManualPipelinePost(
@@ -584,6 +629,74 @@ export function VideoPreviewDialog({
                   )}
                 </div>
               )}
+
+              {/* A/B testing — gated by FeatureFlags.ENABLE_AB_TESTING */}
+              {isPostFlow && FeatureFlags.ENABLE_AB_TESTING && !(phase === "posting" || phase === "complete") && (
+                <div className="rounded-xl border border-sky-500/20 bg-sky-500/5 px-4 py-3 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="ab-toggle" className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                        🧪 Create A/B variants
+                      </Label>
+                      <p className="text-[11px] text-muted-foreground">
+                        Publishes two variants through the same pipeline for safe head-to-head testing.
+                      </p>
+                    </div>
+                    <Switch id="ab-toggle" checked={abEnabled} onCheckedChange={setAbEnabled} />
+                  </div>
+
+                  {abEnabled && (
+                    <div className="space-y-3 pt-1 border-t border-sky-500/15">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-3">
+                        <div className="space-y-1">
+                          <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                            Experiment type
+                          </Label>
+                          <Select value={abType} onValueChange={(v) => setAbType(v as ExperimentType)}>
+                            <SelectTrigger className="h-9 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {(Object.keys(EXPERIMENT_TYPE_LABELS) as ExperimentType[]).map((t) => (
+                                <SelectItem key={t} value={t} className="text-xs">
+                                  {EXPERIMENT_TYPE_LABELS[t]}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                            Rollout mode
+                          </Label>
+                          <Select value={abRollout} onValueChange={(v) => setAbRollout(v as RolloutMode)}>
+                            <SelectTrigger className="h-9 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="manual_select_winner" className="text-xs">
+                                Manual: I pick the winner
+                              </SelectItem>
+                              <SelectItem value="auto_rotate_variants" className="text-xs">
+                                Auto: rotate to winner
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground italic">
+                        {EXPERIMENT_TYPE_DESCRIPTIONS[abType]}
+                      </p>
+                      <ABComparePanel
+                        type={abType}
+                        variantA={variantPair.variantA}
+                        variantB={variantPair.variantB}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Lock status + AI Tip — shown when preview is ready to post */}
               {isPostFlow && preview?.bundle_id && !bundleInvalidated && (
                 <div className="space-y-1.5 pt-1">
