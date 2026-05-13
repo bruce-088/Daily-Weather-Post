@@ -189,6 +189,10 @@ export interface PreviewResult {
   locked?: boolean;
   /** Render/generation elapsed time in seconds (0.5 = half second, 45 = slow creatomate). */
   render_time?: number;
+  /** True if voiceover generation was attempted for this preview. */
+  voice_attempted?: boolean;
+  /** True if voiceover was attempted but the audio file failed to generate. */
+  voice_failed?: boolean;
 }
 
 export async function generatePreview(opts?: {
