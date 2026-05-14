@@ -13,7 +13,8 @@ export type FeatureFlagName =
   | "USE_PIPELINE_FOR_MANUAL_POSTS"
   | "ENABLE_POST_HEALTH_SCORE"
   | "ENABLE_AB_TESTING"
-  | "SHOW_DEBUG_LABELS";
+  | "SHOW_DEBUG_LABELS"
+  | "ENABLE_CINEMATIC_MODE";
 
 const DEFAULTS: Record<FeatureFlagName, boolean> = {
   USE_PIPELINE_FOR_MANUAL_POSTS: false,
@@ -22,6 +23,7 @@ const DEFAULTS: Record<FeatureFlagName, boolean> = {
   // On by default for now (preview/admin mode). Disable via
   // localStorage.setItem("ff:SHOW_DEBUG_LABELS","false") to silence pills.
   SHOW_DEBUG_LABELS: true,
+  ENABLE_CINEMATIC_MODE: false,
 };
 
 function readOverride(name: FeatureFlagName): boolean | null {
