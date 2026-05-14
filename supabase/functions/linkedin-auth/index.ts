@@ -31,7 +31,11 @@ Deno.serve(async (req) => {
     // --- Generate Auth URL ---
     if (action === "get_auth_url") {
       const oauthState = crypto.randomUUID();
-      const scopes = "openid profile w_member_social r_organization_social w_organization_social";
+      // Keep authorization on LinkedIn's generally available products.
+      // Organization scopes require separate LinkedIn approval and can cause
+      // LinkedIn's generic "Bummer, something went wrong" screen before the
+      // user ever reaches our callback, even when redirect_uri is correct.
+      const scopes = "openid profile w_member_social";
       const url = new URL("https://www.linkedin.com/oauth/v2/authorization");
       url.searchParams.set("response_type", "code");
       url.searchParams.set("client_id", clientId);
