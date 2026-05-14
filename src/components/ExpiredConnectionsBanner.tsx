@@ -35,6 +35,8 @@ export function ExpiredConnectionsBanner({ onReconnect }: Props) {
       .from("weather_settings")
       .select("youtube_access_token, youtube_token_expires_at, tiktok_access_token, tiktok_token_expires_at, linkedin_access_token, linkedin_token_expires_at")
       .eq("user_id", user.id)
+      .order("updated_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
     const { data: cities } = await supabase
       .from("cities")
