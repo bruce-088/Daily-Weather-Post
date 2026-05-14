@@ -2438,67 +2438,10 @@ Deno.serve(async (req) => {
           const realRenderError = renderErrorSink.message || "Video render failed (no provider produced a valid video)";
           console.log(`Video generation failed for scheduled post — real error: ${realRenderError}`);
           await notifyFailure("render", "Render failed", realRenderError, { city: weather.city });
-          const fallbackImage = await generateFallbackImage(weather);
-
-          if (!fallbackImage) {
-            errorMessage = "Both video and fallback image generation failed";
-            await notifyFailure("fallback_image", "Fallback image failed", errorMessage, { city: weather.city });
-          } else {
-            // Store the generated image to Supabase Storage
-            const stored = await storeGeneratedImage(supabase, post.user_id, fallbackImage.data, fallbackImage.mimeType, weather.city);
-            if (stored) {
-              storedImageUrl = stored.signedUrl;
-              console.log("Image stored at:", stored.storagePath);
-            }
-            
-            // Image-capable platforms (text/social). YouTube + TikTok REQUIRE
-            // video and must NEVER receive a static-image fallback.
-            const imageCapablePlatforms = ["linkedin", "twitter"];
-            const videoOnlyPlatforms = ["youtube", "instagram", "tiktok"];
-            let postedAny = false;
-
-            for (const platformName of platformsToPost) {
-              if (imageCapablePlatforms.includes(platformName)) {
-                try {
-                  const { getAdapter } = await import("../_shared/platform-adapter.ts");
-                  const adapter = getAdapter(platformName);
-                  if (!adapter) continue;
-                  const token = await adapter.getValidToken(supabase, post.user_id, post.city_id || null);
-                  if (!token) {
-                    console.error(`${platformName}: failed to get token for image post`);
-                    await notifyFailure("upload", `${platformName} auth failed`, "Could not get valid token for image post.", { platform: platformName });
-                    continue;
-                  }
-
-                  if (platformName === "linkedin") {
-                    const postResult = await postLinkedInImage(token, fallbackImage.data, title, desc);
-                    if (postResult) { postedAny = true; console.log(`Scheduled ${post.id}: linkedin image posted, ID: ${postResult}`); }
-                    else { errorMessage = "LinkedIn image post failed"; await notifyFailure("upload", "LinkedIn image post failed", errorMessage, { platform: "linkedin" }); }
-                  } else if (platformName === "twitter") {
-                    const postResult = await postTwitterImage(token, fallbackImage.data, desc);
-                    if (postResult) { postedAny = true; console.log(`Scheduled ${post.id}: twitter image posted, ID: ${postResult}`); }
-                    else { errorMessage = "Twitter image post failed"; await notifyFailure("upload", "X / Twitter image post failed", errorMessage, { platform: "twitter" }); }
-                  }
-                } catch (err) {
-                  console.error(`${platformName} image post error:`, err);
-                  errorMessage = `${platformName} image post failed`;
-                  await notifyFailure("upload", `${platformName} image post error`, err instanceof Error ? err.message : String(err), { platform: platformName });
-                }
-              } else if (videoOnlyPlatforms.includes(platformName)) {
-                const reason = renderErrorSink.message || "video render failed";
-                console.log(`Skipping ${platformName} — requires video. Reason: ${reason}`);
-                errorMessage = (errorMessage || "") + `${platformName} skipped (video required — ${reason}); `;
-                await notifyFailure("upload", `${platformName} skipped`, `Video render failed: ${reason}`, { platform: platformName });
-              }
-            }
-
-            if (!postedAny) {
-              postStatus = "failed";
-              if (!errorMessage) errorMessage = "No image-capable platforms in selection — video generation failed";
-            }
-          }
-          if (!fallbackImage) {
-            postStatus = "failed";
+          postStatus = "failed";
+          errorMessage = realRenderError;
+          for (const platformName of platformsToPost) {
+            await notifyFailure("upload", `${platformName} skipped`, `Video render failed: ${realRenderError}`, { platform: platformName });
           }
         }
 
