@@ -497,7 +497,7 @@ export function VideoPreviewDialog({
                       </Badge>
                     ) : preview.visual_source === "gemini" ? (
                       <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/20 text-[10px] uppercase tracking-wide">
-                        Gemini Image Fallback
+                        Gemini Image
                       </Badge>
                     ) : (
                       <Badge className="bg-zinc-500/10 text-zinc-400 border-zinc-500/20 text-[10px] uppercase tracking-wide">
