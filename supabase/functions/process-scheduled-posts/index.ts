@@ -2364,9 +2364,10 @@ Deno.serve(async (req) => {
             errorMessage = `Partial publish — ${platformErrors.join(" | ")}`;
           }
         } else {
-          // Video failed — fallback to image for image-capable platforms
-          console.log("Video generation failed for scheduled post, attempting fallback image...");
-          await notifyFailure("render", "Render failed", "Video render failed — attempting fallback image.", { city: weather.city });
+          // Video failed — surface the REAL render error (not the old hardcoded "credits depleted").
+          const realRenderError = renderErrorSink.message || "Video render failed (no provider produced a valid video)";
+          console.log(`Video generation failed for scheduled post — real error: ${realRenderError}`);
+          await notifyFailure("render", "Render failed", realRenderError, { city: weather.city });
           const fallbackImage = await generateFallbackImage(weather);
 
           if (!fallbackImage) {
