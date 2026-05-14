@@ -65,6 +65,7 @@ export function VideoPreviewDialog({
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [generating, setGenerating] = useState(false);
   const [genStage, setGenStage] = useState<"idle" | "video" | "image" | "voice">("idle");
+  const [generationError, setGenerationError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [audioPlaying, setAudioPlaying] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -210,15 +211,12 @@ export function VideoPreviewDialog({
     setGenerating(true);
     setGenStage("video");
     setPreview(null);
+    setGenerationError(null);
     setIsEditingCaption(false);
     // Reset lock state — a fresh preview always starts locked
     setBundleInvalidated(false);
     setInvalidationReason(null);
 
-    // After ~25s, if still generating, switch label to image-fallback hint.
-    // The edge function tries video first via Creatomate; if that fails it
-    // falls back to AI-generated image — we surface that visually.
-    const stageTimer = setTimeout(() => setGenStage("image"), 25000);
     const voiceTimer = voice?.enabled ? setTimeout(() => setGenStage("voice"), 8000) : null;
 
     try {
@@ -235,12 +233,13 @@ export function VideoPreviewDialog({
           );
         }
       } else {
+        setGenerationError(result.error || "Failed to generate preview");
         toast.error(result.error || "Failed to generate preview");
       }
     } catch (err: any) {
+      setGenerationError(err.message || "Failed to generate preview");
       toast.error(err.message || "Failed to generate preview");
     } finally {
-      clearTimeout(stageTimer);
       if (voiceTimer) clearTimeout(voiceTimer);
       setGenerating(false);
       setGenStage("idle");
