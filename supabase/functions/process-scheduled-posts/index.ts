@@ -2411,24 +2411,35 @@ Deno.serve(async (req) => {
               errorMessage = result.error || `${platformName} upload failed`;
               platformErrors.push(`${platformName}: ${errorMessage}`);
               console.error(`[publish] ${platformName} FAILED post=${post.id}: ${errorMessage}`);
-              // Detect expired/invalid YouTube auth (token refresh failed) and surface
-              // a clear, actionable in-app notification so users know to reconnect.
+              // Detect expired/invalid auth (token refresh failed) on any platform.
               const errLower = (errorMessage || "").toLowerCase();
-              const isYoutubeAuth =
-                platformName === "youtube" &&
-                (errLower.includes("token") ||
-                  errLower.includes("auth") ||
-                  errLower.includes("invalid_grant") ||
-                  errLower.includes("unauthorized") ||
-                  errLower.includes("401") ||
-                  errLower.includes("could not get valid token"));
-              if (isYoutubeAuth) {
-                await notifyFailure(
-                  "upload",
-                  "Post Failed: YouTube login expired",
-                  "Please reconnect in settings.",
-                  { platform: "youtube", reason: "auth_expired" },
-                );
+              const isAuthExpired =
+                errLower.includes("invalid_grant") ||
+                errLower.includes("unauthorized") ||
+                errLower.includes("401") ||
+                errLower.includes("failed to obtain valid") ||
+                errLower.includes("could not get valid token") ||
+                errLower.includes("login expired") ||
+                errLower.includes("token expired") ||
+                errLower.includes("reconnect");
+              if (isAuthExpired) {
+                // Tag the error so publish_post handler can route this to an
+                // info-style notification ("connection expired — reconnect")
+                // instead of "Pipeline step failed".
+                errorMessage = `[AUTH_EXPIRED:${platformName}] ${errorMessage}`;
+                await supabase.from("notifications").insert({
+                  user_id: post.user_id,
+                  title: `⚠️ ${platformName.charAt(0).toUpperCase() + platformName.slice(1)} (${weather.city}) connection expired`,
+                  message: `Reconnect ${platformName} in Settings → Social Connections to resume posting.`,
+                  type: "warning",
+                });
+                await supabase.from("system_logs").insert({
+                  user_id: post.user_id,
+                  type: `post_auth_expired`,
+                  message: `${platformName} token expired for ${weather.city}; needs reconnect`,
+                  platform: platformName,
+                  context: { scheduled_post_id: post.id, reason: "auth_expired", city: weather.city },
+                });
               } else {
                 await notifyFailure("upload", `${platformName} upload failed`, errorMessage, { platform: platformName });
               }
