@@ -984,6 +984,44 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
     });
   }
 
+  // ── CINEMATIC ENHANCEMENTS LAYER (additive only — never mutates above) ──
+  // Toggled via ENABLE_CINEMATIC_MODE feature flag. Only appends new elements
+  // using the already-allowed types (shape, text) and animation types
+  // (fade, scale, slide). Never changes timing, voice, or pipeline.
+  if (visualStyle === "cinematic") {
+    const condLower = (weather.condition || "").toLowerCase();
+    const isRain = condLower.includes("rain") || condLower.includes("drizzle") || condLower.includes("storm");
+
+    // 1) Soft fog overlay (~8% white) — adds atmospheric depth.
+    elements.push({
+      type: "shape", track: nt(), time: 0, duration: dur(10.0),
+      shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%",
+      fill_color: "linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 50%, rgba(255,255,255,0.08) 100%)",
+      enter: { type: "fade", duration: 0.8 },
+    });
+
+    // 2) Conditional rain streak overlay (only when condition includes rain).
+    if (isRain) {
+      elements.push({
+        type: "shape", track: nt(), time: 0, duration: dur(10.0),
+        shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%",
+        fill_color: "linear-gradient(180deg, rgba(30,58,138,0.10) 0%, rgba(15,23,42,0.05) 100%)",
+        enter: { type: "fade", duration: 0.8 },
+      });
+    }
+
+    // 3) CTA pulse — overlay ring on the CTA panel during last ~3s, scales 1→1.05→1.
+    const pulseStart = Math.max(0.5, D - 3.0);
+    const pulseDur = Math.max(0.5, D - pulseStart);
+    elements.push({
+      type: "shape", track: nt(), time: pulseStart, duration: pulseDur,
+      shape_type: "rectangle", width: 1000, height: 100, x: "50%", y: ctaPanelY,
+      fill_color: "rgba(255,255,255,0)", border_radius: "14",
+      border_width: 2, border_color: "rgba(255,255,255,0.45)",
+      animations: [{ type: "scale", start_scale: "100%", end_scale: "105%", duration: 1.5, easing: "ease-in-out" }],
+    });
+  }
+
   return {
     width: 1440, height: 2560, duration: D, frame_rate: 30, fill_color: theme.bg1,
     elements,
