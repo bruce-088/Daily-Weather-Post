@@ -980,12 +980,14 @@ async function storeVoiceAudio(supabase: any, userId: string, audio: Uint8Array)
   return signed.signedUrl;
 }
 
-async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null, visualStyle?: string | null): Promise<{ data: Uint8Array; mimeType: string; duration?: number } | { creditExhausted: true; provider: "creatomate"; message?: string } | null> {
+async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null, visualStyle?: string | null, errorSink?: { message?: string }): Promise<{ data: Uint8Array; mimeType: string; duration?: number } | { creditExhausted: true; provider: "creatomate"; message?: string } | null> {
   const apiKey = Deno.env.get("CREATOMATE_API_KEY");
+  const setErr = (m: string) => { if (errorSink) errorSink.message = m; console.error("[creatomate] error:", m); };
   if (!apiKey) {
-    console.error("CREATOMATE_API_KEY not configured");
+    setErr("CREATOMATE_API_KEY not configured in Supabase edge function secrets");
     return null;
   }
+  console.log(`[creatomate] api_key_present=true api_key_prefix=${apiKey.slice(0, 4)}... length=${apiKey.length}`);
 
   const compDuration = computeVideoDuration(audioDurationSec);
   console.log(`Starting Creatomate render for ${weather.city} ${voiceUrl ? "(with voiceover)" : "(no voice)"} — composition ${compDuration.toFixed(2)}s (audio=${audioDurationSec ?? "n/a"}s) — visualStyle=${visualStyle || "default"}`);
