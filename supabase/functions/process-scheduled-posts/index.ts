@@ -2234,14 +2234,22 @@ Deno.serve(async (req) => {
             weather, timePeriod, voiceUrl, audioDurationSec: voiceAudioDurationSec, visualStyle,
             creatomate: () => generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec, visualStyle),
           });
-          // ── Post-render validation: reject empty/tiny outputs ──
+          // ── Post-render validation: reject empty/tiny/short outputs ──
+          // render_video = success ONLY if bytes are real AND duration > 2s.
+          const MIN_RENDER_DURATION_SEC = 2;
           if (rendered && rendered.data.byteLength >= MIN_VIDEO_BYTES) {
-            video = rendered;
+            const dur = (rendered as any).duration;
+            if (typeof dur === "number" && dur <= MIN_RENDER_DURATION_SEC) {
+              console.error(`[render] REJECTED post-render: duration ${dur}s <= ${MIN_RENDER_DURATION_SEC}s — marking FAILED`);
+              trace("video_render_rejected", { reason: "short_duration", duration: dur, provider: rendered.provider });
+            } else {
+              video = rendered;
+            }
           } else if (rendered) {
             console.error(`[render] REJECTED post-render: ${rendered.data.byteLength} bytes < ${MIN_VIDEO_BYTES}`);
-            trace("video_render_rejected", { bytes: rendered.data.byteLength, provider: rendered.provider });
+            trace("video_render_rejected", { reason: "too_small", bytes: rendered.data.byteLength, provider: rendered.provider });
           }
-          trace("video_render", { success: !!video, mime: video?.mimeType, provider: video?.provider, bytes: video?.data.byteLength });
+          trace("video_render", { success: !!video, mime: video?.mimeType, provider: video?.provider, bytes: video?.data.byteLength, duration: (video as any)?.duration });
           // Persist for retry credit-protection (only validated videos)
           if (video && video.data.byteLength >= MIN_VIDEO_BYTES) {
             try {
