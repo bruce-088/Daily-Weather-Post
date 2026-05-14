@@ -1542,9 +1542,11 @@ Deno.serve(async (req) => {
     // Generate video (with voice baked in if available). Composition length is sized
     // dynamically from the audio duration so the voiceover + CTA always finish in full.
     const renderStart = Date.now();
+    const renderErrorSink: { message?: string } = {};
     const video = await generateVideoWithFallback({
       weather, timePeriod, voiceUrl, audioDurationSec: voiceAudioDurationSec,
-      creatomate: () => generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec),
+      primaryTimeoutMs: 180_000,
+      creatomate: () => generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec, renderErrorSink),
     });
     const renderElapsedSec = ((Date.now() - renderStart) / 1000);
 
@@ -1659,66 +1661,23 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Image preview fallback
-      console.log("Video generation failed for preview, trying enhanced image fallback...");
-      const imgRenderStart = Date.now();
-      const fallbackImage = await generateFallbackImage(weather);
-      const imgRenderElapsedSec = ((Date.now() - imgRenderStart) / 1000);
-      if (!fallbackImage || !userId) {
-        throw new Error("Failed to generate both video and image for preview");
-      }
-
-      const ext = fallbackImage.mimeType.includes("png") ? "png" : "jpg";
-      const imgFileName = userId + "/preview-" + Date.now() + "." + ext;
-      const { error: imgUploadError } = await supabase.storage
-        .from("generated-images")
-        .upload(imgFileName, fallbackImage.data, {
-          contentType: fallbackImage.mimeType,
-          upsert: true,
-        });
-
-      if (imgUploadError) {
-        console.error("Image storage upload error:", imgUploadError);
-        throw new Error("Failed to store preview image");
-      }
-
-      const { data: imgSignedData, error: imgSignedError } = await supabase.storage
-        .from("generated-images")
-        .createSignedUrl(imgFileName, 3600);
-
-      if (imgSignedError || !imgSignedData?.signedUrl) {
-        throw new Error("Failed to create signed URL for preview image");
-      }
-
-      const visualSource = "gemini";
-      const bundleId = await insertBundle({
-        contentType: "image",
-        storageBucket: "generated-images",
-        storagePath: imgFileName,
-        assetUrl: imgSignedData.signedUrl,
-        visualSource,
-        bytes: fallbackImage.data.byteLength,
-        renderTime: imgRenderElapsedSec,
-      });
-
-      console.log("Preview image stored with signed URL", { bundleId, visualSource, renderTime: imgRenderElapsedSec });
+      const renderError = renderErrorSink.message || "Video render failed before producing a valid mp4";
+      console.error(`[daily-weather-post] preview video render failed — ${renderError}`);
       return new Response(
         JSON.stringify({
-          success: true,
+          success: false,
           mode: "preview",
-          content_type: "image",
-          image_url: imgSignedData.signedUrl,
-          storage_path: imgFileName,
+          content_type: "video",
+          error: renderError,
           weather,
           caption,
           audio_url: voiceUrl,
           voice_script: voiceScript,
           voice_attempted: voiceAttempted,
           voice_failed: voiceAttempted && !voiceUrl,
-          bundle_id: bundleId,
-          visual_source: visualSource,
-          render_time: imgRenderElapsedSec,
-          locked: !!bundleId,
+          visual_source: "creatomate",
+          render_time: renderElapsedSec,
+          locked: false,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
