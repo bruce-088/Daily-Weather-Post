@@ -56,4 +56,7 @@ export const FeatureFlags = {
   get SHOW_DEBUG_LABELS() {
     return isFeatureEnabled("SHOW_DEBUG_LABELS");
   },
+  get ENABLE_CINEMATIC_MODE() {
+    return isFeatureEnabled("ENABLE_CINEMATIC_MODE");
+  },
 };
