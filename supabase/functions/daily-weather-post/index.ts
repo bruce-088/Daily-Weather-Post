@@ -1003,7 +1003,7 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
   const videoUrl = await fetchPexelsVideoUrl(theme.videoKeyword, weather.city, weather.stateOrRegion);
   let source: Record<string, any>;
   try {
-    source = sanitizeCreatomateSource(buildCreatomateSource(weather, videoUrl, timePeriod, voiceUrl, audioDurationSec) as Record<string, any>);
+    source = sanitizeCreatomateSource(buildCreatomateSource(weather, videoUrl, timePeriod, voiceUrl, audioDurationSec, visualStyle) as Record<string, any>);
   } catch (error) {
     setErr(`Creatomate source validation failed before API call: ${error instanceof Error ? error.message : String(error)}`);
     return null;
