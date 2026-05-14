@@ -2249,9 +2249,10 @@ Deno.serve(async (req) => {
           // Try video generation once (with voiceover baked in if available)
           console.log(`RENDER START: City: ${weather.city}, VoiceEnabled: ${voiceUrl ? "True" : "False"}, VisualStyle: ${visualStyle}`);
           console.log(`[publish] post ${post.id}: AUDIO_URL → ${voiceUrl ? voiceUrl.split("?")[0] : "(none)"} duration=${voiceAudioDurationSec ?? "n/a"}s`);
+          const renderErrorSink: { message?: string } = {};
           const rendered = await generateVideoWithFallback({
             weather, timePeriod, voiceUrl, audioDurationSec: voiceAudioDurationSec, visualStyle,
-            creatomate: () => generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec, visualStyle),
+            creatomate: () => generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec, visualStyle, renderErrorSink),
           });
           // ── Post-render validation: reject empty/tiny/short outputs ──
           // render_video = success ONLY if bytes are real AND duration > 2s.
