@@ -2426,9 +2426,10 @@ Deno.serve(async (req) => {
                   await notifyFailure("upload", `${platformName} image post error`, err instanceof Error ? err.message : String(err), { platform: platformName });
                 }
               } else if (videoOnlyPlatforms.includes(platformName)) {
-                console.log("Skipping " + platformName + " — requires video (image fallback only)");
-                errorMessage = (errorMessage || "") + platformName + " skipped (video required, credits depleted); ";
-                await notifyFailure("upload", `${platformName} skipped`, "Video render failed and this platform does not accept image fallbacks.", { platform: platformName });
+                const reason = renderErrorSink.message || "video render failed";
+                console.log(`Skipping ${platformName} — requires video. Reason: ${reason}`);
+                errorMessage = (errorMessage || "") + `${platformName} skipped (video required — ${reason}); `;
+                await notifyFailure("upload", `${platformName} skipped`, `Video render failed: ${reason}`, { platform: platformName });
               }
             }
 
