@@ -38,6 +38,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { WeatherCard, type CardStyle } from "@/components/WeatherCard";
 import { SettingsPanel } from "@/components/SettingsPanel";
+import { ExpiredConnectionsBanner } from "@/components/ExpiredConnectionsBanner";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PostHistoryList } from "@/components/PostHistoryList";
