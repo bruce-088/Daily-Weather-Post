@@ -537,6 +537,51 @@ function computeVideoDuration(audioDurationSec: number | null | undefined): numb
   return Math.min(MAX_VIDEO_DURATION, Math.max(MIN_VIDEO_DURATION, target));
 }
 
+const ALLOWED_CREATOMATE_ANIMATIONS = new Set(["fade", "scale", "pan", "slide"]);
+const ALLOWED_CREATOMATE_ELEMENTS = new Set(["text", "image", "video", "shape", "audio", "composition"]);
+
+function sanitizeCreatomateSource(source: Record<string, any>): Record<string, any> {
+  const cleanAnimationValue = (value: any, ownerType: string, path: string): any => {
+    if (!value) return value;
+    const cleanOne = (animation: any) => {
+      if (!animation || typeof animation !== "object") return null;
+      const type = String(animation.type || "");
+      if (!ALLOWED_CREATOMATE_ANIMATIONS.has(type)) {
+        console.warn(`[creatomate] removed invalid animation at ${path}: ${type || "(missing)"}`);
+        return null;
+      }
+      return animation;
+    };
+    if (ownerType === "shape" && path.endsWith("animations")) {
+      console.warn("[creatomate] removed shape.animations to avoid Shape.animations.type source rejection");
+      return undefined;
+    }
+    if (Array.isArray(value)) return value.map(cleanOne).filter(Boolean);
+    return cleanOne(value) || undefined;
+  };
+
+  const cleanElement = (el: any, index: number): any => {
+    if (!el || typeof el !== "object") throw new Error(`Creatomate source element ${index} is invalid`);
+    const type = String(el.type || "");
+    if (!ALLOWED_CREATOMATE_ELEMENTS.has(type)) throw new Error(`Creatomate source element ${index} has invalid type: ${type || "(missing)"}`);
+    const next: Record<string, any> = { ...el };
+    next.animations = cleanAnimationValue(next.animations, type, `${type}.animations`);
+    next.enter = cleanAnimationValue(next.enter, type, `${type}.enter`);
+    next.exit = cleanAnimationValue(next.exit, type, `${type}.exit`);
+    if (next.animations === undefined) delete next.animations;
+    if (next.enter === undefined) delete next.enter;
+    if (next.exit === undefined) delete next.exit;
+    if ((type === "video" || type === "image" || type === "audio") && (!next.source || typeof next.source !== "string")) {
+      throw new Error(`Creatomate ${type} element ${index} is missing a valid source URL`);
+    }
+    return next;
+  };
+
+  const elements = Array.isArray(source.elements) ? source.elements.map(cleanElement) : [];
+  if (elements.length === 0) throw new Error("Creatomate source must include a non-empty elements array");
+  return { ...source, output_format: "mp4", elements };
+}
+
 function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | null, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null): object {
   const now = new Date();
   const dateStr = now.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
@@ -1021,7 +1066,13 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
   } else {
     console.log(`[render] Pexels background validated for "${theme.videoKeyword}"`);
   }
-  const source = buildCreatomateSource(weather, videoUrl, timePeriod, voiceUrl, audioDurationSec);
+  let source: Record<string, any>;
+  try {
+    source = sanitizeCreatomateSource(buildCreatomateSource(weather, videoUrl, timePeriod, voiceUrl, audioDurationSec) as Record<string, any>);
+  } catch (error) {
+    setErr(`Creatomate source validation failed before API call: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
 
   // Medium-quality render: 0.75 scale (810x1440 from a 1080x1920 source)
   // dramatically cuts Creatomate render time so we stay inside the worker
@@ -1032,6 +1083,8 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
     frame_rate: 30,
     ...source,
   });
+  const root: any = source;
+  console.log(`[creatomate] source_valid=true output_format=mp4 elements=${Array.isArray(root.elements) ? root.elements.length : 0} background_video_source=${videoUrl ? "mapped" : "none"}`);
   console.log(
     `[render] creatomate_request_sent=true template_id=${(source as any)?.template_id ?? "inline_source"} background_url=${videoUrl ? videoUrl.split("?")[0] : "(gradient)"} audio_url=${voiceUrl ? voiceUrl.split("?")[0] : "(none)"} audio_dur=${audioDurationSec ?? "n/a"}s comp_dur=${compDuration.toFixed(2)}s`,
   );
@@ -1121,10 +1174,8 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
 
   console.log("Creatomate render started, ID:", renderId);
 
-  // Poll budget: 16 ticks × 5s = 80s. Creatomate renders typically take
-  // 46–50s, so we need ≥75s of patience before falling back to image to
-  // avoid wasting credits on renders that actually succeed.
-  for (let i = 0; i < 16; i++) {
+  // Poll budget: 18 ticks × 5s = 90s minimum before any fallback path.
+  for (let i = 0; i < 18; i++) {
     await new Promise((r) => setTimeout(r, 5000));
 
     const statusRes = await fetch(`https://api.creatomate.com/v1/renders/${renderId}`, {
@@ -1137,7 +1188,7 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
     }
 
     const statusData = await statusRes.json();
-    console.log(`Render ${renderId} status: ${statusData.status} (poll ${i + 1}/16, ~${(i + 1) * 5}s)`);
+    console.log(`Render ${renderId} status: ${statusData.status} (poll ${i + 1}/18, ~${(i + 1) * 5}s)`);
 
     // ── Detect partial success / asset-load errors ──
     // Creatomate sometimes returns status=succeeded but flags asset failures
@@ -1187,7 +1238,7 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
     }
   }
 
-  setErr("Creatomate render timed out after 80 seconds");
+  setErr("Creatomate render timed out after 90 seconds");
   return null;
 }
 
@@ -1913,7 +1964,7 @@ Deno.serve(async (req) => {
 
         let postStatus = "posted";
         let errorMessage: string | null = null;
-        let storedImageUrl: string | null = null;
+        const storedImageUrl: string | null = null;
 
         // --- Platform Upload via Adapter ---
         const platformsToPost = post.platform === "both" ? ["youtube", "tiktok"] : post.platform.split(",").map((p: string) => p.trim());
@@ -2393,78 +2444,10 @@ Deno.serve(async (req) => {
           const realRenderError = renderErrorSink.message || "Video render failed (no provider produced a valid video)";
           console.log(`Video generation failed for scheduled post — real error: ${realRenderError}`);
           await notifyFailure("render", "Render failed", realRenderError, { city: weather.city });
-          const fallbackImage = await generateFallbackImage(weather);
-
-          if (!fallbackImage) {
-            errorMessage = "Both video and fallback image generation failed";
-            await notifyFailure("fallback_image", "Fallback image failed", errorMessage, { city: weather.city });
-          } else {
-            // Store the generated image to Supabase Storage
-            const stored = await storeGeneratedImage(supabase, post.user_id, fallbackImage.data, fallbackImage.mimeType, weather.city);
-            if (stored) {
-              storedImageUrl = stored.signedUrl;
-              console.log("Image stored at:", stored.storagePath);
-            }
-            
-            // Image-capable platforms (text/social). YouTube + TikTok REQUIRE
-            // video and must NEVER receive a static-image fallback.
-            const imageCapablePlatforms = ["linkedin", "twitter"];
-            const videoOnlyPlatforms = ["youtube", "instagram", "tiktok"];
-            let postedAny = false;
-
-            for (const platformName of platformsToPost) {
-              if (imageCapablePlatforms.includes(platformName)) {
-                try {
-                  const { getAdapter } = await import("../_shared/platform-adapter.ts");
-                  const adapter = getAdapter(platformName);
-                  if (!adapter) continue;
-                  const token = await adapter.getValidToken(supabase, post.user_id, post.city_id || null);
-                  if (!token) {
-                    console.error(`${platformName}: failed to get token for image post`);
-                    await notifyFailure("upload", `${platformName} auth failed`, "Could not get valid token for image post.", { platform: platformName });
-                    continue;
-                  }
-
-                  if (platformName === "linkedin") {
-                    const postResult = await postLinkedInImage(token, fallbackImage.data, title, desc);
-                    if (postResult) { postedAny = true; console.log(`Scheduled ${post.id}: linkedin image posted, ID: ${postResult}`); }
-                    else { errorMessage = "LinkedIn image post failed"; await notifyFailure("upload", "LinkedIn image post failed", errorMessage, { platform: "linkedin" }); }
-                  } else if (platformName === "twitter") {
-                    const postResult = await postTwitterImage(token, fallbackImage.data, desc);
-                    if (postResult) { postedAny = true; console.log(`Scheduled ${post.id}: twitter image posted, ID: ${postResult}`); }
-                    else { errorMessage = "Twitter image post failed"; await notifyFailure("upload", "X / Twitter image post failed", errorMessage, { platform: "twitter" }); }
-                  } else if (platformName === "tiktok") {
-                    if (storedImageUrl) {
-                      const { TikTokAdapter } = await import("../_shared/tiktok-adapter.ts");
-                      const tiktokAdapter = new TikTokAdapter();
-                      const postResult = await tiktokAdapter.uploadImage(token, storedImageUrl, title, desc);
-                      if (postResult) { postedAny = true; console.log(`Scheduled ${post.id}: tiktok photo posted, publish_id: ${postResult}`); }
-                      else { errorMessage = "TikTok photo post failed"; await notifyFailure("upload", "TikTok photo post failed", errorMessage, { platform: "tiktok" }); }
-                    } else {
-                      console.log(`Skipping TikTok for scheduled ${post.id} — no stored image URL`);
-                      await notifyFailure("upload", "TikTok skipped", "No stored image URL available for TikTok photo post.", { platform: "tiktok" });
-                    }
-                  }
-                } catch (err) {
-                  console.error(`${platformName} image post error:`, err);
-                  errorMessage = `${platformName} image post failed`;
-                  await notifyFailure("upload", `${platformName} image post error`, err instanceof Error ? err.message : String(err), { platform: platformName });
-                }
-              } else if (videoOnlyPlatforms.includes(platformName)) {
-                const reason = renderErrorSink.message || "video render failed";
-                console.log(`Skipping ${platformName} — requires video. Reason: ${reason}`);
-                errorMessage = (errorMessage || "") + `${platformName} skipped (video required — ${reason}); `;
-                await notifyFailure("upload", `${platformName} skipped`, `Video render failed: ${reason}`, { platform: platformName });
-              }
-            }
-
-            if (!postedAny) {
-              postStatus = "failed";
-              if (!errorMessage) errorMessage = "No image-capable platforms in selection — video generation failed";
-            }
-          }
-          if (!fallbackImage) {
-            postStatus = "failed";
+          postStatus = "failed";
+          errorMessage = realRenderError;
+          for (const platformName of platformsToPost) {
+            await notifyFailure("upload", `${platformName} skipped`, `Video render failed: ${realRenderError}`, { platform: platformName });
           }
         }
 

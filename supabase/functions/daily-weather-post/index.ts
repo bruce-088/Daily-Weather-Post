@@ -701,6 +701,51 @@ function computeVideoDuration(audioDurationSec: number | null | undefined): numb
   return Math.min(MAX_VIDEO_DURATION, Math.max(MIN_VIDEO_DURATION, target));
 }
 
+const ALLOWED_CREATOMATE_ANIMATIONS = new Set(["fade", "scale", "pan", "slide"]);
+const ALLOWED_CREATOMATE_ELEMENTS = new Set(["text", "image", "video", "shape", "audio", "composition"]);
+
+function sanitizeCreatomateSource(source: Record<string, any>): Record<string, any> {
+  const cleanAnimationValue = (value: any, ownerType: string, path: string): any => {
+    if (!value) return value;
+    const cleanOne = (animation: any) => {
+      if (!animation || typeof animation !== "object") return null;
+      const type = String(animation.type || "");
+      if (!ALLOWED_CREATOMATE_ANIMATIONS.has(type)) {
+        console.warn(`[creatomate] removed invalid animation at ${path}: ${type || "(missing)"}`);
+        return null;
+      }
+      return animation;
+    };
+    if (ownerType === "shape" && path.endsWith("animations")) {
+      console.warn("[creatomate] removed shape.animations to avoid Shape.animations.type source rejection");
+      return undefined;
+    }
+    if (Array.isArray(value)) return value.map(cleanOne).filter(Boolean);
+    return cleanOne(value) || undefined;
+  };
+
+  const cleanElement = (el: any, index: number): any => {
+    if (!el || typeof el !== "object") throw new Error(`Creatomate source element ${index} is invalid`);
+    const type = String(el.type || "");
+    if (!ALLOWED_CREATOMATE_ELEMENTS.has(type)) throw new Error(`Creatomate source element ${index} has invalid type: ${type || "(missing)"}`);
+    const next: Record<string, any> = { ...el };
+    next.animations = cleanAnimationValue(next.animations, type, `${type}.animations`);
+    next.enter = cleanAnimationValue(next.enter, type, `${type}.enter`);
+    next.exit = cleanAnimationValue(next.exit, type, `${type}.exit`);
+    if (next.animations === undefined) delete next.animations;
+    if (next.enter === undefined) delete next.enter;
+    if (next.exit === undefined) delete next.exit;
+    if ((type === "video" || type === "image" || type === "audio") && (!next.source || typeof next.source !== "string")) {
+      throw new Error(`Creatomate ${type} element ${index} is missing a valid source URL`);
+    }
+    return next;
+  };
+
+  const elements = Array.isArray(source.elements) ? source.elements.map(cleanElement) : [];
+  if (elements.length === 0) throw new Error("Creatomate source must include a non-empty elements array");
+  return { ...source, output_format: "mp4", elements };
+}
+
 function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | null, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null): object {
   const now = new Date();
   const dateStr = now.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
@@ -943,24 +988,34 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
   };
 }
 
-async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null): Promise<{ data: Uint8Array; mimeType: string } | null> {
+async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null, errorSink?: { message?: string }): Promise<{ data: Uint8Array; mimeType: string; duration?: number } | null> {
   const apiKey = Deno.env.get("CREATOMATE_API_KEY");
+  const setErr = (m: string) => { if (errorSink) errorSink.message = m; console.error("[creatomate] error:", m); };
   if (!apiKey) {
-    console.error("CREATOMATE_API_KEY not configured");
+    setErr("CREATOMATE_API_KEY not configured in backend function secrets");
     return null;
   }
+  console.log(`[creatomate] api_key_present=true api_key_prefix=${apiKey.slice(0, 4)}... length=${apiKey.length}`);
 
   const compDuration = computeVideoDuration(audioDurationSec);
   console.log(`Starting Creatomate render for ${weather.city} ${voiceUrl ? "(with voiceover)" : "(no voice)"} — composition ${compDuration.toFixed(2)}s (audio=${audioDurationSec ?? "n/a"}s)`);
   const theme = getWeatherTheme(weather.condition);
   const videoUrl = await fetchPexelsVideoUrl(theme.videoKeyword, weather.city, weather.stateOrRegion);
-  const source = buildCreatomateSource(weather, videoUrl, timePeriod, voiceUrl, audioDurationSec);
+  let source: Record<string, any>;
+  try {
+    source = sanitizeCreatomateSource(buildCreatomateSource(weather, videoUrl, timePeriod, voiceUrl, audioDurationSec) as Record<string, any>);
+  } catch (error) {
+    setErr(`Creatomate source validation failed before API call: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
 
 
   const requestBody = JSON.stringify({ output_format: "mp4", ...source });
+  const root: any = source;
   console.log(
     `[render] creatomate_request_sent=true template_id=${(source as any)?.template_id ?? "inline_source"} background_url=${videoUrl ? String(videoUrl).split("?")[0] : "(gradient)"} audio_url=${voiceUrl ? String(voiceUrl).split("?")[0] : "(none)"} audio_dur=${audioDurationSec ?? "n/a"}s comp_dur=${compDuration.toFixed(2)}s`,
   );
+  console.log(`[creatomate] source_valid=true output_format=mp4 elements=${Array.isArray(root.elements) ? root.elements.length : 0} background_video_source=${videoUrl ? "mapped" : "none"}`);
   console.log("Creatomate request body (first 300 chars):", requestBody.substring(0, 300));
 
   const renderRes = await fetch("https://api.creatomate.com/v2/renders", {
@@ -973,30 +1028,42 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
   });
 
   const responseText = await renderRes.text();
-  console.log("Creatomate response status:", renderRes.status, "body:", responseText.substring(0, 500));
+  console.log("Creatomate raw response status:", renderRes.status);
+  console.log("Creatomate raw response body:", responseText.substring(0, 1500));
+
+  let parsedResponse: any = null;
+  try { parsedResponse = JSON.parse(responseText); } catch { /* keep raw */ }
+  const apiError = parsedResponse?.error || parsedResponse?.message || parsedResponse?.error_message || null;
+  console.log("Creatomate parsed error field:", apiError);
 
   if (!renderRes.ok) {
-    console.error("Creatomate render request failed:", renderRes.status, responseText);
+    const detail = apiError || responseText.slice(0, 300) || `HTTP ${renderRes.status}`;
+    const mapped = renderRes.status === 401
+      ? "Invalid Creatomate API key (401). Check CREATOMATE_API_KEY secret."
+      : renderRes.status === 422
+      ? `Creatomate validation error (422): ${detail}`
+      : renderRes.status === 404
+      ? `Creatomate endpoint/render not found (404): ${detail}`
+      : `Creatomate ${renderRes.status}: ${detail}`;
+    setErr(mapped);
     return null;
   }
 
-  let renders;
-  try {
-    renders = JSON.parse(responseText);
-  } catch {
-    console.error("Failed to parse Creatomate response as JSON");
+  const renders = parsedResponse;
+  if (!renders) {
+    setErr("Failed to parse Creatomate response as JSON");
     return null;
   }
 
   const renderId = Array.isArray(renders) ? renders[0]?.id : renders?.id;
   if (!renderId) {
-    console.error("No render ID in Creatomate response");
+    setErr(`Creatomate returned no render ID (response: ${responseText.slice(0, 200)})`);
     return null;
   }
 
   console.log("Creatomate render started, ID:", renderId);
 
-  for (let i = 0; i < 36; i++) {
+  for (let i = 0; i < 18; i++) {
     await new Promise((r) => setTimeout(r, 5000));
 
     const statusRes = await fetch("https://api.creatomate.com/v1/renders/" + renderId, {
@@ -1009,27 +1076,28 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
     }
 
     const statusData = await statusRes.json();
-    console.log("Render " + renderId + " status: " + statusData.status);
+    console.log(`Render ${renderId} status: ${statusData.status} (poll ${i + 1}/18, ~${(i + 1) * 5}s)`);
 
     if (statusData.status === "succeeded" && statusData.url) {
       console.log("Render complete, downloading video...");
       const videoRes = await fetch(statusData.url);
       if (!videoRes.ok) {
-        console.error("Failed to download rendered video");
+        setErr(`Failed to download rendered video (HTTP ${videoRes.status})`);
         return null;
       }
       const arrayBuf = await videoRes.arrayBuffer();
-      console.log("Video downloaded: " + arrayBuf.byteLength + " bytes");
-      return { data: new Uint8Array(arrayBuf), mimeType: "video/mp4" };
+      const reportedDurationSec = typeof statusData.duration === "number" ? statusData.duration : undefined;
+      console.log(`Video downloaded: ${arrayBuf.byteLength} bytes, reported duration ${reportedDurationSec ?? "?"}s`);
+      return { data: new Uint8Array(arrayBuf), mimeType: "video/mp4", duration: reportedDurationSec };
     }
 
     if (statusData.status === "failed") {
-      console.error("Creatomate render failed:", statusData.error_message || "unknown error");
+      setErr(`Creatomate render failed: ${statusData.error_message || statusData.error || "unknown error"}`);
       return null;
     }
   }
 
-  console.error("Creatomate render timed out after 3 minutes");
+  setErr("Creatomate render timed out after 90 seconds");
   return null;
 }
 
@@ -1301,8 +1369,10 @@ Deno.serve(async (req) => {
     let requestedCityId: string | null = null;
     let requestedCityName: string | null = null;
     let requestedCityState: string | null = null;
+    let requestBody: Record<string, any> = {};
     try {
       const body = await req.clone().json();
+      requestBody = body && typeof body === "object" ? body : {};
       if (body?.mode === "preview") mode = "preview";
       if (body?.time_period) timePeriod = body.time_period; // "morning" | "afternoon" | "evening"
       if (body?.platforms && Array.isArray(body.platforms)) selectedPlatforms = body.platforms;
@@ -1480,9 +1550,11 @@ Deno.serve(async (req) => {
     // Generate video (with voice baked in if available). Composition length is sized
     // dynamically from the audio duration so the voiceover + CTA always finish in full.
     const renderStart = Date.now();
+    const renderErrorSink: { message?: string } = {};
     const video = await generateVideoWithFallback({
       weather, timePeriod, voiceUrl, audioDurationSec: voiceAudioDurationSec,
-      creatomate: () => generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec),
+      primaryTimeoutMs: 180_000,
+      creatomate: () => generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec, renderErrorSink),
     });
     const renderElapsedSec = ((Date.now() - renderStart) / 1000);
 
@@ -1523,7 +1595,7 @@ Deno.serve(async (req) => {
             asset_url: args.assetUrl,
             audio_url: voiceUrl ?? null,
             render_config: {
-              style: (body as any)?.style ?? "standard",
+              style: requestBody.style ?? "standard",
               time_period: timePeriod ?? null,
               render_time_sec: args.renderTime ?? null,
             },
@@ -1597,66 +1669,23 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Image preview fallback
-      console.log("Video generation failed for preview, trying enhanced image fallback...");
-      const imgRenderStart = Date.now();
-      const fallbackImage = await generateFallbackImage(weather);
-      const imgRenderElapsedSec = ((Date.now() - imgRenderStart) / 1000);
-      if (!fallbackImage || !userId) {
-        throw new Error("Failed to generate both video and image for preview");
-      }
-
-      const ext = fallbackImage.mimeType.includes("png") ? "png" : "jpg";
-      const imgFileName = userId + "/preview-" + Date.now() + "." + ext;
-      const { error: imgUploadError } = await supabase.storage
-        .from("generated-images")
-        .upload(imgFileName, fallbackImage.data, {
-          contentType: fallbackImage.mimeType,
-          upsert: true,
-        });
-
-      if (imgUploadError) {
-        console.error("Image storage upload error:", imgUploadError);
-        throw new Error("Failed to store preview image");
-      }
-
-      const { data: imgSignedData, error: imgSignedError } = await supabase.storage
-        .from("generated-images")
-        .createSignedUrl(imgFileName, 3600);
-
-      if (imgSignedError || !imgSignedData?.signedUrl) {
-        throw new Error("Failed to create signed URL for preview image");
-      }
-
-      const visualSource = "gemini";
-      const bundleId = await insertBundle({
-        contentType: "image",
-        storageBucket: "generated-images",
-        storagePath: imgFileName,
-        assetUrl: imgSignedData.signedUrl,
-        visualSource,
-        bytes: fallbackImage.data.byteLength,
-        renderTime: imgRenderElapsedSec,
-      });
-
-      console.log("Preview image stored with signed URL", { bundleId, visualSource, renderTime: imgRenderElapsedSec });
+      const renderError = renderErrorSink.message || "Video render failed before producing a valid mp4";
+      console.error(`[daily-weather-post] preview video render failed — ${renderError}`);
       return new Response(
         JSON.stringify({
-          success: true,
+          success: false,
           mode: "preview",
-          content_type: "image",
-          image_url: imgSignedData.signedUrl,
-          storage_path: imgFileName,
+          content_type: "video",
+          error: renderError,
           weather,
           caption,
           audio_url: voiceUrl,
           voice_script: voiceScript,
           voice_attempted: voiceAttempted,
           voice_failed: voiceAttempted && !voiceUrl,
-          bundle_id: bundleId,
-          visual_source: visualSource,
-          render_time: imgRenderElapsedSec,
-          locked: !!bundleId,
+          visual_source: "creatomate",
+          render_time: renderElapsedSec,
+          locked: false,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -1667,7 +1696,7 @@ Deno.serve(async (req) => {
     let status = "success";
     let errorMessage: string | null = null;
     let youtubeVideoId: string | null = null;
-    let storedImageUrl: string | null = null;
+    const storedImageUrl: string | null = null;
 
     // Per-platform result tracking (used for grouped notification)
     type PlatformResult = { name: string; ok: boolean; error?: string; postId?: string | null };
@@ -1744,85 +1773,12 @@ Deno.serve(async (req) => {
       const requested = selectedPlatforms?.length ? ` (${selectedPlatforms.join(", ")})` : "";
       errorMessage = `No social platforms connected for ${resolvedCityName}${requested} — open Settings → Channels and either connect a shared account or assign one to this city.`;
     } else if (!video) {
-      // === FALLBACK: Generate static image when video fails ===
-      console.log("Video generation failed, attempting fallback image...");
-      const fallbackImage = await generateFallbackImage(weather);
-
-      if (!fallbackImage || !userId) {
-        status = "pending";
-        errorMessage = "Both video and fallback image generation failed";
-        platform = connectedAdapters[0].name;
-        for (const a of connectedAdapters) recordResult(a.name, false, "Image generation failed");
-      } else {
-        console.log("Using fallback image for posting");
-
-        const stored = await storeGeneratedImage(supabase, userId, fallbackImage.data, fallbackImage.mimeType, weather.city);
-        if (stored) {
-          storedImageUrl = stored.signedUrl;
-          console.log("Image stored at:", stored.storagePath);
-        }
-
-        const title = generateSkyBriefTitle(weather.city, weather.temperature, weather.condition, weather.rainChance);
-        const desc = caption || "Weather update for " + weather.city + ": " + weather.temperature + "\u00B0F, " + weather.description;
-
-        const imageCapablePlatforms = ["linkedin", "twitter", "tiktok"];
-        const videoOnlyPlatforms = ["youtube", "instagram"];
-
-        for (const adapter of connectedAdapters) {
-          if (imageCapablePlatforms.includes(adapter.name)) {
-            try {
-              const token = await adapter.getValidToken(supabase, userId, resolvedCityId);
-              if (!token) {
-                console.error(`${adapter.name}: failed to get token for image post`);
-                recordResult(adapter.name, false, "Auth token missing");
-                continue;
-              }
-
-              if (adapter.name === "linkedin") {
-                const postResult = await postLinkedInImage(token, fallbackImage.data, title, desc);
-                platform = "linkedin";
-                if (postResult) { status = "success"; recordResult("linkedin", true, undefined, String(postResult)); }
-                else { status = "failed"; errorMessage = "LinkedIn image post failed"; recordResult("linkedin", false, "LinkedIn image post failed"); }
-              } else if (adapter.name === "twitter") {
-                const postResult = await postTwitterImage(token, fallbackImage.data, desc);
-                platform = "twitter";
-                if (postResult) { status = "success"; recordResult("twitter", true, undefined, String(postResult)); }
-                else { status = "failed"; errorMessage = "Twitter image post failed"; recordResult("twitter", false, "Twitter image post failed"); }
-              } else if (adapter.name === "tiktok") {
-                if (storedImageUrl) {
-                  const { TikTokAdapter } = await import("../_shared/tiktok-adapter.ts");
-                  const tiktokAdapter = new TikTokAdapter();
-                  const postResult = await tiktokAdapter.uploadImage(token, storedImageUrl, title, desc);
-                  platform = "tiktok";
-                  if (postResult) { status = "success"; recordResult("tiktok", true, undefined, String(postResult)); }
-                  else { status = "failed"; errorMessage = "TikTok photo post failed"; recordResult("tiktok", false, "TikTok photo post failed"); }
-                } else {
-                  console.log("Skipping TikTok — no stored image URL available for photo post");
-                  recordResult("tiktok", false, "No image URL available");
-                }
-              }
-            } catch (err) {
-              console.error(`${adapter.name} image post error:`, err);
-              platform = adapter.name;
-              status = "failed";
-              errorMessage = `${adapter.name} image post failed`;
-              recordResult(adapter.name, false, `${adapter.name} image post error`);
-            }
-          } else if (videoOnlyPlatforms.includes(adapter.name)) {
-            console.log("Skipping " + adapter.name + " — requires video (image fallback only)");
-            if (!errorMessage) errorMessage = "";
-            errorMessage += adapter.name + " skipped (video required — render failed; check edge function logs for the real Creatomate error); ";
-            platform = adapter.name;
-            status = "failed";
-            recordResult(adapter.name, false, "Requires video (fallback was image only)");
-          }
-        }
-
-        if (status !== "success") {
-          status = "pending";
-          errorMessage = (errorMessage || "Video unavailable") + " — posted as image where possible";
-        }
-      }
+      const realRenderError = renderErrorSink.message || "Video render failed before producing a valid mp4";
+      console.error(`[daily-weather-post] post blocked because video render failed — ${realRenderError}`);
+      status = "failed";
+      platform = connectedAdapters[0]?.name || "none";
+      errorMessage = realRenderError;
+      for (const a of connectedAdapters) recordResult(a.name, false, `Video render failed: ${realRenderError}`);
     } else if (userId) {
       const title = generateSkyBriefTitle(weather.city, weather.temperature, weather.condition, weather.rainChance);
       const desc = caption || "Weather update for " + weather.city + ": " + weather.temperature + "\u00B0F, " + weather.description;

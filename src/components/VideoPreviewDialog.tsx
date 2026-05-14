@@ -65,6 +65,7 @@ export function VideoPreviewDialog({
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [generating, setGenerating] = useState(false);
   const [genStage, setGenStage] = useState<"idle" | "video" | "image" | "voice">("idle");
+  const [generationError, setGenerationError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [audioPlaying, setAudioPlaying] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -210,15 +211,12 @@ export function VideoPreviewDialog({
     setGenerating(true);
     setGenStage("video");
     setPreview(null);
+    setGenerationError(null);
     setIsEditingCaption(false);
     // Reset lock state — a fresh preview always starts locked
     setBundleInvalidated(false);
     setInvalidationReason(null);
 
-    // After ~25s, if still generating, switch label to image-fallback hint.
-    // The edge function tries video first via Creatomate; if that fails it
-    // falls back to AI-generated image — we surface that visually.
-    const stageTimer = setTimeout(() => setGenStage("image"), 25000);
     const voiceTimer = voice?.enabled ? setTimeout(() => setGenStage("voice"), 8000) : null;
 
     try {
@@ -235,12 +233,13 @@ export function VideoPreviewDialog({
           );
         }
       } else {
+        setGenerationError(result.error || "Failed to generate preview");
         toast.error(result.error || "Failed to generate preview");
       }
     } catch (err: any) {
+      setGenerationError(err.message || "Failed to generate preview");
       toast.error(err.message || "Failed to generate preview");
     } finally {
-      clearTimeout(stageTimer);
       if (voiceTimer) clearTimeout(voiceTimer);
       setGenerating(false);
       setGenStage("idle");
@@ -448,17 +447,20 @@ export function VideoPreviewDialog({
               <p className="text-sm font-medium text-foreground">
                 {genStage === "voice"
                   ? "🎙️ Generating voice narration…"
-                  : genStage === "image"
-                  ? "🖼️ Generating AI weather image via Gemini…"
-                  : "🎥 Creatomate is crafting your video (expect ~45s)…"}
+                  : "🎥 Creatomate is crafting your video (expect ~45–90s)…"}
               </p>
               <p className="text-xs text-muted-foreground">
                 {genStage === "voice"
                   ? "Synthesizing your AI voiceover with ElevenLabs."
-                  : genStage === "image"
-                  ? "Video render didn't make it — falling back to a designed image."
-                  : "Hang tight — renders typically finish in 46–50s. We wait up to 80s before falling back."}
+                  : "Hang tight — video-required platforms will not receive image fallback."}
               </p>
+            </div>
+          )}
+
+          {!preview && !generating && generationError && (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              <div className="font-semibold">Creatomate render failed</div>
+              <div className="mt-1 break-words">{generationError}</div>
             </div>
           )}
 
@@ -495,7 +497,7 @@ export function VideoPreviewDialog({
                       </Badge>
                     ) : preview.visual_source === "gemini" ? (
                       <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/20 text-[10px] uppercase tracking-wide">
-                        Gemini Image Fallback
+                        Gemini Image
                       </Badge>
                     ) : (
                       <Badge className="bg-zinc-500/10 text-zinc-400 border-zinc-500/20 text-[10px] uppercase tracking-wide">
