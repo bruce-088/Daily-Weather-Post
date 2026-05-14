@@ -712,10 +712,10 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
     { type: "shape", track: nt(), time: subStart, duration: subDur, shape_type: "ellipse",
       width: 110, height: 110, x: "70%", y: "94%", fill_color: "#ffffff",
       shadow: "0px 4px 12px rgba(0,0,0,0.35)",
-      animations: [{ type: "wiggle", duration: 0.5, easing: "ease-in-out" }] },
+      animations: [{ type: "scale", start_scale: "100%", end_scale: "115%", duration: 0.5, easing: "ease-in-out" }] },
     { type: "text", track: nt(), time: subStart, duration: subDur, text: "🔔",
       font_size: "70", x: "70%", y: "94%", x_alignment: "50%", y_alignment: "50%",
-      animations: [{ type: "wiggle", duration: 0.5, easing: "ease-in-out" }] },
+      animations: [{ type: "scale", start_scale: "100%", end_scale: "115%", duration: 0.5, easing: "ease-in-out" }] },
     // Channel handle line above the pill
     { type: "text", track: nt(), time: subStart, duration: subDur, text: handleText,
       font_family: "Inter", font_weight: "700", font_size: "30", fill_color: "#ffffff", letter_spacing: "3%",
@@ -1060,12 +1060,37 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
 
   if (!renderRes.ok) {
     const detail = apiError || responseText.slice(0, 300) || `HTTP ${renderRes.status}`;
-    setErr(`Creatomate ${renderRes.status}: ${detail}`);
+    // Map Creatomate HTTP status codes to actionable, human-readable errors.
+    let mapped: string;
+    switch (renderRes.status) {
+      case 401:
+        mapped = "Invalid Creatomate API key (401). Check CREATOMATE_API_KEY secret.";
+        break;
+      case 403:
+        mapped = `Creatomate access forbidden (403): ${detail}`;
+        break;
+      case 404:
+        mapped = "Creatomate template not found (404). We render from inline source — this usually means the endpoint or render id is wrong.";
+        break;
+      case 422:
+        mapped = `Creatomate validation error (422): ${detail}`;
+        break;
+      case 429:
+        mapped = `Creatomate rate limited (429): ${detail}`;
+        break;
+      case 402:
+        mapped = `Creatomate payment required (402): ${detail}`;
+        break;
+      default:
+        mapped = `Creatomate ${renderRes.status}: ${detail}`;
+    }
+    console.error(`[creatomate] ${mapped}`);
+    setErr(mapped);
     const lower = (responseText + " " + (apiError || "")).toLowerCase();
     // STRICT credit-exhaustion detection: explicit billing/credit phrases or
-    // payment-required HTTP codes only. "credit" alone matches too much
-    // (e.g. credit_card validation errors), which produced false "credits
-    // depleted" reports while the account had plenty of credits.
+    // payment-required HTTP code only. Generic 422 validation errors are NOT
+    // treated as credit exhaustion (that produced false "credits depleted"
+    // reports while the account had plenty of credits).
     const isCreditExhausted =
       renderRes.status === 402 ||
       lower.includes("insufficient credit") ||
@@ -1077,7 +1102,7 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
       lower.includes("plan limit") ||
       lower.includes("payment required");
     if (isCreditExhausted) {
-      return { creditExhausted: true, provider: "creatomate", message: detail };
+      return { creditExhausted: true, provider: "creatomate", message: mapped };
     }
     return null;
   }
