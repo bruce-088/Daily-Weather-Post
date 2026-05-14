@@ -1964,7 +1964,7 @@ Deno.serve(async (req) => {
 
         let postStatus = "posted";
         let errorMessage: string | null = null;
-        let storedImageUrl: string | null = null;
+        const storedImageUrl: string | null = null;
 
         // --- Platform Upload via Adapter ---
         const platformsToPost = post.platform === "both" ? ["youtube", "tiktok"] : post.platform.split(",").map((p: string) => p.trim());

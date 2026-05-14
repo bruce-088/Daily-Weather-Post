@@ -1696,7 +1696,7 @@ Deno.serve(async (req) => {
     let status = "success";
     let errorMessage: string | null = null;
     let youtubeVideoId: string | null = null;
-    let storedImageUrl: string | null = null;
+    const storedImageUrl: string | null = null;
 
     // Per-platform result tracking (used for grouped notification)
     type PlatformResult = { name: string; ok: boolean; error?: string; postId?: string | null };
