@@ -980,7 +980,7 @@ async function storeVoiceAudio(supabase: any, userId: string, audio: Uint8Array)
   return signed.signedUrl;
 }
 
-async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null, visualStyle?: string | null): Promise<{ data: Uint8Array; mimeType: string } | null> {
+async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null, visualStyle?: string | null): Promise<{ data: Uint8Array; mimeType: string; duration?: number } | { creditExhausted: true; provider: "creatomate"; message?: string } | null> {
   const apiKey = Deno.env.get("CREATOMATE_API_KEY");
   if (!apiKey) {
     console.error("CREATOMATE_API_KEY not configured");
@@ -1049,6 +1049,17 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
 
   if (!renderRes.ok) {
     console.error("Creatomate render request failed:", renderRes.status, responseText);
+    const lower = responseText.toLowerCase();
+    if (
+      renderRes.status === 402 ||
+      renderRes.status === 429 ||
+      lower.includes("credit") ||
+      lower.includes("quota") ||
+      lower.includes("billing") ||
+      lower.includes("plan limit")
+    ) {
+      return { creditExhausted: true, provider: "creatomate", message: responseText.slice(0, 200) };
+    }
     return null;
   }
 
@@ -1123,7 +1134,7 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
         console.error(`[render] REJECTED: video too short (${reportedDurationSec}s < ${MIN_DURATION_SEC}s)`);
         return null;
       }
-      return { data: new Uint8Array(arrayBuf), mimeType: "video/mp4" };
+      return { data: new Uint8Array(arrayBuf), mimeType: "video/mp4", duration: reportedDurationSec ?? undefined };
     }
 
     if (statusData.status === "failed" || statusData.status === "partial") {
@@ -2223,14 +2234,22 @@ Deno.serve(async (req) => {
             weather, timePeriod, voiceUrl, audioDurationSec: voiceAudioDurationSec, visualStyle,
             creatomate: () => generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec, visualStyle),
           });
-          // ── Post-render validation: reject empty/tiny outputs ──
+          // ── Post-render validation: reject empty/tiny/short outputs ──
+          // render_video = success ONLY if bytes are real AND duration > 2s.
+          const MIN_RENDER_DURATION_SEC = 2;
           if (rendered && rendered.data.byteLength >= MIN_VIDEO_BYTES) {
-            video = rendered;
+            const dur = (rendered as any).duration;
+            if (typeof dur === "number" && dur <= MIN_RENDER_DURATION_SEC) {
+              console.error(`[render] REJECTED post-render: duration ${dur}s <= ${MIN_RENDER_DURATION_SEC}s — marking FAILED`);
+              trace("video_render_rejected", { reason: "short_duration", duration: dur, provider: rendered.provider });
+            } else {
+              video = rendered;
+            }
           } else if (rendered) {
             console.error(`[render] REJECTED post-render: ${rendered.data.byteLength} bytes < ${MIN_VIDEO_BYTES}`);
-            trace("video_render_rejected", { bytes: rendered.data.byteLength, provider: rendered.provider });
+            trace("video_render_rejected", { reason: "too_small", bytes: rendered.data.byteLength, provider: rendered.provider });
           }
-          trace("video_render", { success: !!video, mime: video?.mimeType, provider: video?.provider, bytes: video?.data.byteLength });
+          trace("video_render", { success: !!video, mime: video?.mimeType, provider: video?.provider, bytes: video?.data.byteLength, duration: (video as any)?.duration });
           // Persist for retry credit-protection (only validated videos)
           if (video && video.data.byteLength >= MIN_VIDEO_BYTES) {
             try {
@@ -2341,8 +2360,10 @@ Deno.serve(async (req) => {
               console.log("Image stored at:", stored.storagePath);
             }
             
-            const imageCapablePlatforms = ["linkedin", "twitter", "tiktok"];
-            const videoOnlyPlatforms = ["youtube", "instagram"];
+            // Image-capable platforms (text/social). YouTube + TikTok REQUIRE
+            // video and must NEVER receive a static-image fallback.
+            const imageCapablePlatforms = ["linkedin", "twitter"];
+            const videoOnlyPlatforms = ["youtube", "instagram", "tiktok"];
             let postedAny = false;
 
             for (const platformName of platformsToPost) {
