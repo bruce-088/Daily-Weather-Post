@@ -1765,85 +1765,12 @@ Deno.serve(async (req) => {
       const requested = selectedPlatforms?.length ? ` (${selectedPlatforms.join(", ")})` : "";
       errorMessage = `No social platforms connected for ${resolvedCityName}${requested} — open Settings → Channels and either connect a shared account or assign one to this city.`;
     } else if (!video) {
-      // === FALLBACK: Generate static image when video fails ===
-      console.log("Video generation failed, attempting fallback image...");
-      const fallbackImage = await generateFallbackImage(weather);
-
-      if (!fallbackImage || !userId) {
-        status = "pending";
-        errorMessage = "Both video and fallback image generation failed";
-        platform = connectedAdapters[0].name;
-        for (const a of connectedAdapters) recordResult(a.name, false, "Image generation failed");
-      } else {
-        console.log("Using fallback image for posting");
-
-        const stored = await storeGeneratedImage(supabase, userId, fallbackImage.data, fallbackImage.mimeType, weather.city);
-        if (stored) {
-          storedImageUrl = stored.signedUrl;
-          console.log("Image stored at:", stored.storagePath);
-        }
-
-        const title = generateSkyBriefTitle(weather.city, weather.temperature, weather.condition, weather.rainChance);
-        const desc = caption || "Weather update for " + weather.city + ": " + weather.temperature + "\u00B0F, " + weather.description;
-
-        const imageCapablePlatforms = ["linkedin", "twitter", "tiktok"];
-        const videoOnlyPlatforms = ["youtube", "instagram"];
-
-        for (const adapter of connectedAdapters) {
-          if (imageCapablePlatforms.includes(adapter.name)) {
-            try {
-              const token = await adapter.getValidToken(supabase, userId, resolvedCityId);
-              if (!token) {
-                console.error(`${adapter.name}: failed to get token for image post`);
-                recordResult(adapter.name, false, "Auth token missing");
-                continue;
-              }
-
-              if (adapter.name === "linkedin") {
-                const postResult = await postLinkedInImage(token, fallbackImage.data, title, desc);
-                platform = "linkedin";
-                if (postResult) { status = "success"; recordResult("linkedin", true, undefined, String(postResult)); }
-                else { status = "failed"; errorMessage = "LinkedIn image post failed"; recordResult("linkedin", false, "LinkedIn image post failed"); }
-              } else if (adapter.name === "twitter") {
-                const postResult = await postTwitterImage(token, fallbackImage.data, desc);
-                platform = "twitter";
-                if (postResult) { status = "success"; recordResult("twitter", true, undefined, String(postResult)); }
-                else { status = "failed"; errorMessage = "Twitter image post failed"; recordResult("twitter", false, "Twitter image post failed"); }
-              } else if (adapter.name === "tiktok") {
-                if (storedImageUrl) {
-                  const { TikTokAdapter } = await import("../_shared/tiktok-adapter.ts");
-                  const tiktokAdapter = new TikTokAdapter();
-                  const postResult = await tiktokAdapter.uploadImage(token, storedImageUrl, title, desc);
-                  platform = "tiktok";
-                  if (postResult) { status = "success"; recordResult("tiktok", true, undefined, String(postResult)); }
-                  else { status = "failed"; errorMessage = "TikTok photo post failed"; recordResult("tiktok", false, "TikTok photo post failed"); }
-                } else {
-                  console.log("Skipping TikTok — no stored image URL available for photo post");
-                  recordResult("tiktok", false, "No image URL available");
-                }
-              }
-            } catch (err) {
-              console.error(`${adapter.name} image post error:`, err);
-              platform = adapter.name;
-              status = "failed";
-              errorMessage = `${adapter.name} image post failed`;
-              recordResult(adapter.name, false, `${adapter.name} image post error`);
-            }
-          } else if (videoOnlyPlatforms.includes(adapter.name)) {
-            console.log("Skipping " + adapter.name + " — requires video (image fallback only)");
-            if (!errorMessage) errorMessage = "";
-            errorMessage += adapter.name + " skipped (video required — render failed; check edge function logs for the real Creatomate error); ";
-            platform = adapter.name;
-            status = "failed";
-            recordResult(adapter.name, false, "Requires video (fallback was image only)");
-          }
-        }
-
-        if (status !== "success") {
-          status = "pending";
-          errorMessage = (errorMessage || "Video unavailable") + " — posted as image where possible";
-        }
-      }
+      const realRenderError = renderErrorSink.message || "Video render failed before producing a valid mp4";
+      console.error(`[daily-weather-post] post blocked because video render failed — ${realRenderError}`);
+      status = "failed";
+      platform = connectedAdapters[0]?.name || "none";
+      errorMessage = realRenderError;
+      for (const a of connectedAdapters) recordResult(a.name, false, `Video render failed: ${realRenderError}`);
     } else if (userId) {
       const title = generateSkyBriefTitle(weather.city, weather.temperature, weather.condition, weather.rainChance);
       const desc = caption || "Weather update for " + weather.city + ": " + weather.temperature + "\u00B0F, " + weather.description;
