@@ -988,24 +988,28 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
   };
 }
 
-async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null): Promise<{ data: Uint8Array; mimeType: string } | null> {
+async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null, errorSink?: { message?: string }): Promise<{ data: Uint8Array; mimeType: string; duration?: number } | null> {
   const apiKey = Deno.env.get("CREATOMATE_API_KEY");
+  const setErr = (m: string) => { if (errorSink) errorSink.message = m; console.error("[creatomate] error:", m); };
   if (!apiKey) {
-    console.error("CREATOMATE_API_KEY not configured");
+    setErr("CREATOMATE_API_KEY not configured in backend function secrets");
     return null;
   }
+  console.log(`[creatomate] api_key_present=true api_key_prefix=${apiKey.slice(0, 4)}... length=${apiKey.length}`);
 
   const compDuration = computeVideoDuration(audioDurationSec);
   console.log(`Starting Creatomate render for ${weather.city} ${voiceUrl ? "(with voiceover)" : "(no voice)"} — composition ${compDuration.toFixed(2)}s (audio=${audioDurationSec ?? "n/a"}s)`);
   const theme = getWeatherTheme(weather.condition);
   const videoUrl = await fetchPexelsVideoUrl(theme.videoKeyword, weather.city, weather.stateOrRegion);
-  const source = buildCreatomateSource(weather, videoUrl, timePeriod, voiceUrl, audioDurationSec);
+  const source = sanitizeCreatomateSource(buildCreatomateSource(weather, videoUrl, timePeriod, voiceUrl, audioDurationSec) as Record<string, any>);
 
 
   const requestBody = JSON.stringify({ output_format: "mp4", ...source });
+  const root: any = source;
   console.log(
     `[render] creatomate_request_sent=true template_id=${(source as any)?.template_id ?? "inline_source"} background_url=${videoUrl ? String(videoUrl).split("?")[0] : "(gradient)"} audio_url=${voiceUrl ? String(voiceUrl).split("?")[0] : "(none)"} audio_dur=${audioDurationSec ?? "n/a"}s comp_dur=${compDuration.toFixed(2)}s`,
   );
+  console.log(`[creatomate] source_valid=true output_format=mp4 elements=${Array.isArray(root.elements) ? root.elements.length : 0} background_video_source=${videoUrl ? "mapped" : "none"}`);
   console.log("Creatomate request body (first 300 chars):", requestBody.substring(0, 300));
 
   const renderRes = await fetch("https://api.creatomate.com/v2/renders", {
@@ -1018,30 +1022,42 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
   });
 
   const responseText = await renderRes.text();
-  console.log("Creatomate response status:", renderRes.status, "body:", responseText.substring(0, 500));
+  console.log("Creatomate raw response status:", renderRes.status);
+  console.log("Creatomate raw response body:", responseText.substring(0, 1500));
+
+  let parsedResponse: any = null;
+  try { parsedResponse = JSON.parse(responseText); } catch { /* keep raw */ }
+  const apiError = parsedResponse?.error || parsedResponse?.message || parsedResponse?.error_message || null;
+  console.log("Creatomate parsed error field:", apiError);
 
   if (!renderRes.ok) {
-    console.error("Creatomate render request failed:", renderRes.status, responseText);
+    const detail = apiError || responseText.slice(0, 300) || `HTTP ${renderRes.status}`;
+    const mapped = renderRes.status === 401
+      ? "Invalid Creatomate API key (401). Check CREATOMATE_API_KEY secret."
+      : renderRes.status === 422
+      ? `Creatomate validation error (422): ${detail}`
+      : renderRes.status === 404
+      ? `Creatomate endpoint/render not found (404): ${detail}`
+      : `Creatomate ${renderRes.status}: ${detail}`;
+    setErr(mapped);
     return null;
   }
 
-  let renders;
-  try {
-    renders = JSON.parse(responseText);
-  } catch {
-    console.error("Failed to parse Creatomate response as JSON");
+  const renders = parsedResponse;
+  if (!renders) {
+    setErr("Failed to parse Creatomate response as JSON");
     return null;
   }
 
   const renderId = Array.isArray(renders) ? renders[0]?.id : renders?.id;
   if (!renderId) {
-    console.error("No render ID in Creatomate response");
+    setErr(`Creatomate returned no render ID (response: ${responseText.slice(0, 200)})`);
     return null;
   }
 
   console.log("Creatomate render started, ID:", renderId);
 
-  for (let i = 0; i < 36; i++) {
+  for (let i = 0; i < 18; i++) {
     await new Promise((r) => setTimeout(r, 5000));
 
     const statusRes = await fetch("https://api.creatomate.com/v1/renders/" + renderId, {
@@ -1054,27 +1070,28 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
     }
 
     const statusData = await statusRes.json();
-    console.log("Render " + renderId + " status: " + statusData.status);
+    console.log(`Render ${renderId} status: ${statusData.status} (poll ${i + 1}/18, ~${(i + 1) * 5}s)`);
 
     if (statusData.status === "succeeded" && statusData.url) {
       console.log("Render complete, downloading video...");
       const videoRes = await fetch(statusData.url);
       if (!videoRes.ok) {
-        console.error("Failed to download rendered video");
+        setErr(`Failed to download rendered video (HTTP ${videoRes.status})`);
         return null;
       }
       const arrayBuf = await videoRes.arrayBuffer();
-      console.log("Video downloaded: " + arrayBuf.byteLength + " bytes");
-      return { data: new Uint8Array(arrayBuf), mimeType: "video/mp4" };
+      const reportedDurationSec = typeof statusData.duration === "number" ? statusData.duration : undefined;
+      console.log(`Video downloaded: ${arrayBuf.byteLength} bytes, reported duration ${reportedDurationSec ?? "?"}s`);
+      return { data: new Uint8Array(arrayBuf), mimeType: "video/mp4", duration: reportedDurationSec };
     }
 
     if (statusData.status === "failed") {
-      console.error("Creatomate render failed:", statusData.error_message || "unknown error");
+      setErr(`Creatomate render failed: ${statusData.error_message || statusData.error || "unknown error"}`);
       return null;
     }
   }
 
-  console.error("Creatomate render timed out after 3 minutes");
+  setErr("Creatomate render timed out after 90 seconds");
   return null;
 }
 
