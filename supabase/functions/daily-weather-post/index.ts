@@ -746,7 +746,7 @@ function sanitizeCreatomateSource(source: Record<string, any>): Record<string, a
   return { ...source, output_format: "mp4", elements };
 }
 
-function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | null, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null): object {
+function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | null, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null, visualStyle?: string | null): object {
   const now = new Date();
   const dateStr = now.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
   const theme = getWeatherTheme(weather.condition);
@@ -785,7 +785,9 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
   const hiStr = hi + "\u00B0";
   const loStr = lo + "\u00B0";
   const rainStr = weather.rainChance + "%";
-  const bgGradient = "linear-gradient(170deg, " + theme.bg1 + " 0%, " + theme.bg2 + " 50%, " + theme.bg1 + " 100%)";
+  const bgGradient = visualStyle === "cinematic"
+    ? "linear-gradient(170deg, #0b1220 0%, #1a1a2e 50%, #0b1220 100%)"
+    : "linear-gradient(170deg, " + theme.bg1 + " 0%, " + theme.bg2 + " 50%, " + theme.bg1 + " 100%)";
   const logoUrl = "https://pewdswjhsesfondewucc.supabase.co/storage/v1/object/public/brand-assets/skybrief-icon.png";
 
   // === BACKGROUND with Ken Burns slow zoom (100% → 110%) — keeps motion alive
@@ -988,7 +990,7 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
   };
 }
 
-async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null, errorSink?: { message?: string }): Promise<{ data: Uint8Array; mimeType: string; duration?: number } | null> {
+async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null, visualStyle?: string | null, errorSink?: { message?: string }): Promise<{ data: Uint8Array; mimeType: string; duration?: number } | null> {
   const apiKey = Deno.env.get("CREATOMATE_API_KEY");
   const setErr = (m: string) => { if (errorSink) errorSink.message = m; console.error("[creatomate] error:", m); };
   if (!apiKey) {
@@ -1003,7 +1005,7 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
   const videoUrl = await fetchPexelsVideoUrl(theme.videoKeyword, weather.city, weather.stateOrRegion);
   let source: Record<string, any>;
   try {
-    source = sanitizeCreatomateSource(buildCreatomateSource(weather, videoUrl, timePeriod, voiceUrl, audioDurationSec) as Record<string, any>);
+    source = sanitizeCreatomateSource(buildCreatomateSource(weather, videoUrl, timePeriod, voiceUrl, audioDurationSec, visualStyle) as Record<string, any>);
   } catch (error) {
     setErr(`Creatomate source validation failed before API call: ${error instanceof Error ? error.message : String(error)}`);
     return null;
@@ -1389,7 +1391,9 @@ Deno.serve(async (req) => {
         };
       }
     } catch { /* no body is fine */ }
-    console.log(`[daily-weather-post] mode=${mode} style=${style} variation=${variation} voice=${voiceOpts.enabled} city_id=${requestedCityId ?? "-"} city=${requestedCityName ?? "-"}`);
+    const enableCinematic = !!requestBody?.enable_cinematic_mode;
+    const visualStyle: string | null = enableCinematic ? "cinematic" : null;
+    console.log(`[daily-weather-post] mode=${mode} style=${style} variation=${variation} voice=${voiceOpts.enabled} city_id=${requestedCityId ?? "-"} city=${requestedCityName ?? "-"} cinematic=${enableCinematic}`);
 
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -1553,8 +1557,9 @@ Deno.serve(async (req) => {
     const renderErrorSink: { message?: string } = {};
     const video = await generateVideoWithFallback({
       weather, timePeriod, voiceUrl, audioDurationSec: voiceAudioDurationSec,
+      visualStyle,
       primaryTimeoutMs: 180_000,
-      creatomate: () => generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec, renderErrorSink),
+      creatomate: () => generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec, visualStyle, renderErrorSink),
     });
     const renderElapsedSec = ((Date.now() - renderStart) / 1000);
 

@@ -2233,6 +2233,11 @@ Deno.serve(async (req) => {
         // Priority: 1) experiment override 2) weather context 3) city context
         // 4) top-performing style from history. Then rotation guard.
         let visualStyle = "sky";
+        // Feature-flag override: cinematic mode forces cinematic visual style globally.
+        if (Deno.env.get("ENABLE_CINEMATIC_MODE") === "true") {
+          visualStyle = "cinematic";
+          console.log(`[visual] post ${post.id}: ENABLE_CINEMATIC_MODE override → cinematic`);
+        }
         let topPerfStyle: string | null = null;
         try {
           const top = await getTopVisualStyle(supabase, post.user_id);
