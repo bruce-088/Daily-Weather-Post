@@ -25,30 +25,42 @@ export class YouTubeAdapter implements PlatformAdapter {
       access_token: string | null;
       refresh_token: string | null;
       token_expires_at: string | null;
+      account_name?: string | null;
+      city_id?: string | null;
     } | null = null;
 
+    // Inventory all YouTube channels for this user so we can enforce strict
+    // city→channel routing when multiple channels are connected.
+    const { data: allChannels } = await supabase
+      .from("social_accounts")
+      .select("id, access_token, refresh_token, token_expires_at, account_name, city_id")
+      .eq("user_id", userId)
+      .eq("platform", "youtube");
+    const channels = allChannels || [];
+
     if (cityId) {
-      const { data } = await supabase
-        .from("social_accounts")
-        .select("id, access_token, refresh_token, token_expires_at")
-        .eq("user_id", userId)
-        .eq("platform", "youtube")
-        .eq("city_id", cityId)
-        .maybeSingle();
-      if (data) account = data;
+      account = channels.find((c: any) => c.city_id === cityId) || null;
+    }
+
+    // STRICT routing: if there are multiple channels and the city has no
+    // explicit assignment, refuse to fall back to a "shared" channel — that
+    // is exactly how Gainesville posts ended up on the Orlando channel.
+    if (!account && cityId && channels.length > 1) {
+      const names = channels.map((c: any) => c.account_name || "channel").join(", ");
+      throw new Error(
+        `No YouTube channel mapped to this city. Open Settings → City → Account Routing and assign one of your connected channels (${names}) to this city.`,
+      );
     }
 
     if (!account) {
-      const { data } = await supabase
-        .from("social_accounts")
-        .select("id, access_token, refresh_token, token_expires_at")
-        .eq("user_id", userId)
-        .eq("platform", "youtube")
-        .is("city_id", null)
-        .order("updated_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (data) account = data;
+      // Single-channel installs (or no city context): use the shared row.
+      account = channels.find((c: any) => c.city_id == null) || channels[0] || null;
+    }
+
+    if (account) {
+      console.log(
+        `[youtube-adapter] using channel "${account.account_name || account.id}" (city_id=${account.city_id ?? "shared"}) for cityId=${cityId ?? "none"}`,
+      );
     }
 
     // Final fallback to legacy weather_settings columns (oldest single-channel install).
