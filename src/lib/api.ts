@@ -205,6 +205,7 @@ export async function generatePreview(opts?: {
     mode: "preview",
     style: opts?.style ?? "standard",
     variation: !!opts?.variation,
+    enable_cinematic_mode: FeatureFlags.ENABLE_CINEMATIC_MODE,
   };
   if (opts?.voice?.enabled) body.voice = opts.voice;
   applyCityContext(body, opts?.city);
