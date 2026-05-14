@@ -308,7 +308,7 @@ async function generateWithJSON2Video(
     scenes: [
       {
         duration,
-        background: { type: "color", color: bg },
+        "background-color": bg,
         elements,
       },
     ],
