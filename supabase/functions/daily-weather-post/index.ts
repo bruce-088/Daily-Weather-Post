@@ -746,7 +746,7 @@ function sanitizeCreatomateSource(source: Record<string, any>): Record<string, a
   return { ...source, output_format: "mp4", elements };
 }
 
-function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | null, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null): object {
+function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | null, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null, visualStyle?: string | null): object {
   const now = new Date();
   const dateStr = now.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
   const theme = getWeatherTheme(weather.condition);
