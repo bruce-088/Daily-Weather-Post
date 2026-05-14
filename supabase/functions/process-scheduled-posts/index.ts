@@ -537,6 +537,51 @@ function computeVideoDuration(audioDurationSec: number | null | undefined): numb
   return Math.min(MAX_VIDEO_DURATION, Math.max(MIN_VIDEO_DURATION, target));
 }
 
+const ALLOWED_CREATOMATE_ANIMATIONS = new Set(["fade", "scale", "pan", "slide"]);
+const ALLOWED_CREATOMATE_ELEMENTS = new Set(["text", "image", "video", "shape", "audio", "composition"]);
+
+function sanitizeCreatomateSource(source: Record<string, any>): Record<string, any> {
+  const cleanAnimationValue = (value: any, ownerType: string, path: string): any => {
+    if (!value) return value;
+    const cleanOne = (animation: any) => {
+      if (!animation || typeof animation !== "object") return null;
+      const type = String(animation.type || "");
+      if (!ALLOWED_CREATOMATE_ANIMATIONS.has(type)) {
+        console.warn(`[creatomate] removed invalid animation at ${path}: ${type || "(missing)"}`);
+        return null;
+      }
+      return animation;
+    };
+    if (ownerType === "shape" && path.endsWith("animations")) {
+      console.warn("[creatomate] removed shape.animations to avoid Shape.animations.type source rejection");
+      return undefined;
+    }
+    if (Array.isArray(value)) return value.map(cleanOne).filter(Boolean);
+    return cleanOne(value) || undefined;
+  };
+
+  const cleanElement = (el: any, index: number): any => {
+    if (!el || typeof el !== "object") throw new Error(`Creatomate source element ${index} is invalid`);
+    const type = String(el.type || "");
+    if (!ALLOWED_CREATOMATE_ELEMENTS.has(type)) throw new Error(`Creatomate source element ${index} has invalid type: ${type || "(missing)"}`);
+    const next: Record<string, any> = { ...el };
+    next.animations = cleanAnimationValue(next.animations, type, `${type}.animations`);
+    next.enter = cleanAnimationValue(next.enter, type, `${type}.enter`);
+    next.exit = cleanAnimationValue(next.exit, type, `${type}.exit`);
+    if (next.animations === undefined) delete next.animations;
+    if (next.enter === undefined) delete next.enter;
+    if (next.exit === undefined) delete next.exit;
+    if ((type === "video" || type === "image" || type === "audio") && (!next.source || typeof next.source !== "string")) {
+      throw new Error(`Creatomate ${type} element ${index} is missing a valid source URL`);
+    }
+    return next;
+  };
+
+  const elements = Array.isArray(source.elements) ? source.elements.map(cleanElement) : [];
+  if (elements.length === 0) throw new Error("Creatomate source must include a non-empty elements array");
+  return { ...source, output_format: "mp4", elements };
+}
+
 function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | null, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null): object {
   const now = new Date();
   const dateStr = now.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
