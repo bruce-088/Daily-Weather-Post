@@ -1369,8 +1369,10 @@ Deno.serve(async (req) => {
     let requestedCityId: string | null = null;
     let requestedCityName: string | null = null;
     let requestedCityState: string | null = null;
+    let requestBody: Record<string, any> = {};
     try {
       const body = await req.clone().json();
+      requestBody = body && typeof body === "object" ? body : {};
       if (body?.mode === "preview") mode = "preview";
       if (body?.time_period) timePeriod = body.time_period; // "morning" | "afternoon" | "evening"
       if (body?.platforms && Array.isArray(body.platforms)) selectedPlatforms = body.platforms;
@@ -1593,7 +1595,7 @@ Deno.serve(async (req) => {
             asset_url: args.assetUrl,
             audio_url: voiceUrl ?? null,
             render_config: {
-              style: (body as any)?.style ?? "standard",
+              style: requestBody.style ?? "standard",
               time_period: timePeriod ?? null,
               render_time_sec: args.renderTime ?? null,
             },
