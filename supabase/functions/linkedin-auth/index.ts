@@ -243,6 +243,15 @@ Deno.serve(async (req) => {
         );
       }
 
+      await supabase
+        .from("social_accounts")
+        .update({
+          extra: { organization_urn },
+          updated_at: new Date().toISOString(),
+        })
+        .eq("user_id", auth.userId)
+        .eq("platform", "linkedin");
+
       return new Response(
         JSON.stringify({ success: true }),
         { headers: corsHeaders },
@@ -302,6 +311,17 @@ Deno.serve(async (req) => {
           linkedin_token_expires_at: expiresAt,
         })
         .eq("user_id", auth.userId);
+
+      await supabase
+        .from("social_accounts")
+        .update({
+          access_token: tokenData.access_token,
+          refresh_token: tokenData.refresh_token || settings.linkedin_refresh_token,
+          token_expires_at: expiresAt,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("user_id", auth.userId)
+        .eq("platform", "linkedin");
 
       return new Response(
         JSON.stringify({ success: true, access_token: tokenData.access_token }),
