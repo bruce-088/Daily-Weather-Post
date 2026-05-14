@@ -158,7 +158,7 @@ export async function triggerDailyPost(
     console.error("[guardrail] " + msg);
     throw new Error(msg);
   }
-  const body: Record<string, any> = { mode: "post-now" };
+  const body: Record<string, any> = { mode: "post-now", enable_cinematic_mode: FeatureFlags.ENABLE_CINEMATIC_MODE };
   if (timePeriod) body.time_period = timePeriod;
   if (platforms?.length) body.platforms = platforms;
   if (voice?.enabled) body.voice = voice;
