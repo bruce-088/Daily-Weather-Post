@@ -980,7 +980,7 @@ async function storeVoiceAudio(supabase: any, userId: string, audio: Uint8Array)
   return signed.signedUrl;
 }
 
-async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null, visualStyle?: string | null): Promise<{ data: Uint8Array; mimeType: string } | null> {
+async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null, visualStyle?: string | null): Promise<{ data: Uint8Array; mimeType: string; duration?: number } | { creditExhausted: true; provider: "creatomate"; message?: string } | null> {
   const apiKey = Deno.env.get("CREATOMATE_API_KEY");
   if (!apiKey) {
     console.error("CREATOMATE_API_KEY not configured");
