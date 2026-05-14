@@ -1066,7 +1066,13 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
   } else {
     console.log(`[render] Pexels background validated for "${theme.videoKeyword}"`);
   }
-  const source = sanitizeCreatomateSource(buildCreatomateSource(weather, videoUrl, timePeriod, voiceUrl, audioDurationSec) as Record<string, any>);
+  let source: Record<string, any>;
+  try {
+    source = sanitizeCreatomateSource(buildCreatomateSource(weather, videoUrl, timePeriod, voiceUrl, audioDurationSec) as Record<string, any>);
+  } catch (error) {
+    setErr(`Creatomate source validation failed before API call: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
 
   // Medium-quality render: 0.75 scale (810x1440 from a 1080x1920 source)
   // dramatically cuts Creatomate render time so we stay inside the worker
