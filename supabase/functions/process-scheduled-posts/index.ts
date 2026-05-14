@@ -1066,7 +1066,7 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
   } else {
     console.log(`[render] Pexels background validated for "${theme.videoKeyword}"`);
   }
-  const source = buildCreatomateSource(weather, videoUrl, timePeriod, voiceUrl, audioDurationSec);
+  const source = sanitizeCreatomateSource(buildCreatomateSource(weather, videoUrl, timePeriod, voiceUrl, audioDurationSec) as Record<string, any>);
 
   // Medium-quality render: 0.75 scale (810x1440 from a 1080x1920 source)
   // dramatically cuts Creatomate render time so we stay inside the worker
@@ -1077,6 +1077,8 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
     frame_rate: 30,
     ...source,
   });
+  const root: any = source;
+  console.log(`[creatomate] source_valid=true output_format=mp4 elements=${Array.isArray(root.elements) ? root.elements.length : 0} background_video_source=${videoUrl ? "mapped" : "none"}`);
   console.log(
     `[render] creatomate_request_sent=true template_id=${(source as any)?.template_id ?? "inline_source"} background_url=${videoUrl ? videoUrl.split("?")[0] : "(gradient)"} audio_url=${voiceUrl ? voiceUrl.split("?")[0] : "(none)"} audio_dur=${audioDurationSec ?? "n/a"}s comp_dur=${compDuration.toFixed(2)}s`,
   );
@@ -1166,10 +1168,8 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
 
   console.log("Creatomate render started, ID:", renderId);
 
-  // Poll budget: 16 ticks × 5s = 80s. Creatomate renders typically take
-  // 46–50s, so we need ≥75s of patience before falling back to image to
-  // avoid wasting credits on renders that actually succeed.
-  for (let i = 0; i < 16; i++) {
+  // Poll budget: 18 ticks × 5s = 90s minimum before any fallback path.
+  for (let i = 0; i < 18; i++) {
     await new Promise((r) => setTimeout(r, 5000));
 
     const statusRes = await fetch(`https://api.creatomate.com/v1/renders/${renderId}`, {
@@ -1182,7 +1182,7 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
     }
 
     const statusData = await statusRes.json();
-    console.log(`Render ${renderId} status: ${statusData.status} (poll ${i + 1}/16, ~${(i + 1) * 5}s)`);
+    console.log(`Render ${renderId} status: ${statusData.status} (poll ${i + 1}/18, ~${(i + 1) * 5}s)`);
 
     // ── Detect partial success / asset-load errors ──
     // Creatomate sometimes returns status=succeeded but flags asset failures
@@ -1232,7 +1232,7 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
     }
   }
 
-  setErr("Creatomate render timed out after 80 seconds");
+  setErr("Creatomate render timed out after 90 seconds");
   return null;
 }
 
