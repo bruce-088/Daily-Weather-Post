@@ -1134,7 +1134,7 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
         console.error(`[render] REJECTED: video too short (${reportedDurationSec}s < ${MIN_DURATION_SEC}s)`);
         return null;
       }
-      return { data: new Uint8Array(arrayBuf), mimeType: "video/mp4" };
+      return { data: new Uint8Array(arrayBuf), mimeType: "video/mp4", duration: reportedDurationSec ?? undefined };
     }
 
     if (statusData.status === "failed" || statusData.status === "partial") {
