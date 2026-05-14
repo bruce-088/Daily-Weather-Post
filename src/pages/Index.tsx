@@ -208,8 +208,8 @@ const Index = () => {
     }));
   }, [activeCityId, userCities]);
 
-  const [voiceEnabled, setVoiceEnabled] = useState(false);
-  const [voiceId, setVoiceId] = useState<"female" | "male">("female");
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [voiceId, setVoiceId] = useState<"female" | "male">("male");
   const [voiceTone, setVoiceTone] = useState<"conversational" | "energetic" | "news">("conversational");
   const voiceOptions: VoiceOptions = useMemo(
     () => ({ enabled: voiceEnabled, voiceId, tone: voiceTone }),
@@ -724,8 +724,8 @@ const Index = () => {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="female">Female (default)</SelectItem>
-                              <SelectItem value="male">Male</SelectItem>
+                              <SelectItem value="female">Female</SelectItem>
+                              <SelectItem value="male">Male (default)</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
