@@ -785,7 +785,9 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
   const hiStr = hi + "\u00B0";
   const loStr = lo + "\u00B0";
   const rainStr = weather.rainChance + "%";
-  const bgGradient = "linear-gradient(170deg, " + theme.bg1 + " 0%, " + theme.bg2 + " 50%, " + theme.bg1 + " 100%)";
+  const bgGradient = visualStyle === "cinematic"
+    ? "linear-gradient(170deg, #0b1220 0%, #1a1a2e 50%, #0b1220 100%)"
+    : "linear-gradient(170deg, " + theme.bg1 + " 0%, " + theme.bg2 + " 50%, " + theme.bg1 + " 100%)";
   const logoUrl = "https://pewdswjhsesfondewucc.supabase.co/storage/v1/object/public/brand-assets/skybrief-icon.png";
 
   // === BACKGROUND with Ken Burns slow zoom (100% → 110%) — keeps motion alive
