@@ -586,6 +586,7 @@ const Index = () => {
       </header>
 
       <main className="container px-4 py-6">
+        <ExpiredConnectionsBanner onReconnect={() => setActiveTab("settings")} />
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="bg-secondary/50 border border-border/30 mb-6">
             <TabsTrigger value="create" className="gap-1.5 text-xs">
