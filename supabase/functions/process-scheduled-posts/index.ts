@@ -1049,6 +1049,17 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
 
   if (!renderRes.ok) {
     console.error("Creatomate render request failed:", renderRes.status, responseText);
+    const lower = responseText.toLowerCase();
+    if (
+      renderRes.status === 402 ||
+      renderRes.status === 429 ||
+      lower.includes("credit") ||
+      lower.includes("quota") ||
+      lower.includes("billing") ||
+      lower.includes("plan limit")
+    ) {
+      return { creditExhausted: true, provider: "creatomate", message: responseText.slice(0, 200) };
+    }
     return null;
   }
 
