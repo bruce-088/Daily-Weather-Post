@@ -1389,7 +1389,9 @@ Deno.serve(async (req) => {
         };
       }
     } catch { /* no body is fine */ }
-    console.log(`[daily-weather-post] mode=${mode} style=${style} variation=${variation} voice=${voiceOpts.enabled} city_id=${requestedCityId ?? "-"} city=${requestedCityName ?? "-"}`);
+    const enableCinematic = !!requestBody?.enable_cinematic_mode;
+    const visualStyle: string | null = enableCinematic ? "cinematic" : null;
+    console.log(`[daily-weather-post] mode=${mode} style=${style} variation=${variation} voice=${voiceOpts.enabled} city_id=${requestedCityId ?? "-"} city=${requestedCityName ?? "-"} cinematic=${enableCinematic}`);
 
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
