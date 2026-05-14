@@ -38,6 +38,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { WeatherCard, type CardStyle } from "@/components/WeatherCard";
 import { SettingsPanel } from "@/components/SettingsPanel";
+import { ExpiredConnectionsBanner } from "@/components/ExpiredConnectionsBanner";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PostHistoryList } from "@/components/PostHistoryList";
@@ -586,6 +587,7 @@ const Index = () => {
       </header>
 
       <main className="container px-4 py-6">
+        <ExpiredConnectionsBanner onReconnect={() => setActiveTab("settings")} />
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="bg-secondary/50 border border-border/30 mb-6">
             <TabsTrigger value="create" className="gap-1.5 text-xs">
