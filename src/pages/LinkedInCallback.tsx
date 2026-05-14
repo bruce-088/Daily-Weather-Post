@@ -44,7 +44,8 @@ export default function LinkedInCallback() {
         return;
       }
 
-      const redirectUri = `${window.location.origin}/linkedin/callback`;
+      const { getLinkedInRedirectUri } = await import("@/lib/oauthConfig");
+      const redirectUri = getLinkedInRedirectUri();
       const { data, error: fnError } = await supabase.functions.invoke("linkedin-auth", {
         body: { action: "exchange_code", code, redirect_uri: redirectUri, state },
       });

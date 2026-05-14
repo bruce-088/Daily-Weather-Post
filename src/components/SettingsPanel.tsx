@@ -321,7 +321,8 @@ export function SettingsPanel({
   };
 
   const handleConnectLinkedIn = async () => {
-    const redirectUri = `${window.location.origin}/linkedin/callback`;
+    const { getLinkedInRedirectUri } = await import("@/lib/oauthConfig");
+    const redirectUri = getLinkedInRedirectUri();
     const { data, error } = await supabase.functions.invoke("linkedin-auth", {
       body: { action: "get_auth_url", redirect_uri: redirectUri },
     });
