@@ -180,13 +180,26 @@ Deno.serve(async (req) => {
         );
       }
 
-      const { data: existingAccount } = await supabase
+      const { data: matchingAccount } = await supabase
         .from("social_accounts")
         .select("id, refresh_token")
         .eq("user_id", auth.userId)
         .eq("platform", "linkedin")
         .eq("account_external_id", personUrn)
         .maybeSingle();
+
+      const { data: fallbackAccount } = matchingAccount
+        ? { data: null }
+        : await supabase
+          .from("social_accounts")
+          .select("id, refresh_token")
+          .eq("user_id", auth.userId)
+          .eq("platform", "linkedin")
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+      const existingAccount = matchingAccount || fallbackAccount;
 
       const accountPayload = {
         account_name: accountName,
