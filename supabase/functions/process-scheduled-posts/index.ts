@@ -1047,35 +1047,50 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
   });
 
   const responseText = await renderRes.text();
-  console.log("Creatomate response status:", renderRes.status, "body:", responseText.substring(0, 500));
+  console.log("Creatomate raw response status:", renderRes.status);
+  console.log("Creatomate raw response body:", responseText.substring(0, 1500));
+
+  // Try to parse the response so we can surface the REAL error field.
+  let parsedResponse: any = null;
+  try { parsedResponse = JSON.parse(responseText); } catch { /* keep raw */ }
+  const apiError =
+    (parsedResponse && (parsedResponse.error || parsedResponse.message || parsedResponse.error_message)) ||
+    null;
+  console.log("Creatomate parsed error field:", apiError);
 
   if (!renderRes.ok) {
-    console.error("Creatomate render request failed:", renderRes.status, responseText);
-    const lower = responseText.toLowerCase();
-    if (
+    const detail = apiError || responseText.slice(0, 300) || `HTTP ${renderRes.status}`;
+    setErr(`Creatomate ${renderRes.status}: ${detail}`);
+    const lower = (responseText + " " + (apiError || "")).toLowerCase();
+    // STRICT credit-exhaustion detection: explicit billing/credit phrases or
+    // payment-required HTTP codes only. "credit" alone matches too much
+    // (e.g. credit_card validation errors), which produced false "credits
+    // depleted" reports while the account had plenty of credits.
+    const isCreditExhausted =
       renderRes.status === 402 ||
-      renderRes.status === 429 ||
-      lower.includes("credit") ||
-      lower.includes("quota") ||
-      lower.includes("billing") ||
-      lower.includes("plan limit")
-    ) {
-      return { creditExhausted: true, provider: "creatomate", message: responseText.slice(0, 200) };
+      lower.includes("insufficient credit") ||
+      lower.includes("out of credit") ||
+      lower.includes("credit exhausted") ||
+      lower.includes("credits exhausted") ||
+      lower.includes("no credits") ||
+      lower.includes("quota exceeded") ||
+      lower.includes("plan limit") ||
+      lower.includes("payment required");
+    if (isCreditExhausted) {
+      return { creditExhausted: true, provider: "creatomate", message: detail };
     }
     return null;
   }
 
-  let renders;
-  try {
-    renders = JSON.parse(responseText);
-  } catch {
-    console.error("Failed to parse Creatomate response as JSON");
+  const renders = parsedResponse;
+  if (!renders) {
+    setErr("Failed to parse Creatomate response as JSON");
     return null;
   }
-  
+
   const renderId = Array.isArray(renders) ? renders[0]?.id : renders?.id;
   if (!renderId) {
-    console.error("No render ID in Creatomate response");
+    setErr(`Creatomate returned no render id (response: ${responseText.slice(0, 200)})`);
     return null;
   }
 
