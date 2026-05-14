@@ -1557,8 +1557,9 @@ Deno.serve(async (req) => {
     const renderErrorSink: { message?: string } = {};
     const video = await generateVideoWithFallback({
       weather, timePeriod, voiceUrl, audioDurationSec: voiceAudioDurationSec,
+      visualStyle,
       primaryTimeoutMs: 180_000,
-      creatomate: () => generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec, renderErrorSink),
+      creatomate: () => generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec, visualStyle, renderErrorSink),
     });
     const renderElapsedSec = ((Date.now() - renderStart) / 1000);
 
