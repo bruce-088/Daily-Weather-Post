@@ -31,17 +31,39 @@ export function ExpiredConnectionsBanner({ onReconnect }: Props) {
       .from("social_accounts")
       .select("id, platform, account_name, city_id, refresh_token, token_expires_at")
       .eq("user_id", user.id);
+    const { data: legacySettings } = await supabase
+      .from("weather_settings")
+      .select("youtube_access_token, youtube_token_expires_at, tiktok_access_token, tiktok_token_expires_at, linkedin_access_token, linkedin_token_expires_at")
+      .eq("user_id", user.id)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
     const { data: cities } = await supabase
       .from("cities")
       .select("id, name, state");
 
     const cityMap = new Map((cities ?? []).map((c: any) => [c.id, `${c.name}${c.state ? `, ${c.state}` : ""}`]));
     const now = Date.now();
+    const hasFreshLegacyToken = (platform: string) => {
+      if (!legacySettings) return false;
+      const keyMap: Record<string, [string, string]> = {
+        youtube: ["youtube_access_token", "youtube_token_expires_at"],
+        tiktok: ["tiktok_access_token", "tiktok_token_expires_at"],
+        linkedin: ["linkedin_access_token", "linkedin_token_expires_at"],
+      };
+      const keys = keyMap[platform];
+      if (!keys) return false;
+      const accessToken = (legacySettings as any)[keys[0]];
+      const expiresAt = (legacySettings as any)[keys[1]];
+      return !!accessToken && !!expiresAt && new Date(expiresAt).getTime() > now;
+    };
     const stale = (accounts ?? []).filter((a: any) => {
       const exp = a.token_expires_at ? new Date(a.token_expires_at).getTime() : 0;
       // Consider expired only if access token has lapsed AND no refresh token
-      // is available to silently renew it.
-      return exp > 0 && exp < now && !a.refresh_token;
+      // is available to silently renew it. Some legacy OAuth flows store the
+      // current token on weather_settings, so do not warn on an old mirror row
+      // if the canonical platform token is still fresh.
+      return exp > 0 && exp < now && !a.refresh_token && !hasFreshLegacyToken(a.platform);
     });
     setExpired(stale.map((a: any) => ({
       id: a.id,

@@ -150,15 +150,25 @@ Deno.serve(async (req) => {
       const supabase = createClient(supabaseUrl, serviceRoleKey);
       const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
 
+      const { data: existingSettings } = await supabase
+        .from("weather_settings")
+        .select("linkedin_refresh_token")
+        .eq("user_id", auth.userId)
+        .maybeSingle();
+
+      const refreshTokenToStore = refreshToken || existingSettings?.linkedin_refresh_token || null;
+      const accountName = profileData.name || profileData.localizedFirstName || null;
+      const selectedOrgUrn = organizations.length === 1 ? organizations[0].urn : null;
+
       const { error: dbError } = await supabase
         .from("weather_settings")
         .update({
           linkedin_access_token: accessToken,
-          linkedin_refresh_token: refreshToken,
+          linkedin_refresh_token: refreshTokenToStore,
           linkedin_token_expires_at: expiresAt,
           linkedin_person_urn: personUrn,
           // If only one org, auto-select it
-          ...(organizations.length === 1 ? { linkedin_organization_urn: organizations[0].urn } : {}),
+          ...(selectedOrgUrn ? { linkedin_organization_urn: selectedOrgUrn } : {}),
         })
         .eq("user_id", auth.userId);
 
@@ -168,6 +178,48 @@ Deno.serve(async (req) => {
           JSON.stringify({ error: "Failed to save LinkedIn tokens" }),
           { status: 500, headers: corsHeaders },
         );
+      }
+
+      const { data: matchingAccount } = await supabase
+        .from("social_accounts")
+        .select("id, refresh_token")
+        .eq("user_id", auth.userId)
+        .eq("platform", "linkedin")
+        .eq("account_external_id", personUrn)
+        .maybeSingle();
+
+      const { data: fallbackAccount } = matchingAccount
+        ? { data: null }
+        : await supabase
+          .from("social_accounts")
+          .select("id, refresh_token")
+          .eq("user_id", auth.userId)
+          .eq("platform", "linkedin")
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+      const existingAccount = matchingAccount || fallbackAccount;
+
+      const accountPayload = {
+        account_external_id: personUrn,
+        account_name: accountName,
+        access_token: accessToken,
+        refresh_token: refreshTokenToStore || existingAccount?.refresh_token || null,
+        token_expires_at: expiresAt,
+        extra: { organization_urn: selectedOrgUrn },
+        updated_at: new Date().toISOString(),
+      };
+
+      if (existingAccount) {
+        await supabase.from("social_accounts").update(accountPayload).eq("id", existingAccount.id);
+      } else {
+        await supabase.from("social_accounts").insert({
+          user_id: auth.userId,
+          platform: "linkedin",
+          account_external_id: personUrn,
+          ...accountPayload,
+        });
       }
 
       return new Response(
@@ -204,6 +256,15 @@ Deno.serve(async (req) => {
           { status: 500, headers: corsHeaders },
         );
       }
+
+      await supabase
+        .from("social_accounts")
+        .update({
+          extra: { organization_urn },
+          updated_at: new Date().toISOString(),
+        })
+        .eq("user_id", auth.userId)
+        .eq("platform", "linkedin");
 
       return new Response(
         JSON.stringify({ success: true }),
@@ -264,6 +325,17 @@ Deno.serve(async (req) => {
           linkedin_token_expires_at: expiresAt,
         })
         .eq("user_id", auth.userId);
+
+      await supabase
+        .from("social_accounts")
+        .update({
+          access_token: tokenData.access_token,
+          refresh_token: tokenData.refresh_token || settings.linkedin_refresh_token,
+          token_expires_at: expiresAt,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("user_id", auth.userId)
+        .eq("platform", "linkedin");
 
       return new Response(
         JSON.stringify({ success: true, access_token: tokenData.access_token }),
