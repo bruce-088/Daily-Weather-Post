@@ -2360,8 +2360,10 @@ Deno.serve(async (req) => {
               console.log("Image stored at:", stored.storagePath);
             }
             
-            const imageCapablePlatforms = ["linkedin", "twitter", "tiktok"];
-            const videoOnlyPlatforms = ["youtube", "instagram"];
+            // Image-capable platforms (text/social). YouTube + TikTok REQUIRE
+            // video and must NEVER receive a static-image fallback.
+            const imageCapablePlatforms = ["linkedin", "twitter"];
+            const videoOnlyPlatforms = ["youtube", "instagram", "tiktok"];
             let postedAny = false;
 
             for (const platformName of platformsToPost) {
