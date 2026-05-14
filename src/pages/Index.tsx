@@ -724,8 +724,8 @@ const Index = () => {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="female">Female (default)</SelectItem>
-                              <SelectItem value="male">Male</SelectItem>
+                              <SelectItem value="female">Female</SelectItem>
+                              <SelectItem value="male">Male (default)</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
