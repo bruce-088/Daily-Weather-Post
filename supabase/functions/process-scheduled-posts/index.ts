@@ -1128,13 +1128,14 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
 
     if (statusData.status === "succeeded" && statusData.url) {
       if (assetIssue) {
-        console.error(`[render] REJECTED: Creatomate reported asset load issue — error="${statusData.error_message ?? ""}" warnings=${JSON.stringify(warnings).slice(0, 300)}`);
+        const m = `Creatomate asset load issue: ${statusData.error_message ?? JSON.stringify(warnings).slice(0, 200)}`;
+        setErr(m);
         return null;
       }
       console.log("Render complete, downloading video...");
       const videoRes = await fetch(statusData.url);
       if (!videoRes.ok) {
-        console.error("Failed to download rendered video");
+        setErr(`Failed to download rendered video (HTTP ${videoRes.status})`);
         return null;
       }
       const arrayBuf = await videoRes.arrayBuffer();
@@ -1144,23 +1145,24 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
       const MIN_BYTES = 50_000;     // <50KB → almost certainly empty/black
       const MIN_DURATION_SEC = 5;
       if (arrayBuf.byteLength < MIN_BYTES) {
-        console.error(`[render] REJECTED: video too small (${arrayBuf.byteLength} bytes < ${MIN_BYTES})`);
+        setErr(`Rendered video too small (${arrayBuf.byteLength} bytes < ${MIN_BYTES})`);
         return null;
       }
       if (reportedDurationSec !== null && reportedDurationSec < MIN_DURATION_SEC) {
-        console.error(`[render] REJECTED: video too short (${reportedDurationSec}s < ${MIN_DURATION_SEC}s)`);
+        setErr(`Rendered video too short (${reportedDurationSec}s < ${MIN_DURATION_SEC}s)`);
         return null;
       }
       return { data: new Uint8Array(arrayBuf), mimeType: "video/mp4", duration: reportedDurationSec ?? undefined };
     }
 
     if (statusData.status === "failed" || statusData.status === "partial") {
-      console.error(`[render] Creatomate ${statusData.status}:`, statusData.error_message || "unknown error");
+      const detail = statusData.error_message || statusData.error || "unknown render error";
+      setErr(`Creatomate ${statusData.status}: ${detail}`);
       return null;
     }
   }
 
-  console.error("Creatomate render timed out after 80 seconds");
+  setErr("Creatomate render timed out after 80 seconds");
   return null;
 }
 
