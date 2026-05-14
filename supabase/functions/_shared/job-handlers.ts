@@ -168,6 +168,40 @@ const publishPost: JobHandler = async ({ job, supabase, log }): Promise<JobStepR
     .select("status, error_message, scheduled_at, platform, city, user_id")
     .eq("id", job.scheduled_post_id)
     .maybeSingle();
+
+  const errMsg = post?.error_message ?? "";
+  const isDeduped = /\[DEDUPED\]/i.test(errMsg);
+  const authExpiredMatch = /\[AUTH_EXPIRED:([a-z]+)\]/i.exec(errMsg);
+
+  // ── Soft-skip: dedup ──
+  // Already posted within the dedup window — not an error, surface as info
+  // and end the chain cleanly (no retry, no analyze_performance).
+  if (isDeduped) {
+    await log("Skipped — duplicate post within 60-min window", { city: post?.city, platform: post?.platform });
+    await supabase.from("notifications").insert({
+      user_id: job.user_id,
+      title: `✅ Skipped — already posted to ${post?.city ?? "this city"} in last 60 min`,
+      message: `${post?.platform ?? "Post"} for ${post?.city ?? "city"} was skipped because a successful post already exists.`,
+      type: "info",
+    });
+    return { output: { skipped: "deduped", city: post?.city, platform: post?.platform }, done: true };
+  }
+
+  // ── Soft-skip: expired token ──
+  // Token refresh failed — show a reconnect prompt and DO NOT count as a
+  // failed pipeline step (no retry, no "Pipeline step failed" notification).
+  if (authExpiredMatch) {
+    const platform = authExpiredMatch[1];
+    await log(`Skipped — ${platform} connection expired`, { city: post?.city, platform });
+    await supabase.from("notifications").insert({
+      user_id: job.user_id,
+      title: `⚠️ ${platform.charAt(0).toUpperCase() + platform.slice(1)} (${post?.city ?? "city"}) connection expired`,
+      message: `Reconnect in Settings → Social Connections to resume posting.`,
+      type: "warning",
+    });
+    return { output: { skipped: "auth_expired", platform, city: post?.city }, done: true };
+  }
+
   if (post && (post.status === "failed" || post.status === "failed_precheck")) {
     throw new Error(`publish_post FAILED — scheduled_post status=${post.status}: ${post.error_message ?? "unknown"}`);
   }
