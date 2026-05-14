@@ -1001,7 +1001,13 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
   console.log(`Starting Creatomate render for ${weather.city} ${voiceUrl ? "(with voiceover)" : "(no voice)"} — composition ${compDuration.toFixed(2)}s (audio=${audioDurationSec ?? "n/a"}s)`);
   const theme = getWeatherTheme(weather.condition);
   const videoUrl = await fetchPexelsVideoUrl(theme.videoKeyword, weather.city, weather.stateOrRegion);
-  const source = sanitizeCreatomateSource(buildCreatomateSource(weather, videoUrl, timePeriod, voiceUrl, audioDurationSec) as Record<string, any>);
+  let source: Record<string, any>;
+  try {
+    source = sanitizeCreatomateSource(buildCreatomateSource(weather, videoUrl, timePeriod, voiceUrl, audioDurationSec) as Record<string, any>);
+  } catch (error) {
+    setErr(`Creatomate source validation failed before API call: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
 
 
   const requestBody = JSON.stringify({ output_format: "mp4", ...source });
