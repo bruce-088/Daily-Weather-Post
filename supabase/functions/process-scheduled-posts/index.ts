@@ -2478,17 +2478,6 @@ Deno.serve(async (req) => {
                     const postResult = await postTwitterImage(token, fallbackImage.data, desc);
                     if (postResult) { postedAny = true; console.log(`Scheduled ${post.id}: twitter image posted, ID: ${postResult}`); }
                     else { errorMessage = "Twitter image post failed"; await notifyFailure("upload", "X / Twitter image post failed", errorMessage, { platform: "twitter" }); }
-                  } else if (platformName === "tiktok") {
-                    if (storedImageUrl) {
-                      const { TikTokAdapter } = await import("../_shared/tiktok-adapter.ts");
-                      const tiktokAdapter = new TikTokAdapter();
-                      const postResult = await tiktokAdapter.uploadImage(token, storedImageUrl, title, desc);
-                      if (postResult) { postedAny = true; console.log(`Scheduled ${post.id}: tiktok photo posted, publish_id: ${postResult}`); }
-                      else { errorMessage = "TikTok photo post failed"; await notifyFailure("upload", "TikTok photo post failed", errorMessage, { platform: "tiktok" }); }
-                    } else {
-                      console.log(`Skipping TikTok for scheduled ${post.id} — no stored image URL`);
-                      await notifyFailure("upload", "TikTok skipped", "No stored image URL available for TikTok photo post.", { platform: "tiktok" });
-                    }
                   }
                 } catch (err) {
                   console.error(`${platformName} image post error:`, err);
