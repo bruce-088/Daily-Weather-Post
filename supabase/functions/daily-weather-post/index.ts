@@ -1811,7 +1811,7 @@ Deno.serve(async (req) => {
           } else if (videoOnlyPlatforms.includes(adapter.name)) {
             console.log("Skipping " + adapter.name + " — requires video (image fallback only)");
             if (!errorMessage) errorMessage = "";
-            errorMessage += adapter.name + " skipped (video required, Creatomate credits depleted); ";
+            errorMessage += adapter.name + " skipped (video required — render failed; check edge function logs for the real Creatomate error); ";
             platform = adapter.name;
             status = "failed";
             recordResult(adapter.name, false, "Requires video (fallback was image only)");

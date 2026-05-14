@@ -980,12 +980,14 @@ async function storeVoiceAudio(supabase: any, userId: string, audio: Uint8Array)
   return signed.signedUrl;
 }
 
-async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null, visualStyle?: string | null): Promise<{ data: Uint8Array; mimeType: string; duration?: number } | { creditExhausted: true; provider: "creatomate"; message?: string } | null> {
+async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null, visualStyle?: string | null, errorSink?: { message?: string }): Promise<{ data: Uint8Array; mimeType: string; duration?: number } | { creditExhausted: true; provider: "creatomate"; message?: string } | null> {
   const apiKey = Deno.env.get("CREATOMATE_API_KEY");
+  const setErr = (m: string) => { if (errorSink) errorSink.message = m; console.error("[creatomate] error:", m); };
   if (!apiKey) {
-    console.error("CREATOMATE_API_KEY not configured");
+    setErr("CREATOMATE_API_KEY not configured in Supabase edge function secrets");
     return null;
   }
+  console.log(`[creatomate] api_key_present=true api_key_prefix=${apiKey.slice(0, 4)}... length=${apiKey.length}`);
 
   const compDuration = computeVideoDuration(audioDurationSec);
   console.log(`Starting Creatomate render for ${weather.city} ${voiceUrl ? "(with voiceover)" : "(no voice)"} — composition ${compDuration.toFixed(2)}s (audio=${audioDurationSec ?? "n/a"}s) — visualStyle=${visualStyle || "default"}`);
@@ -1045,35 +1047,50 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
   });
 
   const responseText = await renderRes.text();
-  console.log("Creatomate response status:", renderRes.status, "body:", responseText.substring(0, 500));
+  console.log("Creatomate raw response status:", renderRes.status);
+  console.log("Creatomate raw response body:", responseText.substring(0, 1500));
+
+  // Try to parse the response so we can surface the REAL error field.
+  let parsedResponse: any = null;
+  try { parsedResponse = JSON.parse(responseText); } catch { /* keep raw */ }
+  const apiError =
+    (parsedResponse && (parsedResponse.error || parsedResponse.message || parsedResponse.error_message)) ||
+    null;
+  console.log("Creatomate parsed error field:", apiError);
 
   if (!renderRes.ok) {
-    console.error("Creatomate render request failed:", renderRes.status, responseText);
-    const lower = responseText.toLowerCase();
-    if (
+    const detail = apiError || responseText.slice(0, 300) || `HTTP ${renderRes.status}`;
+    setErr(`Creatomate ${renderRes.status}: ${detail}`);
+    const lower = (responseText + " " + (apiError || "")).toLowerCase();
+    // STRICT credit-exhaustion detection: explicit billing/credit phrases or
+    // payment-required HTTP codes only. "credit" alone matches too much
+    // (e.g. credit_card validation errors), which produced false "credits
+    // depleted" reports while the account had plenty of credits.
+    const isCreditExhausted =
       renderRes.status === 402 ||
-      renderRes.status === 429 ||
-      lower.includes("credit") ||
-      lower.includes("quota") ||
-      lower.includes("billing") ||
-      lower.includes("plan limit")
-    ) {
-      return { creditExhausted: true, provider: "creatomate", message: responseText.slice(0, 200) };
+      lower.includes("insufficient credit") ||
+      lower.includes("out of credit") ||
+      lower.includes("credit exhausted") ||
+      lower.includes("credits exhausted") ||
+      lower.includes("no credits") ||
+      lower.includes("quota exceeded") ||
+      lower.includes("plan limit") ||
+      lower.includes("payment required");
+    if (isCreditExhausted) {
+      return { creditExhausted: true, provider: "creatomate", message: detail };
     }
     return null;
   }
 
-  let renders;
-  try {
-    renders = JSON.parse(responseText);
-  } catch {
-    console.error("Failed to parse Creatomate response as JSON");
+  const renders = parsedResponse;
+  if (!renders) {
+    setErr("Failed to parse Creatomate response as JSON");
     return null;
   }
-  
+
   const renderId = Array.isArray(renders) ? renders[0]?.id : renders?.id;
   if (!renderId) {
-    console.error("No render ID in Creatomate response");
+    setErr(`Creatomate returned no render id (response: ${responseText.slice(0, 200)})`);
     return null;
   }
 
@@ -1111,13 +1128,14 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
 
     if (statusData.status === "succeeded" && statusData.url) {
       if (assetIssue) {
-        console.error(`[render] REJECTED: Creatomate reported asset load issue — error="${statusData.error_message ?? ""}" warnings=${JSON.stringify(warnings).slice(0, 300)}`);
+        const m = `Creatomate asset load issue: ${statusData.error_message ?? JSON.stringify(warnings).slice(0, 200)}`;
+        setErr(m);
         return null;
       }
       console.log("Render complete, downloading video...");
       const videoRes = await fetch(statusData.url);
       if (!videoRes.ok) {
-        console.error("Failed to download rendered video");
+        setErr(`Failed to download rendered video (HTTP ${videoRes.status})`);
         return null;
       }
       const arrayBuf = await videoRes.arrayBuffer();
@@ -1127,23 +1145,24 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
       const MIN_BYTES = 50_000;     // <50KB → almost certainly empty/black
       const MIN_DURATION_SEC = 5;
       if (arrayBuf.byteLength < MIN_BYTES) {
-        console.error(`[render] REJECTED: video too small (${arrayBuf.byteLength} bytes < ${MIN_BYTES})`);
+        setErr(`Rendered video too small (${arrayBuf.byteLength} bytes < ${MIN_BYTES})`);
         return null;
       }
       if (reportedDurationSec !== null && reportedDurationSec < MIN_DURATION_SEC) {
-        console.error(`[render] REJECTED: video too short (${reportedDurationSec}s < ${MIN_DURATION_SEC}s)`);
+        setErr(`Rendered video too short (${reportedDurationSec}s < ${MIN_DURATION_SEC}s)`);
         return null;
       }
       return { data: new Uint8Array(arrayBuf), mimeType: "video/mp4", duration: reportedDurationSec ?? undefined };
     }
 
     if (statusData.status === "failed" || statusData.status === "partial") {
-      console.error(`[render] Creatomate ${statusData.status}:`, statusData.error_message || "unknown error");
+      const detail = statusData.error_message || statusData.error || "unknown render error";
+      setErr(`Creatomate ${statusData.status}: ${detail}`);
       return null;
     }
   }
 
-  console.error("Creatomate render timed out after 80 seconds");
+  setErr("Creatomate render timed out after 80 seconds");
   return null;
 }
 
@@ -2230,9 +2249,10 @@ Deno.serve(async (req) => {
           // Try video generation once (with voiceover baked in if available)
           console.log(`RENDER START: City: ${weather.city}, VoiceEnabled: ${voiceUrl ? "True" : "False"}, VisualStyle: ${visualStyle}`);
           console.log(`[publish] post ${post.id}: AUDIO_URL → ${voiceUrl ? voiceUrl.split("?")[0] : "(none)"} duration=${voiceAudioDurationSec ?? "n/a"}s`);
+          const renderErrorSink: { message?: string } = {};
           const rendered = await generateVideoWithFallback({
             weather, timePeriod, voiceUrl, audioDurationSec: voiceAudioDurationSec, visualStyle,
-            creatomate: () => generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec, visualStyle),
+            creatomate: () => generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec, visualStyle, renderErrorSink),
           });
           // ── Post-render validation: reject empty/tiny/short outputs ──
           // render_video = success ONLY if bytes are real AND duration > 2s.
@@ -2344,9 +2364,10 @@ Deno.serve(async (req) => {
             errorMessage = `Partial publish — ${platformErrors.join(" | ")}`;
           }
         } else {
-          // Video failed — fallback to image for image-capable platforms
-          console.log("Video generation failed for scheduled post, attempting fallback image...");
-          await notifyFailure("render", "Render failed", "Video render failed — attempting fallback image.", { city: weather.city });
+          // Video failed — surface the REAL render error (not the old hardcoded "credits depleted").
+          const realRenderError = renderErrorSink.message || "Video render failed (no provider produced a valid video)";
+          console.log(`Video generation failed for scheduled post — real error: ${realRenderError}`);
+          await notifyFailure("render", "Render failed", realRenderError, { city: weather.city });
           const fallbackImage = await generateFallbackImage(weather);
 
           if (!fallbackImage) {
@@ -2405,9 +2426,10 @@ Deno.serve(async (req) => {
                   await notifyFailure("upload", `${platformName} image post error`, err instanceof Error ? err.message : String(err), { platform: platformName });
                 }
               } else if (videoOnlyPlatforms.includes(platformName)) {
-                console.log("Skipping " + platformName + " — requires video (image fallback only)");
-                errorMessage = (errorMessage || "") + platformName + " skipped (video required, credits depleted); ";
-                await notifyFailure("upload", `${platformName} skipped`, "Video render failed and this platform does not accept image fallbacks.", { platform: platformName });
+                const reason = renderErrorSink.message || "video render failed";
+                console.log(`Skipping ${platformName} — requires video. Reason: ${reason}`);
+                errorMessage = (errorMessage || "") + `${platformName} skipped (video required — ${reason}); `;
+                await notifyFailure("upload", `${platformName} skipped`, `Video render failed: ${reason}`, { platform: platformName });
               }
             }
 
