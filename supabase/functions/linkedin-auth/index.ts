@@ -202,6 +202,7 @@ Deno.serve(async (req) => {
       const existingAccount = matchingAccount || fallbackAccount;
 
       const accountPayload = {
+        account_external_id: personUrn,
         account_name: accountName,
         access_token: accessToken,
         refresh_token: refreshTokenToStore || existingAccount?.refresh_token || null,
