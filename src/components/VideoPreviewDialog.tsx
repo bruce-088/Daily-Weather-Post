@@ -9,12 +9,15 @@ import { Play, Upload, RefreshCw, X, Loader2, Pencil, Eye, Download, Send, Mic, 
 import { generatePreview, uploadPreviewVideo, triggerManualPipelinePost, publishPreviewBundle, triggerDailyPost, enqueuePreviewJob, fetchPreviewJob } from "@/lib/api";
 import type { PreviewResult, VoiceOptions, CityContext, PreviewJobStage } from "@/lib/api";
 import { PreviewPipelineStatus } from "@/components/PreviewPipelineStatus";
+import { RenderProgressTracker } from "@/components/RenderProgressTracker";
 import { calculatePreviewHealth } from "@/lib/postHealth";
 import { FeatureFlags } from "@/lib/featureFlags";
 import { evaluateCinematicMode, cinematicLogLine } from "@/lib/cinematicMode";
 import { fetchHooks, saveReceipt, formatReceipt, HOOK_LABELS, type HookId, type HookSet, type PostReceipt } from "@/lib/hooks";
-import { Zap, Flame, Umbrella } from "lucide-react";
+import { Zap, Lightbulb } from "lucide-react";
 import { DebugLabels } from "@/components/DebugLabels";
+import { useDynamicFavicon } from "@/hooks/useDynamicFavicon";
+import { celebrate } from "@/lib/confetti";
 import { ABComparePanel } from "@/components/ABComparePanel";
 import {
   buildVariantPair,
