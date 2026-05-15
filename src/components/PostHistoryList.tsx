@@ -351,6 +351,60 @@ export function PostHistoryList({ posts, loading, onReuse, onChanged }: PostHist
                             "{post.caption}"
                           </p>
                         )}
+                        {(() => {
+                          const receipt = getReceipt(post.city, post.platform || "", post.created_at);
+                          const hookText = receipt?.hook_used || null;
+                          const cinematic = receipt?.cinematic_mode ?? false;
+                          const voiceName = receipt?.voice_name || null;
+                          return (
+                            <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
+                              {hookText ? (
+                                <span
+                                  className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium bg-violet-500/15 text-violet-400 border border-violet-500/30"
+                                  title="Hook used for this post"
+                                >
+                                  <Zap size={9} />
+                                  {hookText.length > 40 ? hookText.slice(0, 40) + "…" : hookText}
+                                </span>
+                              ) : (
+                                <span
+                                  className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium bg-muted/40 text-muted-foreground border border-border/40"
+                                  title="Hook used for this post"
+                                >
+                                  <Zap size={9} />
+                                  —
+                                </span>
+                              )}
+                              <span
+                                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium border ${
+                                  cinematic
+                                    ? "bg-violet-500/15 text-violet-400 border-violet-500/30"
+                                    : "bg-muted/40 text-muted-foreground border-border/40"
+                                }`}
+                                title="Cinematic mode"
+                              >
+                                ⚡ {cinematic ? "ON" : "OFF"}
+                              </span>
+                              {voiceName ? (
+                                <span
+                                  className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+                                  title={`Voice: ${voiceName}`}
+                                >
+                                  <Mic size={9} />
+                                  {voiceName}
+                                </span>
+                              ) : (
+                                <span
+                                  className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium bg-muted/40 text-muted-foreground border border-border/40"
+                                  title="Voice used"
+                                >
+                                  <Mic size={9} />
+                                  —
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
                         {post.error_message && isFailed && (
                           <button
                             type="button"
