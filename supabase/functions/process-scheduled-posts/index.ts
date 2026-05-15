@@ -582,7 +582,7 @@ function sanitizeCreatomateSource(source: Record<string, any>): Record<string, a
   return { ...source, output_format: "mp4", elements };
 }
 
-function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | null, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null): object {
+function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | null, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null, visualStyle?: string | null): object {
   const now = new Date();
   const dateStr = now.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
   const theme = getWeatherTheme(weather.condition);
@@ -785,6 +785,68 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
       volume: "100%",
       // Explicitly do not fade out — keep audio crisp through the CTA.
     });
+  }
+
+  // ── CINEMATIC ENHANCEMENTS LAYER ──
+  // Activated when visualStyle === "cinematic" (set by ENABLE_CINEMATIC_MODE
+  // override or weather-driven detection upstream). Additive only:
+  //  • condition-matched overlays (rain / fog / snow / vignette)
+  //  • subtle float animation injected onto existing card layers
+  // Background Ken-Burns zoom (1.0 → 1.10) is already applied above for every
+  // render and remains active in cinematic mode.
+  if (visualStyle === "cinematic") {
+    const condLower = (weather.condition || "").toLowerCase();
+    const isRain = condLower.includes("rain") || condLower.includes("drizzle") || condLower.includes("storm") || condLower.includes("thunder");
+    const isFog = condLower.includes("fog") || condLower.includes("mist") || condLower.includes("haze") || condLower.includes("smoke");
+    const isSnow = condLower.includes("snow") || condLower.includes("sleet") || condLower.includes("blizzard");
+
+    // Cinematic VIGNETTE — radial dark edges, always on for cinematic.
+    elements.push({
+      type: "shape", track: nt(), time: 0, duration: dur(10.0),
+      shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%",
+      fill_color: "radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(0,0,0,0.55) 100%)",
+      enter: { type: "fade", duration: 0.8 },
+    });
+
+    if (isRain) {
+      elements.push({
+        type: "shape", track: nt(), time: 0, duration: dur(10.0),
+        shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%",
+        fill_color: "linear-gradient(180deg, rgba(30,58,138,0.18) 0%, rgba(15,23,42,0.10) 100%)",
+        enter: { type: "fade", duration: 0.8 },
+        animations: [{ type: "scale", start_scale: "100%", end_scale: "104%", duration: 6.0, easing: "ease-in-out" }],
+      });
+    }
+    if (isFog) {
+      elements.push({
+        type: "shape", track: nt(), time: 0, duration: dur(10.0),
+        shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%",
+        fill_color: "linear-gradient(180deg, rgba(220,225,235,0.28) 0%, rgba(200,210,225,0.18) 100%)",
+        enter: { type: "fade", duration: 1.0 },
+        animations: [{ type: "scale", start_scale: "100%", end_scale: "106%", duration: 7.0, easing: "ease-in-out" }],
+      });
+    }
+    if (isSnow) {
+      elements.push({
+        type: "shape", track: nt(), time: 0, duration: dur(10.0),
+        shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%",
+        fill_color: "linear-gradient(180deg, rgba(241,245,249,0.20) 0%, rgba(203,213,225,0.10) 100%)",
+        enter: { type: "fade", duration: 0.8 },
+      });
+    }
+
+    // Subtle card float — inject animation onto existing city header + detail
+    // card shapes (no JSON structure changes, only `animations` property).
+    for (const el of elements) {
+      if (!el || el.type !== "shape" || el.shape_type !== "rectangle") continue;
+      const isCityPanel = el.width === 800 && el.height === 200 && el.y === "18%";
+      const isDetailCard = el.width === 920 && el.height === 260 && el.y === "63%";
+      if (!isCityPanel && !isDetailCard) continue;
+      const float = { type: "scale", start_scale: "100%", end_scale: "101.5%", duration: 4.0, easing: "ease-in-out" };
+      el.animations = Array.isArray(el.animations) ? [...el.animations, float] : [float];
+    }
+
+    console.log(`[cinematic] enhancements applied: vignette=on rain=${isRain} fog=${isFog} snow=${isSnow} card_float=on`);
   }
 
   return {
@@ -1068,7 +1130,7 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
   }
   let source: Record<string, any>;
   try {
-    source = sanitizeCreatomateSource(buildCreatomateSource(weather, videoUrl, timePeriod, voiceUrl, audioDurationSec) as Record<string, any>);
+    source = sanitizeCreatomateSource(buildCreatomateSource(weather, videoUrl, timePeriod, voiceUrl, audioDurationSec, visualStyle) as Record<string, any>);
   } catch (error) {
     setErr(`Creatomate source validation failed before API call: ${error instanceof Error ? error.message : String(error)}`);
     return null;
@@ -1140,20 +1202,17 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
     console.error(`[creatomate] ${mapped}`);
     setErr(mapped);
     const lower = (responseText + " " + (apiError || "")).toLowerCase();
-    // STRICT credit-exhaustion detection: explicit billing/credit phrases or
-    // payment-required HTTP code only. Generic 422 validation errors are NOT
-    // treated as credit exhaustion (that produced false "credits depleted"
-    // reports while the account had plenty of credits).
+    // STRICT credit-exhaustion detection. ONLY a literal HTTP 402 from the
+    // Creatomate API or an explicit `no_credits` / `insufficient credit` body
+    // phrase counts. Generic billing/quota text or any other status code is
+    // treated as a normal failure (retry-then-fallback) — not a hard stop.
     const isCreditExhausted =
       renderRes.status === 402 ||
+      lower.includes("no_credits") ||
       lower.includes("insufficient credit") ||
       lower.includes("out of credit") ||
       lower.includes("credit exhausted") ||
-      lower.includes("credits exhausted") ||
-      lower.includes("no credits") ||
-      lower.includes("quota exceeded") ||
-      lower.includes("plan limit") ||
-      lower.includes("payment required");
+      lower.includes("credits exhausted");
     if (isCreditExhausted) {
       return { creditExhausted: true, provider: "creatomate", message: mapped };
     }
@@ -2506,9 +2565,13 @@ Deno.serve(async (req) => {
         trace("final_action", { action: postStatus === "posted" ? "POSTED" : `FAILED — ${errorMessage}`, voice_status: voiceStatus });
         // Always persist hook/cinematic/voice metadata for analytics; only
         // include the verbose `steps` array when the user opted in.
+        // Derive a hook label from the caption (first non-empty line, ≤120 chars)
+        // so analytics + the History UI always show what opened the post.
+        const _hookSource = (caption || "").split(/\r?\n/).map((s) => s.trim()).find(Boolean) || "";
+        const hookUsedDerived = _hookSource ? _hookSource.slice(0, 120) : null;
         const persistedTrace: Record<string, any> = {
           captured_at: new Date().toISOString(),
-          hook_used: null,
+          hook_used: hookUsedDerived,
           hook_type: null,
           cinematic_mode: cinematicForced,
           cinematic_trigger: cinematicTrigger,
@@ -2570,8 +2633,9 @@ Deno.serve(async (req) => {
           visual_metadata: visualMeta,
           health_score: healthScore,
           health_breakdown: healthBreakdown,
-          // Persist cinematic flag so the History tab shows ⚡ ON for
-          // automated posts that ran the cinematic treatment.
+          // Persist hook + cinematic flags so the History UI shows them on
+          // any device (cross-device, server-authoritative).
+          hook_used: hookUsedDerived,
           cinematic_mode: cinematicForced,
           cinematic_trigger: cinematicTrigger,
           voice_name: voiceUrl ? "AI" : null,
