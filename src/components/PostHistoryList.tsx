@@ -349,9 +349,33 @@ export function PostHistoryList({ posts, loading, onReuse, onChanged }: PostHist
                               {post.temperature}°F
                             </span>
                           )}
-                          {post.condition && (
-                            <span className="text-xs text-muted-foreground">· {post.condition}</span>
-                          )}
+                          {(() => {
+                            const chip = conditionChip(post.condition);
+                            if (!chip) return null;
+                            const CIcon = chip.icon;
+                            return (
+                              <span
+                                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium border ${chip.cls}`}
+                                title={post.condition || undefined}
+                              >
+                                <CIcon size={10} />
+                                {post.condition}
+                              </span>
+                            );
+                          })()}
+                          {(() => {
+                            const v = viewsByPostId[post.id] || 0;
+                            if (avgViews === 0 || v <= avgViews) return null;
+                            return (
+                              <span
+                                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/40"
+                                title={`Top Performer — ${v.toLocaleString()} views (avg ${Math.round(avgViews).toLocaleString()})`}
+                              >
+                                <Trophy size={10} className="fill-amber-400/40" />
+                                Top Performer
+                              </span>
+                            );
+                          })()}
                           {brand && PIcon && (
                             <span
                               className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium"
