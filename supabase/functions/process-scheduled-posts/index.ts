@@ -796,57 +796,54 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
   // render and remains active in cinematic mode.
   if (visualStyle === "cinematic") {
     const condLower = (weather.condition || "").toLowerCase();
-    const isRain = condLower.includes("rain") || condLower.includes("drizzle") || condLower.includes("storm") || condLower.includes("thunder");
-    const isFog = condLower.includes("fog") || condLower.includes("mist") || condLower.includes("haze") || condLower.includes("smoke");
-    const isSnow = condLower.includes("snow") || condLower.includes("sleet") || condLower.includes("blizzard");
+    // Strict cinematic conditions: rain family, storm/thunder, cloudy/overcast.
+    // Fog/mist/snow do NOT trigger cinematic overlays per product rule.
+    const isRain   = condLower.includes("rain") || condLower.includes("drizzle") || condLower.includes("shower");
+    const isStorm  = condLower.includes("storm") || condLower.includes("thunder");
+    const isCloudy = condLower.includes("cloudy") || condLower.includes("overcast");
 
-    // Cinematic VIGNETTE — radial dark edges, always on for cinematic.
-    elements.push({
-      type: "shape", track: nt(), time: 0, duration: dur(10.0),
-      shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%",
-      fill_color: "radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(0,0,0,0.55) 100%)",
-      enter: { type: "fade", duration: 0.8 },
-    });
-
+    // Storm/thunder: dark vignette + grain feel (opacity ~10%). Always-on
+    // vignette is reserved for storm so we don't darken light cloudy scenes.
+    if (isStorm) {
+      elements.push({
+        type: "shape", track: nt(), time: 0, duration: dur(10.0),
+        shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%",
+        fill_color: "radial-gradient(ellipse at center, rgba(0,0,0,0) 50%, rgba(0,0,0,0.10) 100%)",
+        enter: { type: "fade", duration: 0.8 },
+      });
+    }
+    // Rain/drizzle/shower: subtle cool blue overlay (opacity 8%).
     if (isRain) {
       elements.push({
         type: "shape", track: nt(), time: 0, duration: dur(10.0),
         shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%",
-        fill_color: "linear-gradient(180deg, rgba(30,58,138,0.18) 0%, rgba(15,23,42,0.10) 100%)",
+        fill_color: "linear-gradient(180deg, rgba(30,58,138,0.08) 0%, rgba(15,23,42,0.06) 100%)",
         enter: { type: "fade", duration: 0.8 },
-        animations: [{ type: "scale", start_scale: "100%", end_scale: "104%", duration: 6.0, easing: "ease-in-out" }],
       });
     }
-    if (isFog) {
+    // Cloudy/overcast: soft fog layer (opacity 6%).
+    if (isCloudy) {
       elements.push({
         type: "shape", track: nt(), time: 0, duration: dur(10.0),
         shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%",
-        fill_color: "linear-gradient(180deg, rgba(220,225,235,0.28) 0%, rgba(200,210,225,0.18) 100%)",
+        fill_color: "linear-gradient(180deg, rgba(220,225,235,0.06) 0%, rgba(200,210,225,0.04) 100%)",
         enter: { type: "fade", duration: 1.0 },
-        animations: [{ type: "scale", start_scale: "100%", end_scale: "106%", duration: 7.0, easing: "ease-in-out" }],
-      });
-    }
-    if (isSnow) {
-      elements.push({
-        type: "shape", track: nt(), time: 0, duration: dur(10.0),
-        shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%",
-        fill_color: "linear-gradient(180deg, rgba(241,245,249,0.20) 0%, rgba(203,213,225,0.10) 100%)",
-        enter: { type: "fade", duration: 0.8 },
       });
     }
 
-    // Subtle card float — inject animation onto existing city header + detail
-    // card shapes (no JSON structure changes, only `animations` property).
+    // Subtle card float — 5s loop, injected onto existing city header + detail
+    // card shapes (no JSON structure changes, only `animations` property,
+    // reusing the existing "scale" animation type per hard-rule constraint).
     for (const el of elements) {
       if (!el || el.type !== "shape" || el.shape_type !== "rectangle") continue;
       const isCityPanel = el.width === 800 && el.height === 200 && el.y === "18%";
       const isDetailCard = el.width === 920 && el.height === 260 && el.y === "63%";
       if (!isCityPanel && !isDetailCard) continue;
-      const float = { type: "scale", start_scale: "100%", end_scale: "101.5%", duration: 4.0, easing: "ease-in-out" };
+      const float = { type: "scale", start_scale: "100%", end_scale: "101%", duration: 5.0, easing: "ease-in-out" };
       el.animations = Array.isArray(el.animations) ? [...el.animations, float] : [float];
     }
 
-    console.log(`[cinematic] enhancements applied: vignette=on rain=${isRain} fog=${isFog} snow=${isSnow} card_float=on`);
+    console.log(`[cinematic] enhancements applied: rain=${isRain} storm=${isStorm} cloudy=${isCloudy} card_float=on`);
   }
 
   return {
