@@ -15,7 +15,9 @@ export type FeatureFlagName =
   | "ENABLE_AB_TESTING"
   | "SHOW_DEBUG_LABELS"
   | "ENABLE_CINEMATIC_MODE"
-  | "ENABLE_DURABLE_PREVIEW_PIPELINE";
+  | "ENABLE_DURABLE_PREVIEW_PIPELINE"
+  | "ENABLE_CONTENT_SCORE"
+  | "ENABLE_AUTO_WINNER";
 
 const DEFAULTS: Record<FeatureFlagName, boolean> = {
   // Single source of truth: manual posts + preview always run through the
