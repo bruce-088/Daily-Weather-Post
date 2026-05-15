@@ -6,6 +6,7 @@ import { generateVideoWithFallback } from "../_shared/video-render.ts";
 import { expandVisualMeta, getTopVisualStyle, classifyVisualTheme, classifyColorProfile } from "../_shared/experiments.ts";
 import { getRecentStyles, enforceStyleRotation } from "../_shared/style-rotation.ts";
 import { selectContextualVisualStyle } from "../_shared/visual-selector.ts";
+import { getAutoWinnerOverrides, type AutoWinnerOverrides } from "../_shared/auto-winner.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
