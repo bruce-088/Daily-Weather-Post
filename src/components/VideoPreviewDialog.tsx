@@ -78,6 +78,8 @@ export function VideoPreviewDialog({
   const [pipelineSource, setPipelineSource] = useState<"pipeline" | "legacy" | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [audioPlaying, setAudioPlaying] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [videoPaused, setVideoPaused] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [editedCaption, setEditedCaption] = useState("");
   const [isEditingCaption, setIsEditingCaption] = useState(false);
