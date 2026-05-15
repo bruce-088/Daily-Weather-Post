@@ -659,6 +659,14 @@ export function VideoPreviewDialog({
             />
           )}
 
+          {/* Auto-Winner override badge — what will actually be applied at post time */}
+          {preview && isPostFlow && (
+            <AutoWinnerBadgeWrapper
+              cityName={city?.name || preview?.weather?.city || null}
+              condition={preview?.weather?.condition || null}
+            />
+          )}
+
           {/* Media display - video or image */}
           {(preview?.video_url || preview?.image_url) && (
             <>
