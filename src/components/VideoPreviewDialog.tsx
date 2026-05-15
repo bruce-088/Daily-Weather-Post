@@ -818,8 +818,10 @@ export function VideoPreviewDialog({
                   ) : hooks ? (
                     <div className="grid grid-cols-1 gap-2">
                       {(["A", "B", "C"] as HookId[]).map((id) => {
-                        const Icon = id === "A" ? Flame : id === "B" ? Umbrella : Eye;
+                        const Icon = id === "A" ? Zap : id === "B" ? Lightbulb : Eye;
                         const isSel = selectedHookId === id;
+                        const tone =
+                          id === "A" ? "Urgency" : id === "B" ? "Advice" : "Insight";
                         return (
                           <button
                             key={id}
@@ -827,13 +829,13 @@ export function VideoPreviewDialog({
                             onClick={() => applyHook(id)}
                             className={`text-left rounded-lg border px-3 py-2 transition ${
                               isSel
-                                ? "border-violet-500/60 bg-violet-500/15 ring-1 ring-violet-400/40"
+                                ? "border-primary bg-primary/10 ring-2 ring-primary/50 shadow-[0_0_18px_-4px_hsl(var(--primary))]"
                                 : "border-border/40 bg-background/40 hover:border-violet-500/40 hover:bg-violet-500/5"
                             }`}
                           >
                             <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-violet-300">
-                              <Icon size={11} />
-                              Hook {id} · {HOOK_LABELS[id]}
+                              <Icon size={11} className={isSel ? "text-primary" : ""} />
+                              Hook {id} · {tone} · {HOOK_LABELS[id]}
                               {isSel && <span className="ml-auto text-emerald-400">✓ Selected</span>}
                             </div>
                             <p className="text-sm text-foreground mt-1 leading-snug">{hooks[id]}</p>
