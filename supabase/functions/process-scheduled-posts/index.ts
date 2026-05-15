@@ -2341,6 +2341,27 @@ Deno.serve(async (req) => {
         for (const kw of _cinematicKeywords) {
           if (_condLower.includes(kw)) { cinematicForced = true; cinematicTrigger = kw; break; }
         }
+
+        // ── Auto-Winner cinematic override ──
+        // If the user opted into "auto cinematic for storms" we force cinematic on
+        // for rain/storm conditions even if the keyword check above missed an alias.
+        try {
+          if (autoWinner.flags.auto_cinematic_for_storms) {
+            const isStormy = /rain|storm|thunder|drizzle|shower/.test(_condLower);
+            if (isStormy && !cinematicForced) {
+              cinematicForced = true;
+              cinematicTrigger = cinematicTrigger ?? "auto_winner";
+              autoWinner.applied = true;
+              autoWinner.fields.cinematic = true;
+              console.log(`[auto-winner] post ${post.id}: cinematic override ON (condition=${_condLower})`);
+            } else if (cinematicForced) {
+              autoWinner.fields.cinematic = true; // already on; just record
+            }
+          }
+        } catch (e) {
+          console.warn("[auto-winner] cinematic override failed; falling back:", e);
+        }
+
         if (cinematicForced) {
           visualStyle = "cinematic";
           console.log(`[visual] post ${post.id}: 🎬 cinematic mode ON (trigger=${cinematicTrigger})`);
