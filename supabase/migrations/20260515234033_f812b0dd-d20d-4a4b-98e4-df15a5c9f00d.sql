@@ -1,0 +1,2 @@
+ALTER TABLE public.jobs DROP CONSTRAINT IF EXISTS jobs_type_check;
+ALTER TABLE public.jobs ADD CONSTRAINT jobs_type_check CHECK (type = ANY (ARRAY['generate_content'::text, 'generate_voice'::text, 'render_video'::text, 'publish_post'::text, 'preview'::text, 'analyze_performance'::text]));
