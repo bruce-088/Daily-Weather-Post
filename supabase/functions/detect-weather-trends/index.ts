@@ -114,12 +114,13 @@ import { requireCronOrUser } from "../_shared/auth-helpers.ts";
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
+  const _gate = await requireCronOrUser(req);
+  if (!_gate.ok) return _gate.response;
+
   const apiKey = Deno.env.get("OPENWEATHER_API_KEY");
   if (!apiKey) {
     return new Response(JSON.stringify({ error: "OPENWEATHER_API_KEY not configured" }), {
 
-  const _gate = await requireCronOrUser(req);
-  if (!_gate.ok) return _gate.response;
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

@@ -19,6 +19,7 @@ Deno.serve(async (req) => {
   const _gate = await requireCronOrUser(req);
   if (!_gate.ok) return _gate.response;
 
+
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,

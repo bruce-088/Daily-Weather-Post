@@ -36,6 +36,7 @@ Deno.serve(async (req) => {
   const _gate = await requireCronOrUser(req);
   if (!_gate.ok) return _gate.response;
 
+
   // Initialize client + heartbeat OUTSIDE the main try so heartbeat always runs first.
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
