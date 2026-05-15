@@ -532,6 +532,26 @@ export function VideoPreviewDialog({
                   <Badge variant="secondary" className="text-xs">
                     {preview.weather.condition}
                   </Badge>
+                  {(() => {
+                    const cm = evaluateCinematicMode(preview.weather.condition);
+                    return cm.enabled ? (
+                      <Badge
+                        className="bg-violet-500/10 text-violet-300 border-violet-500/30 text-[10px] uppercase tracking-wide flex items-center gap-1"
+                        title={`Cinematic Mode triggered by "${cm.trigger}"`}
+                      >
+                        <Zap size={10} className="fill-current" />
+                        Cinematic Mode
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] uppercase tracking-wide text-muted-foreground"
+                        title="Standard render — sunny/clear/calm conditions"
+                      >
+                        ○ Standard Mode
+                      </Badge>
+                    );
+                  })()}
                 </div>
               )}
 
