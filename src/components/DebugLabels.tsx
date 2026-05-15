@@ -31,10 +31,10 @@ function pillSize(size: "sm" | "xs") {
 
 function modeStyle(mode: ExecutionMode) {
   if (mode === "pipeline") {
-    return { cls: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30", label: "Pipeline ✅" };
+    return { cls: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30", label: "SOURCE: PIPELINE ✅" };
   }
   if (mode === "legacy") {
-    return { cls: "bg-amber-500/15 text-amber-500 border-amber-500/30", label: "Legacy ⚠️" };
+    return { cls: "bg-amber-500/15 text-amber-500 border-amber-500/30", label: "SOURCE: LEGACY ⚠️" };
   }
   return null;
 }
