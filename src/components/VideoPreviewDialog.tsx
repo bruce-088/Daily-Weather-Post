@@ -620,20 +620,15 @@ export function VideoPreviewDialog({
             </div>
           )}
 
-          {/* Loading state with stage-aware status */}
+          {/* Producer view — multi-step status tracker */}
           {generating && (
-            <div className="flex flex-col items-center gap-3 py-12">
-              <Loader2 size={32} className="animate-spin text-primary" />
-              <p className="text-sm font-medium text-foreground">
-                {genStage === "voice"
-                  ? "🎙️ Generating voice narration…"
-                  : "🎥 Creatomate is crafting your video (expect ~45–90s)…"}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {genStage === "voice"
-                  ? "Synthesizing your AI voiceover with ElevenLabs."
-                  : "Hang tight — video-required platforms will not receive image fallback."}
-              </p>
+            <div className="py-2">
+              <RenderProgressTracker
+                stage={pipelineStage}
+                cityName={city?.name || null}
+                voiceEnabled={!!voice?.enabled}
+                error={generationError}
+              />
             </div>
           )}
 
