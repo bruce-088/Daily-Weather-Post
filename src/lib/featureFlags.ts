@@ -36,6 +36,10 @@ const DEFAULTS: Record<FeatureFlagName, boolean> = {
   // localStorage.setItem("ff:ENABLE_DURABLE_PREVIEW_PIPELINE","false") to
   // fall back to the legacy direct-invoke path for one release.
   ENABLE_DURABLE_PREVIEW_PIPELINE: true,
+  // Auto-Winner: pre-post Content Score card (display only). Default ON.
+  ENABLE_CONTENT_SCORE: true,
+  // Auto-Winner: opt-in auto-apply toggles in Settings. Default OFF.
+  ENABLE_AUTO_WINNER: false,
 };
 
 function readOverride(name: FeatureFlagName): boolean | null {
