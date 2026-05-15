@@ -12,6 +12,7 @@ import { setSkipToday } from "@/lib/api";
 import { SystemHealthCard } from "@/components/SystemHealthCard";
 import { JobPipelineToggle } from "@/components/JobPipelineToggle";
 import { PerformanceLearningToggle } from "@/components/PerformanceLearningToggle";
+import { AutoWinnerSettings } from "@/components/AutoWinnerSettings";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { CollapsibleCardHeader } from "@/components/CollapsibleCardHeader";
 
@@ -954,6 +955,7 @@ export function SettingsPanel({
 
       <PerformanceLearningToggle />
       <JobPipelineToggle />
+      <AutoWinnerSettings />
       <SystemHealthCard />
 
       {(showLocation || showConnections || showAutomation) && (

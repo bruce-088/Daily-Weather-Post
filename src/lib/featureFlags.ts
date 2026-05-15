@@ -15,7 +15,9 @@ export type FeatureFlagName =
   | "ENABLE_AB_TESTING"
   | "SHOW_DEBUG_LABELS"
   | "ENABLE_CINEMATIC_MODE"
-  | "ENABLE_DURABLE_PREVIEW_PIPELINE";
+  | "ENABLE_DURABLE_PREVIEW_PIPELINE"
+  | "ENABLE_CONTENT_SCORE"
+  | "ENABLE_AUTO_WINNER";
 
 const DEFAULTS: Record<FeatureFlagName, boolean> = {
   // Single source of truth: manual posts + preview always run through the
@@ -34,6 +36,10 @@ const DEFAULTS: Record<FeatureFlagName, boolean> = {
   // localStorage.setItem("ff:ENABLE_DURABLE_PREVIEW_PIPELINE","false") to
   // fall back to the legacy direct-invoke path for one release.
   ENABLE_DURABLE_PREVIEW_PIPELINE: true,
+  // Auto-Winner: pre-post Content Score card (display only). Default ON.
+  ENABLE_CONTENT_SCORE: true,
+  // Auto-Winner: opt-in auto-apply toggles in Settings. Default OFF.
+  ENABLE_AUTO_WINNER: false,
 };
 
 function readOverride(name: FeatureFlagName): boolean | null {
@@ -71,5 +77,11 @@ export const FeatureFlags = {
   },
   get ENABLE_DURABLE_PREVIEW_PIPELINE() {
     return isFeatureEnabled("ENABLE_DURABLE_PREVIEW_PIPELINE");
+  },
+  get ENABLE_CONTENT_SCORE() {
+    return isFeatureEnabled("ENABLE_CONTENT_SCORE");
+  },
+  get ENABLE_AUTO_WINNER() {
+    return isFeatureEnabled("ENABLE_AUTO_WINNER");
   },
 };

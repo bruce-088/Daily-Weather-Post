@@ -116,6 +116,7 @@ export function GrowthDashboard() {
 
   return (
     <div className="space-y-4">
+      <OutperformingPosts />
       {/* Recommendation header */}
       <Card className="border-primary/30 bg-gradient-to-br from-primary/5 to-transparent">
         <CardHeader className="pb-2">
@@ -305,5 +306,93 @@ export function GrowthDashboard() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+// ─── Auto-Winner: Outperforming Posts ────────────────────────────────────
+import { Flame } from "lucide-react";
+
+interface RepostSuggestion {
+  id: string;
+  post_id: string;
+  city: string | null;
+  reason: string | null;
+  suggested_at: string;
+  views_24h: number | null;
+  city_avg: number | null;
+  status: string;
+}
+
+function OutperformingPosts() {
+  const [items, setItems] = useState<RepostSuggestion[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  async function load() {
+    const { data } = await supabase
+      .from("winner_repost_suggestions" as any)
+      .select("*")
+      .eq("status", "pending")
+      .order("suggested_at", { ascending: false })
+      .limit(10);
+    setItems(((data as any[]) || []) as RepostSuggestion[]);
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function handle(id: string, status: "dismissed" | "reposted") {
+    await supabase.from("winner_repost_suggestions" as any).update({ status }).eq("id", id);
+    setItems((prev) => prev.filter((p) => p.id !== id));
+  }
+
+  if (loading || items.length === 0) return null;
+
+  return (
+    <Card className="border-orange-400/30 bg-gradient-to-br from-orange-400/10 to-transparent">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center gap-2">
+          <Flame size={14} className="text-orange-400" />
+          Outperforming posts
+          <Badge variant="outline" className="text-[10px] border-orange-400/40 text-orange-400 ml-auto">
+            {items.length}
+          </Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2 pb-3">
+        {items.map((it) => (
+          <div
+            key={it.id}
+            className="flex items-center justify-between gap-2 rounded-md border border-border/40 bg-card/50 p-2.5"
+          >
+            <div className="text-xs flex-1 min-w-0">
+              <p className="font-medium text-foreground">
+                🔥 {it.city || "Post"} is outperforming
+              </p>
+              <p className="text-muted-foreground truncate">{it.reason}</p>
+            </div>
+            <div className="flex gap-1.5 shrink-0">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                onClick={() => handle(it.id, "reposted")}
+              >
+                Repost variation
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 text-xs"
+                onClick={() => handle(it.id, "dismissed")}
+              >
+                Dismiss
+              </Button>
+            </div>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
   );
 }

@@ -37,6 +37,7 @@ import {
 } from "recharts";
 import { toast } from "sonner";
 import { useActiveCity } from "@/hooks/useActiveCity";
+import { GrowthIntelligenceCard } from "@/components/GrowthIntelligenceCard";
 
 type AnalyticsRow = {
   id: string;
@@ -275,7 +276,9 @@ export function AnalyticsPanel() {
 
   if (ytPosts.length === 0) {
     return (
-      <Card className="p-8 text-center">
+      <div className="space-y-6">
+        <GrowthIntelligenceCard />
+        <Card className="p-8 text-center">
         <BarChart3 className="mx-auto mb-3 text-muted-foreground" size={32} />
         <h3 className="font-display text-lg mb-1">
           {activeCity.name ? `No data yet for ${activeCity.name}` : "No YouTube posts yet"}
@@ -290,11 +293,13 @@ export function AnalyticsPanel() {
           Sync Now
         </Button>
       </Card>
+      </div>
     );
   }
 
   return (
     <div className="space-y-6">
+      <GrowthIntelligenceCard />
       {/* Header + Sync Now */}
       <div className="flex items-center justify-between">
         <div>

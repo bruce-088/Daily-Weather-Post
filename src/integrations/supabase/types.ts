@@ -613,6 +613,8 @@ export type Database = {
         Row: {
           avg_percentage_viewed: number | null
           avg_view_duration_sec: number | null
+          cinematic: boolean | null
+          city: string | null
           comments: number
           condition: string | null
           created_at: string
@@ -620,20 +622,29 @@ export type Database = {
           fetched_at: string
           has_local_reference: boolean
           has_voiceover: boolean
+          hook_text: string | null
+          hook_type: string | null
           id: string
           likes: number
           platform: string
           post_id: string | null
+          posted_at: string | null
+          posted_hour: number | null
+          score: number | null
           shares: number
           subscribers_gained: number | null
           time_of_day: string | null
           tone: string | null
           user_id: string
           views: number
+          views_24h: number | null
+          views_7d: number | null
         }
         Insert: {
           avg_percentage_viewed?: number | null
           avg_view_duration_sec?: number | null
+          cinematic?: boolean | null
+          city?: string | null
           comments?: number
           condition?: string | null
           created_at?: string
@@ -641,20 +652,29 @@ export type Database = {
           fetched_at?: string
           has_local_reference?: boolean
           has_voiceover?: boolean
+          hook_text?: string | null
+          hook_type?: string | null
           id?: string
           likes?: number
           platform: string
           post_id?: string | null
+          posted_at?: string | null
+          posted_hour?: number | null
+          score?: number | null
           shares?: number
           subscribers_gained?: number | null
           time_of_day?: string | null
           tone?: string | null
           user_id: string
           views?: number
+          views_24h?: number | null
+          views_7d?: number | null
         }
         Update: {
           avg_percentage_viewed?: number | null
           avg_view_duration_sec?: number | null
+          cinematic?: boolean | null
+          city?: string | null
           comments?: number
           condition?: string | null
           created_at?: string
@@ -662,16 +682,23 @@ export type Database = {
           fetched_at?: string
           has_local_reference?: boolean
           has_voiceover?: boolean
+          hook_text?: string | null
+          hook_type?: string | null
           id?: string
           likes?: number
           platform?: string
           post_id?: string | null
+          posted_at?: string | null
+          posted_hour?: number | null
+          score?: number | null
           shares?: number
           subscribers_gained?: number | null
           time_of_day?: string | null
           tone?: string | null
           user_id?: string
           views?: number
+          views_24h?: number | null
+          views_7d?: number | null
         }
         Relationships: []
       }
@@ -1273,6 +1300,9 @@ export type Database = {
           afternoon_platforms: Json
           afternoon_post_time: string
           afternoon_skip_date: string | null
+          auto_adjust_post_times: boolean
+          auto_apply_winning_hook: boolean
+          auto_cinematic_for_storms: boolean
           auto_post: boolean
           auto_post_afternoon: boolean
           auto_post_evening: boolean
@@ -1329,6 +1359,9 @@ export type Database = {
           afternoon_platforms?: Json
           afternoon_post_time?: string
           afternoon_skip_date?: string | null
+          auto_adjust_post_times?: boolean
+          auto_apply_winning_hook?: boolean
+          auto_cinematic_for_storms?: boolean
           auto_post?: boolean
           auto_post_afternoon?: boolean
           auto_post_evening?: boolean
@@ -1385,6 +1418,9 @@ export type Database = {
           afternoon_platforms?: Json
           afternoon_post_time?: string
           afternoon_skip_date?: string | null
+          auto_adjust_post_times?: boolean
+          auto_apply_winning_hook?: boolean
+          auto_cinematic_for_storms?: boolean
           auto_post?: boolean
           auto_post_afternoon?: boolean
           auto_post_evening?: boolean
@@ -1436,6 +1472,102 @@ export type Database = {
           youtube_has_refresh_token?: boolean | null
           youtube_refresh_token?: string | null
           youtube_token_expires_at?: string | null
+        }
+        Relationships: []
+      }
+      winner_repost_suggestions: {
+        Row: {
+          city: string | null
+          city_avg: number | null
+          id: string
+          post_id: string
+          reason: string | null
+          status: string
+          suggested_at: string
+          user_id: string
+          views_24h: number | null
+        }
+        Insert: {
+          city?: string | null
+          city_avg?: number | null
+          id?: string
+          post_id: string
+          reason?: string | null
+          status?: string
+          suggested_at?: string
+          user_id: string
+          views_24h?: number | null
+        }
+        Update: {
+          city?: string | null
+          city_avg?: number | null
+          id?: string
+          post_id?: string
+          reason?: string | null
+          status?: string
+          suggested_at?: string
+          user_id?: string
+          views_24h?: number | null
+        }
+        Relationships: []
+      }
+      winner_stats: {
+        Row: {
+          best_condition: string | null
+          best_condition_avg: number | null
+          best_hook_avg: number | null
+          best_hook_type: string | null
+          best_hour: number | null
+          best_hour_avg: number | null
+          cinematic_lift_pct: number | null
+          city: string | null
+          city_avg_views: number | null
+          computed_at: string
+          id: string
+          raw: Json
+          sample_size: number
+          user_id: string
+          voice_lift_pct: number | null
+          worst_hour: number | null
+          worst_hour_avg: number | null
+        }
+        Insert: {
+          best_condition?: string | null
+          best_condition_avg?: number | null
+          best_hook_avg?: number | null
+          best_hook_type?: string | null
+          best_hour?: number | null
+          best_hour_avg?: number | null
+          cinematic_lift_pct?: number | null
+          city?: string | null
+          city_avg_views?: number | null
+          computed_at?: string
+          id?: string
+          raw?: Json
+          sample_size?: number
+          user_id: string
+          voice_lift_pct?: number | null
+          worst_hour?: number | null
+          worst_hour_avg?: number | null
+        }
+        Update: {
+          best_condition?: string | null
+          best_condition_avg?: number | null
+          best_hook_avg?: number | null
+          best_hook_type?: string | null
+          best_hour?: number | null
+          best_hour_avg?: number | null
+          cinematic_lift_pct?: number | null
+          city?: string | null
+          city_avg_views?: number | null
+          computed_at?: string
+          id?: string
+          raw?: Json
+          sample_size?: number
+          user_id?: string
+          voice_lift_pct?: number | null
+          worst_hour?: number | null
+          worst_hour_avg?: number | null
         }
         Relationships: []
       }
