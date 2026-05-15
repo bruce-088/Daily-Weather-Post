@@ -2261,7 +2261,11 @@ Deno.serve(async (req) => {
           if (top) topPerfStyle = top.style;
         } catch (e) { console.warn("[visual] memory lookup failed:", e); }
 
-        if (experimentCtx?.variable === "visuals" && experimentCtx?.meta?.visuals) {
+        if (cinematicForced) {
+          // Cinematic mode wins over contextual/experiment selection so the
+          // dramatic-weather visual treatment actually reaches the renderer.
+          trace("visual_rotation", { skipped: true, reason: "cinematic_forced", style: visualStyle });
+        } else if (experimentCtx?.variable === "visuals" && experimentCtx?.meta?.visuals) {
           visualStyle = String(experimentCtx.meta.visuals);
           console.log(`[visual] post ${post.id}: experiment override → visual_style=${visualStyle}`);
           trace("visual_rotation", { skipped: true, reason: "experiment_override", style: visualStyle });
