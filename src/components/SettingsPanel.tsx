@@ -955,6 +955,7 @@ export function SettingsPanel({
 
       <PerformanceLearningToggle />
       <JobPipelineToggle />
+      <AutoWinnerSettings />
       <SystemHealthCard />
 
       {(showLocation || showConnections || showAutomation) && (
