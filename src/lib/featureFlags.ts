@@ -78,4 +78,10 @@ export const FeatureFlags = {
   get ENABLE_DURABLE_PREVIEW_PIPELINE() {
     return isFeatureEnabled("ENABLE_DURABLE_PREVIEW_PIPELINE");
   },
+  get ENABLE_CONTENT_SCORE() {
+    return isFeatureEnabled("ENABLE_CONTENT_SCORE");
+  },
+  get ENABLE_AUTO_WINNER() {
+    return isFeatureEnabled("ENABLE_AUTO_WINNER");
+  },
 };
