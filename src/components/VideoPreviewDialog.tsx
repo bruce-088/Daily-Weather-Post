@@ -303,10 +303,11 @@ export function VideoPreviewDialog({
     setUploading(true);
     try {
       const cityName = city?.name || preview.weather.city;
-      const title = `${cityName} Weather Today — ${preview.weather.temperature}°F ${preview.weather.condition}`;
+      const hookTitle = selectedHookId && hooks ? hooks[selectedHookId] : null;
+      const title = hookTitle || `${cityName} Weather Today — ${preview.weather.temperature}°F ${preview.weather.condition}`;
       const captionToUse = editedCaption || preview.caption;
       const desc = captionToUse || `Weather update for ${cityName}: ${preview.weather.temperature}°F, ${preview.weather.description}`;
-      console.log("[preview] uploading", { city_id: city?.id, city: cityName });
+      console.log("[preview] uploading", { city_id: city?.id, city: cityName, hook_id: selectedHookId });
       const result = await uploadPreviewVideo(preview.storage_path, title, desc, captionToUse, city);
 
       if (result.success) {
