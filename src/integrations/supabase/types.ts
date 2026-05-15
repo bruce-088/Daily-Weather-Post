@@ -1187,6 +1187,39 @@ export type Database = {
           },
         ]
       }
+      video_renders: {
+        Row: {
+          city: string | null
+          created_at: string | null
+          id: string
+          pexels_video_url: string | null
+          render_id: string | null
+          status: string | null
+          user_id: string | null
+          voiceover_url: string | null
+        }
+        Insert: {
+          city?: string | null
+          created_at?: string | null
+          id?: string
+          pexels_video_url?: string | null
+          render_id?: string | null
+          status?: string | null
+          user_id?: string | null
+          voiceover_url?: string | null
+        }
+        Update: {
+          city?: string | null
+          created_at?: string | null
+          id?: string
+          pexels_video_url?: string | null
+          render_id?: string | null
+          status?: string | null
+          user_id?: string | null
+          voiceover_url?: string | null
+        }
+        Relationships: []
+      }
       weather_cache: {
         Row: {
           city: string
