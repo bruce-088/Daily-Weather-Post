@@ -130,6 +130,9 @@ export function VideoPreviewDialog({
 
   const isPostFlow = !!(postPlatforms && postPlatforms.length > 0);
 
+  // Tab favicon turns into a 🔴 dot while a render or upload is in flight.
+  useDynamicFavicon(generating || uploading || posting, "SkyBrief — Rendering");
+
   // Build / refresh validation states whenever preview content type or selected platforms change
   useEffect(() => {
     if (!isPostFlow || !postPlatforms) {
