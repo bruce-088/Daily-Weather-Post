@@ -10,6 +10,8 @@ import { generatePreview, uploadPreviewVideo, triggerManualPipelinePost, publish
 import type { PreviewResult, VoiceOptions, CityContext } from "@/lib/api";
 import { calculatePreviewHealth } from "@/lib/postHealth";
 import { FeatureFlags } from "@/lib/featureFlags";
+import { evaluateCinematicMode, cinematicLogLine } from "@/lib/cinematicMode";
+import { Zap } from "lucide-react";
 import { DebugLabels } from "@/components/DebugLabels";
 import { ABComparePanel } from "@/components/ABComparePanel";
 import {
