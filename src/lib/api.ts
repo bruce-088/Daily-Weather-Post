@@ -310,6 +310,12 @@ export interface PostHistoryItem {
   health_score?: number | null;
   published_visual_source?: string | null;
   experiment_variant?: string | null;
+  // Hook + cinematic metadata persisted at publish time.
+  hook_used?: string | null;
+  hook_id?: string | null;
+  cinematic_mode?: boolean | null;
+  cinematic_trigger?: string | null;
+  voice_name?: string | null;
 }
 
 export async function fetchPostHistory(limit = 10, offset = 0): Promise<PostHistoryItem[]> {

@@ -2233,8 +2233,25 @@ Deno.serve(async (req) => {
         // Priority: 1) experiment override 2) weather context 3) city context
         // 4) top-performing style from history. Then rotation guard.
         let visualStyle = "sky";
-        // Feature-flag override: cinematic mode forces cinematic visual style globally.
-        if (Deno.env.get("ENABLE_CINEMATIC_MODE") === "true") {
+
+        // ── Cinematic Mode (auto, weather-triggered) ──
+        // Dramatic conditions force cinematic visual style. This activates
+        // the cinematic background + overlays in the fallback renderer
+        // (see _shared/video-render.ts pickBackgroundColor) AND signals
+        // intent to the contextual selector below. Sunny/clear conditions
+        // never trigger cinematic — standard render only.
+        const _condLower = (weather.condition || "").toLowerCase();
+        const _cinematicKeywords = ["rain","drizzle","shower","storm","thunder","cloudy","overcast","fog","mist"];
+        let cinematicForced = false;
+        let cinematicTrigger: string | null = null;
+        for (const kw of _cinematicKeywords) {
+          if (_condLower.includes(kw)) { cinematicForced = true; cinematicTrigger = kw; break; }
+        }
+        if (cinematicForced) {
+          visualStyle = "cinematic";
+          console.log(`[visual] post ${post.id}: 🎬 cinematic mode ON (trigger=${cinematicTrigger})`);
+          trace("cinematic_mode", { enabled: true, trigger: cinematicTrigger });
+        } else if (Deno.env.get("ENABLE_CINEMATIC_MODE") === "true") {
           visualStyle = "cinematic";
           console.log(`[visual] post ${post.id}: ENABLE_CINEMATIC_MODE override → cinematic`);
         }

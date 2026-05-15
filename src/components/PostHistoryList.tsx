@@ -352,10 +352,13 @@ export function PostHistoryList({ posts, loading, onReuse, onChanged }: PostHist
                           </p>
                         )}
                         {(() => {
+                          // Prefer DB-persisted metadata (works on any device);
+                          // fall back to the legacy localStorage receipt.
                           const receipt = getReceipt(post.city, post.platform || "", post.created_at);
-                          const hookText = receipt?.hook_used || null;
-                          const cinematic = receipt?.cinematic_mode ?? false;
-                          const voiceName = receipt?.voice_name || null;
+                          const hookText = post.hook_used ?? receipt?.hook_used ?? null;
+                          const cinematic =
+                            post.cinematic_mode ?? receipt?.cinematic_mode ?? false;
+                          const voiceName = post.voice_name ?? receipt?.voice_name ?? null;
                           return (
                             <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
                               {hookText ? (
