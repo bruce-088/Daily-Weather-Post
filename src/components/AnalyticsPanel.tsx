@@ -37,6 +37,7 @@ import {
 } from "recharts";
 import { toast } from "sonner";
 import { useActiveCity } from "@/hooks/useActiveCity";
+import { GrowthIntelligenceCard } from "@/components/GrowthIntelligenceCard";
 
 type AnalyticsRow = {
   id: string;
