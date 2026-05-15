@@ -1140,20 +1140,17 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
     console.error(`[creatomate] ${mapped}`);
     setErr(mapped);
     const lower = (responseText + " " + (apiError || "")).toLowerCase();
-    // STRICT credit-exhaustion detection: explicit billing/credit phrases or
-    // payment-required HTTP code only. Generic 422 validation errors are NOT
-    // treated as credit exhaustion (that produced false "credits depleted"
-    // reports while the account had plenty of credits).
+    // STRICT credit-exhaustion detection. ONLY a literal HTTP 402 from the
+    // Creatomate API or an explicit `no_credits` / `insufficient credit` body
+    // phrase counts. Generic billing/quota text or any other status code is
+    // treated as a normal failure (retry-then-fallback) — not a hard stop.
     const isCreditExhausted =
       renderRes.status === 402 ||
+      lower.includes("no_credits") ||
       lower.includes("insufficient credit") ||
       lower.includes("out of credit") ||
       lower.includes("credit exhausted") ||
-      lower.includes("credits exhausted") ||
-      lower.includes("no credits") ||
-      lower.includes("quota exceeded") ||
-      lower.includes("plan limit") ||
-      lower.includes("payment required");
+      lower.includes("credits exhausted");
     if (isCreditExhausted) {
       return { creditExhausted: true, provider: "creatomate", message: mapped };
     }
