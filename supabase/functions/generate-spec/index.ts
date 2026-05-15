@@ -74,27 +74,25 @@ function table(headers: string[], rows: string[][]) {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
+  const auth = await verifyUser(req);
+  if (auth.response) return auth.response;
+
   try {
     const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
 
-    // --- Live DB introspection ---
-    const { data: tablesRaw } = await supabase
-      .rpc("noop_unused", {})
-      .then(() => ({ data: null }))
-      .catch(() => ({ data: null }));
-
-    // Use information_schema via REST is not exposed; we hardcode known tables but pull row counts live.
+    // --- Live DB introspection (no row counts; counts are infrastructure-disclosing) ---
     const KNOWN_TABLES = ["weather_settings", "scheduled_posts", "post_history", "notifications", "system_health"];
-    const tableStats: Record<string, number | string> = {};
+    const tableStats: Record<string, string> = {};
     for (const t of KNOWN_TABLES) {
-      const { count, error } = await supabase.from(t).select("*", { count: "exact", head: true });
-      tableStats[t] = error ? "n/a" : (count ?? 0);
+      tableStats[t] = "—";
     }
 
-    // Recent activity log (last 10 from post_history)
+    // Recent activity log (last 10 from post_history) — scoped to the requesting user
+    // and with error_message scrubbed to avoid leaking internal failure details.
     const { data: recent } = await supabase
       .from("post_history")
-      .select("created_at, status, platform, city, error_message")
+      .select("created_at, status, platform, city")
+      .eq("user_id", auth.userId)
       .order("created_at", { ascending: false })
       .limit(10);
 
@@ -103,7 +101,6 @@ Deno.serve(async (req) => {
       r.status ?? "—",
       r.platform ?? "—",
       r.city ?? "—",
-      (r.error_message ?? "").slice(0, 80),
     ]);
 
     const SCHEMA_TABLES: Record<string, string[]> = {
