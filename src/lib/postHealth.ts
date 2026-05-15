@@ -221,3 +221,133 @@ export function calculatePreviewHealth(
     videoDurationSec: preview?.content_type === "video" ? 13 : null,
   });
 }
+
+// ─── Auto-Winner Layer 6: Pre-Post Content Score ───────────────────────────
+// Read-only scoring of intent (hook + voice + cinematic + slot vs winners).
+// Never blocks posting.
+
+export interface ContentScoreCheck {
+  status: "ok" | "warn" | "info";
+  label: string;
+  tip?: string;
+}
+
+export interface ContentScoreResult {
+  score: number; // 0-100
+  checks: ContentScoreCheck[];
+}
+
+export interface ContentScoreInput {
+  hookType?: string | null; // 'A' | 'B' | 'C'
+  voiceEnabled?: boolean;
+  cinematic?: boolean;
+  condition?: string | null;
+  scheduledHour?: number | null; // 0-23
+}
+
+export interface WinnerStatsLite {
+  best_hook_type?: string | null;
+  best_hour?: number | null;
+  worst_hour?: number | null;
+  cinematic_lift_pct?: number | null;
+  voice_lift_pct?: number | null;
+  best_condition?: string | null;
+}
+
+export function computeContentScore(
+  input: ContentScoreInput,
+  winners?: WinnerStatsLite | null,
+): ContentScoreResult {
+  const checks: ContentScoreCheck[] = [];
+  let score = 60; // base
+
+  // Hook
+  if (input.hookType) {
+    if (winners?.best_hook_type && winners.best_hook_type === input.hookType) {
+      score += 15;
+      checks.push({ status: "ok", label: `Top-performing hook (${input.hookType}) selected` });
+    } else if (winners?.best_hook_type) {
+      score += 5;
+      checks.push({
+        status: "info",
+        label: `Hook ${input.hookType} selected`,
+        tip: `Hook ${winners.best_hook_type} averages higher for you.`,
+      });
+    } else {
+      score += 8;
+      checks.push({ status: "ok", label: "Hook selected" });
+    }
+  } else {
+    checks.push({ status: "warn", label: "No hook selected" });
+  }
+
+  // Voice
+  if (input.voiceEnabled) {
+    score += 10;
+    if (winners?.voice_lift_pct != null && winners.voice_lift_pct >= 0) {
+      checks.push({ status: "ok", label: `Voiceover enabled (+${winners.voice_lift_pct}% lift)` });
+    } else {
+      checks.push({ status: "ok", label: "Voiceover enabled" });
+    }
+  } else if (winners?.voice_lift_pct != null && winners.voice_lift_pct >= 10) {
+    checks.push({
+      status: "warn",
+      label: "Voiceover off",
+      tip: `Voice posts average +${winners.voice_lift_pct}% views for you.`,
+    });
+  }
+
+  // Cinematic
+  const stormy = (input.condition || "").toLowerCase().match(/storm|thunder|severe/);
+  if (input.cinematic) {
+    score += 10;
+    checks.push({
+      status: "ok",
+      label: stormy ? "Cinematic (storm detected)" : "Cinematic mode ON",
+    });
+  } else if (stormy) {
+    checks.push({
+      status: "warn",
+      label: "Cinematic OFF for storm",
+      tip: "Storm posts perform best in cinematic mode.",
+    });
+  }
+
+  // Slot timing
+  if (input.scheduledHour != null && winners?.best_hour != null) {
+    if (input.scheduledHour === winners.best_hour) {
+      score += 10;
+      checks.push({ status: "ok", label: "Posting at your best hour" });
+    } else if (winners.worst_hour != null && input.scheduledHour === winners.worst_hour) {
+      score -= 10;
+      checks.push({
+        status: "warn",
+        label: "Worst-performing slot",
+        tip: `Posts at ${formatHour(winners.best_hour)} average highest views.`,
+      });
+    } else {
+      checks.push({
+        status: "info",
+        label: `Scheduled for ${formatHour(input.scheduledHour)}`,
+        tip: `Best slot is ${formatHour(winners.best_hour)}.`,
+      });
+    }
+  }
+
+  // Best-condition tip
+  if (
+    input.condition &&
+    winners?.best_condition &&
+    input.condition.toLowerCase().includes(winners.best_condition.toLowerCase())
+  ) {
+    score += 5;
+    checks.push({ status: "ok", label: `${winners.best_condition} — your best condition` });
+  }
+
+  return { score: Math.max(0, Math.min(100, score)), checks };
+}
+
+function formatHour(h: number) {
+  const hh = h % 12 === 0 ? 12 : h % 12;
+  return `${hh}${h < 12 ? "AM" : "PM"}`;
+}
