@@ -146,6 +146,49 @@ export function VideoPreviewDialog({
     }
   }, [preview?.caption]);
 
+  // Auto-fetch viral hooks once a preview is available. Re-fetch when the
+  // weather or city materially changes. Does NOT modify the render pipeline.
+  useEffect(() => {
+    const w = preview?.weather;
+    const cityName: string = w?.city || city?.name || "";
+    if (!w || !cityName) return;
+    const sig = `${cityName}|${w.condition || ""}|${w.temperature ?? ""}`;
+    if (hooksFetchedFor === sig) return;
+    setHooksFetchedFor(sig);
+    setHooksLoading(true);
+    setHooks(null);
+    setSelectedHookId(null);
+    fetchHooks({
+      city: cityName,
+      condition: w.condition ?? null,
+      temperature: typeof w.temperature === "number" ? w.temperature : null,
+      time_period: (w as any).time_period ?? null,
+      rain_chance: (w as any).rain_chance ?? (w as any).rainChance ?? null,
+    })
+      .then((h) => setHooks(h))
+      .finally(() => setHooksLoading(false));
+  }, [preview?.weather, city?.name, hooksFetchedFor]);
+
+  // Apply selected hook as the FIRST line of the caption. The voiceover
+  // script is derived from the caption downstream — re-generating the preview
+  // after applying will make the hook the first spoken sentence too.
+  const applyHook = (id: HookId) => {
+    if (!hooks) return;
+    const text = hooks[id]?.trim();
+    if (!text) return;
+    setSelectedHookId(id);
+    const baseCaption = (editedCaption || preview?.caption || "").trim();
+    // Strip an existing hook line if one was already applied.
+    const stripped = baseCaption.replace(/^.+\n\n/, (m) =>
+      Object.values(hooks).some((h) => m.trim().startsWith(h.trim().slice(0, 40))) ? "" : m,
+    );
+    const next = `${text}\n\n${stripped}`.trim();
+    setEditedCaption(next);
+    setIsEditingCaption(false);
+    toast.success(`Hook ${id} applied. Re-generate preview to refresh voiceover with this opener.`);
+  };
+
+
   // Invalidate bundle if user edits caption away from the locked text
   useEffect(() => {
     if (!preview?.bundle_id) return;
