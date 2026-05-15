@@ -1907,12 +1907,34 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Derive a hook label from the caption (first non-empty line, ≤120 chars)
+    // so analytics + History UI always show what opened the post — matches the
+    // logic used by process-scheduled-posts.
+    const _hookSource = (caption || "").split(/\r?\n/).map((s) => s.trim()).find(Boolean) || "";
+    const hookUsedDerived = _hookSource ? _hookSource.slice(0, 120) : null;
+    const persistedTrace = {
+      captured_at: new Date().toISOString(),
+      hook_used: hookUsedDerived,
+      hook_type: null,
+      cinematic_mode: enableCinematic,
+      cinematic_trigger: cinematicTrigger,
+      voice_enabled: !!voiceUrl,
+      source: "daily-weather-post",
+    };
+
     const { data: historyRow, error: historyError } = await supabase.from("post_history").insert({
       status, platform, city: weather.city, temperature: weather.temperature,
       condition: weather.condition, image_url: storedImageUrl, error_message: errorMessage,
       caption, user_id: userId,
       post_url: youtubeVideoId ? `https://www.youtube.com/watch?v=${youtubeVideoId}` : null,
       external_id: youtubeVideoId || null,
+      // Persist hook + cinematic + voice metadata so the History UI shows them
+      // on any device (cross-device, server-authoritative).
+      hook_used: hookUsedDerived,
+      cinematic_mode: enableCinematic,
+      cinematic_trigger: cinematicTrigger,
+      voice_name: voiceUrl ? "AI" : null,
+      debug_trace: persistedTrace,
     }).select("id").single();
     if (historyError) console.error("Failed to log post history:", historyError);
 
