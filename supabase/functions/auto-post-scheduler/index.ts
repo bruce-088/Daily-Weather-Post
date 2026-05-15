@@ -291,6 +291,44 @@ Deno.serve(async (req) => {
         } catch (tErr) {
           console.warn("[scheduler]   timing tilt lookup failed:", tErr);
         }
+
+        // ── AUTO-WINNER TIME OVERRIDE (safe; toggle-gated) ──
+        // If the user enabled `auto_adjust_post_times` and we have a
+        // winner_stats.best_hour for this user/city, bias the slot's target
+        // time toward that hour. We only nudge — never replace — and the
+        // total tilt remains bounded by ±30 min so we stay inside the slot.
+        try {
+          const userSettings = settingsByUser.get(target.user_id) || null;
+          if (userSettings?.auto_adjust_post_times === true) {
+            const { data: winner } = await supabase
+              .from("winner_stats")
+              .select("best_hour")
+              .eq("user_id", target.user_id)
+              .ilike("city", target.city)
+              .order("computed_at", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            const bestHour = (winner as any)?.best_hour;
+            if (typeof bestHour === "number" && bestHour >= 0 && bestHour <= 23) {
+              const t0 = parseTime(period.time);
+              const slotMinutes = t0.hour * 60 + t0.minute;
+              const targetMinutes = bestHour * 60;
+              const delta = targetMinutes - slotMinutes;
+              // Only bias when the winning hour is within ±2h of this slot —
+              // otherwise leave the slot alone (a different slot will own it).
+              if (Math.abs(delta) <= 120) {
+                const extra = Math.max(-30, Math.min(30, delta - timingTiltMin));
+                if (extra !== 0) {
+                  console.log(`[scheduler]   🏆 auto-winner time bias: +${extra}min toward best_hour=${bestHour} (slot=${period.name})`);
+                  timingTiltMin += extra;
+                }
+              }
+            }
+          }
+        } catch (wErr) {
+          console.warn("[scheduler]   auto-winner time bias failed; falling back:", wErr);
+        }
+
         // Apply the tilt to the period time before evaluation.
         const tiltedTime = (() => {
           const t = parseTime(period.time);
