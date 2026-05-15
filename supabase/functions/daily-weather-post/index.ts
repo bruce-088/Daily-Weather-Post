@@ -1097,7 +1097,11 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
   }
 
 
-  const requestBody = JSON.stringify({ output_format: "mp4", ...source });
+  // Cache-bust: opaque per-render nonce. Creatomate stores `metadata` on the
+  // render record and includes it in the input fingerprint, so this guarantees
+  // a fresh render_id every call even when weather inputs are identical.
+  const renderNonce = `${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+  const requestBody = JSON.stringify({ output_format: "mp4", metadata: renderNonce, ...source });
   const root: any = source;
   console.log(
     `[render] creatomate_request_sent=true template_id=${(source as any)?.template_id ?? "inline_source"} background_url=${videoUrl ? String(videoUrl).split("?")[0] : "(gradient)"} audio_url=${voiceUrl ? String(voiceUrl).split("?")[0] : "(none)"} audio_dur=${audioDurationSec ?? "n/a"}s comp_dur=${compDuration.toFixed(2)}s`,

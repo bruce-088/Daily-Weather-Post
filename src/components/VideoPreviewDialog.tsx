@@ -6,8 +6,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Play, Upload, RefreshCw, X, Loader2, Pencil, Eye, Download, Send, Mic, Pause, Lock, AlertTriangle, Sparkles, Volume2, VolumeX } from "lucide-react";
-import { generatePreview, uploadPreviewVideo, triggerManualPipelinePost, publishPreviewBundle, triggerDailyPost } from "@/lib/api";
-import type { PreviewResult, VoiceOptions, CityContext } from "@/lib/api";
+import { generatePreview, uploadPreviewVideo, triggerManualPipelinePost, publishPreviewBundle, triggerDailyPost, enqueuePreviewJob, fetchPreviewJob } from "@/lib/api";
+import type { PreviewResult, VoiceOptions, CityContext, PreviewJobStage } from "@/lib/api";
+import { PreviewPipelineStatus } from "@/components/PreviewPipelineStatus";
 import { calculatePreviewHealth } from "@/lib/postHealth";
 import { FeatureFlags } from "@/lib/featureFlags";
 import { evaluateCinematicMode, cinematicLogLine } from "@/lib/cinematicMode";
@@ -69,6 +70,9 @@ export function VideoPreviewDialog({
   const [generating, setGenerating] = useState(false);
   const [genStage, setGenStage] = useState<"idle" | "video" | "image" | "voice">("idle");
   const [generationError, setGenerationError] = useState<string | null>(null);
+  // Durable preview pipeline status (driven by `jobs.result.stage`)
+  const [pipelineStage, setPipelineStage] = useState<PreviewJobStage | null>(null);
+  const [pipelineSource, setPipelineSource] = useState<"pipeline" | "legacy" | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [audioPlaying, setAudioPlaying] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -268,15 +272,53 @@ export function VideoPreviewDialog({
     // Reset lock state — a fresh preview always starts locked
     setBundleInvalidated(false);
     setInvalidationReason(null);
+    setPipelineStage("fetching_weather");
 
     const voiceTimer = voice?.enabled ? setTimeout(() => setGenStage("voice"), 8000) : null;
+    const useDurable = FeatureFlags.ENABLE_DURABLE_PREVIEW_PIPELINE;
+    setPipelineSource(useDurable ? "pipeline" : "legacy");
 
     try {
-      console.log("[preview] generating", { city_id: city?.id, city: city?.name, state: city?.state });
-      const result = await generatePreview({ style, variation, voice, city });
+      console.log("[preview] generating", {
+        path: useDurable ? "durable-pipeline" : "legacy-direct",
+        city_id: city?.id, city: city?.name, state: city?.state,
+      });
+
+      let result: PreviewResult;
+
+      if (useDurable) {
+        const selectedHookText = selectedHookId && hooks ? hooks[selectedHookId] : null;
+        const enq = await enqueuePreviewJob({ style, variation, voice, city, selectedHook: selectedHookText });
+        if ("error" in enq) throw new Error(enq.error);
+        const jobId = enq.job_id;
+
+        // Poll up to 180s — render fallback chain can occasionally be slow.
+        const POLL_INTERVAL_MS = 1500;
+        const POLL_TIMEOUT_MS = 180_000;
+        const started = Date.now();
+        let snap: Awaited<ReturnType<typeof fetchPreviewJob>> = null;
+        while (Date.now() - started < POLL_TIMEOUT_MS) {
+          await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+          snap = await fetchPreviewJob(jobId);
+          if (!snap) continue;
+          if (snap.stage) setPipelineStage(snap.stage);
+          if (snap.status === "succeeded" || snap.status === "failed") break;
+        }
+        if (!snap) throw new Error("Lost connection to preview job");
+        if (snap.status === "failed") {
+          setPipelineStage("failed");
+          throw new Error(snap.error || "Preview pipeline failed");
+        }
+        if (!snap.preview) throw new Error("Preview job finished but returned no result");
+        result = snap.preview;
+      } else {
+        result = await generatePreview({ style, variation, voice, city });
+      }
+
       if (result.success && (result.video_url || result.image_url)) {
         setPreview(result);
         setPreviewCity({ id: city?.id ?? null, name: city?.name ?? result.weather?.city ?? null });
+        setPipelineStage("ready");
         if (variation) {
           toast.success("✨ New variation ready!");
         } else {
@@ -285,10 +327,12 @@ export function VideoPreviewDialog({
           );
         }
       } else {
+        setPipelineStage("failed");
         setGenerationError(result.error || "Failed to generate preview");
         toast.error(result.error || "Failed to generate preview");
       }
     } catch (err: any) {
+      setPipelineStage("failed");
       setGenerationError(err.message || "Failed to generate preview");
       toast.error(err.message || "Failed to generate preview");
     } finally {
@@ -1059,6 +1103,12 @@ export function VideoPreviewDialog({
             />
           )}
         </div>
+
+        <PreviewPipelineStatus
+          stage={pipelineStage}
+          error={generationError}
+          source={pipelineSource}
+        />
 
         {(preview?.video_url || preview?.image_url) && (
           <DialogFooter className="flex-row gap-2 sm:gap-2 flex-wrap">
