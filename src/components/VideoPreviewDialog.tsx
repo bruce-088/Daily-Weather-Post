@@ -9,12 +9,15 @@ import { Play, Upload, RefreshCw, X, Loader2, Pencil, Eye, Download, Send, Mic, 
 import { generatePreview, uploadPreviewVideo, triggerManualPipelinePost, publishPreviewBundle, triggerDailyPost, enqueuePreviewJob, fetchPreviewJob } from "@/lib/api";
 import type { PreviewResult, VoiceOptions, CityContext, PreviewJobStage } from "@/lib/api";
 import { PreviewPipelineStatus } from "@/components/PreviewPipelineStatus";
+import { RenderProgressTracker } from "@/components/RenderProgressTracker";
 import { calculatePreviewHealth } from "@/lib/postHealth";
 import { FeatureFlags } from "@/lib/featureFlags";
 import { evaluateCinematicMode, cinematicLogLine } from "@/lib/cinematicMode";
 import { fetchHooks, saveReceipt, formatReceipt, HOOK_LABELS, type HookId, type HookSet, type PostReceipt } from "@/lib/hooks";
-import { Zap, Flame, Umbrella } from "lucide-react";
+import { Zap, Lightbulb } from "lucide-react";
 import { DebugLabels } from "@/components/DebugLabels";
+import { useDynamicFavicon } from "@/hooks/useDynamicFavicon";
+import { celebrate } from "@/lib/confetti";
 import { ABComparePanel } from "@/components/ABComparePanel";
 import {
   buildVariantPair,
@@ -75,6 +78,8 @@ export function VideoPreviewDialog({
   const [pipelineSource, setPipelineSource] = useState<"pipeline" | "legacy" | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [audioPlaying, setAudioPlaying] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [videoPaused, setVideoPaused] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [editedCaption, setEditedCaption] = useState("");
   const [isEditingCaption, setIsEditingCaption] = useState(false);
@@ -124,6 +129,9 @@ export function VideoPreviewDialog({
   }, [abType, defaultPair, hookA, hookB]);
 
   const isPostFlow = !!(postPlatforms && postPlatforms.length > 0);
+
+  // Tab favicon turns into a 🔴 dot while a render or upload is in flight.
+  useDynamicFavicon(generating || uploading || posting, "SkyBrief — Rendering");
 
   // Build / refresh validation states whenever preview content type or selected platforms change
   useEffect(() => {
@@ -442,7 +450,9 @@ export function VideoPreviewDialog({
       console.warn("[receipt] DB persist failed (non-fatal):", e);
     }
 
-    toast.success(formatReceipt(receipt), { duration: 9000, style: { whiteSpace: "pre-wrap", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: "12px" } });
+    toast.success(formatReceipt(receipt), { duration: 9000, className: "animate-slide-up", style: { whiteSpace: "pre-wrap", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: "12px" } });
+    // Subtle celebratory burst — a few pieces only, never blocking.
+    try { celebrate({ y: window.innerHeight * 0.35, pieces: 28 }); } catch {}
   };
 
 
@@ -615,20 +625,15 @@ export function VideoPreviewDialog({
             </div>
           )}
 
-          {/* Loading state with stage-aware status */}
+          {/* Producer view — multi-step status tracker */}
           {generating && (
-            <div className="flex flex-col items-center gap-3 py-12">
-              <Loader2 size={32} className="animate-spin text-primary" />
-              <p className="text-sm font-medium text-foreground">
-                {genStage === "voice"
-                  ? "🎙️ Generating voice narration…"
-                  : "🎥 Creatomate is crafting your video (expect ~45–90s)…"}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {genStage === "voice"
-                  ? "Synthesizing your AI voiceover with ElevenLabs."
-                  : "Hang tight — video-required platforms will not receive image fallback."}
-              </p>
+            <div className="py-2">
+              <RenderProgressTracker
+                stage={pipelineStage}
+                cityName={city?.name || null}
+                voiceEnabled={!!voice?.enabled}
+                error={generationError}
+              />
             </div>
           )}
 
@@ -642,23 +647,53 @@ export function VideoPreviewDialog({
           {/* Media display - video or image */}
           {(preview?.video_url || preview?.image_url) && (
             <>
-              <div className="rounded-xl overflow-hidden bg-secondary/30 border border-border/20">
-                {preview.content_type === "image" && preview.image_url ? (
-                  <img
-                    src={preview.image_url}
-                    alt="Weather infographic preview"
-                    className="w-full max-h-[50vh] object-contain"
-                  />
-                ) : preview.video_url ? (
-                  <video
-                    src={preview.video_url}
-                    controls
-                    autoPlay
-                    loop
-                    muted
-                    className="w-full max-h-[40vh] object-contain"
-                  />
-                ) : null}
+              <div className="relative rounded-2xl p-3 bg-gradient-to-br from-white/5 via-white/[0.02] to-white/5 backdrop-blur-xl border border-white/10 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.7)]">
+                <div className="absolute -inset-12 -z-10 opacity-40 pointer-events-none blur-3xl bg-[radial-gradient(circle_at_30%_20%,hsl(var(--primary)/0.35),transparent_60%),radial-gradient(circle_at_70%_80%,hsl(280_85%_60%/0.25),transparent_60%)]" />
+                <div className="relative rounded-xl overflow-hidden bg-black/40 ring-1 ring-white/10 shadow-2xl">
+                  {preview.content_type === "image" && preview.image_url ? (
+                    <img
+                      src={preview.image_url}
+                      alt="Weather infographic preview"
+                      className="w-full max-h-[50vh] object-contain"
+                    />
+                  ) : preview.video_url ? (
+                    <>
+                      <video
+                        ref={videoRef}
+                        src={preview.video_url}
+                        controls
+                        autoPlay
+                        loop
+                        muted
+                        onPlay={() => setVideoPaused(false)}
+                        onPause={() => setVideoPaused(true)}
+                        className="w-full max-h-[44vh] object-contain"
+                      />
+                      {/* Metadata badge overlay — visible while paused */}
+                      {videoPaused && (
+                        <div className="absolute top-3 left-3 right-3 flex items-center gap-1.5 flex-wrap pointer-events-none animate-fade-in">
+                          <span className="rounded-md bg-black/60 backdrop-blur px-2 py-0.5 text-[10px] font-mono text-white/90 border border-white/15">
+                            1080×1920
+                          </span>
+                          {typeof preview.render_time === "number" && (
+                            <span className="rounded-md bg-black/60 backdrop-blur px-2 py-0.5 text-[10px] font-mono text-white/90 border border-white/15">
+                              {Math.max(2, Math.round(preview.render_time))}s
+                            </span>
+                          )}
+                          <span
+                            className={`rounded-md backdrop-blur px-2 py-0.5 text-[10px] font-mono border ${
+                              preview.audio_url
+                                ? "bg-emerald-500/25 text-emerald-100 border-emerald-300/40"
+                                : "bg-yellow-500/25 text-yellow-100 border-yellow-300/40"
+                            }`}
+                          >
+                            {preview.audio_url ? "♪ Audio Attached" : "♪ Silent"}
+                          </span>
+                        </div>
+                      )}
+                    </>
+                  ) : null}
+                </div>
               </div>
 
               {/* Engine Metadata — shows which engine produced the asset and how long it took */}
@@ -813,8 +848,10 @@ export function VideoPreviewDialog({
                   ) : hooks ? (
                     <div className="grid grid-cols-1 gap-2">
                       {(["A", "B", "C"] as HookId[]).map((id) => {
-                        const Icon = id === "A" ? Flame : id === "B" ? Umbrella : Eye;
+                        const Icon = id === "A" ? Zap : id === "B" ? Lightbulb : Eye;
                         const isSel = selectedHookId === id;
+                        const tone =
+                          id === "A" ? "Urgency" : id === "B" ? "Advice" : "Insight";
                         return (
                           <button
                             key={id}
@@ -822,13 +859,13 @@ export function VideoPreviewDialog({
                             onClick={() => applyHook(id)}
                             className={`text-left rounded-lg border px-3 py-2 transition ${
                               isSel
-                                ? "border-violet-500/60 bg-violet-500/15 ring-1 ring-violet-400/40"
+                                ? "border-primary bg-primary/10 ring-2 ring-primary/50 shadow-[0_0_18px_-4px_hsl(var(--primary))]"
                                 : "border-border/40 bg-background/40 hover:border-violet-500/40 hover:bg-violet-500/5"
                             }`}
                           >
                             <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-violet-300">
-                              <Icon size={11} />
-                              Hook {id} · {HOOK_LABELS[id]}
+                              <Icon size={11} className={isSel ? "text-primary" : ""} />
+                              Hook {id} · {tone} · {HOOK_LABELS[id]}
                               {isSel && <span className="ml-auto text-emerald-400">✓ Selected</span>}
                             </div>
                             <p className="text-sm text-foreground mt-1 leading-snug">{hooks[id]}</p>
@@ -1114,15 +1151,26 @@ export function VideoPreviewDialog({
           <DialogFooter className="flex-row gap-2 sm:gap-2 flex-wrap">
             {/* During posting/complete in post flow, show only Close (and Retry is per-row) */}
             {isPostFlow && (phase === "posting" || phase === "complete") ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleClose}
-                disabled={posting}
-                className="gap-1.5 text-xs ml-auto"
-              >
-                <X size={14} /> Close
-              </Button>
+              <>
+                {posting && (
+                  <div className="flex items-center gap-2 mr-auto text-[11px] text-primary font-mono">
+                    <span className="relative inline-flex h-5 w-5 items-center justify-center">
+                      <span className="absolute inset-0 rounded-full border-2 border-primary/30" />
+                      <span className="absolute inset-0 rounded-full border-2 border-transparent border-t-primary animate-spin" />
+                    </span>
+                    Publishing…
+                  </div>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleClose}
+                  disabled={posting}
+                  className="gap-1.5 text-xs ml-auto"
+                >
+                  <X size={14} /> Close
+                </Button>
+              </>
             ) : (
               <>
                 <Button
