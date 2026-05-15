@@ -760,8 +760,9 @@ export function VideoPreviewDialog({
                 </div>
               )}
               {bundleInvalidated && invalidationReason && (
-                <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 px-3 py-2 text-[11px] text-yellow-500">
-                  {invalidationReason}
+                <div className="rounded-lg border border-sky-500/30 bg-sky-500/5 px-3 py-2 text-[11px] text-sky-400 flex items-center gap-2">
+                  <Loader2 size={12} className={generating ? "animate-spin" : ""} />
+                  <span>Changes detected — syncing preview. You can still post the current render.</span>
                 </div>
               )}
 
@@ -1085,9 +1086,11 @@ export function VideoPreviewDialog({
                 </div>
               )}
               {isPostFlow && bundleInvalidated && (
-                <div className="flex items-center gap-2 text-[11px] text-yellow-500 pt-1">
-                  <AlertTriangle size={12} />
-                  <span className="font-medium">Preview stale: regenerate before posting.</span>
+                <div className="flex items-center gap-2 text-[11px] text-sky-400 pt-1">
+                  <Loader2 size={12} className={generating ? "animate-spin" : ""} />
+                  <span className="font-medium">
+                    {generating ? "Preview updating…" : "Changes detected — re-generate to sync, or post the current render."}
+                  </span>
                 </div>
               )}
 
@@ -1243,7 +1246,7 @@ export function VideoPreviewDialog({
                     size="sm"
                     onClick={handlePostToPlatforms}
                     disabled={
-                      isBusy || blockingError || postablePlatforms.length === 0 || bundleInvalidated ||
+                      isBusy || blockingError || postablePlatforms.length === 0 ||
                       (FeatureFlags.ENABLE_POST_HEALTH_SCORE && health.blocked) ||
                       (FeatureFlags.ENABLE_AB_TESTING && abEnabled && !selectedVariant)
                     }
@@ -1253,7 +1256,7 @@ export function VideoPreviewDialog({
                         : FeatureFlags.ENABLE_POST_HEALTH_SCORE && health.blocked
                         ? `Post quality too low (${health.score}/100) — fix before publishing`
                         : bundleInvalidated
-                        ? (invalidationReason || "Regenerate preview before posting")
+                        ? "Posting current render — recent edits not included unless you regenerate"
                         : blockingError
                         ? "Resolve connection errors before posting"
                         : undefined
