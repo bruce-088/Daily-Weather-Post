@@ -1264,3 +1264,54 @@ export function VideoPreviewDialog({
     </Dialog>
   );
 }
+
+// ─── Auto-Winner: Pre-post Content Score + Urgency banner ────────────────
+function PreviewAutoWinnerBlock({
+  preview,
+  selectedHookId,
+  cityName,
+  onApplyUrgency,
+}: {
+  preview: PreviewResult;
+  selectedHookId: HookId | null;
+  cityName: string | null;
+  onApplyUrgency: (s: UrgencySuggestion) => void;
+}) {
+  const condition = preview?.weather?.condition || null;
+  const tempNow = (preview?.weather as any)?.temperature ?? null;
+  const tempPrev = (preview?.weather as any)?.temperature_24h_ago ?? null;
+  const cm = evaluateCinematicMode(condition);
+  const urgency = detectUrgency({ condition, tempNow, tempPrev24h: tempPrev });
+
+  return (
+    <div className="space-y-2">
+      {urgency.trigger && (
+        <div className="rounded-lg border border-amber-400/40 bg-amber-400/10 p-3 flex items-start gap-2">
+          <span className="text-base leading-none">⚡</span>
+          <div className="flex-1 text-xs">
+            <p className="font-medium text-amber-300">Significant weather detected</p>
+            <p className="text-amber-200/80">{urgency.reason} — Urgency mode recommended.</p>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs border-amber-400/40"
+            onClick={() => onApplyUrgency(urgency.suggest)}
+          >
+            Apply
+          </Button>
+        </div>
+      )}
+      <ContentScoreCard
+        city={cityName}
+        input={{
+          hookType: selectedHookId,
+          voiceEnabled: !!preview?.audio_url,
+          cinematic: cm.enabled,
+          condition,
+          scheduledHour: new Date().getHours(),
+        }}
+      />
+    </div>
+  );
+}
