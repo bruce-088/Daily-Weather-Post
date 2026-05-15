@@ -1,115 +1,176 @@
-## Goal
+# Auto-Winner System — Additive Intelligence Layer
 
-Make the "Preview" experience as durable as auto-post by routing it through a real backend job, eliminating render cache "ghosts," reusing the previewed asset at publish time, and showing the user where the pipeline is at every step.
+A self-improving learning layer built **on top of** existing tables and edge functions. Zero changes to render, posting, Creatomate, or auto-apply behavior. Everything is read-only against current pipeline; only new analytics columns and one new table are written to.
 
----
+## Guardrails (encoded in code)
 
-## 1. Hook the Preview into the Job Pipeline
-
-Today the **Preview** button calls `daily-weather-post` (mode=`preview`) synchronously and waits up to ~60s for the response. It bypasses the `jobs` table entirely. We will wrap it in a real job so it has the same status surface as auto-post.
-
-**New edge function: `enqueue-preview-job`**
-- Inputs: `city_id`, `city`, `state`, `style`, `voice`, `selected_hook`, `enable_cinematic_mode`.
-- Calls `enqueue_job()` SQL with `type = 'preview'`, payload carrying the inputs.
-- Returns `{ job_id }` immediately (no waiting).
-
-**New job handler: `preview`** (added to `_shared/job-handlers.ts`)
-- Stage 1 — `fetching_weather`: calls `fetch-weather`, writes `result.stage`.
-- Stage 2 — `generating_hooks`: calls `generate-hooks`, writes the chosen hook into `result`.
-- Stage 3 — `rendering_video`: calls `daily-weather-post` (`mode=preview`) with all inputs + `nonce` (see §2). On success writes `result.video_url`, `result.bundle_id`, `result.caption`, `result.weather`, `result.visual_source`, `result.health_score`.
-- Stage 4 — `ready`: marks job `status='succeeded'`.
-- Failures bubble up via the existing `last_error` field; UI surfaces them.
-
-**Frontend (`VideoPreviewDialog` + `lib/api.ts`)**
-- New helper `enqueuePreviewJob(opts)` → returns `job_id`.
-- New helper `pollPreviewJob(jobId)` → polls `jobs` row every 1.5s for up to 90s, returns `{ stage, status, result, last_error }`.
-- `handleGenerate` is rewritten to: enqueue → poll → set `preview` only when `status='succeeded'`. The existing `generatePreview()` direct-call helper stays as a fallback behind a feature flag for one release, then gets removed.
+- No edits to: `daily-weather-post`, `process-scheduled-posts`, `video-render.ts`, any platform adapter, Creatomate config, `enqueue-preview-job`.
+- No automatic settings changes anywhere. Layers 4/5/7 are suggestion-only and gated behind explicit user confirmation toggles (default OFF).
+- All new feature flags default OFF except Layers 1–3 (read/display).
 
 ---
 
-## 2. Eliminate Render Caching "Ghosts"
+## Layer 1 — Performance Reader (extend existing)
 
-The frontend already appends a `nonce` to the edge invoke body, but the value is not forwarded into the Creatomate render request, so Creatomate's content-hash cache can still return the same render. We will plumb the nonce all the way down.
-
-- `daily-weather-post` reads `requestBody.nonce` (already received) and passes it through `generateWeatherVideo()` → `buildCreatomateSource()`.
-- Inside `buildCreatomateSource`, attach the nonce as a hidden `modifications.cache_bust` property on the source object, e.g.:
-  ```
-  source.modifications = { ...(source.modifications||{}), cache_bust: nonce }
-  ```
-- Same nonce is also added to the JSON2Video payload (`payload.metadata.cache_bust`) so the fallback chain is just as fresh.
-- The new `preview` job handler ALWAYS generates a server-side nonce (`crypto.randomUUID()`) so even if a client forgets, every preview is unique.
-
-Result: identical weather inputs no longer produce identical render IDs.
-
----
-
-## 3. WYSYWYP — "What You See Is What You Post"
-
-`preview_bundles` already stores the locked render. `publish-preview-bundle` already supports posting an exact `bundle_id`. The gap is on the publish path: when a user "Posts" after previewing, the manual-post pipeline currently re-renders. We will:
-
-- Surface the current preview's `bundle_id` (already returned in `PreviewResult.bundle_id`) all the way through `triggerManualPipelinePost(...)` and the resulting `scheduled_posts.debug_trace.preview_bundle_id`.
-- Update `process-scheduled-posts` so that when `debug_trace.preview_bundle_id` is set AND the bundle is still `locked` (not expired/consumed) it:
-  1. Loads `preview_bundles.asset_url` + `audio_url`.
-  2. Skips `generateWeatherVideo()` entirely.
-  3. Downloads the stored asset bytes and feeds them straight to `postToPlatform()`.
-  4. On success marks the bundle `consumed`.
-- The manual "Post" button only invalidates the bundle when (a) caption was edited, (b) city changed, or (c) `Regenerate` was clicked — the existing `bundleInvalidated` state already tracks this. When invalidated, fall back to the normal pipeline render.
-
-Result: the exact mp4 the user previewed is the exact mp4 that lands on the platform.
-
----
-
-## 4. Visual Reliability Indicator
-
-Add a thin status strip pinned to the bottom of `VideoPreviewDialog` (above the existing footer). It's driven directly by the polled `result.stage` from the preview job.
+`post_analytics` already exists with views/likes/comments/condition/time_of_day/has_voiceover/avg_view_duration_sec. We **extend** it (no rebuild) with the missing fields:
 
 ```text
-[●  Fetching weather] ── [○  Generating hooks] ── [○  Rendering video] ── [○  Ready]
+ALTER TABLE post_analytics ADD:
+  hook_type        text          -- 'A' | 'B' | 'C' (urgency/advice/insight)
+  hook_text        text
+  cinematic        boolean
+  posted_at        timestamptz
+  posted_hour      smallint      -- 0-23, in user timezone
+  views_24h        integer
+  views_7d         integer
+  score            numeric        -- (views * 1.0) + (likes * 10) + (duration_pct * 50)
+  city             text           -- denormalized for fast group-by
 ```
 
-- States rendered as small pills (matching `DebugLabels`/`PostProgressPanel` styling).
-- Active stage uses an animated pulse + the existing `Loader2` icon.
-- Completed stages get a check; failed stages get a red X with the `last_error` shown beneath in monospace.
-- New component: `src/components/PreviewPipelineStatus.tsx` (≤120 lines, presentational only).
+Backfill from `post_history` (hook_id → A/B/C map, cinematic_mode, created_at, views_count, likes_count). All values are **read** from `post_history` — no writes back to it.
+
+A new edge function `compute-winner-stats` (cron every 6h) walks recent posts and:
+1. Recomputes `views_24h` / `views_7d` / `score` for each `post_analytics` row.
+2. Writes nothing back to `post_history`, `scheduled_posts`, or `weather_settings`.
+
+## Layer 2 — Winner Detection
+
+New table `winner_stats` (per user, per city) — pure aggregate output:
+
+```text
+winner_stats:
+  user_id, city, computed_at
+  best_hook_type      text     -- 'A'|'B'|'C'
+  best_hook_avg       numeric
+  best_hour           smallint
+  best_hour_avg       numeric
+  worst_hour          smallint
+  worst_hour_avg      numeric
+  best_condition      text
+  best_condition_avg  numeric
+  cinematic_lift_pct  numeric  -- (avg_on - avg_off) / avg_off * 100
+  voice_lift_pct      numeric
+  sample_size         integer
+  raw                 jsonb    -- full breakdown for UI drill-down
+```
+
+`compute-winner-stats` populates this. Min sample size = 3 per bucket; otherwise field is null and UI shows "still learning."
+
+## Layer 3 — Growth Intelligence card (Analytics tab)
+
+New component `src/components/GrowthIntelligenceCard.tsx`, mounted inside `AnalyticsPanel.tsx` above existing `GrowthDashboard`. Reads from `winner_stats` for the active city.
+
+Layout matches the spec:
+
+```text
+🏆 What's Working
+Best Hook Style:    ⚡ Urgency (Hook A)   avg 142 views
+Best Post Time:     🕕 6:00 PM            avg 138 views
+Cinematic Lift:     +47% views when ON
+Best Condition:     ⛈️ Storm posts        avg 155 views
+Worst Time:         🕐 1:00 PM            avg 31 views
+```
+
+Empty state: "Need 3+ posts per pattern. Currently tracking N posts."
+
+## Layer 4 — Gentle Auto-Apply (opt-in toggles)
+
+Add to `weather_settings` (per user, default false):
+
+```text
+auto_apply_winning_hook       boolean default false
+auto_adjust_post_times        boolean default false
+auto_cinematic_for_storms     boolean default false
+```
+
+In `SettingsPanel.tsx` add an "Auto-Winner" section with three switches. Toggling ON triggers a confirmation dialog quoting the current winner ("Auto-Winner will now prefer Hook A and post at 6PM. Confirm?").
+
+**Read-side only** for now: `daily-weather-post` and the scheduler are NOT modified. Instead we expose a helper `getAutoWinnerOverrides(userId, city)` in `_shared/winning-recipes.ts` that returns `{ preferred_hook, preferred_hour, force_cinematic }` only when both (a) the toggle is ON and (b) `winner_stats` has a clear winner. Wiring those overrides into the render pipeline is **out of scope for this task** (will be a separate, isolated PR with its own approval) so we don't violate the "don't touch render/posting" rule.
+
+## Layer 5 — Auto-Repost Winner Suggestion
+
+Edge function logic added inside `compute-winner-stats` (no new function): when a post's `views_24h > city_avg × 1.5`, insert into existing `notifications` and a new `winner_repost_suggestions` table:
+
+```text
+winner_repost_suggestions:
+  id, user_id, post_id, city, suggested_at,
+  reason text, status text  -- 'pending'|'dismissed'|'reposted'
+```
+
+UI: new section in `GrowthDashboard.tsx` titled "🔥 Outperforming posts" with `[Repost Variation]` (deep-links to existing `SchedulePostForm` prefilled, no auto-creation) and `[Dismiss]` buttons. Never creates a scheduled post automatically.
+
+## Layer 6 — Pre-Post Content Score
+
+`src/lib/postHealth.ts` already exists. Extend (don't replace) with a new function `computeContentScore(input, winnerStats)` returning:
+
+```text
+{ score: 0-100, checks: [{ ok|warn|info, label, tip? }] }
+```
+
+Display in `VideoPreviewDialog.tsx` review step as a non-blocking card:
+
+```text
+📊 Post Score: 84/100
+✅ Strong hook selected
+✅ Voice enabled
+✅ Cinematic (storm detected)
+⚠️ Afternoon slot (lower avg)
+💡 Tip: Evening posts avg +40% views
+```
+
+Gated by feature flag `ENABLE_CONTENT_SCORE` (default true). Never blocks the Post button.
+
+## Layer 7 — Smart Weather Triggers
+
+New helper `src/lib/weatherTriggers.ts`:
+
+```text
+detectUrgency({ condition, tempNow, tempPrev24h }) →
+  { trigger: boolean, reason: string,
+    suggest: { hook: 'A', cinematic: true, earlier_minutes: 30 } }
+```
+
+Used **only** by the preview/review modal to display:
+
+```text
+⚡ Significant weather detected. Urgency mode recommended.
+[Apply suggestion] [Ignore]
+```
+
+`Apply` mutates only the in-memory preview state (hook selection, cinematic toggle in the dialog). Posting/render pipeline unchanged.
 
 ---
 
-## Technical details
+## Files
 
-**DB**
-- No schema change required. `jobs.payload`, `jobs.result`, and `jobs.status` already cover everything.
-- Add a CHECK-friendly value: `jobs.type = 'preview'` (free text — already allowed).
-- Optional: add an index `CREATE INDEX IF NOT EXISTS idx_jobs_type_status ON jobs (type, status);` for poll efficiency. (Will be done in a separate migration if poll latency is a concern.)
+**New**
+- `supabase/functions/compute-winner-stats/index.ts`
+- `src/components/GrowthIntelligenceCard.tsx`
+- `src/lib/weatherTriggers.ts`
+- `src/components/AutoWinnerSettings.tsx` (mounted inside SettingsPanel)
+- `src/components/ContentScoreCard.tsx`
 
-**Job runner**
-- `_shared/job-handlers.ts` registry gets a new entry: `preview: previewJob`.
-- `run-jobs` continues to claim jobs via `claim_next_jobs`; no change needed there because the new handler self-contains the staged work and writes intermediate `result.stage` updates inside a single job rather than chaining sub-jobs.
+**Edited (additive only)**
+- `src/components/AnalyticsPanel.tsx` — mount `GrowthIntelligenceCard`
+- `src/components/GrowthDashboard.tsx` — add "Outperforming posts" section
+- `src/components/SettingsPanel.tsx` — mount `AutoWinnerSettings`
+- `src/components/VideoPreviewDialog.tsx` — mount `ContentScoreCard` + urgency banner
+- `src/lib/postHealth.ts` — add `computeContentScore`
+- `src/lib/featureFlags.ts` — add `ENABLE_CONTENT_SCORE`, `ENABLE_AUTO_WINNER`
 
-**Edge functions touched**
-- New: `supabase/functions/enqueue-preview-job/index.ts`
-- Modified: `supabase/functions/_shared/job-handlers.ts` (add `previewJob` + register)
-- Modified: `supabase/functions/daily-weather-post/index.ts` (forward `nonce` into Creatomate `source.modifications.cache_bust`; same for JSON2Video metadata)
-- Modified: `supabase/functions/process-scheduled-posts/index.ts` (WYSYWYP short-circuit when `preview_bundle_id` present and bundle is `locked`)
+**DB migrations**
+1. `ALTER TABLE post_analytics` add columns + backfill from `post_history`.
+2. `CREATE TABLE winner_stats` (RLS: users read own, service_role full).
+3. `CREATE TABLE winner_repost_suggestions` (same RLS).
+4. `ALTER TABLE weather_settings` add 3 auto-apply boolean columns (default false).
 
-**Frontend touched**
-- Modified: `src/lib/api.ts` (`enqueuePreviewJob`, `pollPreviewJob`; pass `bundle_id` through `triggerManualPipelinePost`)
-- Modified: `src/components/VideoPreviewDialog.tsx` (replace direct `generatePreview` call with enqueue+poll; pass `bundle_id` to manual post)
-- New: `src/components/PreviewPipelineStatus.tsx` (status bar)
-
-**Feature flags**
-- `ENABLE_DURABLE_PREVIEW_PIPELINE` (default `true`, localStorage override). When `false`, `handleGenerate` falls back to today's direct `generatePreview()` for one release as a safety net.
-
-**Failure modes & UX**
-- Job stuck in `processing` >90s: UI shows "Render is taking longer than usual…" but keeps polling up to 180s, then surfaces `last_error` (or "Timed out — try again").
-- Render fallback chain (Creatomate → JSON2Video → Ken-Burns) is unchanged; the user just sees `Rendering video` longer.
-- Bundle expired between preview and publish: WYSYWYP short-circuit detects expiry, falls back to a fresh pipeline render, and toasts "Preview expired — regenerated for posting."
+**Cron**
+- `compute-winner-stats` scheduled every 6h via `pg_cron` (separate `supabase--insert` step after migrations).
 
 ---
 
-## Acceptance criteria
+## What this does NOT change
 
-1. Clicking **Preview** creates a row in `jobs` with `type='preview'` visible in `JobsDashboard`.
-2. Two consecutive previews of the same city produce **two different `render_id`s** in Creatomate's API log.
-3. Posting after a preview reuses the bundle's stored mp4 — no second Creatomate render is logged.
-4. The Preview Modal always shows one of: `Fetching weather` / `Generating hooks` / `Rendering video` / `Ready` / `Failed: <reason>`.
-5. Auto-post and Preview→Post produce byte-identical mp4s for the same bundle id.
+- `daily-weather-post`, `process-scheduled-posts`, `enqueue-preview-job`, all `_shared/*-adapter.ts`, `video-render.ts`, Creatomate templates, JSON2Video config — untouched.
+- No existing analytics computation is removed; this layer runs alongside `analyze-performance` / `analyze-growth`.
+- No automatic mutation of `weather_settings`, `automations`, or `scheduled_posts` from the auto-winner system. Every actionable suggestion requires a user click.
