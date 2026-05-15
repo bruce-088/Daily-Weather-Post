@@ -2297,7 +2297,13 @@ Deno.serve(async (req) => {
         // intent to the contextual selector below. Sunny/clear conditions
         // never trigger cinematic — standard render only.
         const _condLower = (weather.condition || "").toLowerCase();
-        const _cinematicKeywords = ["rain","drizzle","shower","storm","thunder","cloudy","overcast","fog","mist"];
+        // Strict cinematic trigger list — high-drama weather only.
+        // Sunny / clear / hot / fog / snow → standard render.
+        const _cinematicKeywords = [
+          "rain","drizzle","shower",
+          "storm","thunder",
+          "cloudy","overcast",
+        ];
         let cinematicForced = false;
         let cinematicTrigger: string | null = null;
         for (const kw of _cinematicKeywords) {
@@ -2307,9 +2313,10 @@ Deno.serve(async (req) => {
           visualStyle = "cinematic";
           console.log(`[visual] post ${post.id}: 🎬 cinematic mode ON (trigger=${cinematicTrigger})`);
           trace("cinematic_mode", { enabled: true, trigger: cinematicTrigger });
-        } else if (Deno.env.get("ENABLE_CINEMATIC_MODE") === "true") {
-          visualStyle = "cinematic";
-          console.log(`[visual] post ${post.id}: ENABLE_CINEMATIC_MODE override → cinematic`);
+        } else {
+          // Non-dramatic conditions never get cinematic — standard render only,
+          // even if ENABLE_CINEMATIC_MODE is set globally.
+          trace("cinematic_mode", { enabled: false, reason: "condition_not_dramatic", condition: _condLower });
         }
         let topPerfStyle: string | null = null;
         try {
