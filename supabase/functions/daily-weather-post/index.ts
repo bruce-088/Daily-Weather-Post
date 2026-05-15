@@ -1476,9 +1476,17 @@ Deno.serve(async (req) => {
         };
       }
     } catch { /* no body is fine */ }
-    const enableCinematic = !!requestBody?.enable_cinematic_mode;
+    const requestedCinematic = !!requestBody?.enable_cinematic_mode;
+    // Cinematic-mode hard gate: only fires for high-drama weather conditions
+    // (rain / storm / thunder / cloudy / overcast / drizzle / shower). Sunny,
+    // clear, hot, fog, mist, snow → standard render. Mirrors the rule applied
+    // in process-scheduled-posts so manual + auto paths behave identically.
+    const _condForCinematic = (weather?.condition || "").toLowerCase();
+    const _cinematicMatch = /(rain|storm|thunder|cloudy|overcast|drizzle|shower)/.exec(_condForCinematic);
+    const cinematicTrigger: string | null = _cinematicMatch ? _cinematicMatch[1] : null;
+    const enableCinematic = requestedCinematic && !!cinematicTrigger;
     const visualStyle: string | null = enableCinematic ? "cinematic" : null;
-    console.log(`[daily-weather-post] mode=${mode} style=${style} variation=${variation} voice=${voiceOpts.enabled} city_id=${requestedCityId ?? "-"} city=${requestedCityName ?? "-"} cinematic=${enableCinematic}`);
+    console.log(`[daily-weather-post] mode=${mode} style=${style} variation=${variation} voice=${voiceOpts.enabled} city_id=${requestedCityId ?? "-"} city=${requestedCityName ?? "-"} cinematic_requested=${requestedCinematic} cinematic_active=${enableCinematic} trigger=${cinematicTrigger ?? "-"}`);
 
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
