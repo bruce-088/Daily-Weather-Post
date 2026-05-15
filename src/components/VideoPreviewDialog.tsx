@@ -376,6 +376,7 @@ export function VideoPreviewDialog({
           const tag = useAB ? ` (Variant ${selectedVariant})` : "";
           const cine = ` · ${cinematicLogLine(preview?.weather?.condition)}`;
           updatePlatform(platformId, { status: "success", message: (result.message || "Posted successfully") + tag + cine });
+          recordReceipt(platformId, (result as any).external_id ?? null);
         } else {
           updatePlatform(platformId, { status: "failed", message: result.message || "Pipeline failed" });
         }
@@ -390,6 +391,8 @@ export function VideoPreviewDialog({
       if (result.success) {
         const cine = ` · ${cinematicLogLine(preview?.weather?.condition)}`;
         updatePlatform(platformId, { status: "success", message: (result.message || "Posted successfully") + cine });
+        const externalId = (result as any)?.results?.find?.((r: any) => r.platform === platformId)?.id ?? null;
+        recordReceipt(platformId, externalId);
       } else {
         updatePlatform(platformId, { status: "failed", message: result.message || "Post failed" });
       }
