@@ -990,9 +990,11 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
   // (fade, scale, slide). Never changes timing, voice, or pipeline.
   if (visualStyle === "cinematic") {
     const condLower = (weather.condition || "").toLowerCase();
-    const isRain = condLower.includes("rain") || condLower.includes("drizzle") || condLower.includes("storm");
+    const isRain = condLower.includes("rain") || condLower.includes("drizzle") || condLower.includes("storm") || condLower.includes("thunder");
+    const isFog = condLower.includes("fog") || condLower.includes("mist") || condLower.includes("haze") || condLower.includes("smoke");
+    const isSnow = condLower.includes("snow") || condLower.includes("sleet") || condLower.includes("blizzard");
 
-    // 1) Soft fog overlay (~8% white) — adds atmospheric depth.
+    // 1) Soft atmospheric haze (~8% white) — adds depth on every cinematic render.
     elements.push({
       type: "shape", track: nt(), time: 0, duration: dur(10.0),
       shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%",
@@ -1000,17 +1002,60 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
       enter: { type: "fade", duration: 0.8 },
     });
 
-    // 2) Conditional rain streak overlay (only when condition includes rain).
+    // 2) Cinematic VIGNETTE — radial dark edges via top+bottom+side gradient stack.
+    //    Always-on for cinematic; pushes the eye toward center subjects.
+    elements.push({
+      type: "shape", track: nt(), time: 0, duration: dur(10.0),
+      shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%",
+      fill_color: "radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(0,0,0,0.55) 100%)",
+      enter: { type: "fade", duration: 0.8 },
+    });
+
+    // 3) Condition-based overlays — RAIN (cool blue tint + slow drift).
     if (isRain) {
       elements.push({
         type: "shape", track: nt(), time: 0, duration: dur(10.0),
         shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%",
-        fill_color: "linear-gradient(180deg, rgba(30,58,138,0.10) 0%, rgba(15,23,42,0.05) 100%)",
+        fill_color: "linear-gradient(180deg, rgba(30,58,138,0.18) 0%, rgba(15,23,42,0.10) 100%)",
+        enter: { type: "fade", duration: 0.8 },
+        animations: [{ type: "scale", start_scale: "100%", end_scale: "104%", duration: 6.0, easing: "ease-in-out" }],
+      });
+    }
+
+    // 4) Condition-based overlays — FOG (heavy white wash + soft pulse).
+    if (isFog) {
+      elements.push({
+        type: "shape", track: nt(), time: 0, duration: dur(10.0),
+        shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%",
+        fill_color: "linear-gradient(180deg, rgba(220,225,235,0.28) 0%, rgba(200,210,225,0.18) 100%)",
+        enter: { type: "fade", duration: 1.0 },
+        animations: [{ type: "scale", start_scale: "100%", end_scale: "106%", duration: 7.0, easing: "ease-in-out" }],
+      });
+    }
+
+    // 5) Condition-based overlays — SNOW (cool white wash).
+    if (isSnow) {
+      elements.push({
+        type: "shape", track: nt(), time: 0, duration: dur(10.0),
+        shape_type: "rectangle", width: "100%", height: "100%", x: "50%", y: "50%",
+        fill_color: "linear-gradient(180deg, rgba(241,245,249,0.20) 0%, rgba(203,213,225,0.10) 100%)",
         enter: { type: "fade", duration: 0.8 },
       });
     }
 
-    // 3) CTA pulse — overlay ring on the CTA panel during last ~3s, scales 1→1.05→1.
+    // 6) SUBTLE CARD FLOAT — inject animation onto the existing city header glass
+    //    panel and detail card shapes. We mutate only the `animations` property —
+    //    no JSON structure or layer additions for the cards themselves.
+    for (const el of elements) {
+      if (!el || el.type !== "shape" || el.shape_type !== "rectangle") continue;
+      const isCityPanel = el.width === 1100 && el.height === 280 && el.y === "17%";
+      const isDetailCard = el.width === 1250 && el.height === 340 && el.y === "63%";
+      if (!isCityPanel && !isDetailCard) continue;
+      const float = { type: "scale", start_scale: "100%", end_scale: "101.5%", duration: 4.0, easing: "ease-in-out" };
+      el.animations = Array.isArray(el.animations) ? [...el.animations, float] : [float];
+    }
+
+    // 7) CTA pulse — overlay ring on the CTA panel during last ~3s, scales 1→1.05→1.
     const pulseStart = Math.max(0.5, D - 3.0);
     const pulseDur = Math.max(0.5, D - pulseStart);
     elements.push({
@@ -1020,6 +1065,8 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
       border_width: 2, border_color: "rgba(255,255,255,0.45)",
       animations: [{ type: "scale", start_scale: "100%", end_scale: "105%", duration: 1.5, easing: "ease-in-out" }],
     });
+
+    console.log(`[cinematic] enhancements applied: vignette=on rain=${isRain} fog=${isFog} snow=${isSnow} card_float=on`);
   }
 
   return {
