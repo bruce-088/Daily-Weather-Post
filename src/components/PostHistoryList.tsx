@@ -138,6 +138,41 @@ export function PostHistoryList({ posts, loading, onReuse, onChanged }: PostHist
   const [repostingId, setRepostingId] = useState<string | null>(null);
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [expandedError, setExpandedError] = useState<string | null>(null);
+  const [viewsByPostId, setViewsByPostId] = useState<Record<string, number>>({});
+
+  // Fetch view counts for the visible posts so we can flag "Top Performer"
+  // (any post whose views are above the average of fetched posts).
+  useEffect(() => {
+    const ids = posts.map((p) => p.id).filter(Boolean);
+    if (ids.length === 0) {
+      setViewsByPostId({});
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from("post_analytics")
+        .select("post_id, views")
+        .in("post_id", ids);
+      if (cancelled || error || !data) return;
+      const map: Record<string, number> = {};
+      for (const row of data as Array<{ post_id: string; views: number | null }>) {
+        const v = Number(row.views) || 0;
+        // Keep the highest sample per post in case multiple platform rows exist.
+        if (!map[row.post_id] || v > map[row.post_id]) map[row.post_id] = v;
+      }
+      setViewsByPostId(map);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [posts]);
+
+  const avgViews = useMemo(() => {
+    const vals = Object.values(viewsByPostId).filter((v) => v > 0);
+    if (vals.length < 2) return 0; // need a baseline before flagging top performers
+    return vals.reduce((a, b) => a + b, 0) / vals.length;
+  }, [viewsByPostId]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, { date: Date; items: PostHistoryItem[] }>();
