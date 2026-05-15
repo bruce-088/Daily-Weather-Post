@@ -709,6 +709,48 @@ export function VideoPreviewDialog({
                 />
               )}
 
+              {/* Viral Hook Generator — pick the YouTube title + voiceover opener */}
+              {!(isPostFlow && (phase === "posting" || phase === "complete")) && (hooks || hooksLoading) && (
+                <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 px-3 py-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Zap size={14} className="text-violet-400" />
+                    <Label className="text-sm font-medium text-foreground">Viral Hook</Label>
+                    <span className="text-[10px] text-muted-foreground">Selected hook becomes the YouTube title and the first spoken sentence (re-generate to refresh voice).</span>
+                  </div>
+                  {hooksLoading && !hooks ? (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Loader2 size={12} className="animate-spin" /> Crafting 3 hook options…
+                    </div>
+                  ) : hooks ? (
+                    <div className="grid grid-cols-1 gap-2">
+                      {(["A", "B", "C"] as HookId[]).map((id) => {
+                        const Icon = id === "A" ? Flame : id === "B" ? Umbrella : EyeIcon;
+                        const isSel = selectedHookId === id;
+                        return (
+                          <button
+                            key={id}
+                            type="button"
+                            onClick={() => applyHook(id)}
+                            className={`text-left rounded-lg border px-3 py-2 transition ${
+                              isSel
+                                ? "border-violet-500/60 bg-violet-500/15 ring-1 ring-violet-400/40"
+                                : "border-border/40 bg-background/40 hover:border-violet-500/40 hover:bg-violet-500/5"
+                            }`}
+                          >
+                            <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-violet-300">
+                              <Icon size={11} />
+                              Hook {id} · {HOOK_LABELS[id]}
+                              {isSel && <span className="ml-auto text-emerald-400">✓ Selected</span>}
+                            </div>
+                            <p className="text-sm text-foreground mt-1 leading-snug">{hooks[id]}</p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+              )}
+
               {/* Caption section - hidden during post run/results to keep focus on status */}
               {!(isPostFlow && (phase === "posting" || phase === "complete")) && (
                 <div className="space-y-2">
