@@ -17,6 +17,7 @@ import { fetchHooks, saveReceipt, formatReceipt, HOOK_LABELS, type HookId, type 
 import { Zap, Lightbulb } from "lucide-react";
 import { DebugLabels } from "@/components/DebugLabels";
 import { ContentScoreCard } from "@/components/ContentScoreCard";
+import { AutoWinnerBadge } from "@/components/AutoWinnerBadge";
 import { detectUrgency, type UrgencySuggestion } from "@/lib/weatherTriggers";
 import { useDynamicFavicon } from "@/hooks/useDynamicFavicon";
 import { celebrate } from "@/lib/confetti";
@@ -655,6 +656,14 @@ export function VideoPreviewDialog({
               onApplyUrgency={(suggest) => {
                 if (suggest.hook && hooks) setSelectedHookId(suggest.hook as HookId);
               }}
+            />
+          )}
+
+          {/* Auto-Winner override badge — what will actually be applied at post time */}
+          {preview && isPostFlow && (
+            <AutoWinnerBadgeWrapper
+              cityName={city?.name || preview?.weather?.city || null}
+              condition={preview?.weather?.condition || null}
             />
           )}
 

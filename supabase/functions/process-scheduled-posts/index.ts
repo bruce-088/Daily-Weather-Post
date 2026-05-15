@@ -6,6 +6,7 @@ import { generateVideoWithFallback } from "../_shared/video-render.ts";
 import { expandVisualMeta, getTopVisualStyle, classifyVisualTheme, classifyColorProfile } from "../_shared/experiments.ts";
 import { getRecentStyles, enforceStyleRotation } from "../_shared/style-rotation.ts";
 import { selectContextualVisualStyle } from "../_shared/visual-selector.ts";
+import { getAutoWinnerOverrides, type AutoWinnerOverrides } from "../_shared/auto-winner.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1968,6 +1969,15 @@ Deno.serve(async (req) => {
           : String(post.platform || "").split(",").map((p: string) => p.trim()).filter(Boolean);
         const primaryPlatform = earlyPlatformList[0] || null;
 
+        // ── AUTO-WINNER OVERRIDES (safe; no-op when toggles are off) ──
+        // Loaded once per post; consumed by hook (caption), cinematic (render),
+        // and persisted to debug_trace + post_history for UI feedback.
+        const autoWinner: AutoWinnerOverrides = await getAutoWinnerOverrides(
+          supabase,
+          post.user_id,
+          weather.city,
+        );
+
         if (!caption) {
           const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
           if (LOVABLE_API_KEY) {
@@ -2004,7 +2014,23 @@ Deno.serve(async (req) => {
                 const d = await r.json();
                 return d.choices?.[0]?.message?.content?.trim() || null;
               };
-              caption = await callCap();
+              // ── Auto-Winner hook injection (only when toggle is ON and we have a winner) ──
+              let hookExtra = "";
+              try {
+                if (
+                  autoWinner.flags.auto_apply_winning_hook &&
+                  autoWinner.preferred_hook
+                ) {
+                  hookExtra = `\n\nAUTO-WINNER HOOK OVERRIDE: Open the caption with a "${autoWinner.preferred_hook}" style hook in the very first line. Keep the rest of the caption natural.`;
+                  autoWinner.applied = true;
+                  autoWinner.fields.hook = autoWinner.preferred_hook;
+                  console.log(`[auto-winner] post ${post.id}: hook override → ${autoWinner.preferred_hook}`);
+                }
+              } catch (e) {
+                console.warn("[auto-winner] hook injection failed; falling back:", e);
+                hookExtra = "";
+              }
+              caption = await callCap(hookExtra);
               if (caption) {
                 const v = validateCaptionLocation(caption, weather.city);
                 if (!v.ok) {
@@ -2315,6 +2341,27 @@ Deno.serve(async (req) => {
         for (const kw of _cinematicKeywords) {
           if (_condLower.includes(kw)) { cinematicForced = true; cinematicTrigger = kw; break; }
         }
+
+        // ── Auto-Winner cinematic override ──
+        // If the user opted into "auto cinematic for storms" we force cinematic on
+        // for rain/storm conditions even if the keyword check above missed an alias.
+        try {
+          if (autoWinner.flags.auto_cinematic_for_storms) {
+            const isStormy = /rain|storm|thunder|drizzle|shower/.test(_condLower);
+            if (isStormy && !cinematicForced) {
+              cinematicForced = true;
+              cinematicTrigger = cinematicTrigger ?? "auto_winner";
+              autoWinner.applied = true;
+              autoWinner.fields.cinematic = true;
+              console.log(`[auto-winner] post ${post.id}: cinematic override ON (condition=${_condLower})`);
+            } else if (cinematicForced) {
+              autoWinner.fields.cinematic = true; // already on; just record
+            }
+          }
+        } catch (e) {
+          console.warn("[auto-winner] cinematic override failed; falling back:", e);
+        }
+
         if (cinematicForced) {
           visualStyle = "cinematic";
           console.log(`[visual] post ${post.id}: 🎬 cinematic mode ON (trigger=${cinematicTrigger})`);
@@ -2626,10 +2673,13 @@ Deno.serve(async (req) => {
         const persistedTrace: Record<string, any> = {
           captured_at: new Date().toISOString(),
           hook_used: hookUsedDerived,
-          hook_type: null,
+          hook_type: autoWinner.fields.hook ?? null,
           cinematic_mode: cinematicForced,
           cinematic_trigger: cinematicTrigger,
           voice_enabled: !!voiceUrl,
+          auto_winner_applied: autoWinner.applied,
+          auto_winner_fields: autoWinner.applied ? autoWinner.fields : null,
+          auto_winner_flags: autoWinner.flags,
         };
         if (debugTraceEnabled) {
           persistedTrace.steps = traceSteps;
