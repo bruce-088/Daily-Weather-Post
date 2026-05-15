@@ -206,6 +206,10 @@ export async function generatePreview(opts?: {
     style: opts?.style ?? "standard",
     variation: !!opts?.variation,
     enable_cinematic_mode: FeatureFlags.ENABLE_CINEMATIC_MODE,
+    // Cache-bust: every preview click forces a fresh pipeline run
+    // (generate_content → generate_voice → render_video). No static reuse,
+    // no memoized inputs — same path auto-post takes.
+    nonce: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
   };
   if (opts?.voice?.enabled) body.voice = opts.voice;
   applyCityContext(body, opts?.city);
