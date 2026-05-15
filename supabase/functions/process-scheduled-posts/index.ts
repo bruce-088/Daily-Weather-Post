@@ -2558,6 +2558,11 @@ Deno.serve(async (req) => {
           visual_metadata: visualMeta,
           health_score: healthScore,
           health_breakdown: healthBreakdown,
+          // Persist cinematic flag so the History tab shows ⚡ ON for
+          // automated posts that ran the cinematic treatment.
+          cinematic_mode: cinematicForced,
+          cinematic_trigger: cinematicTrigger,
+          voice_name: voiceUrl ? "AI" : null,
         }).select("id").single();
         if (historyErr) {
           console.error(`[process] post_history insert failed for ${post.id}:`, historyErr);
