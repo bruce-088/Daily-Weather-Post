@@ -188,16 +188,19 @@ export async function generateVideoWithFallback(
 }
 
 function looksLikeCreditError(s: string): boolean {
+  // STRICT: only escalate to credit-exhaustion when the API is unambiguous
+  // about it. Avoids false "credits depleted" failures (e.g. transient 402s
+  // on unrelated endpoints, "billing" appearing in benign messages, or the
+  // substring "402" showing up in unrelated payloads). The HTTP 402 status
+  // code itself is checked separately at the call sites.
   const m = (s || "").toLowerCase();
   return (
     m.includes("insufficient credit") ||
     m.includes("credit exhausted") ||
+    m.includes("credits exhausted") ||
     m.includes("out of credit") ||
-    m.includes("quota exceeded") ||
-    m.includes("plan limit") ||
-    m.includes("billing") ||
-    m.includes("payment required") ||
-    m.includes("402")
+    m.includes("no credits") ||
+    m.includes("no_credits")
   );
 }
 
