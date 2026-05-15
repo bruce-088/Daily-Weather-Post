@@ -1151,15 +1151,26 @@ export function VideoPreviewDialog({
           <DialogFooter className="flex-row gap-2 sm:gap-2 flex-wrap">
             {/* During posting/complete in post flow, show only Close (and Retry is per-row) */}
             {isPostFlow && (phase === "posting" || phase === "complete") ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleClose}
-                disabled={posting}
-                className="gap-1.5 text-xs ml-auto"
-              >
-                <X size={14} /> Close
-              </Button>
+              <>
+                {posting && (
+                  <div className="flex items-center gap-2 mr-auto text-[11px] text-primary font-mono">
+                    <span className="relative inline-flex h-5 w-5 items-center justify-center">
+                      <span className="absolute inset-0 rounded-full border-2 border-primary/30" />
+                      <span className="absolute inset-0 rounded-full border-2 border-transparent border-t-primary animate-spin" />
+                    </span>
+                    Publishing…
+                  </div>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleClose}
+                  disabled={posting}
+                  className="gap-1.5 text-xs ml-auto"
+                >
+                  <X size={14} /> Close
+                </Button>
+              </>
             ) : (
               <>
                 <Button
