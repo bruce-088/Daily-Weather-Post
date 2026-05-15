@@ -642,23 +642,53 @@ export function VideoPreviewDialog({
           {/* Media display - video or image */}
           {(preview?.video_url || preview?.image_url) && (
             <>
-              <div className="rounded-xl overflow-hidden bg-secondary/30 border border-border/20">
-                {preview.content_type === "image" && preview.image_url ? (
-                  <img
-                    src={preview.image_url}
-                    alt="Weather infographic preview"
-                    className="w-full max-h-[50vh] object-contain"
-                  />
-                ) : preview.video_url ? (
-                  <video
-                    src={preview.video_url}
-                    controls
-                    autoPlay
-                    loop
-                    muted
-                    className="w-full max-h-[40vh] object-contain"
-                  />
-                ) : null}
+              <div className="relative rounded-2xl p-3 bg-gradient-to-br from-white/5 via-white/[0.02] to-white/5 backdrop-blur-xl border border-white/10 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.7)]">
+                <div className="absolute -inset-12 -z-10 opacity-40 pointer-events-none blur-3xl bg-[radial-gradient(circle_at_30%_20%,hsl(var(--primary)/0.35),transparent_60%),radial-gradient(circle_at_70%_80%,hsl(280_85%_60%/0.25),transparent_60%)]" />
+                <div className="relative rounded-xl overflow-hidden bg-black/40 ring-1 ring-white/10 shadow-2xl">
+                  {preview.content_type === "image" && preview.image_url ? (
+                    <img
+                      src={preview.image_url}
+                      alt="Weather infographic preview"
+                      className="w-full max-h-[50vh] object-contain"
+                    />
+                  ) : preview.video_url ? (
+                    <>
+                      <video
+                        ref={videoRef}
+                        src={preview.video_url}
+                        controls
+                        autoPlay
+                        loop
+                        muted
+                        onPlay={() => setVideoPaused(false)}
+                        onPause={() => setVideoPaused(true)}
+                        className="w-full max-h-[44vh] object-contain"
+                      />
+                      {/* Metadata badge overlay — visible while paused */}
+                      {videoPaused && (
+                        <div className="absolute top-3 left-3 right-3 flex items-center gap-1.5 flex-wrap pointer-events-none animate-fade-in">
+                          <span className="rounded-md bg-black/60 backdrop-blur px-2 py-0.5 text-[10px] font-mono text-white/90 border border-white/15">
+                            1080×1920
+                          </span>
+                          {typeof preview.render_time === "number" && (
+                            <span className="rounded-md bg-black/60 backdrop-blur px-2 py-0.5 text-[10px] font-mono text-white/90 border border-white/15">
+                              {Math.max(2, Math.round(preview.render_time))}s
+                            </span>
+                          )}
+                          <span
+                            className={`rounded-md backdrop-blur px-2 py-0.5 text-[10px] font-mono border ${
+                              preview.audio_url
+                                ? "bg-emerald-500/25 text-emerald-100 border-emerald-300/40"
+                                : "bg-yellow-500/25 text-yellow-100 border-yellow-300/40"
+                            }`}
+                          >
+                            {preview.audio_url ? "♪ Audio Attached" : "♪ Silent"}
+                          </span>
+                        </div>
+                      )}
+                    </>
+                  ) : null}
+                </div>
               </div>
 
               {/* Engine Metadata — shows which engine produced the asset and how long it took */}
