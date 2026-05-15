@@ -1476,9 +1476,13 @@ Deno.serve(async (req) => {
         };
       }
     } catch { /* no body is fine */ }
-    const enableCinematic = !!requestBody?.enable_cinematic_mode;
-    const visualStyle: string | null = enableCinematic ? "cinematic" : null;
-    console.log(`[daily-weather-post] mode=${mode} style=${style} variation=${variation} voice=${voiceOpts.enabled} city_id=${requestedCityId ?? "-"} city=${requestedCityName ?? "-"} cinematic=${enableCinematic}`);
+    const requestedCinematic = !!requestBody?.enable_cinematic_mode;
+    // NOTE: Cinematic-mode hard gate is applied AFTER weather is fetched (see below).
+    // These vars are reassigned once weather.condition is known.
+    let cinematicTrigger: string | null = null;
+    let enableCinematic = false;
+    let visualStyle: string | null = null;
+    console.log(`[daily-weather-post] mode=${mode} style=${style} variation=${variation} voice=${voiceOpts.enabled} city_id=${requestedCityId ?? "-"} city=${requestedCityName ?? "-"} cinematic_requested=${requestedCinematic}`);
 
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -1528,6 +1532,19 @@ Deno.serve(async (req) => {
     }
 
     const weather = await fetchWeatherData(resolvedCityState ? resolvedCityName + "," + resolvedCityState : resolvedCityName, openWeatherApiKey);
+
+    // Cinematic-mode hard gate: only fires for high-drama weather conditions
+    // (rain / storm / thunder / cloudy / overcast / drizzle / shower). Sunny,
+    // clear, hot, fog, mist, snow → standard render. Mirrors the rule applied
+    // in process-scheduled-posts so manual + auto paths behave identically.
+    {
+      const _condForCinematic = (weather?.condition || "").toLowerCase();
+      const _cinematicMatch = /(rain|storm|thunder|cloudy|overcast|drizzle|shower)/.exec(_condForCinematic);
+      cinematicTrigger = _cinematicMatch ? _cinematicMatch[1] : null;
+      enableCinematic = requestedCinematic && !!cinematicTrigger;
+      visualStyle = enableCinematic ? "cinematic" : null;
+      console.log(`[daily-weather-post] cinematic_active=${enableCinematic} trigger=${cinematicTrigger ?? "-"} condition=${weather?.condition ?? "-"}`);
+    }
 
     // Generate caption via SkyBrief prompt
     let caption: string | null = null;
@@ -1890,12 +1907,34 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Derive a hook label from the caption (first non-empty line, ≤120 chars)
+    // so analytics + History UI always show what opened the post — matches the
+    // logic used by process-scheduled-posts.
+    const _hookSource = (caption || "").split(/\r?\n/).map((s) => s.trim()).find(Boolean) || "";
+    const hookUsedDerived = _hookSource ? _hookSource.slice(0, 120) : null;
+    const persistedTrace = {
+      captured_at: new Date().toISOString(),
+      hook_used: hookUsedDerived,
+      hook_type: null,
+      cinematic_mode: enableCinematic,
+      cinematic_trigger: cinematicTrigger,
+      voice_enabled: !!voiceUrl,
+      source: "daily-weather-post",
+    };
+
     const { data: historyRow, error: historyError } = await supabase.from("post_history").insert({
       status, platform, city: weather.city, temperature: weather.temperature,
       condition: weather.condition, image_url: storedImageUrl, error_message: errorMessage,
       caption, user_id: userId,
       post_url: youtubeVideoId ? `https://www.youtube.com/watch?v=${youtubeVideoId}` : null,
       external_id: youtubeVideoId || null,
+      // Persist hook + cinematic + voice metadata so the History UI shows them
+      // on any device (cross-device, server-authoritative).
+      hook_used: hookUsedDerived,
+      cinematic_mode: enableCinematic,
+      cinematic_trigger: cinematicTrigger,
+      voice_name: voiceUrl ? "AI" : null,
+      debug_trace: persistedTrace,
     }).select("id").single();
     if (historyError) console.error("Failed to log post history:", historyError);
 
