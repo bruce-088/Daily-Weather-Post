@@ -39,6 +39,14 @@ Deno.serve(async (req) => {
       throw new Error("Authentication required");
     }
 
+    // Ownership guard: storage_path MUST live under the caller's own folder.
+    if (typeof storage_path !== "string" || !storage_path.startsWith(`${userId}/`)) {
+      return new Response(
+        JSON.stringify({ error: "Access denied: storage_path does not belong to you" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     // Download video from storage
     const { data: videoBlob, error: downloadError } = await supabase.storage
       .from("weather-videos")
