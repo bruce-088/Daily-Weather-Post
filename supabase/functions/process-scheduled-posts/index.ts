@@ -2565,9 +2565,13 @@ Deno.serve(async (req) => {
         trace("final_action", { action: postStatus === "posted" ? "POSTED" : `FAILED — ${errorMessage}`, voice_status: voiceStatus });
         // Always persist hook/cinematic/voice metadata for analytics; only
         // include the verbose `steps` array when the user opted in.
+        // Derive a hook label from the caption (first non-empty line, ≤120 chars)
+        // so analytics + the History UI always show what opened the post.
+        const _hookSource = (caption || "").split(/\r?\n/).map((s) => s.trim()).find(Boolean) || "";
+        const hookUsedDerived = _hookSource ? _hookSource.slice(0, 120) : null;
         const persistedTrace: Record<string, any> = {
           captured_at: new Date().toISOString(),
-          hook_used: null,
+          hook_used: hookUsedDerived,
           hook_type: null,
           cinematic_mode: cinematicForced,
           cinematic_trigger: cinematicTrigger,
