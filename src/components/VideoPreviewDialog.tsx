@@ -16,6 +16,8 @@ import { evaluateCinematicMode, cinematicLogLine } from "@/lib/cinematicMode";
 import { fetchHooks, saveReceipt, formatReceipt, HOOK_LABELS, type HookId, type HookSet, type PostReceipt } from "@/lib/hooks";
 import { Zap, Lightbulb } from "lucide-react";
 import { DebugLabels } from "@/components/DebugLabels";
+import { ContentScoreCard } from "@/components/ContentScoreCard";
+import { detectUrgency, type UrgencySuggestion } from "@/lib/weatherTriggers";
 import { useDynamicFavicon } from "@/hooks/useDynamicFavicon";
 import { celebrate } from "@/lib/confetti";
 import { ABComparePanel } from "@/components/ABComparePanel";
