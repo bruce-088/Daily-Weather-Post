@@ -76,6 +76,12 @@ export function VideoPreviewDialog({
   const [isEditingCaption, setIsEditingCaption] = useState(false);
   const [autoGenerateTriggered, setAutoGenerateTriggered] = useState(false);
 
+  // Viral hook generator (additive — does not touch render/voice pipeline)
+  const [hooks, setHooks] = useState<HookSet | null>(null);
+  const [hooksLoading, setHooksLoading] = useState(false);
+  const [selectedHookId, setSelectedHookId] = useState<HookId | null>(null);
+  const [hooksFetchedFor, setHooksFetchedFor] = useState<string | null>(null);
+
   // Per-platform posting state
   const [platformStates, setPlatformStates] = useState<PlatformPostState[]>([]);
   const [phase, setPhase] = useState<"validating" | "ready" | "posting" | "complete">("validating");
