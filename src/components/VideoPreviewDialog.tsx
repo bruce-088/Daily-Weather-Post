@@ -10,6 +10,8 @@ import { generatePreview, uploadPreviewVideo, triggerManualPipelinePost, publish
 import type { PreviewResult, VoiceOptions, CityContext } from "@/lib/api";
 import { calculatePreviewHealth } from "@/lib/postHealth";
 import { FeatureFlags } from "@/lib/featureFlags";
+import { evaluateCinematicMode, cinematicLogLine } from "@/lib/cinematicMode";
+import { Zap } from "lucide-react";
 import { DebugLabels } from "@/components/DebugLabels";
 import { ABComparePanel } from "@/components/ABComparePanel";
 import {
@@ -322,7 +324,8 @@ export function VideoPreviewDialog({
         );
         if (result.success) {
           const tag = useAB ? ` (Variant ${selectedVariant})` : "";
-          updatePlatform(platformId, { status: "success", message: (result.message || "Posted successfully") + tag });
+          const cine = ` · ${cinematicLogLine(preview?.weather?.condition)}`;
+          updatePlatform(platformId, { status: "success", message: (result.message || "Posted successfully") + tag + cine });
         } else {
           updatePlatform(platformId, { status: "failed", message: result.message || "Pipeline failed" });
         }
@@ -335,7 +338,8 @@ export function VideoPreviewDialog({
         ? await publishPreviewBundle(bundleId, [platformId])
         : await triggerDailyPost(undefined, [platformId], voice, city ?? null);
       if (result.success) {
-        updatePlatform(platformId, { status: "success", message: result.message || "Posted successfully" });
+        const cine = ` · ${cinematicLogLine(preview?.weather?.condition)}`;
+        updatePlatform(platformId, { status: "success", message: (result.message || "Posted successfully") + cine });
       } else {
         updatePlatform(platformId, { status: "failed", message: result.message || "Post failed" });
       }
@@ -530,6 +534,26 @@ export function VideoPreviewDialog({
                   <Badge variant="secondary" className="text-xs">
                     {preview.weather.condition}
                   </Badge>
+                  {(() => {
+                    const cm = evaluateCinematicMode(preview.weather.condition);
+                    return cm.enabled ? (
+                      <Badge
+                        className="bg-violet-500/10 text-violet-300 border-violet-500/30 text-[10px] uppercase tracking-wide flex items-center gap-1"
+                        title={`Cinematic Mode triggered by "${cm.trigger}"`}
+                      >
+                        <Zap size={10} className="fill-current" />
+                        Cinematic Mode
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] uppercase tracking-wide text-muted-foreground"
+                        title="Standard render — sunny/clear/calm conditions"
+                      >
+                        ○ Standard Mode
+                      </Badge>
+                    );
+                  })()}
                 </div>
               )}
 
