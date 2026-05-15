@@ -678,6 +678,8 @@ export type Database = {
       post_history: {
         Row: {
           caption: string | null
+          cinematic_mode: boolean | null
+          cinematic_trigger: string | null
           city: string
           comment_count: number
           condition: string | null
@@ -689,6 +691,8 @@ export type Database = {
           external_id: string | null
           health_breakdown: Json | null
           health_score: number | null
+          hook_id: string | null
+          hook_used: string | null
           id: string
           image_url: string | null
           last_attempt_at: string | null
@@ -709,10 +713,13 @@ export type Database = {
           visual_metadata: Json | null
           voice_attempts: number
           voice_error: string | null
+          voice_name: string | null
           voice_status: string | null
         }
         Insert: {
           caption?: string | null
+          cinematic_mode?: boolean | null
+          cinematic_trigger?: string | null
           city: string
           comment_count?: number
           condition?: string | null
@@ -724,6 +731,8 @@ export type Database = {
           external_id?: string | null
           health_breakdown?: Json | null
           health_score?: number | null
+          hook_id?: string | null
+          hook_used?: string | null
           id?: string
           image_url?: string | null
           last_attempt_at?: string | null
@@ -744,10 +753,13 @@ export type Database = {
           visual_metadata?: Json | null
           voice_attempts?: number
           voice_error?: string | null
+          voice_name?: string | null
           voice_status?: string | null
         }
         Update: {
           caption?: string | null
+          cinematic_mode?: boolean | null
+          cinematic_trigger?: string | null
           city?: string
           comment_count?: number
           condition?: string | null
@@ -759,6 +771,8 @@ export type Database = {
           external_id?: string | null
           health_breakdown?: Json | null
           health_score?: number | null
+          hook_id?: string | null
+          hook_used?: string | null
           id?: string
           image_url?: string | null
           last_attempt_at?: string | null
@@ -779,6 +793,7 @@ export type Database = {
           visual_metadata?: Json | null
           voice_attempts?: number
           voice_error?: string | null
+          voice_name?: string | null
           voice_status?: string | null
         }
         Relationships: []

@@ -332,7 +332,7 @@ export function VideoPreviewDialog({
   // Build + persist a Post Confirmation Receipt for a single platform success.
   // Stored in localStorage so the History tab can surface Hook + Cinematic
   // status without requiring server schema changes.
-  const recordReceipt = (platformId: string, externalId: string | null) => {
+  const recordReceipt = async (platformId: string, externalId: string | null) => {
     const cityName = city?.name || preview?.weather?.city || "—";
     const cm = evaluateCinematicMode(preview?.weather?.condition);
     const hookText = selectedHookId && hooks ? hooks[selectedHookId] : null;
@@ -353,6 +353,41 @@ export function VideoPreviewDialog({
       created_at: new Date().toISOString(),
     };
     saveReceipt(receipt);
+
+    // Persist hook + cinematic metadata onto the most-recent matching
+    // post_history row so the History tab works on any device (no
+    // localStorage dependency).
+    try {
+      const { supabase } = await import("@/integrations/supabase/client");
+      const { data: userData } = await supabase.auth.getUser();
+      const uid = userData?.user?.id;
+      if (uid) {
+        const { data: rows } = await supabase
+          .from("post_history")
+          .select("id")
+          .eq("user_id", uid)
+          .eq("city", cityName)
+          .eq("platform", platformId)
+          .order("created_at", { ascending: false })
+          .limit(1);
+        const targetId = rows?.[0]?.id;
+        if (targetId) {
+          await supabase
+            .from("post_history")
+            .update({
+              hook_used: hookText,
+              hook_id: selectedHookId,
+              cinematic_mode: cm.enabled,
+              cinematic_trigger: cm.trigger,
+              voice_name: voiceName,
+            } as any)
+            .eq("id", targetId);
+        }
+      }
+    } catch (e) {
+      console.warn("[receipt] DB persist failed (non-fatal):", e);
+    }
+
     toast.success(formatReceipt(receipt), { duration: 9000, style: { whiteSpace: "pre-wrap", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: "12px" } });
   };
 
