@@ -12,7 +12,7 @@ import { calculatePreviewHealth } from "@/lib/postHealth";
 import { FeatureFlags } from "@/lib/featureFlags";
 import { evaluateCinematicMode, cinematicLogLine } from "@/lib/cinematicMode";
 import { fetchHooks, saveReceipt, formatReceipt, HOOK_LABELS, type HookId, type HookSet, type PostReceipt } from "@/lib/hooks";
-import { Zap, Flame, Umbrella, Eye as EyeIcon } from "lucide-react";
+import { Zap, Flame, Umbrella } from "lucide-react";
 import { DebugLabels } from "@/components/DebugLabels";
 import { ABComparePanel } from "@/components/ABComparePanel";
 import {
