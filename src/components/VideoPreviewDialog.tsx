@@ -644,6 +644,18 @@ export function VideoPreviewDialog({
             </div>
           )}
 
+          {/* Auto-Winner: pre-post Content Score + urgency banner */}
+          {preview && isPostFlow && (
+            <PreviewAutoWinnerBlock
+              preview={preview}
+              selectedHookId={selectedHookId}
+              cityName={city?.name || preview?.weather?.city || null}
+              onApplyUrgency={(suggest) => {
+                if (suggest.hook && hooks) setSelectedHookId(suggest.hook as HookId);
+              }}
+            />
+          )}
+
           {/* Media display - video or image */}
           {(preview?.video_url || preview?.image_url) && (
             <>
