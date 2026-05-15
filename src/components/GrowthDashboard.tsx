@@ -9,6 +9,7 @@ import {
   ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { useActiveCity } from "@/hooks/useActiveCity";
+import { OutperformingPosts } from "@/components/OutperformingPosts";
 
 interface HookStat {
   hook_text: string;
