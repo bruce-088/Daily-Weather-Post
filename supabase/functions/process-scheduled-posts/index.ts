@@ -2673,10 +2673,13 @@ Deno.serve(async (req) => {
         const persistedTrace: Record<string, any> = {
           captured_at: new Date().toISOString(),
           hook_used: hookUsedDerived,
-          hook_type: null,
+          hook_type: autoWinner.fields.hook ?? null,
           cinematic_mode: cinematicForced,
           cinematic_trigger: cinematicTrigger,
           voice_enabled: !!voiceUrl,
+          auto_winner_applied: autoWinner.applied,
+          auto_winner_fields: autoWinner.applied ? autoWinner.fields : null,
+          auto_winner_flags: autoWinner.flags,
         };
         if (debugTraceEnabled) {
           persistedTrace.steps = traceSteps;
