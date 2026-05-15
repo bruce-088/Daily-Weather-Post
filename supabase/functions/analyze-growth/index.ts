@@ -38,6 +38,8 @@ interface HookRow {
   created_at: string;
 }
 
+import { requireCronOrUser } from "../_shared/auth-helpers.ts";
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -132,6 +134,9 @@ Deno.serve(async (req) => {
         else if (h.avg_views < overallAvg * 0.7) status = "retired";
       }
       return {
+
+  const _gate = await requireCronOrUser(req);
+  if (!_gate.ok) return _gate.response;
         user_id: userId,
         hook_text: h.hook_text,
         uses: h.uses,

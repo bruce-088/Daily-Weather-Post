@@ -11,6 +11,8 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+import { requireCronOrUser } from "../_shared/auth-helpers.ts";
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -33,6 +35,9 @@ Deno.serve(async (req) => {
   if (postsErr) {
     console.error("[refresh-youtube] failed to load posts:", postsErr);
     return new Response(JSON.stringify({ error: postsErr.message }), {
+
+  const _gate = await requireCronOrUser(req);
+  if (!_gate.ok) return _gate.response;
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

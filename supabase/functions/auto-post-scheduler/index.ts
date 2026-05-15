@@ -26,10 +26,15 @@ function cityLabel(city: any): string {
   return city?.state ? String(city.name) + ", " + String(city.state) : String(city?.name || "Unknown");
 }
 
+import { requireCronOrUser } from "../_shared/auth-helpers.ts";
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
+
+  const _gate = await requireCronOrUser(req);
+  if (!_gate.ok) return _gate.response;
 
   // Initialize client + heartbeat OUTSIDE the main try so heartbeat always runs first.
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;

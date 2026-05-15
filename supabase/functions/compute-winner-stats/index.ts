@@ -68,6 +68,8 @@ function bestBucket<T extends string | number>(
   return { best, worst };
 }
 
+import { requireCronOrUser } from "../_shared/auth-helpers.ts";
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -89,6 +91,9 @@ Deno.serve(async (req) => {
 
     const hookIdToType = (id: string | null): string | null => {
       if (!id) return null;
+
+  const _gate = await requireCronOrUser(req);
+  if (!_gate.ok) return _gate.response;
       const s = id.toLowerCase();
       if (s.includes("a") || s === "0") return "A";
       if (s.includes("b") || s === "1") return "B";
