@@ -1969,6 +1969,15 @@ Deno.serve(async (req) => {
           : String(post.platform || "").split(",").map((p: string) => p.trim()).filter(Boolean);
         const primaryPlatform = earlyPlatformList[0] || null;
 
+        // ── AUTO-WINNER OVERRIDES (safe; no-op when toggles are off) ──
+        // Loaded once per post; consumed by hook (caption), cinematic (render),
+        // and persisted to debug_trace + post_history for UI feedback.
+        const autoWinner: AutoWinnerOverrides = await getAutoWinnerOverrides(
+          supabase,
+          post.user_id,
+          weather.city,
+        );
+
         if (!caption) {
           const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
           if (LOVABLE_API_KEY) {
