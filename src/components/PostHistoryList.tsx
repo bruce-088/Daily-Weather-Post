@@ -23,11 +23,14 @@ import {
   Bot,
   MapPin,
   ExternalLink,
+  Zap,
+  Mic,
 } from "lucide-react";
 import type { PostHistoryItem } from "@/lib/api";
 import { triggerManualPipelinePost } from "@/lib/api";
 import { toast } from "sonner";
 import { DebugLabels } from "@/components/DebugLabels";
+import { getReceipt } from "@/lib/hooks";
 
 interface PlatformBrand {
   icon: React.ElementType;
