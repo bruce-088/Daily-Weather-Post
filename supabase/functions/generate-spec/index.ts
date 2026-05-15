@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.95.0";
 import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2.95.0/cors";
+import { verifyUser } from "../_shared/auth-helpers.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -73,27 +74,25 @@ function table(headers: string[], rows: string[][]) {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
+  const auth = await verifyUser(req);
+  if (auth.response) return auth.response;
+
   try {
     const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
 
-    // --- Live DB introspection ---
-    const { data: tablesRaw } = await supabase
-      .rpc("noop_unused", {})
-      .then(() => ({ data: null }))
-      .catch(() => ({ data: null }));
-
-    // Use information_schema via REST is not exposed; we hardcode known tables but pull row counts live.
+    // --- Live DB introspection (no row counts; counts are infrastructure-disclosing) ---
     const KNOWN_TABLES = ["weather_settings", "scheduled_posts", "post_history", "notifications", "system_health"];
-    const tableStats: Record<string, number | string> = {};
+    const tableStats: Record<string, string> = {};
     for (const t of KNOWN_TABLES) {
-      const { count, error } = await supabase.from(t).select("*", { count: "exact", head: true });
-      tableStats[t] = error ? "n/a" : (count ?? 0);
+      tableStats[t] = "—";
     }
 
-    // Recent activity log (last 10 from post_history)
+    // Recent activity log (last 10 from post_history) — scoped to the requesting user
+    // and with error_message scrubbed to avoid leaking internal failure details.
     const { data: recent } = await supabase
       .from("post_history")
-      .select("created_at, status, platform, city, error_message")
+      .select("created_at, status, platform, city")
+      .eq("user_id", auth.userId)
       .order("created_at", { ascending: false })
       .limit(10);
 
@@ -102,7 +101,6 @@ Deno.serve(async (req) => {
       r.status ?? "—",
       r.platform ?? "—",
       r.city ?? "—",
-      (r.error_message ?? "").slice(0, 80),
     ]);
 
     const SCHEMA_TABLES: Record<string, string[]> = {
@@ -160,10 +158,9 @@ Deno.serve(async (req) => {
     docParts.push("");
 
     docParts.push(`## 3. Database Schema`);
-    docParts.push(`Live row counts shown below.`);
     docParts.push("");
     for (const [t, cols] of Object.entries(SCHEMA_TABLES)) {
-      docParts.push(`### \`${t}\`  _(rows: ${tableStats[t]})_`);
+      docParts.push(`### \`${t}\``);
       docParts.push(cols.map((c) => `- ${c}`).join("\n"));
       docParts.push("");
     }
@@ -189,30 +186,21 @@ Deno.serve(async (req) => {
     docParts.push(`## 8. Deployment`);
     const reqUrl = new URL(req.url);
     const liveAppUrl = reqUrl.searchParams.get("origin") || "https://skybriefweatherpost.lovable.app";
-    const supabaseUrl = SUPABASE_URL;
-    const projectRef = (() => {
-      try { return new URL(supabaseUrl).hostname.split(".")[0]; } catch { return "unknown"; }
-    })();
-    const edgeBase = `${supabaseUrl}/functions/v1`;
-    const lovableProjectId = Deno.env.get("LOVABLE_PROJECT_ID") || "f81dce50-925f-420f-9022-0fb85c4a9a2f";
     docParts.push(md([
       `- **Hosting provider**: Lovable Cloud (Supabase-backed)`,
       `- **Live app URL**: ${liveAppUrl}`,
-      `- **Supabase project URL**: ${supabaseUrl}`,
-      `- **Supabase project ref**: \`${projectRef}\``,
-      `- **Edge function base URL**: ${edgeBase}`,
-      `- **Lovable project ID**: \`${lovableProjectId}\``,
-      `- **Edge runtime region**: ${Deno.env.get("DENO_REGION") || "auto"}`,
+      `- **Frontend**: React 18 + Vite + TypeScript + Tailwind`,
+      `- **Backend**: Lovable Cloud Edge Functions (Deno) + managed Postgres`,
     ]));
     docParts.push("");
 
     docParts.push(`## 9. Recent Changes Log`);
-    docParts.push(`Pulled live from \`post_history\` (last 10 events).`);
+    docParts.push(`Pulled live from your own \`post_history\` (last 10 events).`);
     docParts.push("");
     if (recentRows.length === 0) {
       docParts.push(`_No recent activity recorded._`);
     } else {
-      docParts.push(table(["When (UTC)", "Status", "Platform", "City", "Note"], recentRows));
+      docParts.push(table(["When (UTC)", "Status", "Platform", "City"], recentRows));
     }
     docParts.push("");
 

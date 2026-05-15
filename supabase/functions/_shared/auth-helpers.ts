@@ -48,3 +48,29 @@ export async function verifyUser(req: Request): Promise<
 
   return { userId: data.claims.sub as string };
 }
+
+/**
+ * Allow the request when EITHER:
+ *   - the `x-cron-secret` header matches the CRON_SECRET env var (pg_cron callers), OR
+ *   - the request carries a valid Supabase JWT (in-app callers).
+ *
+ * Returns { ok: true, userId? } on success, otherwise { ok: false, response }.
+ * Use for edge functions that are primarily triggered by pg_cron but should also
+ * be invocable from the authenticated UI.
+ */
+export async function requireCronOrUser(req: Request): Promise<
+  | { ok: true; userId?: string; source: "cron" | "user" }
+  | { ok: false; response: Response }
+> {
+  const cronSecretHeader = req.headers.get("x-cron-secret");
+  const cronSecretEnv = Deno.env.get("CRON_SECRET");
+  if (cronSecretEnv && cronSecretHeader && cronSecretHeader === cronSecretEnv) {
+    return { ok: true, source: "cron" };
+  }
+
+  const auth = await verifyUser(req);
+  if (auth.response) {
+    return { ok: false, response: auth.response };
+  }
+  return { ok: true, userId: auth.userId, source: "user" };
+}
