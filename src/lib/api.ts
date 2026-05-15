@@ -225,6 +225,62 @@ export async function generatePreview(opts?: {
   return data as PreviewResult;
 }
 
+// ────────────────────────────────────────────────────────────────────────
+// Durable Preview Pipeline — enqueue + poll
+// ────────────────────────────────────────────────────────────────────────
+
+export type PreviewJobStage =
+  | "fetching_weather"
+  | "generating_hooks"
+  | "rendering_video"
+  | "ready"
+  | "failed";
+
+export interface PreviewJobSnapshot {
+  status: "pending" | "processing" | "succeeded" | "failed" | "retrying";
+  stage: PreviewJobStage | null;
+  error?: string | null;
+  preview?: PreviewResult | null;
+}
+
+export async function enqueuePreviewJob(opts?: {
+  style?: string;
+  variation?: boolean;
+  voice?: VoiceOptions;
+  city?: CityContext | null;
+  selectedHook?: string | null;
+}): Promise<{ job_id: string } | { error: string }> {
+  const body: Record<string, any> = {
+    style: opts?.style ?? "standard",
+    variation: !!opts?.variation,
+    enable_cinematic_mode: FeatureFlags.ENABLE_CINEMATIC_MODE,
+    selected_hook: opts?.selectedHook ?? null,
+  };
+  if (opts?.voice?.enabled) body.voice = opts.voice;
+  applyCityContext(body, opts?.city);
+
+  const { data, error } = await supabase.functions.invoke("enqueue-preview-job", { body });
+  if (error) return { error: error.message || "Failed to enqueue preview" };
+  if (!data?.job_id) return { error: data?.error || "No job id returned" };
+  return { job_id: data.job_id as string };
+}
+
+export async function fetchPreviewJob(jobId: string): Promise<PreviewJobSnapshot | null> {
+  const { data, error } = await supabase
+    .from("jobs")
+    .select("status, result, last_error")
+    .eq("id", jobId)
+    .maybeSingle();
+  if (error || !data) return null;
+  const result = (data.result ?? {}) as any;
+  return {
+    status: data.status as PreviewJobSnapshot["status"],
+    stage: (result.stage ?? null) as PreviewJobStage | null,
+    error: data.last_error ?? (result.error ?? null),
+    preview: (result.preview ?? null) as PreviewResult | null,
+  };
+}
+
 export interface PublishBundleResult {
   success: boolean;
   message: string;
