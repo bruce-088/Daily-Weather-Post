@@ -34,6 +34,9 @@ Deno.serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
+  const auth = await verifyUser(req);
+  if (auth.response) return auth.response;
+
   try {
     // Accept either ELEVENLABS_API_KEY or the legacy ELEVEN_LABS_API_KEY name
     // so a future rotation under either spelling keeps the preview working.
