@@ -25,9 +25,26 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
-  // When called by an authenticated user, scope to that user only (ignore body input).
+  // When called by an authenticated user, scope to that user only.
+  // If the body supplies a user_id, it MUST match the authenticated session.
   // Cron calls process all users.
   let scopedUserId: string | null = gate.source === "user" ? (gate.userId ?? null) : null;
+
+  if (gate.source === "user") {
+    let bodyUserId: string | undefined;
+    try {
+      if (req.headers.get("content-type")?.includes("application/json")) {
+        const body = await req.clone().json().catch(() => null);
+        bodyUserId = body?.user_id;
+      }
+    } catch (_) { /* ignore */ }
+    if (bodyUserId && bodyUserId !== gate.userId) {
+      return new Response(
+        JSON.stringify({ error: "user_id mismatch with authenticated session" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+  }
 
   // Look at the last 60 days so manual syncs catch everything reasonable.
   const since = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();

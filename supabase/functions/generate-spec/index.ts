@@ -168,7 +168,7 @@ Deno.serve(async (req) => {
     docParts.push("");
 
     docParts.push(`## 4. Edge Functions`);
-    docParts.push(table(["Function", "Trigger", "Purpose"], EDGE_FUNCTIONS.map(([n, t, p]) => [n, t, p])));
+    docParts.push(`_Internal function names redacted. Functional capabilities are described in section 2 (Features)._`);
     docParts.push("");
 
     docParts.push(`## 5. Automation Logic`);
@@ -184,13 +184,9 @@ Deno.serve(async (req) => {
     docParts.push("");
 
     docParts.push(`## 8. Deployment`);
-    const reqUrl = new URL(req.url);
-    const liveAppUrl = reqUrl.searchParams.get("origin") || "https://skybriefweatherpost.lovable.app";
     docParts.push(md([
-      `- **Hosting provider**: Lovable Cloud (Supabase-backed)`,
-      `- **Live app URL**: ${liveAppUrl}`,
       `- **Frontend**: React 18 + Vite + TypeScript + Tailwind`,
-      `- **Backend**: Lovable Cloud Edge Functions (Deno) + managed Postgres`,
+      `- **Backend**: managed Postgres + serverless edge runtime`,
     ]));
     docParts.push("");
 
