@@ -310,8 +310,6 @@ export function GrowthDashboard() {
 }
 
 // ─── Auto-Winner: Outperforming Posts ────────────────────────────────────
-import { Flame } from "lucide-react";
-
 interface RepostSuggestion {
   id: string;
   post_id: string;
