@@ -225,6 +225,46 @@
     );
     animation: success-sweep 1.6s ease-in-out forwards;
   }
+
+  /* Inline text shimmer — sweep a soft highlight over the active step label */
+  @keyframes text-shimmer {
+    0%   { background-position: -180% 0; }
+    100% { background-position: 220% 0; }
+  }
+  .shimmer-text {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--foreground) / 0.85) 0%,
+      hsl(var(--foreground) / 0.85) 35%,
+      hsl(var(--primary)) 50%,
+      hsl(var(--foreground) / 0.85) 65%,
+      hsl(var(--foreground) / 0.85) 100%
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: text-shimmer 2.4s linear infinite;
+  }
+
+  /* Slide-up entrance for receipts / success banners */
+  @keyframes slide-up-fade {
+    0%   { transform: translateY(14px); opacity: 0; }
+    100% { transform: translateY(0); opacity: 1; }
+  }
+  .animate-slide-up {
+    animation: slide-up-fade 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  /* Pulsing glow ring — used around platform icons after a successful publish */
+  @keyframes success-glow {
+    0%, 100% { box-shadow: 0 0 0 0 hsla(142, 76%, 55%, 0.55); }
+    50%      { box-shadow: 0 0 0 10px hsla(142, 76%, 55%, 0); }
+  }
+  .animate-success-glow {
+    animation: success-glow 1.4s ease-out 2;
+    border-radius: 9999px;
+  }
 }
 
 /* Notifications dropdown scrollbar */
