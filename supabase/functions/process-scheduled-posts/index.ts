@@ -2504,7 +2504,19 @@ Deno.serve(async (req) => {
 
         // Final action step in the trace
         trace("final_action", { action: postStatus === "posted" ? "POSTED" : `FAILED — ${errorMessage}`, voice_status: voiceStatus });
-        const persistedTrace = debugTraceEnabled ? { steps: traceSteps, captured_at: new Date().toISOString() } : null;
+        // Always persist hook/cinematic/voice metadata for analytics; only
+        // include the verbose `steps` array when the user opted in.
+        const persistedTrace: Record<string, any> = {
+          captured_at: new Date().toISOString(),
+          hook_used: null,
+          hook_type: null,
+          cinematic_mode: cinematicForced,
+          cinematic_trigger: cinematicTrigger,
+          voice_enabled: !!voiceUrl,
+        };
+        if (debugTraceEnabled) {
+          persistedTrace.steps = traceSteps;
+        }
 
         // Pick a representative external_id for the post_history row (prefer YouTube).
         const primaryExternalId =
