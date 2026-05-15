@@ -11,7 +11,8 @@ import type { PreviewResult, VoiceOptions, CityContext } from "@/lib/api";
 import { calculatePreviewHealth } from "@/lib/postHealth";
 import { FeatureFlags } from "@/lib/featureFlags";
 import { evaluateCinematicMode, cinematicLogLine } from "@/lib/cinematicMode";
-import { Zap } from "lucide-react";
+import { fetchHooks, saveReceipt, formatReceipt, HOOK_LABELS, type HookId, type HookSet, type PostReceipt } from "@/lib/hooks";
+import { Zap, Flame, Umbrella } from "lucide-react";
 import { DebugLabels } from "@/components/DebugLabels";
 import { ABComparePanel } from "@/components/ABComparePanel";
 import {
@@ -74,6 +75,12 @@ export function VideoPreviewDialog({
   const [editedCaption, setEditedCaption] = useState("");
   const [isEditingCaption, setIsEditingCaption] = useState(false);
   const [autoGenerateTriggered, setAutoGenerateTriggered] = useState(false);
+
+  // Viral hook generator (additive — does not touch render/voice pipeline)
+  const [hooks, setHooks] = useState<HookSet | null>(null);
+  const [hooksLoading, setHooksLoading] = useState(false);
+  const [selectedHookId, setSelectedHookId] = useState<HookId | null>(null);
+  const [hooksFetchedFor, setHooksFetchedFor] = useState<string | null>(null);
 
   // Per-platform posting state
   const [platformStates, setPlatformStates] = useState<PlatformPostState[]>([]);
@@ -138,6 +145,49 @@ export function VideoPreviewDialog({
       setEditedCaption(preview.caption);
     }
   }, [preview?.caption]);
+
+  // Auto-fetch viral hooks once a preview is available. Re-fetch when the
+  // weather or city materially changes. Does NOT modify the render pipeline.
+  useEffect(() => {
+    const w = preview?.weather;
+    const cityName: string = w?.city || city?.name || "";
+    if (!w || !cityName) return;
+    const sig = `${cityName}|${w.condition || ""}|${w.temperature ?? ""}`;
+    if (hooksFetchedFor === sig) return;
+    setHooksFetchedFor(sig);
+    setHooksLoading(true);
+    setHooks(null);
+    setSelectedHookId(null);
+    fetchHooks({
+      city: cityName,
+      condition: w.condition ?? null,
+      temperature: typeof w.temperature === "number" ? w.temperature : null,
+      time_period: (w as any).time_period ?? null,
+      rain_chance: (w as any).rain_chance ?? (w as any).rainChance ?? null,
+    })
+      .then((h) => setHooks(h))
+      .finally(() => setHooksLoading(false));
+  }, [preview?.weather, city?.name, hooksFetchedFor]);
+
+  // Apply selected hook as the FIRST line of the caption. The voiceover
+  // script is derived from the caption downstream — re-generating the preview
+  // after applying will make the hook the first spoken sentence too.
+  const applyHook = (id: HookId) => {
+    if (!hooks) return;
+    const text = hooks[id]?.trim();
+    if (!text) return;
+    setSelectedHookId(id);
+    const baseCaption = (editedCaption || preview?.caption || "").trim();
+    // Strip an existing hook line if one was already applied.
+    const stripped = baseCaption.replace(/^.+\n\n/, (m) =>
+      Object.values(hooks).some((h) => m.trim().startsWith(h.trim().slice(0, 40))) ? "" : m,
+    );
+    const next = `${text}\n\n${stripped}`.trim();
+    setEditedCaption(next);
+    setIsEditingCaption(false);
+    toast.success(`Hook ${id} applied. Re-generate preview to refresh voiceover with this opener.`);
+  };
+
 
   // Invalidate bundle if user edits caption away from the locked text
   useEffect(() => {
@@ -253,10 +303,11 @@ export function VideoPreviewDialog({
     setUploading(true);
     try {
       const cityName = city?.name || preview.weather.city;
-      const title = `${cityName} Weather Today — ${preview.weather.temperature}°F ${preview.weather.condition}`;
+      const hookTitle = selectedHookId && hooks ? hooks[selectedHookId] : null;
+      const title = hookTitle || `${cityName} Weather Today — ${preview.weather.temperature}°F ${preview.weather.condition}`;
       const captionToUse = editedCaption || preview.caption;
       const desc = captionToUse || `Weather update for ${cityName}: ${preview.weather.temperature}°F, ${preview.weather.description}`;
-      console.log("[preview] uploading", { city_id: city?.id, city: cityName });
+      console.log("[preview] uploading", { city_id: city?.id, city: cityName, hook_id: selectedHookId });
       const result = await uploadPreviewVideo(preview.storage_path, title, desc, captionToUse, city);
 
       if (result.success) {
@@ -277,6 +328,34 @@ export function VideoPreviewDialog({
   const updatePlatform = (id: string, patch: Partial<PlatformPostState>) => {
     setPlatformStates((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
   };
+
+  // Build + persist a Post Confirmation Receipt for a single platform success.
+  // Stored in localStorage so the History tab can surface Hook + Cinematic
+  // status without requiring server schema changes.
+  const recordReceipt = (platformId: string, externalId: string | null) => {
+    const cityName = city?.name || preview?.weather?.city || "—";
+    const cm = evaluateCinematicMode(preview?.weather?.condition);
+    const hookText = selectedHookId && hooks ? hooks[selectedHookId] : null;
+    const voiceName = voice?.enabled ? (voice.voiceId || "default") : "Off";
+    const channel =
+      platformLabels?.[platformId] ||
+      (platformId === "youtube" ? "YouTube Shorts" : platformId);
+    const receipt: PostReceipt = {
+      city: cityName,
+      platform: platformId,
+      channel,
+      hook_used: hookText,
+      hook_id: selectedHookId,
+      cinematic_mode: cm.enabled,
+      cinematic_trigger: cm.trigger,
+      voice_name: voiceName,
+      external_id: externalId,
+      created_at: new Date().toISOString(),
+    };
+    saveReceipt(receipt);
+    toast.success(formatReceipt(receipt), { duration: 9000, style: { whiteSpace: "pre-wrap", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: "12px" } });
+  };
+
 
   const postSinglePlatform = async (platformId: string) => {
     const usePipeline = FeatureFlags.USE_PIPELINE_FOR_MANUAL_POSTS;
@@ -326,6 +405,7 @@ export function VideoPreviewDialog({
           const tag = useAB ? ` (Variant ${selectedVariant})` : "";
           const cine = ` · ${cinematicLogLine(preview?.weather?.condition)}`;
           updatePlatform(platformId, { status: "success", message: (result.message || "Posted successfully") + tag + cine });
+          recordReceipt(platformId, (result as any).external_id ?? null);
         } else {
           updatePlatform(platformId, { status: "failed", message: result.message || "Pipeline failed" });
         }
@@ -340,6 +420,8 @@ export function VideoPreviewDialog({
       if (result.success) {
         const cine = ` · ${cinematicLogLine(preview?.weather?.condition)}`;
         updatePlatform(platformId, { status: "success", message: (result.message || "Posted successfully") + cine });
+        const externalId = (result as any)?.results?.find?.((r: any) => r.platform === platformId)?.id ?? null;
+        recordReceipt(platformId, externalId);
       } else {
         updatePlatform(platformId, { status: "failed", message: result.message || "Post failed" });
       }
@@ -625,6 +707,48 @@ export function VideoPreviewDialog({
                   phase={phase}
                   onRetry={phase === "complete" || phase === "posting" ? handleRetry : undefined}
                 />
+              )}
+
+              {/* Viral Hook Generator — pick the YouTube title + voiceover opener */}
+              {!(isPostFlow && (phase === "posting" || phase === "complete")) && (hooks || hooksLoading) && (
+                <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 px-3 py-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Zap size={14} className="text-violet-400" />
+                    <Label className="text-sm font-medium text-foreground">Viral Hook</Label>
+                    <span className="text-[10px] text-muted-foreground">Selected hook becomes the YouTube title and the first spoken sentence (re-generate to refresh voice).</span>
+                  </div>
+                  {hooksLoading && !hooks ? (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Loader2 size={12} className="animate-spin" /> Crafting 3 hook options…
+                    </div>
+                  ) : hooks ? (
+                    <div className="grid grid-cols-1 gap-2">
+                      {(["A", "B", "C"] as HookId[]).map((id) => {
+                        const Icon = id === "A" ? Flame : id === "B" ? Umbrella : Eye;
+                        const isSel = selectedHookId === id;
+                        return (
+                          <button
+                            key={id}
+                            type="button"
+                            onClick={() => applyHook(id)}
+                            className={`text-left rounded-lg border px-3 py-2 transition ${
+                              isSel
+                                ? "border-violet-500/60 bg-violet-500/15 ring-1 ring-violet-400/40"
+                                : "border-border/40 bg-background/40 hover:border-violet-500/40 hover:bg-violet-500/5"
+                            }`}
+                          >
+                            <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-violet-300">
+                              <Icon size={11} />
+                              Hook {id} · {HOOK_LABELS[id]}
+                              {isSel && <span className="ml-auto text-emerald-400">✓ Selected</span>}
+                            </div>
+                            <p className="text-sm text-foreground mt-1 leading-snug">{hooks[id]}</p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
               )}
 
               {/* Caption section - hidden during post run/results to keep focus on status */}
