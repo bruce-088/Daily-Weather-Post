@@ -2014,7 +2014,23 @@ Deno.serve(async (req) => {
                 const d = await r.json();
                 return d.choices?.[0]?.message?.content?.trim() || null;
               };
-              caption = await callCap();
+              // ── Auto-Winner hook injection (only when toggle is ON and we have a winner) ──
+              let hookExtra = "";
+              try {
+                if (
+                  autoWinner.flags.auto_apply_winning_hook &&
+                  autoWinner.preferred_hook
+                ) {
+                  hookExtra = `\n\nAUTO-WINNER HOOK OVERRIDE: Open the caption with a "${autoWinner.preferred_hook}" style hook in the very first line. Keep the rest of the caption natural.`;
+                  autoWinner.applied = true;
+                  autoWinner.fields.hook = autoWinner.preferred_hook;
+                  console.log(`[auto-winner] post ${post.id}: hook override → ${autoWinner.preferred_hook}`);
+                }
+              } catch (e) {
+                console.warn("[auto-winner] hook injection failed; falling back:", e);
+                hookExtra = "";
+              }
+              caption = await callCap(hookExtra);
               if (caption) {
                 const v = validateCaptionLocation(caption, weather.city);
                 if (!v.ok) {
