@@ -1533,6 +1533,19 @@ Deno.serve(async (req) => {
 
     const weather = await fetchWeatherData(resolvedCityState ? resolvedCityName + "," + resolvedCityState : resolvedCityName, openWeatherApiKey);
 
+    // Cinematic-mode hard gate: only fires for high-drama weather conditions
+    // (rain / storm / thunder / cloudy / overcast / drizzle / shower). Sunny,
+    // clear, hot, fog, mist, snow → standard render. Mirrors the rule applied
+    // in process-scheduled-posts so manual + auto paths behave identically.
+    {
+      const _condForCinematic = (weather?.condition || "").toLowerCase();
+      const _cinematicMatch = /(rain|storm|thunder|cloudy|overcast|drizzle|shower)/.exec(_condForCinematic);
+      cinematicTrigger = _cinematicMatch ? _cinematicMatch[1] : null;
+      enableCinematic = requestedCinematic && !!cinematicTrigger;
+      visualStyle = enableCinematic ? "cinematic" : null;
+      console.log(`[daily-weather-post] cinematic_active=${enableCinematic} trigger=${cinematicTrigger ?? "-"} condition=${weather?.condition ?? "-"}`);
+    }
+
     // Generate caption via SkyBrief prompt
     let caption: string | null = null;
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
