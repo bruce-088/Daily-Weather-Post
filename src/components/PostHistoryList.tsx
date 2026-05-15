@@ -1,5 +1,5 @@
 import { format, isToday, isYesterday, startOfDay } from "date-fns";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -25,12 +25,40 @@ import {
   ExternalLink,
   Zap,
   Mic,
+  Trophy,
+  Sun,
+  CloudRain,
+  CloudLightning,
+  Cloud,
+  Snowflake,
+  CloudFog,
 } from "lucide-react";
 import type { PostHistoryItem } from "@/lib/api";
 import { triggerManualPipelinePost } from "@/lib/api";
 import { toast } from "sonner";
 import { DebugLabels } from "@/components/DebugLabels";
 import { getReceipt } from "@/lib/hooks";
+import { supabase } from "@/integrations/supabase/client";
+
+/**
+ * Maps a free-text weather condition to a color-coded chip preset.
+ * Used to make the History feed scannable like a leaderboard.
+ */
+function conditionChip(raw: string | null | undefined) {
+  const c = (raw || "").toLowerCase();
+  if (/(thunder|storm|lightning)/.test(c))
+    return { icon: CloudLightning, cls: "bg-violet-500/15 text-violet-300 border-violet-500/30" };
+  if (/(rain|drizzle|shower)/.test(c))
+    return { icon: CloudRain, cls: "bg-sky-500/15 text-sky-300 border-sky-500/30" };
+  if (/(snow|sleet|blizzard|ice)/.test(c))
+    return { icon: Snowflake, cls: "bg-cyan-500/15 text-cyan-200 border-cyan-500/30" };
+  if (/(fog|mist|haze|smoke)/.test(c))
+    return { icon: CloudFog, cls: "bg-slate-500/15 text-slate-300 border-slate-500/30" };
+  if (/(cloud|overcast)/.test(c))
+    return { icon: Cloud, cls: "bg-zinc-500/15 text-zinc-300 border-zinc-500/30" };
+  if (c) return { icon: Sun, cls: "bg-orange-500/15 text-orange-300 border-orange-500/30" };
+  return null;
+}
 
 interface PlatformBrand {
   icon: React.ElementType;
