@@ -17,7 +17,11 @@ export type FeatureFlagName =
   | "ENABLE_CINEMATIC_MODE";
 
 const DEFAULTS: Record<FeatureFlagName, boolean> = {
-  USE_PIPELINE_FOR_MANUAL_POSTS: false,
+  // Single source of truth: manual posts + preview always run through the
+  // job pipeline (generate_content → generate_voice → render_video), the
+  // same path auto-post uses. Disable via
+  // localStorage.setItem("ff:USE_PIPELINE_FOR_MANUAL_POSTS","false") for QA.
+  USE_PIPELINE_FOR_MANUAL_POSTS: true,
   ENABLE_POST_HEALTH_SCORE: false,
   ENABLE_AB_TESTING: false,
   // On by default for now (preview/admin mode). Disable via
