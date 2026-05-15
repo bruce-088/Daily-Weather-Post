@@ -364,7 +364,7 @@ export function VideoPreviewDialog({
       if (uid) {
         const { data: rows } = await supabase
           .from("post_history")
-          .select("id")
+          .select("id, debug_trace")
           .eq("user_id", uid)
           .eq("city", cityName)
           .eq("platform", platformId)
@@ -372,6 +372,15 @@ export function VideoPreviewDialog({
           .limit(1);
         const targetId = rows?.[0]?.id;
         if (targetId) {
+          const existingTrace = (rows?.[0] as any)?.debug_trace ?? {};
+          const mergedTrace = {
+            ...existingTrace,
+            hook_used: hookText,
+            hook_type: selectedHookId,
+            cinematic_mode: cm.enabled,
+            cinematic_trigger: cm.trigger,
+            voice_enabled: !!voice?.enabled,
+          };
           await supabase
             .from("post_history")
             .update({
@@ -380,6 +389,7 @@ export function VideoPreviewDialog({
               cinematic_mode: cm.enabled,
               cinematic_trigger: cm.trigger,
               voice_name: voiceName,
+              debug_trace: mergedTrace,
             } as any)
             .eq("id", targetId);
         }
