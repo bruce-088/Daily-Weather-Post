@@ -14,7 +14,8 @@ export type FeatureFlagName =
   | "ENABLE_POST_HEALTH_SCORE"
   | "ENABLE_AB_TESTING"
   | "SHOW_DEBUG_LABELS"
-  | "ENABLE_CINEMATIC_MODE";
+  | "ENABLE_CINEMATIC_MODE"
+  | "ENABLE_DURABLE_PREVIEW_PIPELINE";
 
 const DEFAULTS: Record<FeatureFlagName, boolean> = {
   // Single source of truth: manual posts + preview always run through the
@@ -28,6 +29,11 @@ const DEFAULTS: Record<FeatureFlagName, boolean> = {
   // localStorage.setItem("ff:SHOW_DEBUG_LABELS","false") to silence pills.
   SHOW_DEBUG_LABELS: true,
   ENABLE_CINEMATIC_MODE: false,
+  // Durable Preview: route the Preview button through a real `jobs` row
+  // (enqueue-preview-job) and poll status. Disable via
+  // localStorage.setItem("ff:ENABLE_DURABLE_PREVIEW_PIPELINE","false") to
+  // fall back to the legacy direct-invoke path for one release.
+  ENABLE_DURABLE_PREVIEW_PIPELINE: true,
 };
 
 function readOverride(name: FeatureFlagName): boolean | null {
@@ -62,5 +68,8 @@ export const FeatureFlags = {
   },
   get ENABLE_CINEMATIC_MODE() {
     return isFeatureEnabled("ENABLE_CINEMATIC_MODE");
+  },
+  get ENABLE_DURABLE_PREVIEW_PIPELINE() {
+    return isFeatureEnabled("ENABLE_DURABLE_PREVIEW_PIPELINE");
   },
 };
