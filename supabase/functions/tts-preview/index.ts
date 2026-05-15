@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
+import { verifyUser } from "../_shared/auth-helpers.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -32,6 +33,9 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
+
+  const auth = await verifyUser(req);
+  if (auth.response) return auth.response;
 
   try {
     // Accept either ELEVENLABS_API_KEY or the legacy ELEVEN_LABS_API_KEY name
