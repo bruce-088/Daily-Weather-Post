@@ -2633,8 +2633,9 @@ Deno.serve(async (req) => {
           visual_metadata: visualMeta,
           health_score: healthScore,
           health_breakdown: healthBreakdown,
-          // Persist cinematic flag so the History tab shows ⚡ ON for
-          // automated posts that ran the cinematic treatment.
+          // Persist hook + cinematic flags so the History UI shows them on
+          // any device (cross-device, server-authoritative).
+          hook_used: hookUsedDerived,
           cinematic_mode: cinematicForced,
           cinematic_trigger: cinematicTrigger,
           voice_name: voiceUrl ? "AI" : null,
