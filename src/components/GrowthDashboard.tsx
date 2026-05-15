@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import {
   Sparkles, TrendingUp, AlertTriangle, Trophy, Clock, Activity, X, ArrowUpRight,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, Flame,
 } from "lucide-react";
 import { useActiveCity } from "@/hooks/useActiveCity";
 
