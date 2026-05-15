@@ -724,7 +724,7 @@ export function VideoPreviewDialog({
                   ) : hooks ? (
                     <div className="grid grid-cols-1 gap-2">
                       {(["A", "B", "C"] as HookId[]).map((id) => {
-                        const Icon = id === "A" ? Flame : id === "B" ? Umbrella : EyeIcon;
+                        const Icon = id === "A" ? Flame : id === "B" ? Umbrella : Eye;
                         const isSel = selectedHookId === id;
                         return (
                           <button
