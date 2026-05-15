@@ -328,6 +328,34 @@ export function VideoPreviewDialog({
     setPlatformStates((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
   };
 
+  // Build + persist a Post Confirmation Receipt for a single platform success.
+  // Stored in localStorage so the History tab can surface Hook + Cinematic
+  // status without requiring server schema changes.
+  const recordReceipt = (platformId: string, externalId: string | null) => {
+    const cityName = city?.name || preview?.weather?.city || "—";
+    const cm = evaluateCinematicMode(preview?.weather?.condition);
+    const hookText = selectedHookId && hooks ? hooks[selectedHookId] : null;
+    const voiceName = voice?.enabled ? (voice.voiceId || "default") : "Off";
+    const channel =
+      platformLabels?.[platformId] ||
+      (platformId === "youtube" ? "YouTube Shorts" : platformId);
+    const receipt: PostReceipt = {
+      city: cityName,
+      platform: platformId,
+      channel,
+      hook_used: hookText,
+      hook_id: selectedHookId,
+      cinematic_mode: cm.enabled,
+      cinematic_trigger: cm.trigger,
+      voice_name: voiceName,
+      external_id: externalId,
+      created_at: new Date().toISOString(),
+    };
+    saveReceipt(receipt);
+    toast.success(formatReceipt(receipt), { duration: 9000, style: { whiteSpace: "pre-wrap", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: "12px" } });
+  };
+
+
   const postSinglePlatform = async (platformId: string) => {
     const usePipeline = FeatureFlags.USE_PIPELINE_FOR_MANUAL_POSTS;
     const useAB = FeatureFlags.ENABLE_AB_TESTING && abEnabled;
