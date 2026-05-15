@@ -1104,6 +1104,12 @@ export function VideoPreviewDialog({
           )}
         </div>
 
+        <PreviewPipelineStatus
+          stage={pipelineStage}
+          error={generationError}
+          source={pipelineSource}
+        />
+
         {(preview?.video_url || preview?.image_url) && (
           <DialogFooter className="flex-row gap-2 sm:gap-2 flex-wrap">
             {/* During posting/complete in post flow, show only Close (and Retry is per-row) */}
