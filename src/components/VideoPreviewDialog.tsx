@@ -18,6 +18,20 @@ import { Zap, Lightbulb } from "lucide-react";
 import { DebugLabels } from "@/components/DebugLabels";
 import { ContentScoreCard } from "@/components/ContentScoreCard";
 import { AutoWinnerBadge } from "@/components/AutoWinnerBadge";
+import { supabase as _swSupabase } from "@/integrations/supabase/client";
+
+function AutoWinnerBadgeWrapper({ cityName, condition }: { cityName: string | null; condition: string | null }) {
+  const [uid, setUid] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    _swSupabase.auth.getUser().then(({ data }) => {
+      if (!cancelled) setUid(data?.user?.id ?? null);
+    });
+    return () => { cancelled = true; };
+  }, []);
+  if (!uid) return null;
+  return <AutoWinnerBadge userId={uid} city={cityName} condition={condition} />;
+}
 import { detectUrgency, type UrgencySuggestion } from "@/lib/weatherTriggers";
 import { useDynamicFavicon } from "@/hooks/useDynamicFavicon";
 import { celebrate } from "@/lib/confetti";
