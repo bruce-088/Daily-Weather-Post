@@ -324,7 +324,8 @@ export function VideoPreviewDialog({
         );
         if (result.success) {
           const tag = useAB ? ` (Variant ${selectedVariant})` : "";
-          updatePlatform(platformId, { status: "success", message: (result.message || "Posted successfully") + tag });
+          const cine = ` · ${cinematicLogLine(preview?.weather?.condition)}`;
+          updatePlatform(platformId, { status: "success", message: (result.message || "Posted successfully") + tag + cine });
         } else {
           updatePlatform(platformId, { status: "failed", message: result.message || "Pipeline failed" });
         }
@@ -337,7 +338,8 @@ export function VideoPreviewDialog({
         ? await publishPreviewBundle(bundleId, [platformId])
         : await triggerDailyPost(undefined, [platformId], voice, city ?? null);
       if (result.success) {
-        updatePlatform(platformId, { status: "success", message: result.message || "Posted successfully" });
+        const cine = ` · ${cinematicLogLine(preview?.weather?.condition)}`;
+        updatePlatform(platformId, { status: "success", message: (result.message || "Posted successfully") + cine });
       } else {
         updatePlatform(platformId, { status: "failed", message: result.message || "Post failed" });
       }
