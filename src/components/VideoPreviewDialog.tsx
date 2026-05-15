@@ -450,7 +450,9 @@ export function VideoPreviewDialog({
       console.warn("[receipt] DB persist failed (non-fatal):", e);
     }
 
-    toast.success(formatReceipt(receipt), { duration: 9000, style: { whiteSpace: "pre-wrap", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: "12px" } });
+    toast.success(formatReceipt(receipt), { duration: 9000, className: "animate-slide-up", style: { whiteSpace: "pre-wrap", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: "12px" } });
+    // Subtle celebratory burst — a few pieces only, never blocking.
+    try { celebrate({ y: window.innerHeight * 0.35, pieces: 28 }); } catch {}
   };
 
 
