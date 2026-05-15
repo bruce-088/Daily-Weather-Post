@@ -2390,8 +2390,52 @@ Deno.serve(async (req) => {
         // reuse it instead of paying for another render — but only if it
         // passes the same validity bar we apply to fresh renders.
         let video: { data: Uint8Array; mimeType: string; provider?: string } | null = null;
+
+        // ── WYSYWYP (What You See Is What You Post) ──────────────────────
+        // If the manual post was created from a locked Preview Bundle and
+        // the bundle is still valid, skip rendering entirely and post the
+        // exact mp4 the user previewed. This is the contract the Preview
+        // Modal promises ("Post this exact render").
+        const previewBundleId: string | null =
+          (post as any)?.debug_trace?.preview_bundle_id ?? null;
+        if (previewBundleId) {
+          try {
+            const { data: bundle } = await supabase
+              .from("preview_bundles")
+              .select("id, status, asset_url, expires_at, content_type")
+              .eq("id", previewBundleId)
+              .maybeSingle();
+            const isLocked = bundle?.status === "locked";
+            const notExpired = bundle?.expires_at ? new Date(bundle.expires_at).getTime() > Date.now() : false;
+            const isVideo = bundle?.content_type === "video";
+            if (bundle && isLocked && notExpired && isVideo && bundle.asset_url) {
+              console.log(`[wysywyp] reusing preview bundle ${previewBundleId} → ${String(bundle.asset_url).split("?")[0]}`);
+              const dl = await fetch(bundle.asset_url);
+              if (dl.ok) {
+                const ab = await dl.arrayBuffer();
+                if (ab.byteLength >= MIN_VIDEO_BYTES) {
+                  video = { data: new Uint8Array(ab), mimeType: "video/mp4", provider: "preview_bundle" };
+                  trace("video_render", { reused: "preview_bundle", bundle_id: previewBundleId, bytes: ab.byteLength });
+                  // Mark the bundle consumed (best-effort).
+                  await supabase.from("preview_bundles")
+                    .update({ status: "consumed", consumed_at: new Date().toISOString() })
+                    .eq("id", previewBundleId);
+                } else {
+                  console.warn(`[wysywyp] bundle asset too small (${ab.byteLength}b) — re-rendering`);
+                }
+              } else {
+                console.warn(`[wysywyp] bundle asset fetch failed (${dl.status}) — re-rendering`);
+              }
+            } else {
+              console.log(`[wysywyp] bundle ${previewBundleId} not usable (locked=${isLocked} notExpired=${notExpired} isVideo=${isVideo}) — re-rendering`);
+            }
+          } catch (e) {
+            console.warn("[wysywyp] short-circuit failed (non-fatal):", (e as Error).message);
+          }
+        }
+
         const cachedVideoUrl: string | null = (post as any).cached_video_url ?? null;
-        if (cachedVideoUrl) {
+        if (!video && cachedVideoUrl) {
           try {
             console.log(`[render] reusing cached video for post ${post.id}: ${cachedVideoUrl.slice(0, 80)}…`);
             const dl = await fetch(cachedVideoUrl);
