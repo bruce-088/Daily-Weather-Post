@@ -293,6 +293,7 @@ export function AnalyticsPanel() {
           Sync Now
         </Button>
       </Card>
+      </div>
     );
   }
 
