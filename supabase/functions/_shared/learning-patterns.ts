@@ -264,7 +264,8 @@ export async function getTopPerformingPatterns(
  * 70% exploit proven patterns, 30% exploration.
  */
 export function buildLearningPromptBlock(p: TopPatterns): string {
-  if (p.topHooks.length === 0 && p.conditionLifts.length === 0) return "";
+  const hasForbidden = (p.forbiddenOpeners?.length ?? 0) > 0 || (p.forbiddenThemes?.length ?? 0) > 0;
+  if (p.topHooks.length === 0 && p.conditionLifts.length === 0 && !hasForbidden) return "";
 
   const explore = Math.random() < 0.3;
   const lines: string[] = ["", "PERFORMANCE LEARNING LOOP:"];
