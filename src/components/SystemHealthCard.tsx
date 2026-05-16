@@ -264,17 +264,12 @@ export function SystemHealthCard() {
                   <Activity size={16} className="text-primary" />
                   System Health
                   <Badge
-                    variant={isActive ? "default" : "secondary"}
-                    className={`ml-1 ${isActive ? "bg-green-500/20 text-green-600 border-green-500/30 hover:bg-green-500/20" : ""}`}
+                    variant="outline"
+                    className={`ml-1 ${stateBadgeClass}`}
                   >
-                    <span className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${isActive ? "bg-green-500 animate-pulse" : "bg-muted-foreground"}`} />
-                    {isActive ? "Active" : "Inactive"}
+                    <span className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${stateDotClass}`} />
+                    {stateLabel}
                   </Badge>
-                  {hasError && (
-                    <Badge variant="outline" className="bg-destructive/15 text-destructive border-destructive/30 text-[10px]">
-                      ❌ Error
-                    </Badge>
-                  )}
                 </CardTitle>
                 <CardDescription className="text-xs">
                   {open ? "Background automation status" : `Last run: ${lastRun ?? "—"}`}
