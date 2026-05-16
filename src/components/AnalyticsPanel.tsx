@@ -302,6 +302,7 @@ export function AnalyticsPanel() {
   return (
     <div className="space-y-6">
       <GrowthIntelligenceCard />
+      <ChannelHealthCard />
       {/* Header + Sync Now */}
       <div className="flex items-center justify-between">
         <div>
