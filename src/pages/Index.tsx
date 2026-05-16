@@ -1084,6 +1084,9 @@ const Index = () => {
                   </div>
                 </div>
 
+                {/* Full-width outperforming posts */}
+                <OutperformingPosts />
+
                 {/* Full-width weekly recap */}
                 <GrowthWeeklyRecap />
 
