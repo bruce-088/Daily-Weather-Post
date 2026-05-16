@@ -3034,6 +3034,17 @@ Deno.serve(async (req) => {
             error_message: errMsg,
             last_attempt_at: new Date().toISOString(),
           }).eq("id", post.id);
+          try {
+            if ((post as any).city_id) {
+              await supabase.rpc("release_publish_lock", {
+                p_user: post.user_id,
+                p_city_id: (post as any).city_id,
+                p_slot: (post as any).slot || "adhoc",
+                p_platform: post.platform,
+                p_tz: null,
+              });
+            }
+          } catch (_) { /* best-effort */ }
           await supabase.from("system_logs").insert({
             user_id: post.user_id,
             type: "post_error",
