@@ -182,48 +182,6 @@ export function GrowthCommandCenter() {
         </CardContent>
       </Card>
 
-      {/* Growth log */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <Gem size={14} className="text-amber-300" /> Growth Log
-          </CardTitle>
-          <CardDescription className="text-xs">Chronological feed of A/B test wins.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {insights.length === 0 ? (
-            <p className="text-xs text-muted-foreground italic">
-              {activeCity.name
-                ? `No data yet for ${activeCity.name} — start posting to generate insights.`
-                : "No wins logged yet. Keep posting — A/B tests resolve after ~24h."}
-            </p>
-          ) : (
-            insights.map((i) => (
-              <div
-                key={i.id}
-                className="flex items-start gap-3 rounded-md border border-amber-500/20 bg-gradient-to-r from-amber-500/5 to-transparent p-2.5"
-              >
-                <Gem size={14} className="text-amber-300 mt-0.5 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs leading-snug">
-                    <span className="font-mono text-muted-foreground mr-1.5">{fmtDate(i.created_at)}:</span>
-                    {i.message}
-                  </p>
-                  <div className="mt-1 flex items-center gap-2 text-[10px] text-muted-foreground">
-                    {i.city && <Badge variant="outline" className="text-[10px]">{i.city}</Badge>}
-                    {i.delta_pct != null && (
-                      <Badge variant="outline" className="text-[10px] border-emerald-500/40 text-emerald-400">
-                        +{Number(i.delta_pct).toFixed(0)}%
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))
-          )}
-        </CardContent>
-      </Card>
-
       {/* Weekly Recap */}
       <Card className="border-primary/30 bg-gradient-to-br from-primary/5 to-transparent">
         <CardHeader className="pb-2">
