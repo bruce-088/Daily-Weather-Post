@@ -45,7 +45,7 @@ import { PostHistoryList } from "@/components/PostHistoryList";
 import { AnalyticsPanel } from "@/components/AnalyticsPanel";
 import { SmartInsightsCard } from "@/components/SmartInsightsCard";
 import { GrowthSummaryCard } from "@/components/GrowthSummaryCard";
-import { GrowthDashboard } from "@/components/GrowthDashboard";
+import { GrowthDashboard, OutperformingPosts } from "@/components/GrowthDashboard";
 import { GrowthCommandProvider, GrowthStatsCards, GrowthMemoryBank, GrowthWeeklyRecap } from "@/components/GrowthCommandCenter";
 import { GrowthInsights } from "@/components/GrowthInsights";
 import { GrowthLog } from "@/components/GrowthLog";
