@@ -97,6 +97,40 @@ export function YouTubeChannelsManager({ cities = [], onChange }: Props) {
     onChange?.();
   };
 
+  const [refreshingId, setRefreshingId] = useState<string | null>(null);
+  const handleRefreshChannel = async (channelId: string) => {
+    setRefreshingId(channelId);
+    try {
+      const { data, error } = await supabase.functions.invoke("youtube-auth", {
+        body: { action: "refresh_channel", channel_id: channelId },
+      });
+      if (error) {
+        toast.error("Refresh failed", { description: error.message });
+        return;
+      }
+      const status = (data as any)?.status as string | undefined;
+      if (status === "refreshed") {
+        toast.success("Refreshed successfully");
+      } else if (status === "refresh_token_missing") {
+        toast.error("Refresh token missing", {
+          description: "Reconnect this channel to grant offline access.",
+        });
+      } else if (status === "reauth_required") {
+        toast.error("Re-auth required", {
+          description: (data as any)?.error || "Token cannot be silently refreshed.",
+        });
+      } else {
+        toast.message("Refresh complete", { description: JSON.stringify(data) });
+      }
+      load();
+      onChange?.();
+    } catch (e) {
+      toast.error("Refresh failed", { description: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setRefreshingId(null);
+    }
+  };
+
   return (
     <div className="rounded-xl border border-white/10 bg-white/5 backdrop-blur-xl p-4 space-y-3">
       <div className="flex items-center justify-between">
