@@ -274,6 +274,26 @@ Deno.serve(async (req) => {
         "id (text, PK)", "last_run_at (timestamptz)", "last_status (text)",
         "last_message (text)", "updated_at (timestamptz)",
       ],
+      post_analytics: [
+        "id (uuid, PK)", "user_id (uuid)", "post_history_id (uuid)", "platform (text)", "city (text)",
+        "views / likes / comments / shares (int)", "view_ratio (numeric)", "engagement_rate (numeric)",
+        "performance_score (numeric, 0–100) — weighted blend: view ratio 50% + engagement 30% + retention 20% vs 60d user baseline",
+        "winning_factors (jsonb) — factors ≥+15% vs baseline (tone, hook, slot, condition, etc.)",
+        "losing_factors (jsonb) — factors ≤−15% vs baseline",
+        "created_at (timestamptz)",
+      ],
+      content_insights: [
+        "id (uuid, PK)", "user_id (uuid)", "insight_type (text)", "dimension (text)",
+        "value (text)", "score (numeric)", "sample_size (int)", "updated_at (timestamptz)",
+      ],
+      growth_insights: [
+        "id (uuid, PK)", "user_id (uuid)", "variable (text)", "winner_value (text)",
+        "loser_value (text)", "delta_pct (numeric)", "sample_size (int)", "title (text)", "created_at (timestamptz)",
+      ],
+      ai_memory: [
+        "id (uuid, PK)", "user_id (uuid)", "memory_type (text: top_post | ...)",
+        "content (jsonb)", "score (numeric)", "created_at (timestamptz)",
+      ],
     };
 
     const now = new Date().toISOString();
