@@ -1327,6 +1327,7 @@ export type Database = {
           morning_post_time: string
           morning_skip_date: string | null
           post_time: string
+          recap_youtube_channel: string | null
           state: string | null
           subscribe_cta_enabled: boolean
           tiktok_access_token: string | null
@@ -1386,6 +1387,7 @@ export type Database = {
           morning_post_time?: string
           morning_skip_date?: string | null
           post_time?: string
+          recap_youtube_channel?: string | null
           state?: string | null
           subscribe_cta_enabled?: boolean
           tiktok_access_token?: string | null
@@ -1445,6 +1447,7 @@ export type Database = {
           morning_post_time?: string
           morning_skip_date?: string | null
           post_time?: string
+          recap_youtube_channel?: string | null
           state?: string | null
           subscribe_cta_enabled?: boolean
           tiktok_access_token?: string | null

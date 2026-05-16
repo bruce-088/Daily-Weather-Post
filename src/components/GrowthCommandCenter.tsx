@@ -4,14 +4,15 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Brain, Trophy, FlaskConical, CalendarClock, Sparkles, Cloud, RefreshCw,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
+  Brain, Trophy, FlaskConical, CalendarClock, Sparkles, RefreshCw,
+  Sun, Cloud, CloudRain, CloudSnow, CloudLightning, CloudFog,
 } from "lucide-react";
 import { useActiveCity } from "@/hooks/useActiveCity";
+import { toast } from "sonner";
 
-// Memory items are derived from hook_stats + winner_stats (the same sources
-// that power Growth Intelligence). ai_memory used to back this view but is
-// not consistently populated by the pipeline — hook_stats is, so we use it
-// as the canonical "what the AI has learned" store for the UI.
 interface MemoryRow {
   id: string;
   memory_type: string;
@@ -26,10 +27,38 @@ interface RecentPost {
   city: string;
   image_url: string | null;
   created_at: string;
+  condition: string | null;
+  temperature: number | null;
+}
+
+interface YouTubeChannel {
+  id: string;
+  account_name: string;
+  city_id: string | null;
 }
 
 const fmtDate = (s: string) =>
   new Date(s).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+
+function conditionIcon(cond: string | null) {
+  const c = (cond || "").toLowerCase();
+  if (c.includes("storm") || c.includes("thunder")) return CloudLightning;
+  if (c.includes("snow")) return CloudSnow;
+  if (c.includes("rain") || c.includes("drizzle")) return CloudRain;
+  if (c.includes("fog") || c.includes("mist") || c.includes("haze")) return CloudFog;
+  if (c.includes("clear") || c.includes("sun")) return Sun;
+  return Cloud;
+}
+
+function conditionTint(cond: string | null) {
+  const c = (cond || "").toLowerCase();
+  if (c.includes("storm") || c.includes("thunder")) return "from-violet-500/30 to-slate-900/60";
+  if (c.includes("snow")) return "from-sky-200/30 to-slate-900/60";
+  if (c.includes("rain") || c.includes("drizzle")) return "from-sky-500/25 to-slate-900/60";
+  if (c.includes("fog") || c.includes("mist") || c.includes("haze")) return "from-slate-400/25 to-slate-900/60";
+  if (c.includes("clear") || c.includes("sun")) return "from-amber-400/25 to-slate-900/60";
+  return "from-primary/20 to-slate-900/60";
+}
 
 // Sunday at 18:00 UTC
 function nextSundayRecap(): Date {
@@ -49,6 +78,9 @@ export function GrowthCommandCenter() {
   const [bestHook, setBestHook] = useState<MemoryRow | null>(null);
   const [experimentsRunning, setExperimentsRunning] = useState(0);
   const [recentPosts, setRecentPosts] = useState<RecentPost[]>([]);
+  const [ytChannels, setYtChannels] = useState<YouTubeChannel[]>([]);
+  const [recapChannel, setRecapChannel] = useState<string>("");
+  const [savingChannel, setSavingChannel] = useState(false);
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -58,10 +90,8 @@ export function GrowthCommandCenter() {
       .select("id", { count: "exact", head: true })
       .eq("user_id", user.id)
       .eq("status", "gathering_data");
-    // post_history.status uses "success" / "failed" / "pending" — not "posted".
-    // Accept both so legacy rows still surface.
     let phQ = supabase.from("post_history")
-      .select("id, city, image_url, created_at")
+      .select("id, city, image_url, created_at, condition, temperature")
       .eq("user_id", user.id)
       .in("status", ["success", "posted"])
       .order("created_at", { ascending: false })
@@ -71,10 +101,7 @@ export function GrowthCommandCenter() {
       phQ = phQ.ilike("city", activeCity.name);
     }
 
-    // Derive Memory Bank from hook_stats (real, populated data source).
-    // Minimum 1 use — every post in hook_stats already represents a real
-    // published post the AI has observed performance for.
-    const [hookStatsRes, contentRes, e, ph] = await Promise.all([
+    const [hookStatsRes, contentRes, e, ph, ytRes, settingsRes] = await Promise.all([
       supabase.from("hook_stats")
         .select("id, hook_text, uses, avg_views, status, last_used_at, created_at")
         .eq("user_id", user.id)
@@ -87,6 +114,16 @@ export function GrowthCommandCenter() {
         .order("avg_views", { ascending: false })
         .limit(20),
       expQ, phQ,
+      supabase.from("social_accounts")
+        .select("id, account_name, city_id")
+        .eq("user_id", user.id)
+        .eq("platform", "youtube")
+        .order("account_name", { ascending: true }),
+      supabase.from("weather_settings")
+        .select("recap_youtube_channel")
+        .eq("user_id", user.id)
+        .limit(1)
+        .maybeSingle(),
     ]);
 
     const hookRows = (hookStatsRes.data as any[]) || [];
@@ -111,18 +148,59 @@ export function GrowthCommandCenter() {
       })),
     ].sort((a, b) => b.performance_score - a.performance_score);
 
+    const channels = (ytRes.data as YouTubeChannel[]) || [];
+    setYtChannels(channels);
+
+    // Default selection: saved value → channel matching active city → first.
+    const saved = (settingsRes.data as any)?.recap_youtube_channel as string | undefined;
+    let defaultChannel =
+      (saved && channels.find((c) => c.id === saved)?.id) ||
+      (activeCity.id && channels.find((c) => c.city_id === activeCity.id)?.id) ||
+      channels[0]?.id ||
+      "";
+    setRecapChannel(defaultChannel);
+
     setMemories(mem);
     setBestHook(mem.find((x) => x.memory_type === "hook") || null);
     setExperimentsRunning(e.count ?? 0);
     setRecentPosts((ph.data as RecentPost[]) || []);
     setLoading(false);
-  }, [activeCity.name]);
+  }, [activeCity.name, activeCity.id]);
 
   useEffect(() => { setLoading(true); load(); }, [load]);
 
   async function handleRefresh() {
     setRefreshing(true);
     try { await load(); } finally { setRefreshing(false); }
+  }
+
+  async function handleChannelChange(value: string) {
+    setRecapChannel(value);
+    setSavingChannel(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      // Check-then-act (weather_settings has no unique constraint on user_id).
+      const { data: existing } = await supabase
+        .from("weather_settings")
+        .select("id")
+        .eq("user_id", user.id)
+        .limit(1)
+        .maybeSingle();
+      if (existing?.id) {
+        await supabase.from("weather_settings")
+          .update({ recap_youtube_channel: value } as any)
+          .eq("id", existing.id);
+      } else {
+        await supabase.from("weather_settings")
+          .insert({ user_id: user.id, recap_youtube_channel: value } as any);
+      }
+      toast.success("Recap channel saved");
+    } catch (err: any) {
+      toast.error("Couldn't save recap channel");
+    } finally {
+      setSavingChannel(false);
+    }
   }
 
   const nextRecap = nextSundayRecap();
@@ -223,14 +301,39 @@ export function GrowthCommandCenter() {
         <CardHeader className="pb-2">
           <CardTitle className="text-sm flex items-center gap-2">
             <CalendarClock size={14} className="text-primary" /> Weekly Recap
-            <Badge variant="outline" className="text-[10px] border-primary/40 text-primary ml-auto">Auto</Badge>
+            <Badge variant="outline" className="text-[10px] border-primary/40 text-primary ml-auto">
+              Auto{recapChannel && ytChannels.find((c) => c.id === recapChannel)
+                ? ` · ${ytChannels.find((c) => c.id === recapChannel)!.account_name}`
+                : ""}
+            </Badge>
           </CardTitle>
           <CardDescription className="text-xs">
             Next Recap scheduled for <strong>{recapLabel} UTC</strong>. A long-form YouTube video is generated automatically.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <p className="text-[11px] text-muted-foreground mb-2 flex items-center gap-1.5">
+        <CardContent className="space-y-3">
+          {ytChannels.length > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-muted-foreground shrink-0">Post recap to:</span>
+              <Select
+                value={recapChannel}
+                onValueChange={handleChannelChange}
+                disabled={savingChannel}
+              >
+                <SelectTrigger className="h-8 text-xs flex-1">
+                  <SelectValue placeholder="Select YouTube channel" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ytChannels.map((c) => (
+                    <SelectItem key={c.id} value={c.id} className="text-xs">
+                      {c.account_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
             <Sparkles size={11} className="text-primary" /> Last 3 daily posts in the queue
           </p>
           {recentPosts.length === 0 ? (
@@ -240,26 +343,47 @@ export function GrowthCommandCenter() {
           ) : (
             <div className="grid grid-cols-3 gap-2">
               {recentPosts.map((p) => (
-                <div
-                  key={p.id}
-                  className="aspect-video rounded-md overflow-hidden border border-border/40 bg-muted/30 relative"
-                >
-                  {p.image_url ? (
-                    <img src={p.image_url} alt={p.city} className="w-full h-full object-cover" loading="lazy" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <Cloud size={20} className="text-muted-foreground/50" />
-                    </div>
-                  )}
-                  <div className="absolute bottom-0 left-0 right-0 px-1.5 py-1 text-[9px] bg-gradient-to-t from-black/80 to-transparent text-white truncate">
-                    {p.city} · {fmtDate(p.created_at)}
-                  </div>
-                </div>
+                <RecentPostThumb key={p.id} post={p} />
               ))}
             </div>
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function RecentPostThumb({ post }: { post: RecentPost }) {
+  const [errored, setErrored] = useState(false);
+  const Icon = conditionIcon(post.condition);
+  const tint = conditionTint(post.condition);
+  const showImg = post.image_url && !errored;
+  return (
+    <div className="aspect-video rounded-md overflow-hidden border border-border/40 bg-muted/30 relative">
+      {showImg ? (
+        <img
+          src={post.image_url!}
+          alt={post.city}
+          className="w-full h-full object-cover"
+          loading="lazy"
+          onError={() => setErrored(true)}
+        />
+      ) : (
+        <div className={`w-full h-full flex flex-col items-center justify-center gap-1 bg-gradient-to-br ${tint}`}>
+          <Icon size={22} className="text-white/90 drop-shadow" />
+          <div className="text-[10px] font-medium text-white/90 px-2 text-center leading-tight truncate max-w-full">
+            {post.city}
+          </div>
+          {post.temperature != null && (
+            <div className="text-[9px] font-mono text-white/70">
+              {Math.round(Number(post.temperature))}°F
+            </div>
+          )}
+        </div>
+      )}
+      <div className="absolute bottom-0 left-0 right-0 px-1.5 py-1 text-[9px] bg-gradient-to-t from-black/80 to-transparent text-white truncate">
+        {post.city} · {fmtDate(post.created_at)}
+      </div>
     </div>
   );
 }
