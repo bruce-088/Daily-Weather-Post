@@ -281,9 +281,10 @@ function buildHookTitle(city: string, temp: number, condition: string, rainChanc
 
   // Deterministic-but-rotating pick (date + hour) so titles vary across slots
   const seed = new Date().getDate() * 24 + hour;
-  const title = pool[seed % pool.length];
-
-  return title.length > 95 ? title.substring(0, 92) + "..." : title;
+  const baseTitle = pool[seed % pool.length];
+  const stamp = getCityLocalStamp(city);
+  const stamped = `[${stamp}] ${baseTitle}`;
+  return stamped.length > 95 ? stamped.substring(0, 92) + "..." : stamped;
 }
 
 // --- Dynamic Handle System ---
