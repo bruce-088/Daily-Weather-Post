@@ -396,15 +396,39 @@ export function PostHistoryList({ posts, loading, onReuse, onChanged }: PostHist
                             </span>
                           )}
                           {(() => {
-                            // Visual status indicator: ✅ posted with voice / ⚠️ posted without voice / ❌ failed
+                            // Visual status indicator: ✅ posted with voice / ⚠️ posted without voice
+                            // / 🚫 blocked / ⏭ skipped / ❌ failed
                             const isSuccess = post.status === "success";
                             const vs = post.voice_status;
                             const hadVoice = vs === "success" || vs === "retried";
+                            const err = post.error_message || "";
+                            const isDeduped = /^\[DEDUPED\]/i.test(err);
+                            const isBlocked = /^\[(BLOCKED|ROUTING_VIOLATION)\]/i.test(err);
                             if (!isSuccess) {
+                              if (isDeduped) {
+                                return (
+                                  <span
+                                    className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium bg-muted/40 text-muted-foreground border border-border/40"
+                                    title={err}
+                                  >
+                                    ⏭ Skipped (deduped)
+                                  </span>
+                                );
+                              }
+                              if (isBlocked) {
+                                return (
+                                  <span
+                                    className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium bg-amber-500/15 text-amber-400 border border-amber-500/30"
+                                    title={err}
+                                  >
+                                    🚫 Blocked
+                                  </span>
+                                );
+                              }
                               return (
                                 <span
                                   className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium bg-destructive/15 text-destructive border border-destructive/30"
-                                  title={post.error_message || "Failed"}
+                                  title={err || "Failed"}
                                 >
                                   ❌ Failed
                                 </span>
