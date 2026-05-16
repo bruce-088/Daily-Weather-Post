@@ -2110,8 +2110,12 @@ Deno.serve(async (req) => {
           weather.city,
         );
 
-        // Resolve slot now (used by caption personality, beacon, and title prefix)
-        const _slotForGen = earlyTimePeriod || null;
+        // Resolve slot now (used by caption personality, beacon, and title prefix).
+        // Order: [auto:slot]/[manual:slot] marker → post.slot column → infer from city-local hour.
+        const _slotForGen =
+          earlyTimePeriod ||
+          ((post as any).slot ? String((post as any).slot).toLowerCase() : null) ||
+          inferSlotFromCityHour(weather.city);
         const _slotLabel = slotDisplayLabel(_slotForGen);
 
         // Fetch the most recent prior caption for this city to power anti-repeat
