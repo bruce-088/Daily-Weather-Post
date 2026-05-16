@@ -92,6 +92,7 @@ export class YouTubeAdapter implements PlatformAdapter {
 
     const expiresAt = account.token_expires_at ? new Date(account.token_expires_at) : null;
     if (account.access_token && expiresAt && expiresAt.getTime() > Date.now() + 5 * 60 * 1000) {
+      this._resolved.set(account.access_token, account);
       return account.access_token;
     }
 
