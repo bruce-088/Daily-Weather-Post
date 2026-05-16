@@ -417,7 +417,9 @@ const Index = () => {
     try {
       const dataUrl = await toPng(cardRef.current, { pixelRatio: 3 });
       const link = document.createElement("a");
-      link.download = `weather-${aspectRatio === "1:1" ? "square" : "story"}-${Date.now()}.png`;
+      const citySlug = (weather.city || "weather").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      const dateStr = new Date().toISOString().slice(0, 10);
+      link.download = `skybrief-${citySlug}-${dateStr}.png`;
       link.href = dataUrl;
       link.click();
       toast.success("✅ Image exported successfully");
@@ -427,7 +429,7 @@ const Index = () => {
         action: { label: "Retry", onClick: () => handleExport() },
       });
     }
-  }, [aspectRatio]);
+  }, [aspectRatio, weather.city]);
 
   const handleGenerateCaption = useCallback(async (variation = false) => {
     if (captionLoading) return; // duplicate-request guard
@@ -797,6 +799,25 @@ const Index = () => {
                         {s}
                       </button>
                     ))}
+                  </div>
+
+                  {/* Live refresh + last updated */}
+                  <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                    <span className="uppercase tracking-wider">
+                      {weather.city}, {weather.country}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => fetchWeather(settings.location, settings.state)}
+                      disabled={loading}
+                      title="Refresh weather"
+                      className="inline-flex items-center justify-center h-6 w-6 rounded-full border border-white/10 bg-white/5 hover:bg-white/10 transition-colors disabled:opacity-50"
+                    >
+                      <RefreshCw size={11} className={loading ? "animate-spin" : ""} />
+                    </button>
+                    {lastUpdated && (
+                      <span className="opacity-70">· Last updated: {timeAgo}</span>
+                    )}
                   </div>
 
                   {error && <p className="text-sm text-destructive">{error}</p>}
