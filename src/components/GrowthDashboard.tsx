@@ -320,7 +320,7 @@ interface RepostSuggestion {
   status: string;
 }
 
-export function OutperformingPosts() {
+export function OutperformingPosts({ className }: { className?: string } = {}) {
   const [items, setItems] = useState<RepostSuggestion[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -347,8 +347,8 @@ export function OutperformingPosts() {
   if (loading || items.length === 0) return null;
 
   return (
-    <Card className="border-orange-400/30 bg-gradient-to-br from-orange-400/10 to-transparent">
-      <CardHeader className="pb-2">
+    <Card className={`border-orange-400/30 bg-gradient-to-br from-orange-400/10 to-transparent flex flex-col ${className ?? ""}`}>
+      <CardHeader className="pb-2 shrink-0">
         <CardTitle className="text-sm flex items-center gap-2">
           <Flame size={14} className="text-orange-400" />
           Outperforming posts
@@ -357,7 +357,7 @@ export function OutperformingPosts() {
           </Badge>
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-2 pb-3">
+      <CardContent className="space-y-2 pb-3 flex-1 min-h-0 overflow-auto">
         {items.map((it) => (
           <div
             key={it.id}
