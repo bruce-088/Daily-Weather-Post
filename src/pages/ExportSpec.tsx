@@ -97,11 +97,39 @@ const SpecSection = ({ title, description, content, filenamePrefix, showPdf = fa
 
 const ExportSpec = () => {
   const navigate = useNavigate();
+  const [forcing, setForcing] = useState(false);
+
+  const handleForceRefresh = async () => {
+    setForcing(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+      const url = `${SUPABASE_URL}/functions/v1/generate-spec?_=${Date.now()}`;
+      const res = await fetch(url, {
+        method: "GET",
+        cache: "no-store",
+        headers: {
+          Authorization: `Bearer ${session?.access_token ?? ""}`,
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+        },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const md = await res.text();
+      downloadBlob(md, `skybrief-spec-fresh-${Date.now()}.md`, "text/markdown");
+      toast.success("Fresh spec downloaded!");
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to refresh spec. Check logs.");
+    } finally {
+      setForcing(false);
+    }
+  };
 
   return (
     <div className="dark min-h-screen bg-background">
       <div className="container max-w-3xl px-4 py-8">
-        <div className="flex items-center justify-between mb-6 gap-2">
+        <div className="flex items-center justify-between mb-6 gap-2 flex-wrap">
           <Button
             variant="ghost"
             size="sm"
@@ -110,19 +138,29 @@ const ExportSpec = () => {
           >
             <ArrowLeft size={14} /> Back
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              toast.success("Reloading latest spec…");
-              // Hard reload bypasses bundle cache so the freshly-built
-              // MASTER_PROMPT and any updated generate-spec output are picked up.
-              window.location.reload();
-            }}
-            className="gap-1.5 text-xs"
-          >
-            <RefreshCw size={14} /> Refresh Export Spec
-          </Button>
+          <div className="flex gap-2 flex-wrap">
+            <Button
+              variant="default"
+              size="sm"
+              onClick={handleForceRefresh}
+              disabled={forcing}
+              className="gap-1.5 text-xs"
+            >
+              {forcing ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
+              {forcing ? "Refreshing…" : "Force Refresh Spec"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                toast.success("Reloading latest spec…");
+                window.location.reload();
+              }}
+              className="gap-1.5 text-xs"
+            >
+              <RefreshCw size={14} /> Refresh Export Spec
+            </Button>
+          </div>
         </div>
 
         <Tabs defaultValue="app-spec" className="space-y-4">
