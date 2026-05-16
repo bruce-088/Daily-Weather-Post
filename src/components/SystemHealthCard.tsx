@@ -264,21 +264,50 @@ export function SystemHealthCard() {
     return () => clearInterval(t);
   }, [fetchHealth, fetchDebugState]);
 
-  // Tri-state derivation: Active (≤5m & ok) / Stale (5–10m & ok) / Critical (>10m OR error)
-  const ageMs = lastRunIso ? Date.now() - new Date(lastRunIso).getTime() : Infinity;
-  const hasError = status === "error";
-  const isCritical = hasError || ageMs > 10 * 60 * 1000;
-  const isStale = !isCritical && ageMs > 5 * 60 * 1000;
-  const isActive = !isCritical && !isStale;
-  const stateLabel = isActive ? "Active" : isStale ? "Stale" : "CRITICAL";
-  const stateBadgeClass = isActive
+  // Worker state derivation. A worker is "Active" if its REAL cron heartbeat
+  // wrote within 10m. A probe never counts as healthy — it has its own row.
+  function deriveState(row: HealthRow, staleMs: number, criticalMs: number) {
+    const iso = row.last_run_at;
+    const ageMs = iso ? Date.now() - new Date(iso).getTime() : Infinity;
+    const hasError = row.last_status === "error";
+    const isCritical = hasError || ageMs > criticalMs;
+    const isStale = !isCritical && ageMs > staleMs;
+    const isActive = !isCritical && !isStale;
+    return {
+      iso,
+      ageMs,
+      hasError,
+      isCritical,
+      isStale,
+      isActive,
+      label: isActive ? "Active" : isStale ? "Stale" : "CRITICAL",
+      badgeClass: isActive
+        ? "bg-green-500/20 text-green-600 border-green-500/30 hover:bg-green-500/20"
+        : isStale
+        ? "bg-amber-500/20 text-amber-600 border-amber-500/30 hover:bg-amber-500/20"
+        : "bg-destructive/20 text-destructive border-destructive/40 hover:bg-destructive/20",
+      dotClass: isActive ? "bg-green-500 animate-pulse" : isStale ? "bg-amber-500" : "bg-destructive",
+    };
+  }
+
+  // Scheduler runs every 5min, run-jobs every minute.
+  const schedState = deriveState(scheduler, 6 * 60 * 1000, 10 * 60 * 1000);
+  const jobsState = deriveState(runJobs, 3 * 60 * 1000, 10 * 60 * 1000);
+
+  // Aggregate header badge: worst-of
+  const aggregate = schedState.isCritical || jobsState.isCritical
+    ? "CRITICAL"
+    : schedState.isStale || jobsState.isStale
+    ? "Stale"
+    : "Active";
+  const aggBadgeClass = aggregate === "Active"
     ? "bg-green-500/20 text-green-600 border-green-500/30 hover:bg-green-500/20"
-    : isStale
+    : aggregate === "Stale"
     ? "bg-amber-500/20 text-amber-600 border-amber-500/30 hover:bg-amber-500/20"
     : "bg-destructive/20 text-destructive border-destructive/40 hover:bg-destructive/20";
-  const stateDotClass = isActive
+  const aggDotClass = aggregate === "Active"
     ? "bg-green-500 animate-pulse"
-    : isStale
+    : aggregate === "Stale"
     ? "bg-amber-500"
     : "bg-destructive";
 
@@ -290,93 +319,40 @@ export function SystemHealthCard() {
       })
     : null;
 
-  return (
-    <Card>
-      <Collapsible open={open} onOpenChange={setOpen}>
-        <CollapsibleTrigger asChild>
-          <CardHeader className="cursor-pointer select-none hover:bg-muted/30 transition-colors rounded-t-lg">
-            <div className="flex items-center justify-between gap-2">
-              <div className="space-y-1">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Activity size={16} className="text-primary" />
-                  System Health
-                  <Badge
-                    variant="outline"
-                    className={`ml-1 ${stateBadgeClass}`}
-                  >
-                    <span className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${stateDotClass}`} />
-                    {stateLabel}
-                  </Badge>
-                </CardTitle>
-                <CardDescription className="text-xs">
-                  {open ? "Background automation status" : `Last run: ${lastRun ?? "—"}`}
-                </CardDescription>
-              </div>
-              <ChevronDown
-                size={18}
-                className={`text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
-              />
-            </div>
-          </CardHeader>
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-      <CardContent className="space-y-3">
+  function WorkerRow({ title, state, row, intervalLabel }: { title: string; state: ReturnType<typeof deriveState>; row: HealthRow; intervalLabel: string }) {
+    return (
+      <div className="rounded-md border border-border/50 bg-muted/20 p-2.5 space-y-1.5">
         <div className="flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">Cron Status</span>
-          <Badge variant="outline" className={stateBadgeClass}>
-            <span className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${stateDotClass}`} />
-            {stateLabel}
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">{title}</span>
+            <span className="text-[10px] text-muted-foreground font-mono">{intervalLabel}</span>
+          </div>
+          <Badge variant="outline" className={state.badgeClass}>
+            <span className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${state.dotClass}`} />
+            {state.label}
           </Badge>
         </div>
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">Last Automation Run</span>
-          <span className="text-sm font-medium">{lastRun ?? "—"}</span>
+        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+          <span>Last real run</span>
+          <span className="font-medium text-foreground">{timeAgo(row.last_run_at)}</span>
         </div>
-        {lastRunIso && (
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-muted-foreground">Last result</span>
-            <Badge
-              variant="outline"
-              className={
-                hasError
-                  ? "bg-destructive/15 text-destructive border-destructive/30 text-[11px]"
-                  : "bg-green-500/15 text-green-500 border-green-500/30 text-[11px]"
-              }
-            >
-              {hasError ? "❌ Failed" : "✅ Success"}
-            </Badge>
-          </div>
-        )}
-        {lastRunIso && (
-          <p className="text-[11px] text-muted-foreground">
-            {new Date(lastRunIso).toLocaleString()}
+        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+          <span>Source</span>
+          <span className="font-mono">{sourceFromMessage(row.last_message)}</span>
+        </div>
+        {row.last_message && (
+          <p className="text-[10px] text-muted-foreground font-mono break-all line-clamp-2">
+            {row.last_message}
           </p>
         )}
-        {isCritical && (
-          <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2.5 space-y-1">
-            <p className="text-[11px] font-semibold text-destructive flex items-center gap-1.5">
-              <AlertTriangle size={12} /> CRITICAL — automation link is down
-            </p>
-            <p className="text-[11px] text-destructive/90">
-              {hasError && message
-                ? message
-                : `No tick in ${lastRunIso ? timeAgo(lastRunIso) : "a while"}. Scheduler should run every 5 minutes.`}
-            </p>
-            {probeError && (
-              <p className="text-[11px] font-mono text-destructive/90 break-all">
-                Probe: {probeError}
-              </p>
-            )}
-            <p className="text-[10px] text-muted-foreground">
-              Click <span className="font-semibold">Safe Reset</span> below to send a live test tick.
-            </p>
-          </div>
-        )}
-        {isStale && (
-          <p className="text-[11px] text-amber-600 dark:text-amber-400">
-            Last tick was {lastRun}. Scheduler is delayed — should run every 5 minutes.
+        {state.isCritical && (
+          <p className="text-[10px] text-destructive">
+            ⚠ Stale by {row.last_run_at ? timeAgo(row.last_run_at) : "—"}. Cron tick has not reached this worker.
           </p>
         )}
+      </div>
+    );
+  }
 
         {/* Debug Trace toggle */}
         <div className="rounded-md border border-border/50 bg-muted/30 p-3 space-y-2">
