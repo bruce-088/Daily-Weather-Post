@@ -277,7 +277,7 @@ Deno.serve(async (req) => {
 
         // FAVOR / AVOID + 70/30 explore/exploit (engagement_score = (likes*2+comments*3)/views)
         try {
-          const patterns = await getTopPerformingPatterns(svc, auth.userId);
+          const patterns = await getTopPerformingPatterns(svc, auth.userId, { city });
           const block = buildLearningPromptBlock(patterns);
           if (block) {
             insightNote += block;
