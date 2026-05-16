@@ -116,7 +116,6 @@ export function GrowthDashboard() {
 
   return (
     <div className="space-y-4">
-      <OutperformingPosts />
       {/* Recommendation header */}
       <Card className="border-primary/30 bg-gradient-to-br from-primary/5 to-transparent">
         <CardHeader className="pb-2">
@@ -321,7 +320,7 @@ interface RepostSuggestion {
   status: string;
 }
 
-function OutperformingPosts() {
+export function OutperformingPosts() {
   const [items, setItems] = useState<RepostSuggestion[]>([]);
   const [loading, setLoading] = useState(true);
 
