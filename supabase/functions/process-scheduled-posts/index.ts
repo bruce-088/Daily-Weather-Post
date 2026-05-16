@@ -1685,7 +1685,14 @@ Deno.serve(async (req) => {
         (post.caption?.match(/\[(?:auto|manual):(morning|afternoon|evening|manual|adhoc)\]/i)?.[1]) ||
         "adhoc";
       let lockAcquired = false;
-      if ((post as any).city_id) {
+      // TODO: remove after pipeline debugging — issue #pipeline-hardening
+      const isManualRun =
+        ((post as any).source === "manual_slot") ||
+        (typeof post.caption === "string" && /\[manual:/i.test(post.caption));
+      if (isManualRun) {
+        console.warn(`[lock] ⚠ DEDUP BYPASSED for manual run post=${post.id}`);
+      }
+      if ((post as any).city_id && !isManualRun) {
         try {
           const { data: gotLock, error: lockErr } = await supabase.rpc("acquire_publish_lock", {
             p_user: post.user_id,
