@@ -282,17 +282,14 @@ function buildHookTitle(city: string, temp: number, condition: string, rainChanc
   // Deterministic-but-rotating pick (date + hour) so titles vary across slots
   const seed = new Date().getDate() * 24 + hour;
   const baseTitle = pool[seed % pool.length];
-  // Slot-aware prefix: morning/afternoon/evening get fixed broadcast-style
-  // times ([8 AM]/[1 PM]/[6 PM]). Adhoc/manual fall back to city-local stamp.
-  // Wrapped: any failure in slotTimePrefix degrades to the un-prefixed title.
-  let stamped = baseTitle;
+  // Slot-aware prefix: always force one of [8 AM]/[1 PM]/[6 PM]. The helper
+  // strips any stale prefix, never duplicates, and keeps total length ≤ 95.
   try {
-    const stamp = slotTimePrefix(slot, city);
-    if (stamp) stamped = `[${stamp}] ${baseTitle}`;
+    return ensureSlotTitlePrefix(baseTitle, slot, city);
   } catch (err) {
-    console.warn("buildHookTitle: slot prefix failed, using base title", err);
+    console.warn("buildHookTitle: ensureSlotTitlePrefix failed, returning base title", err);
+    return baseTitle.length > 95 ? baseTitle.substring(0, 92) + "..." : baseTitle;
   }
-  return stamped.length > 95 ? stamped.substring(0, 92) + "..." : stamped;
 }
 
 // --- Dynamic Handle System ---
