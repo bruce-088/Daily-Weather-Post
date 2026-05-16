@@ -30,6 +30,25 @@ export interface TopPatterns {
   sampleSize: number;
   provenWins?: Array<{ variable: string; value: string; wins: number; winRate: number }>;
   winningThemes?: Array<{ label: string; count: number }>;
+  forbiddenOpeners?: string[];
+  forbiddenThemes?: string[];
+}
+
+const THEME_TOKENS = [
+  "beautiful day",
+  "comfortable",
+  "gorgeous",
+  "perfect day",
+  "lovely",
+  "nice day",
+];
+
+function normalizeHook(s: string): string {
+  return String(s || "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 const GENERIC_AVOID = [
@@ -43,7 +62,49 @@ const GENERIC_AVOID = [
 export async function getTopPerformingPatterns(
   supabase: any,
   userId: string,
+  opts?: { city?: string },
 ): Promise<TopPatterns> {
+  const city = opts?.city?.trim() || null;
+
+  // ── Creative Decay: gather recent (48h) city-specific posts ──
+  let recentUseCount = new Map<string, number>();
+  let forbiddenOpeners: string[] = [];
+  let forbiddenThemes: string[] = [];
+  if (city) {
+    try {
+      const since48 = new Date(Date.now() - 48 * 3600_000).toISOString();
+      const { data: recent } = await supabase
+        .from("post_history")
+        .select("hook_used, caption, created_at")
+        .eq("user_id", userId)
+        .eq("city", city)
+        .gte("created_at", since48)
+        .order("created_at", { ascending: false })
+        .limit(20);
+      const rows = (recent || []) as Array<{ hook_used: string | null; caption: string | null }>;
+
+      const seenOpeners: string[] = [];
+      const themeCounts = new Map<string, number>();
+      for (const r of rows) {
+        const hk = normalizeHook(r.hook_used || "");
+        if (hk) recentUseCount.set(hk, (recentUseCount.get(hk) || 0) + 1);
+        if (r.hook_used && seenOpeners.length < 3 && !seenOpeners.includes(r.hook_used)) {
+          seenOpeners.push(r.hook_used);
+        }
+        const blob = `${r.hook_used || ""} ${r.caption || ""}`.toLowerCase();
+        for (const tok of THEME_TOKENS) {
+          if (blob.includes(tok)) themeCounts.set(tok, (themeCounts.get(tok) || 0) + 1);
+        }
+      }
+      forbiddenOpeners = seenOpeners;
+      forbiddenThemes = Array.from(themeCounts.entries())
+        .filter(([, n]) => n >= 2)
+        .map(([t]) => t);
+    } catch (e) {
+      console.warn("[learning-patterns] creative-decay lookup failed:", (e as Error).message);
+    }
+  }
+
   const { data: hookRows } = await supabase
     .from("hook_stats")
     .select("hook_text, avg_views, uses")
@@ -52,10 +113,18 @@ export async function getTopPerformingPatterns(
     .limit(20);
 
   const hooks = (hookRows || []) as Array<{ hook_text: string; avg_views: number; uses: number }>;
-  const topHooks = hooks
+
+  // Apply 80% weight penalty to hooks used ≥2× in last 48h for this city
+  const weighted = hooks
     .filter(h => h.uses >= 2 && h.avg_views > 0)
-    .slice(0, 5)
-    .map(h => h.hook_text);
+    .map(h => {
+      const overused = recentUseCount.get(normalizeHook(h.hook_text)) || 0;
+      const weight = overused >= 2 ? 0.2 : 1;
+      return { ...h, weightedViews: h.avg_views * weight, overused };
+    })
+    .sort((a, b) => b.weightedViews - a.weightedViews);
+
+  const topHooks = weighted.slice(0, 5).map(h => h.hook_text);
 
   const worstHooks = [...hooks]
     .filter(h => h.uses >= 2)
@@ -187,6 +256,7 @@ export async function getTopPerformingPatterns(
     topHooks, avoidPhrases, bestCondition, bestTimeOfDay,
     conditionLifts, hookPrefixes, baselineEngagement, sampleSize: totalN,
     provenWins, winningThemes,
+    forbiddenOpeners, forbiddenThemes,
   } as TopPatterns;
 }
 
@@ -194,7 +264,8 @@ export async function getTopPerformingPatterns(
  * 70% exploit proven patterns, 30% exploration.
  */
 export function buildLearningPromptBlock(p: TopPatterns): string {
-  if (p.topHooks.length === 0 && p.conditionLifts.length === 0) return "";
+  const hasForbidden = (p.forbiddenOpeners?.length ?? 0) > 0 || (p.forbiddenThemes?.length ?? 0) > 0;
+  if (p.topHooks.length === 0 && p.conditionLifts.length === 0 && !hasForbidden) return "";
 
   const explore = Math.random() < 0.3;
   const lines: string[] = ["", "PERFORMANCE LEARNING LOOP:"];
@@ -239,6 +310,13 @@ export function buildLearningPromptBlock(p: TopPatterns): string {
     for (const t of p.winningThemes) {
       lines.push(`  - ${t.label} (×${t.count})`);
     }
+  }
+
+  if (hasForbidden) {
+    lines.push("");
+    lines.push("FORBIDDEN REPETITIONS (used in the last 3 city posts — do NOT start with, paraphrase, or build the post around any of these):");
+    for (const o of (p.forbiddenOpeners ?? [])) lines.push(`  - opener: "${o}"`);
+    for (const t of (p.forbiddenThemes ?? [])) lines.push(`  - theme: "${t}"`);
   }
 
   return lines.join("\n");

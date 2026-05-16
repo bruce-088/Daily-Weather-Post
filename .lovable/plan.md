@@ -1,113 +1,69 @@
-## Advanced Analytics — Insight Engine
+## Goal
 
-Five phases, all built on existing tables. One small schema migration adds derived fields to `post_analytics`; everything else reuses what's there.
+Kill the "Beautiful Day In Gainesville" repetition loop by penalizing recently-used hooks/styles per city, forbidding them in the prompt, forcing a fresh focus angle each post, and varying the stock-image background search.
 
----
-
-### Phase 0 — Schema (one migration, additive only)
-
-Add to `post_analytics`:
-- `performance_score numeric` (0–100, nullable)
-- `winning_factors jsonb default '[]'`
-- `losing_factors jsonb default '[]'`
-
-No new tables. `post_history.health_score` already exists and will be reused for the per-post badge.
+No changes to scheduling, posting pipeline, or analytics collection.
 
 ---
 
-### Phase 1 — Insight Engine in `analyze-performance`
+## 1. `supabase/functions/_shared/learning-patterns.ts` — Creative Decay
 
-After the existing content_insights aggregation, add a per-post scoring pass over the last 60 days of `post_analytics`:
+Extend `getTopPerformingPatterns` and `buildLearningPromptBlock` so cooldown is city-aware.
 
-- Pull each row + its matching `post_hooks` + `post_history` (for slot, tone, cinematic).
-- Compute against the user's own baseline (avg views and avg engagement across their last 60d):
-  - **performance_score** = weighted blend of view ratio (50%), engagement ratio (30%), retention proxy `avg_percentage_viewed` (20%), clamped to 0–100. Fall back to view ratio alone when retention is null.
-  - **winning_factors[]** = labels for any factor ≥+15% vs baseline: `"hook:<text>"`, `"tone:<x>"`, `"slot:<x>"`, `"condition:<x>"`, `"cinematic"`, `"voiceover"`, `"cta:<x>"`.
-  - **losing_factors[]** = same set but ≤−15%.
-- Batch UPDATE post_analytics with the three fields (chunks of 200).
-- Surface the top post per user into `ai_memory` (memory_type=`top_post`) so the caption generator's `getRelevantMemories()` immediately benefits.
+- **New signature:** `getTopPerformingPatterns(supabase, userId, opts?: { city?: string })`. `city` is optional so existing callers that don't pass it still work; cooldown logic just no-ops.
+- **New query** (when `city` provided): pull last 48h of `post_history` for `(user_id, city)` ordered by `created_at desc`, selecting `hook_used`, `caption`, `created_at`. Limit ~20.
+- Build a `recentHookUseCount: Map<normalizedHook, number>` from those rows (normalize = lowercase, trim, collapse whitespace, strip punctuation). Also keep the last 3 distinct openers verbatim → `forbiddenOpeners: string[]`.
+- Extract recent **style keywords** by scanning each recent caption/hook for known theme tokens: `beautiful day`, `comfortable`, `gorgeous`, `perfect day`, `lovely`, `nice day`. Anything appearing ≥2× in the 48h window → `forbiddenThemes`.
+- **Decay rule:** when computing `topHooks` (existing block, lines 54–58), apply an 80% weight penalty to any hook whose normalized form has `recentHookUseCount >= 2` (i.e., used >2× counting the current attempt would be ≥3, so we cool down at ≥2 in the 48h window per spec). Re-sort by penalized `avg_views * weight` before slicing the top 5. High-scoring-but-overused hooks fall off the list.
+- Extend `TopPatterns` with `forbiddenOpeners?: string[]` and `forbiddenThemes?: string[]`.
+- **`buildLearningPromptBlock`** — append a `FORBIDDEN REPETITIONS:` section (only when arrays are non-empty) listing each forbidden opener and theme, with instruction: *"Do NOT start with, paraphrase, or build the post around any of these — they have been used in the last 3 city posts."*
 
-Guard: skip users with fewer than 5 scored posts (Phase 5 safeguard).
-
----
-
-### Phase 2 — Pattern Detection in `analyze-growth`
-
-Extend the existing per-user loop:
-
-- Compute slot × tone, slot × hook-prefix, condition × tone aggregates from the last 20–50 posts (use `post_analytics` + `post_hooks` already loaded).
-- For each pair with ≥3 samples and ≥15% lift vs user baseline, write a row to `growth_insights` with:
-  - `variable` = `"tone"` / `"hook"` / `"slot"` / `"condition"`
-  - `winner_value`, `loser_value`, `delta_pct`
-  - `title` / `message` in plain English: `"Cinematic tone performs +22% in Evening slot"`.
-- Extend `growth_recommendations.recommendation` and write a new optional JSON field via the existing `top_hooks` / `best_slot` / `recent_tones` columns (no schema change — use a short next-action sentence already concatenated into `recommendation`).
-- Existing realtime toast in `useGrowthInsights` will fire automatically for new pattern wins.
+Caller update in `supabase/functions/generate-caption/index.ts` line 280: pass `{ city }` to `getTopPerformingPatterns`. No other call sites need changes (city is optional).
 
 ---
 
-### Phase 3 — Growth Command Center UI
+## 2. `supabase/functions/generate-caption/index.ts` — Diversity Guard + Focus Rotation
 
-`src/components/GrowthDashboard.tsx` (and/or `GrowthCommandCenter.tsx`) gets three new sections, all reading from existing tables:
+- **Diversity Guard block** (new const near `styleNote`/`variationNote`, inserted into `userPrompt` alongside `${styleAddendum}${insightNote}`):
 
-1. **Why It Won panel** — top `post_history` post by `views_count` last 30d; render its `winning_factors[]` (from joined `post_analytics`) as labeled chips with a one-line plain-English summary.
-2. **Pattern Cards** — three cards (Best Tone / Best Slot / Best Hook Type) built from `content_insights` + `hook_stats` + `time_slot_stats`. Each card shows winner, delta %, and sample size.
-3. **Actionable Recommendation** — primary CTA card backed by `growth_recommendations.recommendation`.
+  ```
+  DIVERSITY GUARD:
+  CRITICAL: Do NOT reuse the "Beautiful Day" or "Comfortable" themes if they were used recently for this city. Force a shift to a different angle — wind, humidity, visibility, dew point, UV, specific local activities, or cinematic atmosphere. If conditions are mild, pick the SECONDARY most interesting weather signal and lead with that instead of temperature.
+  ```
 
-`PostHistoryList.tsx`: add a small **Performance Score** pill (0–100) per row, reading `post_analytics.performance_score` (fallback to `post_history.health_score`). Color-coded: ≥75 green, 50–74 amber, <50 muted. Hidden when null.
+- **Focus Rotation:** add a deterministic-but-varying focus picker:
+  - Pool: `["Landscape", "Sky", "Street Level", "Atmospheric Detail", "Human Activity"]`.
+  - Pick index = `(hash(city) + dayOfYear + slotIndex) % pool.length` so consecutive posts for the same city land on different focuses. (`slotIndex`: morning=0, afternoon=1, evening=2, else current hour.)
+  - Inject as: `FOCUS ANGLE: Frame this post from a "${focus}" perspective. Do not default to a wide "beautiful day" overview.`
+  - Append after the Diversity Guard.
 
-No new routes, no design system additions beyond existing semantic tokens.
-
----
-
-### Phase 4 — Feedback Loop into `generate-caption`
-
-Already calls `getTopPerformingPatterns()` + `getWinningStyleForCondition()` + `getRelevantMemories()`. Extend `buildLearningPromptBlock` (in `_shared/learning-patterns.ts`) to also surface:
-
-- Top 1–2 `winning_factors` themes from recent high-scoring posts (queried from `post_analytics` with `performance_score >= 75`).
-- 1 short few-shot example from `ai_memory` `top_post` entries (already supported — just ensure the new Phase-1 writes flow in).
-
-Inject as an additional "PROVEN WINNERS — favor these patterns" block in the prompt, before the existing CTA/anti-clone block. Keep:
-- anti-clone (last 3 captions) ✔
-- CTA rotation ✔
-- fail-safe try/catch fallback to base caption ✔
+Both blocks are precomputed in the existing fail-safe `try/catch` near `personalityBlock` (lines 327–344) so any failure silently drops them.
 
 ---
 
-### Phase 5 — Safeguards (enforced in code)
+## 3. `supabase/functions/_shared/video-render.ts` — Background Variation
 
-- Min sample size **≥5 posts** before applying patterns (Phase 1 guard, Phase 2 ≥3 per pair, Phase 4 query gate).
-- Variation: when injecting winning patterns into the caption prompt, include explicit instruction `"do not copy verbatim — vary opener and structure"`, plus the existing 70/30 exploit/explore in `learning-patterns.ts` is preserved.
-- All new prompt blocks wrapped in `try/catch` — any failure falls through to base caption logic.
+Update `fetchPexelsStillForCondition(condition, city)`:
 
----
+- **Secondary keyword pool** (random per call): `["foliage", "architecture", "horizon", "aerial", "street", "skyline", "trees", "rooftop", "park", "downtown"]`.
+- Build query as `${primary} ${secondary}` where `primary` is today's condition-derived term (existing logic) and `secondary` is randomly picked.
+- **City-scoped variety:** include `city` in the Pexels query (`${primary} ${secondary} ${city}` when city is non-empty), and randomize across the top 10 results instead of top 5. This guarantees Gainesville's "clear sky" doesn't pull the same shared stock photo as Orlando's "clear sky".
+- Add a short log line: `[ken-burns] pexels q="…" picked=index/total` for debuggability.
 
-### Out of scope (not touched)
-
-- `process-scheduled-posts`, `auto-post-scheduler`, cron schedule
-- Routing guard, platform adapters, video render pipeline
-- Auth, RLS policies, scheduled_posts schema
+No caching layer to invalidate — current code already fetches fresh each render — but we document the city scoping in a code comment so future caching keeps `city` in the key.
 
 ---
 
-### Technical details
+## Out of scope (explicitly untouched)
 
-**Files changed**
-- `supabase/migrations/<ts>_post_analytics_factors.sql` (additive only)
-- `supabase/functions/analyze-performance/index.ts` (append scoring pass + ai_memory upsert)
-- `supabase/functions/analyze-growth/index.ts` (append pattern-pair detection + growth_insights inserts)
-- `supabase/functions/_shared/learning-patterns.ts` (add proven-winners block + helper)
-- `supabase/functions/generate-caption/index.ts` (inject new block into prompt assembly, fail-safe)
-- `src/components/GrowthDashboard.tsx` + `GrowthCommandCenter.tsx` (three new sections)
-- `src/components/PostHistoryList.tsx` (score pill)
-- `src/integrations/supabase/types.ts` auto-regenerates from migration
+- `process-scheduled-posts`, `auto-post-scheduler`, cron schedules.
+- `post_analytics` / `post_history` writes (read-only access from learning-patterns).
+- Creatomate template JSON, render fallback chain, voice pipeline.
+- Database schema, RLS, or migrations.
 
-**Deploys**: `analyze-performance`, `analyze-growth`, `generate-caption`.
+---
 
-**Validation**
-- Run `analyze-performance` and `analyze-growth` manually via `curl_edge_functions`, then inspect 5 sample `post_analytics.performance_score` + factor arrays.
-- Open Growth tab; verify Why It Won + Pattern Cards + Recommendation render with real data and gracefully empty-state on <5 posts.
-- Trigger one manual caption generation and confirm logs show the new "PROVEN WINNERS" block was injected without breaking fallback.
+## Verification
 
-### Spec Delta (after implementation)
-
-Sections 2 (Features), 6 (will be `Insight Engine` subsection), 9 (Caption Generation), and 14 (Resolved Issues) get updated in `generate-spec/index.ts` once shipped.
+- Lint/typecheck via build.
+- Quick edge-function deploy of `generate-caption` + (no deploy needed for `_shared` consumers — they redeploy with their parents) and confirm logs show `FORBIDDEN REPETITIONS` + `FOCUS ANGLE` lines on the next Gainesville run.

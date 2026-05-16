@@ -277,7 +277,7 @@ Deno.serve(async (req) => {
 
         // FAVOR / AVOID + 70/30 explore/exploit (engagement_score = (likes*2+comments*3)/views)
         try {
-          const patterns = await getTopPerformingPatterns(svc, auth.userId);
+          const patterns = await getTopPerformingPatterns(svc, auth.userId, { city });
           const block = buildLearningPromptBlock(patterns);
           if (block) {
             insightNote += block;
@@ -327,6 +327,8 @@ Deno.serve(async (req) => {
     let personalityBlock = "";
     let ctaBlock = "";
     let antiRepeatBlock = "";
+    let diversityBlock = "";
+    let focusBlock = "";
     try {
       personalityBlock = slotPersonalityDirective(body.slot ?? period) || "";
       const _cta = rotatingCTA(body.slot ?? period);
@@ -336,11 +338,31 @@ Deno.serve(async (req) => {
       if (body.prev_opener) {
         antiRepeatBlock = `ANTI-REPEAT: Do NOT reuse the opening hook, first-sentence structure, or CTA verb from the previous post for this city. Previous opener was: "${String(body.prev_opener).slice(0, 160)}". Use a noticeably different angle.`;
       }
+
+      // ── Diversity Guard ──
+      diversityBlock = `DIVERSITY GUARD:\nCRITICAL: Do NOT reuse the "Beautiful Day" or "Comfortable" themes if they were used recently for this city. Force a shift to a different angle — wind, humidity, visibility, dew point, UV, specific local activities, or cinematic atmosphere. If conditions are mild, pick the SECONDARY most interesting weather signal and lead with that instead of temperature.`;
+
+      // ── Focus Rotation (deterministic per city + day + slot) ──
+      const focusPool = ["Landscape", "Sky", "Street Level", "Atmospheric Detail", "Human Activity"];
+      const slotIdx = (() => {
+        const s = String(body.slot ?? period ?? "").toLowerCase();
+        if (s.includes("morning")) return 0;
+        if (s.includes("afternoon")) return 1;
+        if (s.includes("evening")) return 2;
+        return new Date().getHours();
+      })();
+      const cityHash = Array.from(String(city)).reduce((a, c) => a + c.charCodeAt(0), 0);
+      const start = new Date(now.getFullYear(), 0, 0);
+      const dayOfYear = Math.floor((now.getTime() - start.getTime()) / 86400000);
+      const focus = focusPool[(cityHash + dayOfYear + slotIdx) % focusPool.length];
+      focusBlock = `FOCUS ANGLE: Frame this post from a "${focus}" perspective. Do not default to a wide "beautiful day" overview.`;
     } catch (err) {
       console.warn("Caption enhancement failed — falling back to default logic", err);
       personalityBlock = "";
       ctaBlock = "";
       antiRepeatBlock = "";
+      diversityBlock = "";
+      focusBlock = "";
     }
 
     const userPrompt = `NOW USE THESE INPUTS TO WRITE TODAY'S CAPTION:
@@ -372,6 +394,10 @@ ${buildCityVisualBlock(city)}
 ${buildLocalIdentityBlock(city)}
 
 ${styleAddendum}${insightNote}
+
+${diversityBlock}
+
+${focusBlock}
 
 ${personalityBlock}
 
