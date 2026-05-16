@@ -99,15 +99,16 @@ export class YouTubeAdapter implements PlatformAdapter {
     const expiresAt = account.token_expires_at ? new Date(account.token_expires_at) : null;
     if (account.access_token && expiresAt && expiresAt.getTime() > Date.now() + 5 * 60 * 1000) {
       this._resolved.set(account.access_token, account);
+      this._refreshCtx.set(account.access_token, { supabase, userId, cityId: cityId ?? null });
       return account.access_token;
     }
 
     if (!account.refresh_token) {
-      console.error("No YouTube refresh token available");
+      console.error("[youtube-auth] No YouTube refresh token available — user must reconnect");
       return null;
     }
     if (!clientId || !clientSecret) {
-      console.error("YouTube client credentials not configured");
+      console.error("[youtube-auth] YouTube client credentials not configured");
       return null;
     }
 
@@ -124,8 +125,12 @@ export class YouTubeAdapter implements PlatformAdapter {
 
     const refreshData = await refreshRes.json();
     if (!refreshData.access_token) {
-      console.error("YouTube token refresh failed:", JSON.stringify(refreshData));
+      console.error("[youtube-auth] YouTube token refresh failed:", JSON.stringify(refreshData));
       const errorCode = (refreshData?.error || "").toString();
+      // Only clear refresh_token on TERMINAL errors (Google says the grant is
+      // permanently invalid). Treat anything else as transient — do NOT wipe
+      // the refresh_token, so the next attempt can succeed once Google
+      // recovers / rate-limit clears.
       if (errorCode === "invalid_grant" || errorCode === "invalid_token") {
         if (account.id) {
           await supabase
@@ -138,7 +143,7 @@ export class YouTubeAdapter implements PlatformAdapter {
             .update({ youtube_refresh_token: null })
             .eq("user_id", userId);
         }
-        console.warn("YouTube refresh_token cleared due to invalid_grant — user must reconnect");
+        console.warn("[youtube-auth] refresh_token invalidated — reconnect required");
       }
       return null;
     }
@@ -165,9 +170,31 @@ export class YouTubeAdapter implements PlatformAdapter {
         .eq("user_id", userId);
     }
 
-    console.log("YouTube token refreshed successfully");
-    this._resolved.set(refreshData.access_token, { ...account, access_token: refreshData.access_token, token_expires_at: newExpiresAt });
+    console.log("[youtube-auth] token refreshed successfully");
+    const refreshedAccount = { ...account, access_token: refreshData.access_token, token_expires_at: newExpiresAt };
+    this._resolved.set(refreshData.access_token, refreshedAccount);
+    this._refreshCtx.set(refreshData.access_token, { supabase, userId, cityId: cityId ?? null });
     return refreshData.access_token;
+  }
+
+  /** Force a fresh access_token by re-running the refresh path. Used by
+   *  the 401 self-heal in uploadVideo(). Returns null if reconnect needed. */
+  private async _forceRefresh(oldToken: string): Promise<string | null> {
+    const ctx = this._refreshCtx.get(oldToken);
+    if (!ctx) {
+      console.warn("[youtube-auth] _forceRefresh: no refresh context for token");
+      return null;
+    }
+    // Invalidate cached row so getValidToken treats it as expired.
+    const cached = this._resolved.get(oldToken);
+    if (cached) {
+      this._resolved.set(oldToken, { ...cached, token_expires_at: new Date(0).toISOString() });
+    }
+    const fresh = await this.getValidToken(ctx.supabase, ctx.userId, ctx.cityId);
+    if (fresh && fresh !== oldToken) {
+      console.log("[youtube-auth] 401 self-heal: minted new access_token");
+    }
+    return fresh;
   }
 
   async uploadVideo(
