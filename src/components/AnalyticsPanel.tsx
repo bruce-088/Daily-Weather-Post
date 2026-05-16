@@ -279,6 +279,7 @@ export function AnalyticsPanel() {
     return (
       <div className="space-y-6">
         <GrowthIntelligenceCard />
+        <ChannelHealthCard />
         <Card className="p-8 text-center">
         <BarChart3 className="mx-auto mb-3 text-muted-foreground" size={32} />
         <h3 className="font-display text-lg mb-1">
