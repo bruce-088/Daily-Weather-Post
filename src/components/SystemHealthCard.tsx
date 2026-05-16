@@ -76,6 +76,8 @@ export function SystemHealthCard() {
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
+  const [probing, setProbing] = useState(false);
+  const [probeError, setProbeError] = useState<string | null>(null);
 
   const [dryRunLoading, setDryRunLoading] = useState(false);
   const [dryRunResult, setDryRunResult] = useState<DryRunResponse | null>(null);
@@ -101,6 +103,45 @@ export function SystemHealthCard() {
       setLoading(false);
     }
   }, []);
+
+  const safeReset = useCallback(async () => {
+    setProbing(true);
+    setProbeError(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("auto-post-scheduler", {
+        body: { probe: true },
+      });
+      if (error) {
+        // FunctionsHttpError exposes .context with status + a Response
+        const anyErr = error as any;
+        const statusCode = anyErr?.context?.status ?? anyErr?.status;
+        let bodyText = "";
+        try {
+          if (anyErr?.context && typeof anyErr.context.text === "function") {
+            bodyText = await anyErr.context.text();
+          }
+        } catch { /* ignore */ }
+        const label = statusCode ? `${statusCode} ${anyErr?.message || "Error"}` : (anyErr?.message || "Probe failed");
+        const full = bodyText ? `${label} — ${bodyText.slice(0, 200)}` : label;
+        setProbeError(full);
+        toast({ title: "❌ Heartbeat failed", description: full, variant: "destructive" });
+      } else if (data?.ok) {
+        toast({ title: "✅ Heartbeat OK", description: "Scheduler responded — link is alive." });
+      } else {
+        const m = data?.error || "Unknown response";
+        setProbeError(m);
+        toast({ title: "❌ Heartbeat error", description: m, variant: "destructive" });
+      }
+    } catch (err) {
+      const m = err instanceof Error ? err.message : String(err);
+      setProbeError(m);
+      toast({ title: "❌ Heartbeat failed", description: m, variant: "destructive" });
+    } finally {
+      setProbing(false);
+      await fetchHealth();
+    }
+  }, [fetchHealth]);
+
 
   const fetchDebugState = useCallback(async () => {
     const { data: userData } = await supabase.auth.getUser();
@@ -186,10 +227,23 @@ export function SystemHealthCard() {
     return () => clearInterval(t);
   }, [fetchHealth, fetchDebugState]);
 
-  const isActive = lastRunIso
-    ? Date.now() - new Date(lastRunIso).getTime() < 12 * 60 * 1000
-    : false;
+  // Tri-state derivation: Active (≤5m & ok) / Stale (5–10m & ok) / Critical (>10m OR error)
+  const ageMs = lastRunIso ? Date.now() - new Date(lastRunIso).getTime() : Infinity;
   const hasError = status === "error";
+  const isCritical = hasError || ageMs > 10 * 60 * 1000;
+  const isStale = !isCritical && ageMs > 5 * 60 * 1000;
+  const isActive = !isCritical && !isStale;
+  const stateLabel = isActive ? "Active" : isStale ? "Stale" : "CRITICAL";
+  const stateBadgeClass = isActive
+    ? "bg-green-500/20 text-green-600 border-green-500/30 hover:bg-green-500/20"
+    : isStale
+    ? "bg-amber-500/20 text-amber-600 border-amber-500/30 hover:bg-amber-500/20"
+    : "bg-destructive/20 text-destructive border-destructive/40 hover:bg-destructive/20";
+  const stateDotClass = isActive
+    ? "bg-green-500 animate-pulse"
+    : isStale
+    ? "bg-amber-500"
+    : "bg-destructive";
 
   const voice = latestTrace
     ? voiceLine({
@@ -210,17 +264,12 @@ export function SystemHealthCard() {
                   <Activity size={16} className="text-primary" />
                   System Health
                   <Badge
-                    variant={isActive ? "default" : "secondary"}
-                    className={`ml-1 ${isActive ? "bg-green-500/20 text-green-600 border-green-500/30 hover:bg-green-500/20" : ""}`}
+                    variant="outline"
+                    className={`ml-1 ${stateBadgeClass}`}
                   >
-                    <span className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${isActive ? "bg-green-500 animate-pulse" : "bg-muted-foreground"}`} />
-                    {isActive ? "Active" : "Inactive"}
+                    <span className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${stateDotClass}`} />
+                    {stateLabel}
                   </Badge>
-                  {hasError && (
-                    <Badge variant="outline" className="bg-destructive/15 text-destructive border-destructive/30 text-[10px]">
-                      ❌ Error
-                    </Badge>
-                  )}
                 </CardTitle>
                 <CardDescription className="text-xs">
                   {open ? "Background automation status" : `Last run: ${lastRun ?? "—"}`}
@@ -237,9 +286,9 @@ export function SystemHealthCard() {
       <CardContent className="space-y-3">
         <div className="flex items-center justify-between">
           <span className="text-sm text-muted-foreground">Cron Status</span>
-          <Badge variant={isActive ? "default" : "secondary"} className={isActive ? "bg-green-500/20 text-green-600 border-green-500/30 hover:bg-green-500/20" : ""}>
-            <span className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${isActive ? "bg-green-500 animate-pulse" : "bg-muted-foreground"}`} />
-            {isActive ? "Active" : "Inactive"}
+          <Badge variant="outline" className={stateBadgeClass}>
+            <span className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${stateDotClass}`} />
+            {stateLabel}
           </Badge>
         </div>
         <div className="flex items-center justify-between">
@@ -266,14 +315,29 @@ export function SystemHealthCard() {
             {new Date(lastRunIso).toLocaleString()}
           </p>
         )}
-        {hasError && message && (
-          <p className="text-[11px] text-destructive">
-            {message}
-          </p>
+        {isCritical && (
+          <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2.5 space-y-1">
+            <p className="text-[11px] font-semibold text-destructive flex items-center gap-1.5">
+              <AlertTriangle size={12} /> CRITICAL — automation link is down
+            </p>
+            <p className="text-[11px] text-destructive/90">
+              {hasError && message
+                ? message
+                : `No tick in ${lastRunIso ? timeAgo(lastRunIso) : "a while"}. Scheduler should run every 5 minutes.`}
+            </p>
+            {probeError && (
+              <p className="text-[11px] font-mono text-destructive/90 break-all">
+                Probe: {probeError}
+              </p>
+            )}
+            <p className="text-[10px] text-muted-foreground">
+              Click <span className="font-semibold">Safe Reset</span> below to send a live test tick.
+            </p>
+          </div>
         )}
-        {!isActive && !hasError && (
+        {isStale && (
           <p className="text-[11px] text-amber-600 dark:text-amber-400">
-            No recent automation tick detected. Scheduler should run every 5 minutes.
+            Last tick was {lastRun}. Scheduler is delayed — should run every 5 minutes.
           </p>
         )}
 
@@ -361,17 +425,18 @@ export function SystemHealthCard() {
         <div className="grid grid-cols-2 gap-2 pt-1">
           <Button
             size="sm"
-            variant="outline"
-            onClick={() => { fetchHealth(); fetchDebugState(); }}
-            disabled={loading}
+            variant={isCritical ? "default" : "outline"}
+            onClick={safeReset}
+            disabled={probing}
             className="gap-2"
+            title="Sends a live test tick to the scheduler and refreshes status."
           >
-            <RefreshCw size={12} className={loading ? "animate-spin" : ""} />
-            Refresh
+            <RefreshCw size={12} className={probing ? "animate-spin" : ""} />
+            {probing ? "Probing…" : "Safe Reset"}
           </Button>
           <Button
             size="sm"
-            variant="default"
+            variant="outline"
             onClick={runDryRun}
             disabled={dryRunLoading}
             className="gap-2"

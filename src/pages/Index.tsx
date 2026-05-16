@@ -63,6 +63,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox";
 import { useWeather } from "@/hooks/useWeather";
 import { loadSettings, saveSettings, fetchPostHistory, fetchScheduledPosts, generateCaption, type VoiceOptions } from "@/lib/api";
+import { wakeupScheduler } from "@/lib/wakeupScheduler";
 import type { AspectRatio, AutomationSettings } from "@/types/weather";
 import type { PostHistoryItem, ScheduledPostItem } from "@/lib/api";
 
@@ -392,6 +393,8 @@ const Index = () => {
     setSaving(false);
     if (ok) {
       toast.success("✅ Settings saved", { description: "Your automation preferences are live." });
+      // Wake the scheduler so the System Health card immediately reflects a live link.
+      wakeupScheduler();
     } else {
       toast.error("❌ Couldn't save settings", {
         description: "Check your connection and try again.",
