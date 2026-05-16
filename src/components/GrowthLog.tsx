@@ -53,6 +53,7 @@ interface ExperimentWinRow {
 
 export function GrowthLog() {
   const activeCity = useActiveCity();
+  const [logOpen, setLogOpen] = useState(true);
   const [insights, setInsights] = useState<GrowthInsightRow[]>([]);
   const [active, setActive] = useState<ExperimentRow[]>([]);
   const [wins, setWins] = useState<ExperimentWinRow[]>([]);
