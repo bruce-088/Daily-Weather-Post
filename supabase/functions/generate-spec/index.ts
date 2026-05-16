@@ -49,7 +49,16 @@ const SLOT_SYSTEM = `Slots define the three daily automation windows and drive c
 
 - Slot times are stored per-city in \`weather_settings\` as \`morning_post_time\`, \`afternoon_post_time\`, \`evening_post_time\`.
 - All times are evaluated in the city's local timezone (stored in \`weather_settings.timezone\`).
-- Slots determine: posting time, caption personality, title prefix, and CTA rotation index.`;
+- Slots determine: posting time, caption personality, title prefix, and CTA rotation index.
+
+### Title Generation
+- Single source of truth: \`ensureSlotTitlePrefix()\` in \`_shared/caption-style.ts\`
+- Slot inference: \`inferSlotFromCityHour(city)\` maps city-local hour to morning / afternoon / evening
+- Broadcast slots only: morning → [8 AM], afternoon → [1 PM], evening → [6 PM]
+- Manual posts without a selected slot infer slot from current city-local hour
+- Prefix is always first — before emojis, text, or hashtags
+- Stale/wrong prefixes are stripped and replaced (no duplication)
+- Total title length enforced at ≤95 chars; base is truncated, prefix is never cut`;
 
 const EXECUTION_SOURCES = `Every post in SkyBrief originates from one of three sources. Each source is tagged internally to ensure isolation and prevent cross-triggering.
 
@@ -181,7 +190,8 @@ const RESOLVED_ISSUES = `| Issue | Resolution |
 | Duplicate YouTube uploads | Added DB-level exclusion constraint on jobs table |
 | Cross-city routing (Gainesville on Orlando channel) | Added pre-flight routing guard in publish step |
 | Identical post titles/captions | Added anti-clone logic, CTA rotation, personality rotation |
-| Silent pipeline failures | Added fail-safe try/catch wrappers on all caption enhancements |`;
+| Silent pipeline failures | Added fail-safe try/catch wrappers on all caption enhancements |
+| Slot prefix inconsistency | Fixed via ensureSlotTitlePrefix in _shared/caption-style.ts — all sources now use single helper |`;
 
 const DEPLOYMENT = `- **Frontend**: React 18 + Vite + TypeScript + Tailwind (Lovable Cloud)
 - **Backend**: Managed Postgres + Serverless Edge Runtime (Supabase via Lovable Cloud)
