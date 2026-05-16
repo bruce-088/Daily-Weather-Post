@@ -137,6 +137,18 @@ export function GrowthCommandCenter() {
 
   return (
     <div className="space-y-4">
+      <div className="flex items-center justify-end -mb-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleRefresh}
+          disabled={refreshing}
+          className="h-7 text-xs"
+        >
+          <RefreshCw size={12} className={refreshing ? "animate-spin" : ""} />
+          Refresh
+        </Button>
+      </div>
       {/* Stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <Card>
