@@ -417,7 +417,9 @@ const Index = () => {
     try {
       const dataUrl = await toPng(cardRef.current, { pixelRatio: 3 });
       const link = document.createElement("a");
-      link.download = `weather-${aspectRatio === "1:1" ? "square" : "story"}-${Date.now()}.png`;
+      const citySlug = (weather.city || "weather").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      const dateStr = new Date().toISOString().slice(0, 10);
+      link.download = `skybrief-${citySlug}-${dateStr}.png`;
       link.href = dataUrl;
       link.click();
       toast.success("✅ Image exported successfully");
@@ -427,7 +429,7 @@ const Index = () => {
         action: { label: "Retry", onClick: () => handleExport() },
       });
     }
-  }, [aspectRatio]);
+  }, [aspectRatio, weather.city]);
 
   const handleGenerateCaption = useCallback(async (variation = false) => {
     if (captionLoading) return; // duplicate-request guard
