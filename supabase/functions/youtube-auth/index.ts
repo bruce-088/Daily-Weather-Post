@@ -342,16 +342,14 @@ Deno.serve(async (req) => {
         .eq("refresh_token", settings.youtube_refresh_token)
         .select("id");
       if (!socialRows?.length) {
-        // No matching row — create one and tag it as the shared/legacy channel
-        // (city_id = null) so we don't accidentally claim a city-mapped slot.
-        await supabaseAdmin.from("social_accounts").insert({
-          user_id: userId,
-          platform: "youtube",
-          access_token: refreshData.access_token,
-          refresh_token: settings.youtube_refresh_token,
-          token_expires_at: expiresAt,
-          city_id: null,
-        });
+        // STRICT: never auto-insert a fallback row. If no social_accounts
+        // row matches the refresh_token we just used, the legacy
+        // weather_settings refresh_token is orphaned — log and skip, do
+        // NOT create a city_id=null row (that risks silently claiming a
+        // city-mapped slot or duplicating an existing channel).
+        console.warn(
+          "[youtube-auth] refresh_token action: no social_accounts row matched the refresh_token used; weather_settings token refreshed but no per-channel row updated. User should reconnect this channel.",
+        );
       }
 
       console.log("[youtube-auth] token refreshed successfully");
