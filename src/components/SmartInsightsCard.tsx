@@ -83,10 +83,10 @@ export function SmartInsightsCard({ compact = false }: SmartInsightsCardProps) {
       let q = supabase
         .from("post_history")
         .select("city, condition, views_count, voice_status, visual_metadata, created_at")
-        .eq("status", "posted")
+        .in("status", ["success", "posted"])
         .order("created_at", { ascending: false })
         .limit(500);
-      if (activeCity.name) q = q.eq("city", activeCity.name);
+      if (activeCity.name) q = q.ilike("city", activeCity.name);
       const { data } = await q;
       if (!alive) return;
       setRows((data as PostRow[]) || []);

@@ -1,12 +1,17 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
-  Brain, Trophy, FlaskConical, CalendarClock, Sparkles, Cloud,
+  Brain, Trophy, FlaskConical, CalendarClock, Sparkles, Cloud, RefreshCw,
 } from "lucide-react";
 import { useActiveCity } from "@/hooks/useActiveCity";
 
+// Memory items are derived from hook_stats + winner_stats (the same sources
+// that power Growth Intelligence). ai_memory used to back this view but is
+// not consistently populated by the pipeline — hook_stats is, so we use it
+// as the canonical "what the AI has learned" store for the UI.
 interface MemoryRow {
   id: string;
   memory_type: string;
@@ -39,50 +44,86 @@ function nextSundayRecap(): Date {
 export function GrowthCommandCenter() {
   const activeCity = useActiveCity();
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [memories, setMemories] = useState<MemoryRow[]>([]);
   const [bestHook, setBestHook] = useState<MemoryRow | null>(null);
   const [experimentsRunning, setExperimentsRunning] = useState(0);
   const [recentPosts, setRecentPosts] = useState<RecentPost[]>([]);
 
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setLoading(false); return; }
+  const load = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setLoading(false); return; }
 
-      let expQ = supabase.from("experiments")
-        .select("id", { count: "exact", head: true })
+    let expQ = supabase.from("experiments")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("status", "gathering_data");
+    // post_history.status uses "success" / "failed" / "pending" — not "posted".
+    // Accept both so legacy rows still surface.
+    let phQ = supabase.from("post_history")
+      .select("id, city, image_url, created_at")
+      .eq("user_id", user.id)
+      .in("status", ["success", "posted"])
+      .order("created_at", { ascending: false })
+      .limit(3);
+    if (activeCity.name) {
+      expQ = expQ.ilike("city", activeCity.name);
+      phQ = phQ.ilike("city", activeCity.name);
+    }
+
+    // Derive Memory Bank from hook_stats (real, populated data source).
+    // Minimum 1 use — every post in hook_stats already represents a real
+    // published post the AI has observed performance for.
+    const [hookStatsRes, contentRes, e, ph] = await Promise.all([
+      supabase.from("hook_stats")
+        .select("id, hook_text, uses, avg_views, status, last_used_at, created_at")
         .eq("user_id", user.id)
-        .eq("status", "gathering_data");
-      let phQ = supabase.from("post_history")
-        .select("id, city, image_url, created_at")
+        .order("avg_views", { ascending: false })
+        .limit(50),
+      supabase.from("content_insights")
+        .select("id, condition, tone, time_of_day, avg_views, sample_size, computed_at")
         .eq("user_id", user.id)
-        .eq("status", "posted")
-        .order("created_at", { ascending: false })
-        .limit(3);
-      if (activeCity.name) {
-        expQ = expQ.ilike("city", activeCity.name);
-        phQ = phQ.ilike("city", activeCity.name);
-      }
+        .gte("sample_size", 1)
+        .order("avg_views", { ascending: false })
+        .limit(20),
+      expQ, phQ,
+    ]);
 
-      const [m, e, ph] = await Promise.all([
-        supabase.from("ai_memory")
-          .select("id, memory_type, content, performance_score, condition, created_at")
-          .eq("user_id", user.id)
-          .order("performance_score", { ascending: false })
-          .limit(50),
-        expQ, phQ,
-      ]);
+    const hookRows = (hookStatsRes.data as any[]) || [];
+    const contentRows = (contentRes.data as any[]) || [];
 
-      const mem = (m.data as MemoryRow[]) || [];
-      setMemories(mem);
-      const bestHookRow = mem.find((x) => x.memory_type === "hook") || null;
-      setBestHook(bestHookRow);
-      setExperimentsRunning(e.count ?? 0);
-      setRecentPosts((ph.data as RecentPost[]) || []);
-      setLoading(false);
-    })();
+    const mem: MemoryRow[] = [
+      ...hookRows.map((h) => ({
+        id: h.id,
+        memory_type: "hook",
+        content: h.hook_text,
+        performance_score: Number(h.avg_views) || 0,
+        condition: null,
+        created_at: h.last_used_at || h.created_at,
+      })),
+      ...contentRows.map((c) => ({
+        id: c.id,
+        memory_type: c.tone ? "tone" : "pattern",
+        content: [c.condition, c.tone, c.time_of_day].filter(Boolean).join(" · "),
+        performance_score: Number(c.avg_views) || 0,
+        condition: c.condition,
+        created_at: c.computed_at,
+      })),
+    ].sort((a, b) => b.performance_score - a.performance_score);
+
+    setMemories(mem);
+    setBestHook(mem.find((x) => x.memory_type === "hook") || null);
+    setExperimentsRunning(e.count ?? 0);
+    setRecentPosts((ph.data as RecentPost[]) || []);
+    setLoading(false);
   }, [activeCity.name]);
+
+  useEffect(() => { setLoading(true); load(); }, [load]);
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    try { await load(); } finally { setRefreshing(false); }
+  }
 
   const nextRecap = nextSundayRecap();
   const recapLabel = nextRecap.toLocaleString(undefined, {
@@ -96,6 +137,18 @@ export function GrowthCommandCenter() {
 
   return (
     <div className="space-y-4">
+      <div className="flex items-center justify-end -mb-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleRefresh}
+          disabled={refreshing}
+          className="h-7 text-xs"
+        >
+          <RefreshCw size={12} className={refreshing ? "animate-spin" : ""} />
+          Refresh
+        </Button>
+      </div>
       {/* Stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <Card>
