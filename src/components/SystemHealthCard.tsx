@@ -69,15 +69,29 @@ function voiceLine(row: { voice_status: string | null; voice_error: string | nul
   return { icon: "—", label: "Voice: Not requested", tone: "muted" as const };
 }
 
+interface HealthRow {
+  last_run_at: string | null;
+  last_status: string | null;
+  last_message: string | null;
+}
+
+const EMPTY_ROW: HealthRow = { last_run_at: null, last_status: null, last_message: null };
+
+function sourceFromMessage(msg: string | null): string {
+  if (!msg) return "—";
+  const m = msg.match(/source=([a-z]+)/);
+  return m ? m[1] : (msg.startsWith("probe") ? "probe" : "cron");
+}
+
 export function SystemHealthCard() {
-  const [lastRun, setLastRun] = useState<string | null>(null);
-  const [lastRunIso, setLastRunIso] = useState<string | null>(null);
-  const [status, setStatus] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [scheduler, setScheduler] = useState<HealthRow>(EMPTY_ROW);
+  const [runJobs, setRunJobs] = useState<HealthRow>(EMPTY_ROW);
+  const [probe, setProbe] = useState<HealthRow>(EMPTY_ROW);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const [probing, setProbing] = useState(false);
   const [probeError, setProbeError] = useState<string | null>(null);
+  const [syncingCron, setSyncingCron] = useState(false);
 
   const [dryRunLoading, setDryRunLoading] = useState(false);
   const [dryRunResult, setDryRunResult] = useState<DryRunResponse | null>(null);
@@ -91,18 +105,42 @@ export function SystemHealthCard() {
     try {
       const { data } = await supabase
         .from("system_health")
-        .select("last_run_at, last_status, last_message")
-        .eq("id", "auto-post-scheduler")
-        .maybeSingle();
-      const iso = data?.last_run_at ?? null;
-      setLastRunIso(iso);
-      setLastRun(timeAgo(iso));
-      setStatus(data?.last_status ?? null);
-      setMessage(data?.last_message ?? null);
+        .select("id, last_run_at, last_status, last_message")
+        .in("id", ["auto-post-scheduler", "auto-post-scheduler-probe", "run-jobs"]);
+      const byId: Record<string, HealthRow> = {};
+      (data || []).forEach((r: any) => {
+        byId[r.id] = {
+          last_run_at: r.last_run_at,
+          last_status: r.last_status,
+          last_message: r.last_message,
+        };
+      });
+      setScheduler(byId["auto-post-scheduler"] || EMPTY_ROW);
+      setRunJobs(byId["run-jobs"] || EMPTY_ROW);
+      setProbe(byId["auto-post-scheduler-probe"] || EMPTY_ROW);
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const syncCronSecret = useCallback(async () => {
+    setSyncingCron(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("sync-cron-secret", { body: {} });
+      if (error || !(data as any)?.ok) {
+        toast({
+          title: "Cron secret sync failed",
+          description: (error?.message || (data as any)?.error || "Unknown error"),
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: "🔑 Cron secret synced", description: "Background workers can authenticate again." });
+      }
+    } finally {
+      setSyncingCron(false);
+      await fetchHealth();
+    }
+  }, [fetchHealth]);
 
   const safeReset = useCallback(async () => {
     setProbing(true);
@@ -112,7 +150,6 @@ export function SystemHealthCard() {
         body: { probe: true },
       });
       if (error) {
-        // FunctionsHttpError exposes .context with status + a Response
         const anyErr = error as any;
         const statusCode = anyErr?.context?.status ?? anyErr?.status;
         let bodyText = "";
