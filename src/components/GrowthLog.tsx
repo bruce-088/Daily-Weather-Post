@@ -9,7 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Trophy, Sparkles, Beaker, Gem, ExternalLink, Clock } from "lucide-react";
+import { Trophy, Sparkles, Beaker, Gem, ExternalLink, Clock, RefreshCw } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useActiveCity } from "@/hooks/useActiveCity";
 
