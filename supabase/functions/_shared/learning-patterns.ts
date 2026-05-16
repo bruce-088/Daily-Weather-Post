@@ -32,6 +32,7 @@ export interface TopPatterns {
   winningThemes?: Array<{ label: string; count: number }>;
   forbiddenOpeners?: string[];
   forbiddenThemes?: string[];
+  recentlyUsedAllowed?: Array<{ hook: string; score: number; uses48h: number }>;
 }
 
 const THEME_TOKENS = [
