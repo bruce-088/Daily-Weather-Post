@@ -177,11 +177,6 @@ export function YouTubeChannelsManager({ cities = [], onChange }: Props) {
                       ❌ Disconnected
                     </Badge>
                   ) : null}
-                  {expired ? (
-                    <Badge variant="outline" className="text-[10px] border-yellow-500/40 text-yellow-500 bg-yellow-500/10">
-                      Reconnect
-                    </Badge>
-                  ) : null}
                   <Button
                     size="sm"
                     variant="ghost"
