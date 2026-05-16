@@ -24,6 +24,10 @@ const FEATURES: Array<[string, string, string]> = [
   ["Duplicate Post Protection", "✅ Working", "DB-level exclusion constraint + runtime dedupe checks."],
   ["City-to-Channel Routing Guard", "✅ Working", "Strict mapping prevents cross-city content contamination."],
   ["Slot-based Title & Caption Branding", "✅ Working", "Titles prefixed with [8 AM]/[1 PM]/[6 PM]; captions include location beacon."],
+  ["Advanced Analytics — Insight Engine", "✅ Working", "Per-post 0–100 performance_score with winning/losing factors; powered by analyze-performance over last 60d of post_analytics."],
+  ["Advanced Analytics — Pattern Detection", "✅ Working", "analyze-growth detects slot×tone, slot×hook, condition×tone winners (≥3 samples, ≥15% lift) into growth_insights."],
+  ["Advanced Analytics — Learning Feedback Loop", "✅ Working", "generate-caption injects PROVEN WINNERS block (winning themes + top-post few-shot from ai_memory) while preserving anti-clone and 70/30 exploit/explore."],
+  ["Advanced Analytics — Growth Command Center UI", "✅ Working", "Why It Won, Best Tone/Slot/Hook cards, actionable recommendation; per-post Performance pill in history."],
 ];
 
 const INTEGRATIONS: Array<[string, string]> = [
