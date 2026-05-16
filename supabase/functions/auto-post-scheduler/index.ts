@@ -101,10 +101,10 @@ Deno.serve(async (req) => {
         id: "auto-post-scheduler",
         last_run_at: new Date().toISOString(),
         last_status: "running",
-        last_message: "tick started",
+        last_message: `tick started (source=${triggerSource})`,
         updated_at: new Date().toISOString(),
       });
-      console.log("[scheduler] ❤️  heartbeat recorded");
+      console.log(`[scheduler] ❤️  heartbeat recorded (source=${triggerSource})`);
     } catch (hbErr) {
       console.error("[scheduler] heartbeat write failed:", hbErr);
     }
