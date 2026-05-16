@@ -562,6 +562,18 @@ export function SystemHealthCard() {
           </div>
         )}
 
+        <Button
+          size="sm"
+          variant="default"
+          onClick={forceRunScheduler}
+          disabled={forceRunning}
+          className="w-full gap-2"
+          title="Manually trigger the auto-post scheduler for missed slots or testing."
+        >
+          <RefreshCw size={12} className={forceRunning ? "animate-spin" : ""} />
+          {forceRunning ? "Running scheduler…" : "Force Run Scheduler"}
+        </Button>
+
         <div className="grid grid-cols-2 gap-2 pt-1">
           <Button
             size="sm"
