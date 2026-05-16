@@ -56,7 +56,7 @@ export function YouTubeChannelsManager({ cities = [], onChange }: Props) {
       toast.error("Failed to load YouTube channels");
       setChannels([]);
     } else {
-      setChannels(data || []);
+      setChannels((data || []) as unknown as YTChannel[]);
     }
     setLoading(false);
   };
