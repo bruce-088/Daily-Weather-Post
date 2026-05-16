@@ -1928,6 +1928,8 @@ Deno.serve(async (req) => {
       source: "daily-weather-post",
     };
 
+    // Derive title used for posting (re-build deterministically for metadata).
+    const _titleForMeta = generateSkyBriefTitle(weather.city, weather.temperature, weather.condition, weather.rainChance);
     const { data: historyRow, error: historyError } = await supabase.from("post_history").insert({
       status, platform, city: weather.city, temperature: weather.temperature,
       condition: weather.condition, image_url: storedImageUrl, error_message: errorMessage,
@@ -1941,6 +1943,7 @@ Deno.serve(async (req) => {
       cinematic_trigger: cinematicTrigger,
       voice_name: voiceUrl ? "AI" : null,
       debug_trace: persistedTrace,
+      visual_metadata: { has_timestamp_in_title: titleHasTimestamp(_titleForMeta) },
     }).select("id").single();
     if (historyError) console.error("Failed to log post history:", historyError);
 
