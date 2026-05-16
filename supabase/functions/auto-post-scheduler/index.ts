@@ -50,13 +50,44 @@ Deno.serve(async (req) => {
   // system_health writes, no duplicate-guard reads. It returns a structured
   // diagnostic payload instead so the UI can show exactly what would have fired.
   let dryRun = false;
+  let isProbe = false;
   try {
     if (req.method === "POST") {
       const body = await req.clone().json().catch(() => ({}));
       dryRun = body?.dry_run === true;
+      isProbe = body?.probe === true || body?.wakeup === true;
     }
   } catch (_) { /* ignore parse errors */ }
   const dryRunReport: any[] = [];
+
+  // ── PROBE / WAKEUP fast path ──
+  // Used by the System Health card's "Safe Reset" and by the Settings save flow.
+  // Writes a heartbeat row and returns immediately — never enters slot logic.
+  if (isProbe) {
+    try {
+      const sb = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      );
+      await sb.from("system_health").upsert({
+        id: "auto-post-scheduler",
+        last_run_at: new Date().toISOString(),
+        last_status: "ok",
+        last_message: "probe ok",
+        updated_at: new Date().toISOString(),
+      });
+    } catch (e) {
+      return new Response(
+        JSON.stringify({ probe: true, ok: false, error: e instanceof Error ? e.message : String(e) }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+    return new Response(
+      JSON.stringify({ probe: true, ok: true, at: new Date().toISOString() }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+
 
   // ── HEARTBEAT (very first thing): record that the scheduler is alive ──
   // Skipped during dry-run so we don't pollute the System Health card.
