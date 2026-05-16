@@ -2137,15 +2137,21 @@ Deno.serve(async (req) => {
           const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
           if (LOVABLE_API_KEY) {
             try {
-              const _rotCTA = rotatingCTA(_slotForGen);
-              const _personality = slotPersonalityDirective(_slotForGen);
-              const _diversityBlock = [
-                _personality,
-                _prevOpener
-                  ? `ANTI-REPEAT: Do NOT reuse the opening hook, first-sentence structure, or CTA verb from the previous post for this city. Previous opener was: "${_prevOpener}". Use a noticeably different angle.`
-                  : "",
-                `CTA ROTATION: For the final call-to-action line, use this exact CTA (or a close paraphrase): "${_rotCTA}". Do not invent additional CTAs.`,
-              ].filter(Boolean).join("\n\n");
+              let _diversityBlock = "";
+              try {
+                const _rotCTA = rotatingCTA(_slotForGen);
+                const _personality = slotPersonalityDirective(_slotForGen);
+                _diversityBlock = [
+                  _personality,
+                  _prevOpener
+                    ? `ANTI-REPEAT: Do NOT reuse the opening hook, first-sentence structure, or CTA verb from the previous post for this city. Previous opener was: "${_prevOpener}". Use a noticeably different angle.`
+                    : "",
+                  `CTA ROTATION: For the final call-to-action line, use this exact CTA (or a close paraphrase): "${_rotCTA}". Do not invent additional CTAs.`,
+                ].filter(Boolean).join("\n\n");
+              } catch (err) {
+                console.warn("Caption enhancement (diversity block) failed — falling back to default logic", err);
+                _diversityBlock = "";
+              }
 
               const baseUserContent =
                 buildSkyBriefUserPrompt(weather) +
