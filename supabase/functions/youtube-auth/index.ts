@@ -326,6 +326,10 @@ Deno.serve(async (req) => {
         })
         .eq("user_id", userId);
 
+      // BUG FIX: previously this updated EVERY youtube social_accounts row
+      // for the user with the same access_token — corrupting per-channel
+      // tokens in multi-channel setups. Scope strictly to the row whose
+      // refresh_token matches the one we just used to mint this access_token.
       const { data: socialRows } = await supabaseAdmin
         .from("social_accounts")
         .update({
@@ -335,16 +339,22 @@ Deno.serve(async (req) => {
         })
         .eq("user_id", userId)
         .eq("platform", "youtube")
+        .eq("refresh_token", settings.youtube_refresh_token)
         .select("id");
       if (!socialRows?.length) {
+        // No matching row — create one and tag it as the shared/legacy channel
+        // (city_id = null) so we don't accidentally claim a city-mapped slot.
         await supabaseAdmin.from("social_accounts").insert({
           user_id: userId,
           platform: "youtube",
           access_token: refreshData.access_token,
           refresh_token: settings.youtube_refresh_token,
           token_expires_at: expiresAt,
+          city_id: null,
         });
       }
+
+      console.log("[youtube-auth] token refreshed successfully");
 
       return new Response(
         JSON.stringify({ success: true }),
