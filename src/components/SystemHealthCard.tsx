@@ -561,6 +561,29 @@ export function SystemHealthCard() {
           </Button>
         </div>
 
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => runAnalysis("analyze-performance", setPerfRunning)}
+            disabled={perfRunning}
+            className="gap-2"
+          >
+            {perfRunning ? <Loader2 size={12} className="animate-spin" /> : <BarChart3 size={12} />}
+            {perfRunning ? "Running…" : "Run Performance Analysis"}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => runAnalysis("analyze-growth", setGrowthRunning)}
+            disabled={growthRunning}
+            className="gap-2"
+          >
+            {growthRunning ? <Loader2 size={12} className="animate-spin" /> : <TrendingUp size={12} />}
+            {growthRunning ? "Running…" : "Run Growth Analysis"}
+          </Button>
+        </div>
+
         <Button
           size="sm"
           variant="outline"
