@@ -198,6 +198,15 @@ Deno.serve(async (req) => {
         .eq("account_external_id", channelId)
         .maybeSingle();
 
+      // Visibility: warn if Google returned no refresh_token AND we have
+      // none on file — means long-lived auth is NOT possible for this row
+      // until the user reconnects with prompt=consent honored.
+      if (!refreshToken && !existingChannel?.refresh_token) {
+        console.warn(
+          `[youtube-auth] exchange_code: no refresh_token returned by Google AND none stored — long-lived auth NOT established for channel ${channelId}. User must reconnect with prompt=consent.`,
+        );
+      }
+
       if (existingChannel) {
         await supabaseAdmin
           .from("social_accounts")
