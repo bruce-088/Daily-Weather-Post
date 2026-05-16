@@ -425,17 +425,18 @@ export function SystemHealthCard() {
         <div className="grid grid-cols-2 gap-2 pt-1">
           <Button
             size="sm"
-            variant="outline"
-            onClick={() => { fetchHealth(); fetchDebugState(); }}
-            disabled={loading}
+            variant={isCritical ? "default" : "outline"}
+            onClick={safeReset}
+            disabled={probing}
             className="gap-2"
+            title="Sends a live test tick to the scheduler and refreshes status."
           >
-            <RefreshCw size={12} className={loading ? "animate-spin" : ""} />
-            Refresh
+            <RefreshCw size={12} className={probing ? "animate-spin" : ""} />
+            {probing ? "Probing…" : "Safe Reset"}
           </Button>
           <Button
             size="sm"
-            variant="default"
+            variant="outline"
             onClick={runDryRun}
             disabled={dryRunLoading}
             className="gap-2"
