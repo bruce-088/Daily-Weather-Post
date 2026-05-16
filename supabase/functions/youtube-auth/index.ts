@@ -84,9 +84,14 @@ Deno.serve(async (req) => {
         redirect_uri: redirect_uri,
         response_type: "code",
         scope: "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly",
+        // ⚠️ CONTRACT — DO NOT REMOVE THESE THREE PARAMS:
+        //   access_type=offline → required for Google to issue a refresh_token
+        //   prompt=consent      → guarantees a refresh_token even on re-auth
+        //                         (without it, Google returns no refresh_token
+        //                          if the user previously granted scope, and
+        //                          tokens silently expire every ~1h)
+        //   include_granted_scopes=true → preserves prior scopes on re-consent
         access_type: "offline",
-        // select_account → user can pick a different Google account or brand channel
-        // consent → guarantees we receive a refresh_token even on re-auth
         prompt: "select_account consent",
         include_granted_scopes: "true",
         state: csrfState,
