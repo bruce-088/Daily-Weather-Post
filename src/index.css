@@ -265,6 +265,36 @@
     animation: success-glow 1.4s ease-out 2;
     border-radius: 9999px;
   }
+
+  /* Weather condition icon animations (preview card) */
+  @keyframes icon-clear-pulse {
+    0%, 100% { filter: drop-shadow(0 0 4px hsl(45 95% 60% / 0.45)); transform: scale(1); }
+    50%      { filter: drop-shadow(0 0 14px hsl(45 95% 65% / 0.85)); transform: scale(1.04); }
+  }
+  .icon-anim-clear { animation: icon-clear-pulse 4s ease-in-out infinite; }
+
+  @keyframes icon-drip {
+    0%, 100% { transform: translateY(0); opacity: 1; }
+    50%      { transform: translateY(2px); opacity: 0.75; }
+  }
+  .icon-anim-rain { animation: icon-drip 1.6s ease-in-out infinite; }
+
+  @keyframes icon-flicker {
+    0%, 100%       { opacity: 1; filter: drop-shadow(0 0 2px hsl(220 90% 70% / 0.6)); }
+    7%, 9%         { opacity: 0.35; }
+    8%             { opacity: 1; filter: drop-shadow(0 0 10px hsl(220 100% 80% / 0.95)); }
+    50%            { opacity: 0.85; }
+    52%            { opacity: 0.4; }
+    53%            { opacity: 1; }
+  }
+  .icon-anim-storm { animation: icon-flicker 2.4s ease-in-out infinite; }
+
+  /* Cinematic background pulse */
+  @keyframes cinematic-pulse {
+    0%, 100% { opacity: 0.4; }
+    50%      { opacity: 0.75; }
+  }
+  .cinematic-pulse { animation: cinematic-pulse 8s ease-in-out infinite; }
 }
 
 /* Notifications dropdown scrollbar */
