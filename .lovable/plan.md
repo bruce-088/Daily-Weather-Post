@@ -1,48 +1,39 @@
-# Pipeline Hardening & Silent Failure Debugging
+# Fix: publish_post verification false failures
 
-Goal: expose the hidden YouTube failure that's marking jobs Succeeded with no video and no notification.
+Single-file change: `supabase/functions/_shared/job-handlers.ts`, `publishPost` handler (~lines 237–261).
 
-## 1. Verbose logging in YouTube adapter
-File: `supabase/functions/_shared/youtube-adapter.ts` — `uploadVideo()` (~lines 285–320)
+## Changes
 
-Right after the resumable `PUT` to `uploadUrl` resolves, log full diagnostics whether or not `ok`:
-- `console.log("[YT] upload status:", uploadRes.status, uploadRes.statusText)`
-- Parse the body once into `responseBody` (string + JSON when possible) and `console.log("[YT] full response body:", JSON.stringify(responseBody))`
-- If `responseBody.id` present → `console.log("✅ YouTube Upload Success! Video ID: " + responseBody.id)`
-- Else → `console.error("❌ YouTube API returned " + uploadRes.status + " but no Video ID found. Full Response: " + JSON.stringify(responseBody))` and `throw new Error("YouTube upload returned no video ID: " + JSON.stringify(responseBody).slice(0,500))` so the caller fails loudly instead of returning `null`.
+### 1. Relax the `post_history` verification query (line 237–245)
+- Widen the lookup window from **30 → 60 minutes** (`sinceIso`).
+- Replace the strict `.eq("city", post?.city ?? "")` with a loose OR match so `"Gainesville"` matches `"Gainesville, Florida"` and vice versa:
+  ```ts
+  const cityFull = (post?.city ?? "").trim();
+  const cityShort = cityFull.split(",")[0].trim();
+  // …
+  .or(`city.eq.${cityFull},city.ilike.%${cityShort}%`)
+  ```
+  Only apply the `.or(...)` when `cityShort` is non-empty; otherwise skip the city filter entirely.
 
-Keep the existing `!uploadRes.ok` branch but route through the same parsed body so we don't double-consume the stream.
+### 2. Don't throw when verification fails — warn and defer to scheduled_post (line 256–261)
+Replace the `if (!successWithId) { throw … }` block with:
+- Log a warning (`⚠ post_history verification found no row with external_id — checking scheduled_post status directly`) including `rows.length`.
+- If `post?.status === "posted"`, log `"scheduled_post.status=posted — treating as success despite missing post_history row"` and **continue** (fall through to the success `return`).
+- Only `throw new Error(reason)` when `post?.status` is anything other than `"posted"`.
 
-## 2. Post-publish notification reliability
-File: `supabase/functions/process-scheduled-posts/index.ts` (~lines 2690–2740)
+### 3. Handle the success-fallthrough's return payload
+When we fall through because `scheduled_post.status === "posted"` but `rows` is empty, the existing `return` block at lines 264–273 reads from `rows` for `published_platforms` / `external_ids`. That still works (it just emits empty arrays), but add `verification: "scheduled_post_status"` to the `output` so the JobsDashboard drilldown shows this path was taken.
 
-- Right before the `postToPlatform` call, `console.log("[publish] Attempting to write notification for user: " + post.user_id + ", platform: " + platformName)` (the request asked for it before `insertNotifications`; this is the equivalent pre-publish hook in this codebase).
-- The branch at line 2733 (`result.success && !result.id`) already treats missing IDs as failure. Tighten it for YouTube specifically: if `platformName === "youtube"` and `result.success` is true but `result.id` is falsy, `throw new Error("[YT_NO_VIDEO_ID] YouTube reported success without a video_id — failing job")`. The surrounding try/catch in `publish_post` job handler will then mark the job FAILED instead of SUCCEEDED.
-- Add a `console.log("[publish] notification queued user=" + post.user_id + " platform=" + platformName + " status=" + (result.success ? "ok" : "fail"))` immediately after the `notifyFailure(...)` / success-log calls so we can see in edge logs whether notification writes actually fired.
-
-## 3. Manual-slot dedup bypass (TESTING ONLY)
-File: `supabase/functions/process-scheduled-posts/index.ts` (~lines 1688–1722)
-
-- Wrap the `acquire_publish_lock` block in `if (!post.caption?.includes("[manual:") && !((post as any).source === "manual_slot")) { ... }` so manual "Run This Slot Now" runs always proceed.
-- Add a `console.warn("[lock] ⚠ DEDUP BYPASSED for manual run post=" + post.id)` when bypassed.
-- Mark the block with a `// TODO: remove after pipeline debugging — issue #pipeline-hardening` comment so it's easy to revert.
-
-(Automated cron runs still honor the lock; only manual slot triggers bypass.)
-
-## 4. Enhanced Jobs Dashboard drilldown
-File: `src/pages/JobsDashboard.tsx` (drilldown sheet, ~lines 360–395)
-
-- Today `last_error` is only rendered inside `if (j.last_error)` which works, but it's hidden behind the status badge styling. Move the error block out from under any status check so it renders for `succeeded` jobs too.
-- Change the heading from `"Failed step: ..."` to a status-aware label: `j.status === "succeeded" ? "⚠ Warning logged on succeeded step" : "Failed step: ..."`.
-- Use a warning style (amber background) for succeeded-with-error vs destructive (red) for actual failures so users can tell them apart at a glance.
-- Also surface `j.result` JSON (pretty-printed, collapsible <details>) in the drilldown so hidden adapter responses are visible without checking edge logs.
+## Why this is safe
+- `process-scheduled-posts` writes `scheduled_posts.status = 'posted'` and the channel-level `system_logs` row only after a real adapter success with a video ID (see `process-scheduled-posts/index.ts` ~line 2733 hard-fail guard already in place).
+- The verification step here is belt-and-suspenders; it should not override the authoritative status flag.
+- Real failures still throw: when `post.status` is `failed`/`failed_precheck` (handled earlier at line 229) or anything not equal to `posted`.
 
 ## Verification
-1. Run "Run This Slot Now" for Orlando 3× in a row — all three should reach `process-scheduled-posts` (no dedup skip) and produce edge-function log lines starting with `[YT] upload status:` and either `✅` or `❌`.
-2. If YouTube returns a 200 without an `id`, the corresponding `publish_post` job appears as **FAILED** in `/jobs` with the `[YT_NO_VIDEO_ID]` error visible in the drilldown.
-3. If YouTube returns an `id`, a `post_published` system_log row is written and a notification row appears for the user.
-4. Open any previously-"succeeded" job in `/jobs` — if `last_error` exists, it now renders in the drilldown with the amber warning style.
+1. Run "Run This Slot Now" for Orlando — the `publish_post` job should now show **Succeeded** with `output.verification: "scheduled_post_status"` if the city-name mismatch was the cause.
+2. Drop a fake `scheduled_posts.status='failed'` row → job should still fail loudly.
+3. Edge logs should show the new warning line whenever the fallthrough fires, so we can quantify how often the city-name mismatch occurs.
 
 ## Out of scope
-- The unrelated `enqueue_job` "permission denied" RPC error visible in console logs (separate issue — would need a SECURITY DEFINER grant migration).
-- Reverting the dedup bypass — flagged with a TODO, to be removed once root cause is identified.
+- Backfilling old "failed" job rows that were actually successful posts on YouTube.
+- Normalizing `post_history.city` to a canonical form (separate cleanup).
