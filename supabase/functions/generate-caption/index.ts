@@ -322,6 +322,27 @@ Deno.serve(async (req) => {
       console.warn("[generate-caption] insight lookup failed:", e);
     }
 
+    // Fail-safe precompute of the new enhancement blocks. If any helper throws,
+    // we silently drop the block and fall back to the original prompt.
+    let personalityBlock = "";
+    let ctaBlock = "";
+    let antiRepeatBlock = "";
+    try {
+      personalityBlock = slotPersonalityDirective(body.slot ?? period) || "";
+      const _cta = rotatingCTA(body.slot ?? period);
+      ctaBlock = _cta
+        ? `CTA ROTATION: For the final call-to-action line, use this exact CTA (or a close paraphrase): "${_cta}". Do not invent additional CTAs.`
+        : "";
+      if (body.prev_opener) {
+        antiRepeatBlock = `ANTI-REPEAT: Do NOT reuse the opening hook, first-sentence structure, or CTA verb from the previous post for this city. Previous opener was: "${String(body.prev_opener).slice(0, 160)}". Use a noticeably different angle.`;
+      }
+    } catch (err) {
+      console.warn("Caption enhancement failed — falling back to default logic", err);
+      personalityBlock = "";
+      ctaBlock = "";
+      antiRepeatBlock = "";
+    }
+
     const userPrompt = `NOW USE THESE INPUTS TO WRITE TODAY'S CAPTION:
 
 city: ${city}
