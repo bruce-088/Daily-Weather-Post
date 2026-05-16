@@ -312,5 +312,12 @@ export function buildLearningPromptBlock(p: TopPatterns): string {
     }
   }
 
+  if (hasForbidden) {
+    lines.push("");
+    lines.push("FORBIDDEN REPETITIONS (used in the last 3 city posts — do NOT start with, paraphrase, or build the post around any of these):");
+    for (const o of (p.forbiddenOpeners ?? [])) lines.push(`  - opener: "${o}"`);
+    for (const t of (p.forbiddenThemes ?? [])) lines.push(`  - theme: "${t}"`);
+  }
+
   return lines.join("\n");
 }
