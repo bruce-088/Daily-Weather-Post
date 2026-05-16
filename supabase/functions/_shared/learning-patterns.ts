@@ -69,6 +69,7 @@ export async function getTopPerformingPatterns(
 
   // ── Creative Decay: gather recent (48h) city-specific posts ──
   let recentUseCount = new Map<string, number>();
+  let last2Hooks: string[] = []; // normalized, most-recent-first, max 2
   let forbiddenOpeners: string[] = [];
   let forbiddenThemes: string[] = [];
   if (city) {
@@ -84,20 +85,25 @@ export async function getTopPerformingPatterns(
         .limit(20);
       const rows = (recent || []) as Array<{ hook_used: string | null; caption: string | null }>;
 
-      const seenOpeners: string[] = [];
       const themeCounts = new Map<string, number>();
       for (const r of rows) {
         const hk = normalizeHook(r.hook_used || "");
-        if (hk) recentUseCount.set(hk, (recentUseCount.get(hk) || 0) + 1);
-        if (r.hook_used && seenOpeners.length < 3 && !seenOpeners.includes(r.hook_used)) {
-          seenOpeners.push(r.hook_used);
+        if (hk) {
+          recentUseCount.set(hk, (recentUseCount.get(hk) || 0) + 1);
+          if (last2Hooks.length < 2 && !last2Hooks.includes(hk)) {
+            last2Hooks.push(hk);
+          }
         }
         const blob = `${r.hook_used || ""} ${r.caption || ""}`.toLowerCase();
         for (const tok of THEME_TOKENS) {
           if (blob.includes(tok)) themeCounts.set(tok, (themeCounts.get(tok) || 0) + 1);
         }
       }
-      forbiddenOpeners = seenOpeners;
+      // Forbidden openers narrowed to the last 2 city posts (verbatim text)
+      forbiddenOpeners = rows
+        .slice(0, 2)
+        .map(r => r.hook_used || "")
+        .filter(Boolean);
       forbiddenThemes = Array.from(themeCounts.entries())
         .filter(([, n]) => n >= 2)
         .map(([t]) => t);
@@ -115,13 +121,43 @@ export async function getTopPerformingPatterns(
 
   const hooks = (hookRows || []) as Array<{ hook_text: string; avg_views: number; uses: number }>;
 
-  // Apply 80% weight penalty to hooks used ≥2× in last 48h for this city
+  // ── Strategic-reuse rescue: look up best performance_score per hook ──
+  const since60 = new Date(Date.now() - 60 * 86400_000).toISOString();
+  const bestScoreByHook = new Map<string, number>();
+  try {
+    const { data: scored } = await supabase
+      .from("post_analytics")
+      .select("hook_used, performance_score")
+      .eq("user_id", userId)
+      .gte("created_at", since60)
+      .not("performance_score", "is", null);
+    for (const r of (scored || []) as Array<{ hook_used: string | null; performance_score: number | null }>) {
+      const k = normalizeHook(r.hook_used || "");
+      if (!k) continue;
+      const s = Number(r.performance_score || 0);
+      if (s > (bestScoreByHook.get(k) || 0)) bestScoreByHook.set(k, s);
+    }
+  } catch { /* non-fatal */ }
+
+  // Tiered weighted decay + rescue
+  const recentlyUsedAllowed: Array<{ hook: string; score: number; uses48h: number }> = [];
   const weighted = hooks
     .filter(h => h.uses >= 2 && h.avg_views > 0)
     .map(h => {
-      const overused = recentUseCount.get(normalizeHook(h.hook_text)) || 0;
-      const weight = overused >= 2 ? 0.2 : 1;
-      return { ...h, weightedViews: h.avg_views * weight, overused };
+      const nk = normalizeHook(h.hook_text);
+      const overused = recentUseCount.get(nk) || 0;
+      let weight = overused <= 1 ? 1.0 : overused === 2 ? 0.6 : 0.2;
+      const bestScore = bestScoreByHook.get(nk) || 0;
+      const inLast2 = last2Hooks.includes(nk);
+      let rescued = false;
+      if (overused >= 2 && bestScore >= 85 && !inLast2) {
+        weight = 1.0;
+        rescued = true;
+        if (recentlyUsedAllowed.length < 3) {
+          recentlyUsedAllowed.push({ hook: h.hook_text, score: bestScore, uses48h: overused });
+        }
+      }
+      return { ...h, weightedViews: h.avg_views * weight, overused, rescued };
     })
     .sort((a, b) => b.weightedViews - a.weightedViews);
 
