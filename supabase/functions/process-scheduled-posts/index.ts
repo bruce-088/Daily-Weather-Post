@@ -284,8 +284,14 @@ function buildHookTitle(city: string, temp: number, condition: string, rainChanc
   const baseTitle = pool[seed % pool.length];
   // Slot-aware prefix: morning/afternoon/evening get fixed broadcast-style
   // times ([8 AM]/[1 PM]/[6 PM]). Adhoc/manual fall back to city-local stamp.
-  const stamp = slotTimePrefix(slot, city);
-  const stamped = `[${stamp}] ${baseTitle}`;
+  // Wrapped: any failure in slotTimePrefix degrades to the un-prefixed title.
+  let stamped = baseTitle;
+  try {
+    const stamp = slotTimePrefix(slot, city);
+    if (stamp) stamped = `[${stamp}] ${baseTitle}`;
+  } catch (err) {
+    console.warn("buildHookTitle: slot prefix failed, using base title", err);
+  }
   return stamped.length > 95 ? stamped.substring(0, 92) + "..." : stamped;
 }
 
@@ -2131,15 +2137,21 @@ Deno.serve(async (req) => {
           const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
           if (LOVABLE_API_KEY) {
             try {
-              const _rotCTA = rotatingCTA(_slotForGen);
-              const _personality = slotPersonalityDirective(_slotForGen);
-              const _diversityBlock = [
-                _personality,
-                _prevOpener
-                  ? `ANTI-REPEAT: Do NOT reuse the opening hook, first-sentence structure, or CTA verb from the previous post for this city. Previous opener was: "${_prevOpener}". Use a noticeably different angle.`
-                  : "",
-                `CTA ROTATION: For the final call-to-action line, use this exact CTA (or a close paraphrase): "${_rotCTA}". Do not invent additional CTAs.`,
-              ].filter(Boolean).join("\n\n");
+              let _diversityBlock = "";
+              try {
+                const _rotCTA = rotatingCTA(_slotForGen);
+                const _personality = slotPersonalityDirective(_slotForGen);
+                _diversityBlock = [
+                  _personality,
+                  _prevOpener
+                    ? `ANTI-REPEAT: Do NOT reuse the opening hook, first-sentence structure, or CTA verb from the previous post for this city. Previous opener was: "${_prevOpener}". Use a noticeably different angle.`
+                    : "",
+                  `CTA ROTATION: For the final call-to-action line, use this exact CTA (or a close paraphrase): "${_rotCTA}". Do not invent additional CTAs.`,
+                ].filter(Boolean).join("\n\n");
+              } catch (err) {
+                console.warn("Caption enhancement (diversity block) failed — falling back to default logic", err);
+                _diversityBlock = "";
+              }
 
               const baseUserContent =
                 buildSkyBriefUserPrompt(weather) +
@@ -2205,24 +2217,28 @@ Deno.serve(async (req) => {
 
               // ── Similarity check vs previous post for this city ──
               if (caption && _prevCaption) {
-                const sim = captionSimilarity(caption, _prevCaption);
-                if (sim >= 0.8) {
-                  console.warn(`[process-scheduled-posts] high similarity (${sim.toFixed(2)}) vs previous post for ${weather.city} — regenerating once`);
-                  try {
-                    await supabase.from("system_logs").insert({
-                      user_id: post.user_id,
-                      type: "caption_similarity_regen",
-                      message: `Caption ${sim.toFixed(2)} similar to previous post for ${weather.city}; triggered one-shot regen.`,
-                      context: { city: weather.city, slot: _slotForGen, similarity: sim, prev_opener: _prevOpener },
-                    });
-                  } catch { /* best-effort */ }
-                  const regen = await callCap(`\n\nREGENERATION REQUIRED: Your previous draft was too similar to the last post for this city ("${_prevOpener}"). Rewrite with a different opening hook, sentence rhythm, and CTA verb. Keep all factual weather data the same.`);
-                  if (regen) {
-                    const v3 = validateCaptionLocation(regen, weather.city);
-                    const cleaned = v3.ok ? regen : stripUnverifiedReferences(regen, weather.city);
-                    const sim2 = captionSimilarity(cleaned, _prevCaption);
-                    if (sim2 < sim) caption = cleaned;
+                try {
+                  const sim = captionSimilarity(caption, _prevCaption);
+                  if (sim >= 0.8) {
+                    console.warn(`[process-scheduled-posts] high similarity (${sim.toFixed(2)}) vs previous post for ${weather.city} — regenerating once`);
+                    try {
+                      await supabase.from("system_logs").insert({
+                        user_id: post.user_id,
+                        type: "caption_similarity_regen",
+                        message: `Caption ${sim.toFixed(2)} similar to previous post for ${weather.city}; triggered one-shot regen.`,
+                        context: { city: weather.city, slot: _slotForGen, similarity: sim, prev_opener: _prevOpener },
+                      });
+                    } catch { /* best-effort */ }
+                    const regen = await callCap(`\n\nREGENERATION REQUIRED: Your previous draft was too similar to the last post for this city ("${_prevOpener}"). Rewrite with a different opening hook, sentence rhythm, and CTA verb. Keep all factual weather data the same.`);
+                    if (regen) {
+                      const v3 = validateCaptionLocation(regen, weather.city);
+                      const cleaned = v3.ok ? regen : stripUnverifiedReferences(regen, weather.city);
+                      const sim2 = captionSimilarity(cleaned, _prevCaption);
+                      if (sim2 < sim) caption = cleaned;
+                    }
                   }
+                } catch (err) {
+                  console.warn("Caption similarity check failed — keeping original caption", err);
                 }
               }
 
