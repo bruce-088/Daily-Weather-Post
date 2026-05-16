@@ -160,6 +160,7 @@ export class YouTubeAdapter implements PlatformAdapter {
     }
 
     console.log("YouTube token refreshed successfully");
+    this._resolved.set(refreshData.access_token, { ...account, access_token: refreshData.access_token, token_expires_at: newExpiresAt });
     return refreshData.access_token;
   }
 
