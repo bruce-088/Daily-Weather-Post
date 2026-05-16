@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { buildStyleAddendum, normalizeTone, appendVoiceCTA, isWeatherAlert, getCityLocalStamp, titleHasTimestamp } from "../_shared/caption-style.ts";
+import { buildStyleAddendum, normalizeTone, appendVoiceCTA, isWeatherAlert, getCityLocalStamp, titleHasTimestamp, ensureSlotTitlePrefix } from "../_shared/caption-style.ts";
 import {
   LOCATION_ACCURACY_RULES,
   buildVerifiedLandmarksBlock,
@@ -158,13 +158,13 @@ function getWeatherEmoji(condition: string): string {
   return "☀️";
 }
 
-function generateSkyBriefTitle(city: string, temp: number, condition: string, rainChance?: number): string {
-  return buildHookTitle(city, temp, condition, rainChance);
+function generateSkyBriefTitle(city: string, temp: number, condition: string, rainChance?: number, slot?: string | null): string {
+  return buildHookTitle(city, temp, condition, rainChance, slot);
 }
 
 // --- Hook-based YouTube title generator ---
 // Format: [Hook] + City + Weather Detail + Emoji. Drives CTR via curiosity + specificity.
-function buildHookTitle(city: string, temp: number, condition: string, rainChance?: number): string {
+function buildHookTitle(city: string, temp: number, condition: string, rainChance?: number, slot?: string | null): string {
   const emoji = getWeatherEmoji(condition);
   const c = (condition || "").toLowerCase();
   const t = Math.round(temp);
@@ -241,9 +241,15 @@ function buildHookTitle(city: string, temp: number, condition: string, rainChanc
 
   const seed = new Date().getDate() * 24 + hour;
   const baseTitle = pool[seed % pool.length];
-  const stamp = getCityLocalStamp(city);
-  const stamped = `[${stamp}] ${baseTitle}`;
-  return stamped.length > 95 ? stamped.substring(0, 92) + "..." : stamped;
+  // Always force one of the three SkyBrief broadcast slot prefixes
+  // ([8 AM]/[1 PM]/[6 PM]). Default to "morning" — this function is the morning
+  // automated job, but callers may override via the slot arg.
+  try {
+    return ensureSlotTitlePrefix(baseTitle, slot || "morning", city);
+  } catch (err) {
+    console.warn("buildHookTitle: ensureSlotTitlePrefix failed, returning base title", err);
+    return baseTitle.length > 95 ? baseTitle.substring(0, 92) + "..." : baseTitle;
+  }
 }
 
 // --- Dynamic Handle System ---

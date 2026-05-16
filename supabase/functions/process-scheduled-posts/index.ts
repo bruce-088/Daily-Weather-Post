@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { buildStyleAddendum, normalizeTone, appendVoiceCTA, isWeatherAlert, getCityLocalStamp, titleHasTimestamp, slotTimePrefix, slotDisplayLabel, slotPersonalityDirective, rotatingCTA, captionSimilarity, firstContentLine } from "../_shared/caption-style.ts";
+import { buildStyleAddendum, normalizeTone, appendVoiceCTA, isWeatherAlert, getCityLocalStamp, titleHasTimestamp, slotTimePrefix, slotDisplayLabel, slotPersonalityDirective, rotatingCTA, captionSimilarity, firstContentLine, ensureSlotTitlePrefix, inferSlotFromCityHour } from "../_shared/caption-style.ts";
 import { LOCATION_ACCURACY_RULES, validateCaptionLocation, buildVerifiedLandmarksBlock, stripUnverifiedReferences } from "../_shared/location-guard.ts";
 import { generateVideoWithFallback } from "../_shared/video-render.ts";
 import { expandVisualMeta, getTopVisualStyle, classifyVisualTheme, classifyColorProfile } from "../_shared/experiments.ts";
@@ -282,17 +282,14 @@ function buildHookTitle(city: string, temp: number, condition: string, rainChanc
   // Deterministic-but-rotating pick (date + hour) so titles vary across slots
   const seed = new Date().getDate() * 24 + hour;
   const baseTitle = pool[seed % pool.length];
-  // Slot-aware prefix: morning/afternoon/evening get fixed broadcast-style
-  // times ([8 AM]/[1 PM]/[6 PM]). Adhoc/manual fall back to city-local stamp.
-  // Wrapped: any failure in slotTimePrefix degrades to the un-prefixed title.
-  let stamped = baseTitle;
+  // Slot-aware prefix: always force one of [8 AM]/[1 PM]/[6 PM]. The helper
+  // strips any stale prefix, never duplicates, and keeps total length ≤ 95.
   try {
-    const stamp = slotTimePrefix(slot, city);
-    if (stamp) stamped = `[${stamp}] ${baseTitle}`;
+    return ensureSlotTitlePrefix(baseTitle, slot, city);
   } catch (err) {
-    console.warn("buildHookTitle: slot prefix failed, using base title", err);
+    console.warn("buildHookTitle: ensureSlotTitlePrefix failed, returning base title", err);
+    return baseTitle.length > 95 ? baseTitle.substring(0, 92) + "..." : baseTitle;
   }
-  return stamped.length > 95 ? stamped.substring(0, 92) + "..." : stamped;
 }
 
 // --- Dynamic Handle System ---
@@ -2113,8 +2110,12 @@ Deno.serve(async (req) => {
           weather.city,
         );
 
-        // Resolve slot now (used by caption personality, beacon, and title prefix)
-        const _slotForGen = earlyTimePeriod || null;
+        // Resolve slot now (used by caption personality, beacon, and title prefix).
+        // Order: [auto:slot]/[manual:slot] marker → post.slot column → infer from city-local hour.
+        const _slotForGen =
+          earlyTimePeriod ||
+          ((post as any).slot ? String((post as any).slot).toLowerCase() : null) ||
+          inferSlotFromCityHour(weather.city);
         const _slotLabel = slotDisplayLabel(_slotForGen);
 
         // Fetch the most recent prior caption for this city to power anti-repeat

@@ -620,14 +620,67 @@ export function titleHasTimestamp(title: string): boolean {
 
 export type SlotName = "morning" | "afternoon" | "evening" | "adhoc" | "manual" | string;
 
-/** Fixed time prefix per slot. Falls back to city-local stamp for adhoc/manual. */
+/**
+ * Returns the canonical morning/afternoon/evening slot based on the city-local
+ * hour. Used to coerce manual/adhoc/null slots into one of the three SkyBrief
+ * broadcast slots so title prefixes are always [8 AM] / [1 PM] / [6 PM].
+ *   04:00–10:59 → morning
+ *   11:00–15:59 → afternoon
+ *   16:00–03:59 → evening
+ */
+export function inferSlotFromCityHour(
+  city?: string | null,
+  when: Date = new Date(),
+): "morning" | "afternoon" | "evening" {
+  const tz = getCityTimezone(city);
+  const hourStr =
+    new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", hour12: false })
+      .formatToParts(when)
+      .find((p) => p.type === "hour")?.value || "12";
+  const h = parseInt(hourStr, 10);
+  if (h >= 4 && h < 11) return "morning";
+  if (h >= 11 && h < 16) return "afternoon";
+  return "evening";
+}
+
+/**
+ * Fixed broadcast time prefix per slot. For unknown/null/manual/adhoc slots we
+ * infer the slot from the city-local hour so titles ALWAYS use one of the
+ * three SkyBrief broadcast stamps (8 AM / 1 PM / 6 PM) — never an arbitrary
+ * local clock value.
+ */
 export function slotTimePrefix(slot: SlotName | null | undefined, city?: string | null): string {
-  switch ((slot || "").toLowerCase()) {
-    case "morning": return "8 AM";
-    case "afternoon": return "1 PM";
-    case "evening": return "6 PM";
-    default: return getCityLocalStamp(city);
-  }
+  const s = (slot || "").toLowerCase();
+  const resolved =
+    s === "morning" || s === "afternoon" || s === "evening"
+      ? s
+      : inferSlotFromCityHour(city);
+  if (resolved === "morning") return "8 AM";
+  if (resolved === "afternoon") return "1 PM";
+  return "6 PM";
+}
+
+/**
+ * Idempotently prepend the correct slot prefix (`[8 AM] ` / `[1 PM] ` /
+ * `[6 PM] `) to a title. If the title already starts with any
+ * `[H(:MM)? AM|PM]` token it is stripped first so we never duplicate the
+ * prefix or keep a stale one. Truncates the base portion (not the prefix) so
+ * the total length stays ≤ `maxLen` (default 95 for YouTube Shorts).
+ */
+export function ensureSlotTitlePrefix(
+  baseTitle: string,
+  slot: SlotName | null | undefined,
+  city?: string | null,
+  maxLen = 95,
+): string {
+  const stripped = String(baseTitle || "").replace(
+    /^\s*\[\d{1,2}(:\d{2})?\s?(AM|PM)\]\s*/i,
+    "",
+  );
+  const prefix = `[${slotTimePrefix(slot, city)}] `;
+  const budget = Math.max(1, maxLen - prefix.length);
+  const body = stripped.length > budget ? stripped.substring(0, budget - 1) + "…" : stripped;
+  return prefix + body;
 }
 
 /** Title-case slot label for UI/beacons. */
