@@ -1,4 +1,4 @@
-import { forwardRef } from "react";
+import { forwardRef, useState } from "react";
 import { MapPin, Droplets, Wind, Thermometer } from "lucide-react";
 import { WeatherIcon } from "./WeatherIcon";
 import type { WeatherData, AspectRatio } from "@/types/weather";
@@ -12,24 +12,41 @@ interface WeatherCardProps {
   generating?: boolean;
 }
 
-const STYLE_PRESETS: Record<CardStyle, { bg: string; iconBoost: number; blurOpacity: string; ring?: string }> = {
+type Tone = "light" | "dark";
+
+const STYLE_PRESETS: Record<
+  CardStyle,
+  { bg: string; iconBoost: number; blurOpacity: string; ring?: string; tone: Tone }
+> = {
   standard: {
     bg: "linear-gradient(135deg, hsl(230, 40%, 12%), hsl(260, 50%, 20%), hsl(220, 35%, 18%))",
     iconBoost: 1,
     blurOpacity: "0.30",
+    tone: "dark",
   },
   minimal: {
-    bg: "linear-gradient(160deg, hsl(225, 18%, 10%), hsl(225, 14%, 14%))",
+    bg: "linear-gradient(180deg, #fafafa, #ececec)",
     iconBoost: 0.9,
-    blurOpacity: "0.05",
+    blurOpacity: "0",
+    tone: "light",
   },
   cinematic: {
     bg: "radial-gradient(circle at 30% 20%, hsl(265, 80%, 22%), hsl(230, 60%, 8%) 70%)",
     iconBoost: 1.3,
     blurOpacity: "0.55",
     ring: "0 0 0 1px hsl(45 95% 60% / 0.25), 0 30px 60px -15px hsl(265 80% 50% / 0.55)",
+    tone: "dark",
   },
 };
+
+function iconAnimClass(icon: string, condition: string): string {
+  const c = (condition || "").toLowerCase();
+  if (icon === "cloud-lightning" || c.includes("thunder") || c.includes("storm")) return "icon-anim-storm";
+  if (icon === "cloud-rain" || icon === "cloud-drizzle" || c.includes("rain") || c.includes("drizzle"))
+    return "icon-anim-rain";
+  if (icon === "sun" || c.includes("clear") || c.includes("sun")) return "icon-anim-clear";
+  return "animate-float";
+}
 
 export const WeatherCard = forwardRef<HTMLDivElement, WeatherCardProps>(
   ({ weather, aspectRatio, style = "standard", generating = false }, ref) => {
@@ -37,6 +54,22 @@ export const WeatherCard = forwardRef<HTMLDivElement, WeatherCardProps>(
     const preset = STYLE_PRESETS[style];
     const isMinimal = style === "minimal";
     const isCinematic = style === "cinematic";
+    const light = preset.tone === "light";
+
+    const [selectedDayIdx, setSelectedDayIdx] = useState<number | null>(null);
+    const selectedDay =
+      selectedDayIdx !== null && weather.forecast[selectedDayIdx] ? weather.forecast[selectedDayIdx] : null;
+
+    // What to show in main block
+    const mainTemp = selectedDay ? selectedDay.tempHigh : weather.temperature;
+    const mainCondition = selectedDay ? selectedDay.condition : weather.condition;
+    const mainIcon = selectedDay ? selectedDay.conditionIcon : weather.conditionIcon;
+    const mainDescription = selectedDay
+      ? `${selectedDay.day} · H ${selectedDay.tempHigh}° / L ${selectedDay.tempLow}°`
+      : weather.description;
+
+    // Tone-aware classes
+    const t = (dark: string, lightCls: string) => (light ? lightCls : dark);
 
     return (
       <div
@@ -49,7 +82,7 @@ export const WeatherCard = forwardRef<HTMLDivElement, WeatherCardProps>(
           boxShadow: preset.ring,
         }}
       >
-        {/* Decorative blurs - dimmed for minimal, intensified for cinematic */}
+        {/* Decorative blurs */}
         {!isMinimal && (
           <>
             <div
@@ -78,21 +111,42 @@ export const WeatherCard = forwardRef<HTMLDivElement, WeatherCardProps>(
           </>
         )}
 
+        {/* Cinematic vignette + animated glow */}
+        {isCinematic && (
+          <>
+            <div
+              className="absolute inset-0 pointer-events-none cinematic-pulse"
+              style={{
+                background:
+                  "radial-gradient(circle at 50% 40%, hsl(45 95% 60% / 0.18), transparent 65%)",
+              }}
+            />
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                boxShadow: "inset 0 0 120px 40px rgba(0,0,0,0.7)",
+              }}
+            />
+          </>
+        )}
+
         {/* Content */}
         <div className={`relative z-10 flex flex-col h-full p-6 ${isPortrait ? "justify-between" : "justify-center gap-4"}`}>
           {/* Header */}
           <div>
             <div className="flex items-center gap-1.5 mb-1">
-              <MapPin size={14} className="text-primary-foreground/60" />
+              <MapPin size={14} className={t("text-primary-foreground/60", "text-black/50")} />
               <span
-                className={`text-sm font-medium text-primary-foreground/70 tracking-wide ${
+                className={`text-sm font-medium tracking-wide ${
                   isMinimal ? "" : "uppercase"
-                }`}
+                } ${t("text-primary-foreground/70", "text-black/70")}`}
               >
                 {weather.city}, {weather.country}
               </span>
             </div>
-            <p className="text-xs text-primary-foreground/40 capitalize">{weather.description}</p>
+            <p className={`text-xs capitalize ${t("text-primary-foreground/40", "text-black/45")}`}>
+              {mainDescription}
+            </p>
           </div>
 
           {/* Main temp */}
@@ -105,47 +159,51 @@ export const WeatherCard = forwardRef<HTMLDivElement, WeatherCardProps>(
                 />
               )}
               <WeatherIcon
-                icon={weather.conditionIcon}
+                icon={mainIcon}
                 size={Math.round((isPortrait ? 72 : 56) * preset.iconBoost)}
-                className="relative text-primary-foreground/90 animate-float"
+                className={`relative ${t("text-primary-foreground/90", "text-black/85")} ${iconAnimClass(mainIcon, mainCondition)}`}
               />
             </div>
             <div>
               <span
-                className={`font-mono-display font-bold text-primary-foreground tracking-tighter leading-none ${
+                className={`font-mono-display font-bold tracking-tighter leading-none ${
                   isCinematic ? "text-8xl drop-shadow-[0_4px_24px_hsl(45_95%_60%/0.4)]" : "text-7xl"
-                }`}
+                } ${t("text-primary-foreground", "text-black")}`}
               >
-                {weather.temperature}°
+                {mainTemp}°
               </span>
-              <p className="text-primary-foreground/60 text-sm mt-1">{weather.condition}</p>
+              <p className={`text-sm mt-1 ${t("text-primary-foreground/60", "text-black/60")}`}>
+                {mainCondition}
+              </p>
             </div>
           </div>
 
           {/* Stats */}
           <div
             className={`rounded-xl p-3 grid grid-cols-3 gap-2 ${
-              isMinimal ? "bg-white/[0.03] border border-white/5" : "glass-card"
+              isMinimal
+                ? "bg-black/[0.04] border border-black/10"
+                : "glass-card"
             }`}
           >
             <div className="flex flex-col items-center gap-1">
-              <Thermometer size={14} className="text-primary-foreground/50" />
-              <span className="text-xs text-primary-foreground/50">Feels</span>
-              <span className="text-sm font-semibold text-primary-foreground font-mono-display">
+              <Thermometer size={14} className={t("text-primary-foreground/50", "text-black/50")} />
+              <span className={`text-xs ${t("text-primary-foreground/50", "text-black/55")}`}>Feels</span>
+              <span className={`text-sm font-semibold font-mono-display ${t("text-primary-foreground", "text-black")}`}>
                 {weather.feelsLike}°
               </span>
             </div>
             <div className="flex flex-col items-center gap-1">
-              <Droplets size={14} className="text-primary-foreground/50" />
-              <span className="text-xs text-primary-foreground/50">Humidity</span>
-              <span className="text-sm font-semibold text-primary-foreground font-mono-display">
+              <Droplets size={14} className={t("text-primary-foreground/50", "text-black/50")} />
+              <span className={`text-xs ${t("text-primary-foreground/50", "text-black/55")}`}>Humidity</span>
+              <span className={`text-sm font-semibold font-mono-display ${t("text-primary-foreground", "text-black")}`}>
                 {weather.humidity}%
               </span>
             </div>
             <div className="flex flex-col items-center gap-1">
-              <Wind size={14} className="text-primary-foreground/50" />
-              <span className="text-xs text-primary-foreground/50">Wind</span>
-              <span className="text-sm font-semibold text-primary-foreground font-mono-display">
+              <Wind size={14} className={t("text-primary-foreground/50", "text-black/50")} />
+              <span className={`text-xs ${t("text-primary-foreground/50", "text-black/55")}`}>Wind</span>
+              <span className={`text-sm font-semibold font-mono-display ${t("text-primary-foreground", "text-black")}`}>
                 {weather.windSpeed} mph
               </span>
             </div>
@@ -153,29 +211,57 @@ export const WeatherCard = forwardRef<HTMLDivElement, WeatherCardProps>(
 
           {/* Forecast */}
           <div>
-            <p className="text-xs text-primary-foreground/40 uppercase tracking-widest mb-2">5-Day Forecast</p>
-            <div className="flex justify-between gap-1">
-              {weather.forecast.map((day) => (
-                <div
-                  key={day.day}
-                  className={`rounded-lg flex-1 flex flex-col items-center py-2 px-1 gap-1 ${
-                    isMinimal ? "bg-white/[0.03] border border-white/5" : "glass-card"
+            <div className="flex items-center justify-between mb-2">
+              <p className={`text-xs uppercase tracking-widest ${t("text-primary-foreground/40", "text-black/45")}`}>
+                5-Day Forecast
+              </p>
+              {selectedDay && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setSelectedDayIdx(null); }}
+                  className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full transition-colors ${
+                    light
+                      ? "bg-black/5 hover:bg-black/10 text-black/60"
+                      : "bg-white/10 hover:bg-white/20 text-primary-foreground/70"
                   }`}
                 >
-                  <span className="text-[10px] font-medium text-primary-foreground/50 uppercase">{day.day}</span>
-                  <WeatherIcon icon={day.conditionIcon} size={18} className="text-primary-foreground/70" />
-                  <span className="text-xs font-semibold text-primary-foreground font-mono-display">
-                    {day.tempHigh}°
-                  </span>
-                  <span className="text-[10px] text-primary-foreground/40 font-mono-display">{day.tempLow}°</span>
-                </div>
-              ))}
+                  Today
+                </button>
+              )}
+            </div>
+            <div className="flex justify-between gap-1">
+              {weather.forecast.map((day, idx) => {
+                const isSel = selectedDayIdx === idx;
+                return (
+                  <button
+                    type="button"
+                    key={`${day.day}-${idx}`}
+                    onClick={() => setSelectedDayIdx(isSel ? null : idx)}
+                    className={`rounded-lg flex-1 flex flex-col items-center py-2 px-1 gap-1 transition-all ${
+                      isMinimal
+                        ? "bg-black/[0.04] border border-black/10 hover:bg-black/[0.07]"
+                        : "glass-card hover:bg-white/10"
+                    } ${isSel ? "ring-2 ring-primary/70 scale-[1.04]" : ""}`}
+                  >
+                    <span className={`text-[10px] font-medium uppercase ${t("text-primary-foreground/50", "text-black/55")}`}>
+                      {day.day}
+                    </span>
+                    <WeatherIcon icon={day.conditionIcon} size={18} className={t("text-primary-foreground/70", "text-black/70")} />
+                    <span className={`text-xs font-semibold font-mono-display ${t("text-primary-foreground", "text-black")}`}>
+                      {day.tempHigh}°
+                    </span>
+                    <span className={`text-[10px] font-mono-display ${t("text-primary-foreground/40", "text-black/45")}`}>
+                      {day.tempLow}°
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
           {/* Branding */}
           <div className="text-center">
-            <span className="text-[10px] text-primary-foreground/20 tracking-widest uppercase">
+            <span className={`text-[10px] tracking-widest uppercase ${t("text-primary-foreground/20", "text-black/35")}`}>
               SkyBrief · Daily Updates
             </span>
           </div>
