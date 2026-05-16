@@ -354,7 +354,86 @@ export function SystemHealthCard() {
     );
   }
 
-        {/* Debug Trace toggle */}
+  return (
+    <Card>
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <CollapsibleTrigger asChild>
+          <CardHeader className="cursor-pointer select-none hover:bg-muted/30 transition-colors rounded-t-lg">
+            <div className="flex items-center justify-between gap-2">
+              <div className="space-y-1">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Activity size={16} className="text-primary" />
+                  System Health
+                  <Badge variant="outline" className={`ml-1 ${aggBadgeClass}`}>
+                    <span className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${aggDotClass}`} />
+                    {aggregate}
+                  </Badge>
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  {open
+                    ? "Background automation status"
+                    : `Scheduler: ${timeAgo(scheduler.last_run_at)} · Worker: ${timeAgo(runJobs.last_run_at)}`}
+                </CardDescription>
+              </div>
+              <ChevronDown
+                size={18}
+                className={`text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
+              />
+            </div>
+          </CardHeader>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <CardContent className="space-y-3">
+            <WorkerRow
+              title="auto-post-scheduler"
+              state={schedState}
+              row={scheduler}
+              intervalLabel="every 5m"
+            />
+            <WorkerRow
+              title="run-jobs"
+              state={jobsState}
+              row={runJobs}
+              intervalLabel="every 1m"
+            />
+
+            <div className="rounded-md border border-border/30 bg-muted/10 p-2.5 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-muted-foreground">Last manual probe</span>
+                <span className="text-[11px] font-mono">{timeAgo(probe.last_run_at)}</span>
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                Probes/Safe-Reset never count as background runs.
+              </p>
+            </div>
+
+            {(schedState.isCritical || jobsState.isCritical) && (
+              <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2.5 space-y-1.5">
+                <p className="text-[11px] font-semibold text-destructive flex items-center gap-1.5">
+                  <AlertTriangle size={12} /> CRITICAL — a background worker is stale
+                </p>
+                <p className="text-[11px] text-destructive/90">
+                  pg_cron is firing on schedule, but the worker isn't writing health updates.
+                  This is usually because the shared cron secret drifted out of sync.
+                </p>
+                {probeError && (
+                  <p className="text-[11px] font-mono text-destructive/90 break-all">
+                    Probe: {probeError}
+                  </p>
+                )}
+                <Button
+                  size="sm"
+                  variant="default"
+                  onClick={syncCronSecret}
+                  disabled={syncingCron}
+                  className="w-full gap-2 mt-1"
+                >
+                  <RefreshCw size={12} className={syncingCron ? "animate-spin" : ""} />
+                  {syncingCron ? "Syncing…" : "Repair cron link (sync secret)"}
+                </Button>
+              </div>
+            )}
+
         <div className="rounded-md border border-border/50 bg-muted/30 p-3 space-y-2">
           <div className="flex items-center justify-between gap-3">
             <div className="space-y-0.5">
