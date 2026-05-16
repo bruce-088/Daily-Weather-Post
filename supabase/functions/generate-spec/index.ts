@@ -28,6 +28,8 @@ const FEATURES: Array<[string, string, string]> = [
   ["Advanced Analytics — Pattern Detection", "✅ Working", "analyze-growth detects slot×tone, slot×hook, condition×tone winners (≥3 samples, ≥15% lift) into growth_insights."],
   ["Advanced Analytics — Learning Feedback Loop", "✅ Working", "generate-caption injects PROVEN WINNERS block (winning themes + top-post few-shot from ai_memory) while preserving anti-clone and 70/30 exploit/explore."],
   ["Advanced Analytics — Growth Command Center UI", "✅ Working", "Why It Won, Best Tone/Slot/Hook cards, actionable recommendation; per-post Performance pill in history."],
+  ["Creative Decay & Diversity Guard", "✅ Working", "48h per-city cooldown penalizes hooks used ≥2× (80% weight cut); FORBIDDEN REPETITIONS block lists last-3 openers + recurring themes; Diversity Guard + deterministic Focus Angle rotation (Landscape/Sky/Street Level/Atmospheric Detail/Human Activity) injected into generate-caption."],
+  ["Background Variation (Pexels)", "✅ Working", "Ken-Burns fallback query combines weather condition + random secondary keyword (foliage/architecture/horizon/aerial/street/skyline/trees/rooftop/park/downtown) + city scope; randomized across top 10 results so identical conditions in different cities never collide."],
 ];
 
 const INTEGRATIONS: Array<[string, string]> = [
@@ -163,7 +165,19 @@ Rotated deterministically by \`(date + slot)\` index:
 - Sources: top \`winning_factors\` themes from high-scoring \`post_analytics\` rows + 1 few-shot example from \`ai_memory\` (\`memory_type='top_post'\`).
 - Safeguards: minimum sample size ≥5 posts per user (and ≥3 per pattern) before patterns are applied.
 - Variation preserved: 70/30 exploit/explore ratio; explicit instruction to vary opener and structure.
-- Fully fail-safe: wrapped in try/catch — falls back to base generation if learning context is unavailable.`;
+- Fully fail-safe: wrapped in try/catch — falls back to base generation if learning context is unavailable.
+
+### Creative Decay & Diversity Guard
+- **Per-city cooldown** (\`getTopPerformingPatterns\` in \`_shared/learning-patterns.ts\`): queries the last 48h of \`post_history\` for \`(user_id, city)\` and counts normalized hook reuse. Any hook used ≥2× in that window has its \`avg_views\` weight cut by 80% before \`topHooks\` is sliced — high performers that are over-served fall off the proven list.
+- **FORBIDDEN REPETITIONS block**: appended by \`buildLearningPromptBlock()\` when present. Lists the last 3 distinct openers verbatim plus any theme tokens (\`beautiful day\`, \`comfortable\`, \`gorgeous\`, \`perfect day\`, \`lovely\`, \`nice day\`) seen ≥2× in 48h. Instructs the model not to start with, paraphrase, or build the post around any of them.
+- **Diversity Guard**: explicit prompt directive telling the model to abandon "Beautiful Day"/"Comfortable" framings when recently used and shift to a secondary signal (wind, humidity, visibility, dew point, UV, local activities, or cinematic atmosphere).
+- **Focus Angle rotation**: deterministic picker over \`["Landscape", "Sky", "Street Level", "Atmospheric Detail", "Human Activity"]\` keyed by \`(cityHash + dayOfYear + slotIdx) mod 5\` so consecutive posts for the same city land on different framings.
+- Both Diversity Guard and Focus Angle live inside the existing fail-safe try/catch — any error silently drops them.
+
+### Background Variation (Pexels Ken-Burns fallback)
+- \`fetchPexelsStillForCondition()\` in \`_shared/video-render.ts\` now appends a random **secondary keyword** (\`foliage | architecture | horizon | aerial | street | skyline | trees | rooftop | park | downtown\`) and the **city name** to the condition-derived primary query.
+- Result pool widened from top 5 → top 10, then randomized. Identical conditions in different cities can no longer collide on the same stock photo.
+- Future caching layers MUST include \`city\` in their cache key.`;
 
 const ROUTING_GUARD = `Prevents cross-city content contamination (e.g., Gainesville content on Orlando channel).
 
@@ -203,7 +217,8 @@ const RESOLVED_ISSUES = `| Issue | Resolution |
 | Identical post titles/captions | Added anti-clone logic, CTA rotation, personality rotation |
 | Silent pipeline failures | Added fail-safe try/catch wrappers on all caption enhancements |
 | Slot prefix inconsistency | Fixed via ensureSlotTitlePrefix in _shared/caption-style.ts — all sources now use single helper |
-| Analytics limited to "Top Performer" badges | Upgraded to Insight Engine: per-post performance_score + winning/losing factors, growth_insights pattern detection, PROVEN WINNERS feedback loop into generate-caption |`;
+| Analytics limited to "Top Performer" badges | Upgraded to Insight Engine: per-post performance_score + winning/losing factors, growth_insights pattern detection, PROVEN WINNERS feedback loop into generate-caption |
+| Gainesville posts repeating "Beautiful Day" hooks and styles | Added 48h per-city Creative Decay (80% weight penalty on overused hooks), FORBIDDEN REPETITIONS block, Diversity Guard, deterministic Focus Angle rotation, and Pexels secondary-keyword + city-scoped background variation |`;
 
 const DEPLOYMENT = `- **Frontend**: React 18 + Vite + TypeScript + Tailwind (Lovable Cloud)
 - **Backend**: Managed Postgres + Serverless Edge Runtime (Supabase via Lovable Cloud)
