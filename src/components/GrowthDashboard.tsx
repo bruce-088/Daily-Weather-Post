@@ -321,7 +321,7 @@ interface RepostSuggestion {
   status: string;
 }
 
-function OutperformingPosts() {
+export function OutperformingPosts() {
   const [items, setItems] = useState<RepostSuggestion[]>([]);
   const [loading, setLoading] = useState(true);
 
