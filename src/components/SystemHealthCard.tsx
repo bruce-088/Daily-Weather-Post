@@ -517,7 +517,7 @@ export function SystemHealthCard() {
         <div className="grid grid-cols-2 gap-2 pt-1">
           <Button
             size="sm"
-            variant={isCritical ? "default" : "outline"}
+            variant={schedState.isCritical || jobsState.isCritical ? "default" : "outline"}
             onClick={safeReset}
             disabled={probing}
             className="gap-2"
