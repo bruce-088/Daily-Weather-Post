@@ -158,13 +158,13 @@ function getWeatherEmoji(condition: string): string {
   return "☀️";
 }
 
-function generateSkyBriefTitle(city: string, temp: number, condition: string, rainChance?: number): string {
-  return buildHookTitle(city, temp, condition, rainChance);
+function generateSkyBriefTitle(city: string, temp: number, condition: string, rainChance?: number, slot?: string | null): string {
+  return buildHookTitle(city, temp, condition, rainChance, slot);
 }
 
 // --- Hook-based YouTube title generator ---
 // Format: [Hook] + City + Weather Detail + Emoji. Drives CTR via curiosity + specificity.
-function buildHookTitle(city: string, temp: number, condition: string, rainChance?: number): string {
+function buildHookTitle(city: string, temp: number, condition: string, rainChance?: number, slot?: string | null): string {
   const emoji = getWeatherEmoji(condition);
   const c = (condition || "").toLowerCase();
   const t = Math.round(temp);
