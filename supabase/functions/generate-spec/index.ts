@@ -38,7 +38,7 @@ const INTEGRATIONS: Array<[string, string]> = [
   ["ElevenLabs", "TTS voiceover for auto-posts."],
   ["Lovable AI Gateway (Google Gemini)", "Caption generation."],
   ["Pexels", "Stock imagery for video backgrounds."],
-  ["YouTube Data API v3", "Shorts upload (resumable)."],
+  ["YouTube Data API v3", "Shorts upload (resumable). Long-lived OAuth via access_type=offline + prompt=consent; refresh_token preserved on re-consent; per-row refresh isolation; in-flight 401 self-heal (refresh + retry once)."],
   ["X/Twitter v1.1 + v2", "OAuth 1.0a HMAC-SHA1; chunked media upload."],
   ["LinkedIn API v202601", "Person + organization posts."],
   ["TikTok Content Posting API", "video.publish / video.upload."],
