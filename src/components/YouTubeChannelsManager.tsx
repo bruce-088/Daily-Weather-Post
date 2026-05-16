@@ -20,6 +20,7 @@ interface YTChannel {
   account_name: string | null;
   city_id: string | null;
   token_expires_at: string | null;
+  extra?: { health?: { status?: "healthy" | "expired" | "disconnected"; checked_at?: string } } | null;
 }
 
 interface CityRow { id: string; name: string; state: string | null }
@@ -47,7 +48,7 @@ export function YouTubeChannelsManager({ cities = [], onChange }: Props) {
     if (!user) { setLoading(false); return; }
     const { data, error } = await supabase
       .from("social_accounts")
-      .select("id, account_external_id, account_name, city_id, token_expires_at")
+      .select("id, account_external_id, account_name, city_id, token_expires_at, extra")
       .eq("user_id", user.id)
       .eq("platform", "youtube")
       .order("created_at", { ascending: true });
@@ -55,7 +56,7 @@ export function YouTubeChannelsManager({ cities = [], onChange }: Props) {
       toast.error("Failed to load YouTube channels");
       setChannels([]);
     } else {
-      setChannels(data || []);
+      setChannels((data || []) as unknown as YTChannel[]);
     }
     setLoading(false);
   };
@@ -129,6 +130,10 @@ export function YouTubeChannelsManager({ cities = [], onChange }: Props) {
               ? new Date(ch.token_expires_at).getTime() < Date.now()
               : false;
             const cn = cityName(ch.city_id);
+            const health = ch.extra?.health?.status;
+            const showExpiredBadge = expired || health === "expired";
+            const showDisconnectedBadge = health === "disconnected";
+            const showHealthyBadge = !showExpiredBadge && !showDisconnectedBadge && health === "healthy";
             return (
               <div
                 key={ch.id}
@@ -157,9 +162,19 @@ export function YouTubeChannelsManager({ cities = [], onChange }: Props) {
                       <Globe size={10} /> Shared
                     </Badge>
                   )}
-                  {expired ? (
-                    <Badge variant="outline" className="text-[10px] border-yellow-500/40 text-yellow-500 bg-yellow-500/10">
-                      Reconnect
+                  {showHealthyBadge ? (
+                    <Badge variant="outline" className="text-[10px] border-emerald-500/40 text-emerald-500 bg-emerald-500/10" title={`Last checked ${ch.extra?.health?.checked_at ? new Date(ch.extra.health.checked_at).toLocaleString() : ""}`}>
+                      ✅ Connected
+                    </Badge>
+                  ) : null}
+                  {showExpiredBadge ? (
+                    <Badge variant="outline" className="text-[10px] border-yellow-500/40 text-yellow-500 bg-yellow-500/10" title="Token expired — reconnect this channel">
+                      ⚠️ Needs refresh
+                    </Badge>
+                  ) : null}
+                  {showDisconnectedBadge ? (
+                    <Badge variant="outline" className="text-[10px] border-destructive/40 text-destructive bg-destructive/10" title="YouTube API unreachable for this channel">
+                      ❌ Disconnected
                     </Badge>
                   ) : null}
                   <Button
