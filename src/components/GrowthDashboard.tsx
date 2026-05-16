@@ -348,7 +348,7 @@ export function OutperformingPosts({ className }: { className?: string } = {}) {
 
   return (
     <Card className={`border-orange-400/30 bg-gradient-to-br from-orange-400/10 to-transparent flex flex-col ${className ?? ""}`}>
-      <CardHeader className="pb-2">
+      <CardHeader className="pb-2 shrink-0">
         <CardTitle className="text-sm flex items-center gap-2">
           <Flame size={14} className="text-orange-400" />
           Outperforming posts
