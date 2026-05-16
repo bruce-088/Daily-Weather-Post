@@ -3,12 +3,18 @@
 
 export interface UploadResult {
   id: string;
+  /** city_id of the social_accounts row actually used for this upload, if resolvable */
+  resolved_city_id?: string | null;
+  /** account_name / handle of the channel actually used for this upload */
+  account_name?: string | null;
 }
 
 export interface PostResult {
   success: boolean;
   id?: string;
   error?: string;
+  resolved_city_id?: string | null;
+  account_name?: string | null;
 }
 
 export interface PlatformAdapter {
@@ -28,6 +34,7 @@ export interface PlatformAdapter {
     title: string,
     description: string,
     mimeType?: string,
+    cityId?: string | null,
   ): Promise<UploadResult | null>;
 }
 
@@ -85,13 +92,21 @@ export async function postToPlatform(
     const cleanTitle = stripTags(title);
     const cleanDescription = stripTags(description);
 
-    const result = await adapter.uploadVideo(token, videoData, cleanTitle, cleanDescription, mimeType);
+    const result = await adapter.uploadVideo(token, videoData, cleanTitle, cleanDescription, mimeType, cityId ?? null);
     if (!result) {
       return { success: false, error: `${adapter.name} upload failed` };
     }
 
-    console.log(`${adapter.name} upload success! ID: ${result.id}`);
-    return { success: true, id: result.id };
+    // Hard routing assertion: if caller scoped the post to a city and the
+    // adapter resolved a different city's channel, refuse to declare success.
+    if (cityId && result.resolved_city_id && result.resolved_city_id !== cityId) {
+      const msg = `[ROUTING_VIOLATION] ${adapter.name} resolved channel city_id=${result.resolved_city_id} but post was for city_id=${cityId}`;
+      console.error(msg);
+      return { success: false, error: msg, resolved_city_id: result.resolved_city_id, account_name: result.account_name ?? null };
+    }
+
+    console.log(`${adapter.name} upload success! ID: ${result.id} channel=${result.account_name ?? "unknown"} city=${result.resolved_city_id ?? "shared"}`);
+    return { success: true, id: result.id, resolved_city_id: result.resolved_city_id ?? null, account_name: result.account_name ?? null };
   } catch (e) {
     const msg = e instanceof Error ? e.message : `${adapter.name} upload failed`;
     console.error(`${adapter.name} upload error:`, msg);

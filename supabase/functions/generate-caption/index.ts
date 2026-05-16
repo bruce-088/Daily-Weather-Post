@@ -352,7 +352,8 @@ ${buildLocalIdentityBlock(city)}
 
 ${styleAddendum}${insightNote}`;
 
-    const systemPrompt = `${SKYBRIEF_SYSTEM_PROMPT}\n\n${LOCATION_ACCURACY_RULES}`;
+    const cityScopeDirective = `\n\nSTRICT CITY SCOPE: You are generating content EXCLUSIVELY for ${city}${body.state_or_region || body.stateOrRegion ? ", " + (body.state_or_region || body.stateOrRegion) : ""}. Do NOT mention any other city, region, or social handle. The ONLY @handle allowed is ${handle}. Never output @SkyBriefGNV, @SkyBriefMiami, @SkyBriefOrlando, @SkyBriefTampa or any other variant unless it exactly equals ${handle}. Do NOT include subscribe URLs for other channels.`;
+    const systemPrompt = `${SKYBRIEF_SYSTEM_PROMPT}\n\n${LOCATION_ACCURACY_RULES}${cityScopeDirective}`;
 
     const callModel = async (extraUserSuffix = "") => {
       const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -418,6 +419,35 @@ ${styleAddendum}${insightNote}`;
     // Final safety net regardless of retry path
     caption = stripUnverifiedReferences(caption, city);
 
+    // City-handle sanitizer: replace any @SkyBrief* token that doesn't match
+    // the dynamic handle for this city. Prevents Orlando captions ending with
+    // "Follow @SkyBriefGNV" because the model recalled stale brand strings.
+    try {
+      const handleRe = /@SkyBrief[A-Za-z0-9_]+/g;
+      const foreign: string[] = [];
+      caption = caption.replace(handleRe, (m) => {
+        if (m === handle) return m;
+        foreign.push(m);
+        return handle;
+      });
+      if (foreign.length > 0) {
+        console.warn(`[generate-caption] foreign @SkyBrief handle(s) replaced for ${city}:`, foreign);
+        try {
+          const svc = createClient(
+            Deno.env.get("SUPABASE_URL")!,
+            Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+          );
+          await svc.from("system_logs").insert({
+            user_id: auth.userId,
+            type: "caption_handle_sanitized",
+            message: `Replaced foreign @SkyBrief handle(s) ${foreign.join(", ")} → ${handle} for city ${city}`,
+            context: { city, expected_handle: handle, foreign },
+          });
+        } catch { /* best-effort */ }
+      }
+    } catch (e) {
+      console.warn("[generate-caption] handle sanitizer failed:", e);
+    }
     // Prepend (or replace) a city-local timestamp stamp on the first line.
     // Format: `📍 ${city} · ${H AM/PM} Update`. Fails silently if anything throws.
     try {

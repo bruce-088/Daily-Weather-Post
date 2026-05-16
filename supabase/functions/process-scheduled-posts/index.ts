@@ -2653,7 +2653,8 @@ Deno.serve(async (req) => {
             const result = await postToPlatform(platformName, supabase, post.user_id, video.data, title, desc, video.mimeType, post.city_id || null);
             if (result.success && result.id) {
               videoPostedAny = true;
-              console.log(`[publish] ${platformName} OK id=${result.id} post=${post.id}`);
+              const acctName = (result as any).account_name || "unknown";
+              console.log(`[publish] ${platformName} OK id=${result.id} channel=${acctName} city=${(result as any).resolved_city_id ?? "shared"} post=${post.id}`);
               if (platformName === "youtube") {
                 platformExternalIds["youtube"] = result.id;
                 if (!publishedPostUrl) publishedPostUrl = `https://www.youtube.com/watch?v=${result.id}`;
@@ -2662,6 +2663,34 @@ Deno.serve(async (req) => {
                 if (!publishedPostUrl) publishedPostUrl = `https://www.tiktok.com/video/${result.id}`;
               } else {
                 platformExternalIds[platformName] = result.id;
+              }
+              // === Channel-level success log ===
+              // Records exactly which channel received this post so any future
+              // contamination is visible after the fact.
+              try {
+                await supabase.from("system_logs").insert({
+                  user_id: post.user_id,
+                  type: "post_published",
+                  platform: platformName,
+                  message: `Success: ${weather.city} posted to ${platformName} channel: ${acctName}`,
+                  context: {
+                    scheduled_post_id: post.id,
+                    city: weather.city,
+                    city_id: post.city_id || null,
+                    account_name: acctName,
+                    resolved_city_id: (result as any).resolved_city_id ?? null,
+                    external_post_id: result.id,
+                  },
+                });
+                await supabase.from("system_health").upsert({
+                  id: "last_publish",
+                  last_status: "ok",
+                  last_message: `${weather.city} → ${platformName} ${acctName}`,
+                  last_run_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                });
+              } catch (e) {
+                console.warn(`[publish] success log failed:`, (e as any)?.message);
               }
             } else if (result.success && !result.id) {
               // Adapter reported success but returned no ID — treat as a hard failure.
