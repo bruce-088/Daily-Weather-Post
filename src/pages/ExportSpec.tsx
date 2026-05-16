@@ -110,16 +110,18 @@ const ExportSpec = () => {
       const { data: { session } } = await supabase.auth.getSession();
       const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
       const url = `${SUPABASE_URL}/functions/v1/generate-spec?_=${Date.now()}`;
+      const ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
       const res = await fetch(url, {
         method: "GET",
         cache: "no-store",
         headers: {
-          Authorization: `Bearer ${session?.access_token ?? ""}`,
+          Authorization: `Bearer ${session?.access_token ?? ANON_KEY}`,
+          apikey: ANON_KEY,
           "Cache-Control": "no-cache, no-store, must-revalidate",
           Pragma: "no-cache",
         },
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
       const md = await res.text();
       // Strip the auto-generated timestamp line so we only detect real spec changes.
       const normalized = md.replace(/_Generated:[^_]+_/g, "");
