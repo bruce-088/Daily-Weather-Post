@@ -46,7 +46,7 @@ import { AnalyticsPanel } from "@/components/AnalyticsPanel";
 import { SmartInsightsCard } from "@/components/SmartInsightsCard";
 import { GrowthSummaryCard } from "@/components/GrowthSummaryCard";
 import { GrowthDashboard } from "@/components/GrowthDashboard";
-import { GrowthCommandCenter } from "@/components/GrowthCommandCenter";
+import { GrowthCommandProvider, GrowthStatsCards, GrowthMemoryBank, GrowthWeeklyRecap } from "@/components/GrowthCommandCenter";
 import { GrowthInsights } from "@/components/GrowthInsights";
 import { GrowthLog } from "@/components/GrowthLog";
 import { AiInsightsCard } from "@/components/AiInsightsCard";
@@ -1052,33 +1052,43 @@ const Index = () => {
 
           {/* GROWTH TAB */}
           <TabsContent value="growth">
-            <div className="max-w-6xl mx-auto space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
-                    <Sparkles size={16} className="text-primary" /> Growth Insights Center
-                  </h2>
-                  <p className="text-xs text-muted-foreground">
-                    Every A/B win, learned pattern, and active experiment in one place.
-                  </p>
+            <GrowthCommandProvider>
+              <div className="max-w-[1600px] mx-auto space-y-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                      <Sparkles size={16} className="text-primary" /> Growth Insights Center
+                    </h2>
+                    <p className="text-xs text-muted-foreground">
+                      Every A/B win, learned pattern, and active experiment in one place.
+                    </p>
+                  </div>
                 </div>
-              </div>
 
-              {/* Top: key metrics + memory bank */}
-              <GrowthCommandCenter />
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                  {/* Left: strategy + experiments + weekly recap */}
+                  <div className="lg:col-span-3 space-y-4">
+                    <GrowthStatsCards stacked />
+                    <GrowthWeeklyRecap />
+                  </div>
 
-              {/* Main: chronological wins feed + Growth Lab side-by-side on wide screens */}
-              <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-                <div className="space-y-4">
-                  <GrowthLog />
+                  {/* Middle: Memory Bank */}
+                  <div className="lg:col-span-5 space-y-4">
+                    <GrowthMemoryBank className="h-full" />
+                  </div>
+
+                  {/* Right: AI insights + heatmap + smart insights */}
+                  <div className="lg:col-span-4 space-y-4">
+                    <AiInsightsCard />
+                    <GrowthDashboard />
+                    <SmartInsightsCard />
+                  </div>
                 </div>
-                <div className="space-y-4">
-                  <GrowthDashboard />
-                  <AiInsightsCard />
-                  <SmartInsightsCard />
-                </div>
+
+                {/* Full-width chronological wins feed */}
+                <GrowthLog />
               </div>
-            </div>
+            </GrowthCommandProvider>
           </TabsContent>
 
           {/* ANALYTICS TAB */}

@@ -1,50 +1,50 @@
-# Interactive Preview Card (UI Only)
+# Growth Page — 3-Column Grid Layout
 
-Scope: `src/components/WeatherCard.tsx` + small bits of `src/pages/Index.tsx` and `src/index.css`. No edge functions, no posting pipeline, no DB.
+The Growth tab lives inside `src/pages/Index.tsx` under `<TabsContent value="growth">`. Most of its content (stat cards, Memory Bank, Weekly Recap) is bundled inside `<GrowthCommandCenter />`. The right-column cards (`GrowthDashboard`, `AiInsightsCard`, `SmartInsightsCard`) are already rendered separately. `GrowthLog` is the chronological wins feed (not requested by user — will be moved below the grid as a full-width row so nothing is lost).
 
-## 1. Live Weather Refresh
-- In `Index.tsx`, next to the existing style/aspect controls (above the card), add a small refresh icon button (`RefreshCw` from lucide) labeled by tooltip "Refresh weather".
-- Place a tiny `MapPin · GAINESVILLE, US · 🔄` cluster + "Last updated: {relative}" line above the card.
-- onClick → `fetchWeather(settings.location, settings.state)` (already wired in `useWeather`). Spin the icon while `loading`.
-- Relative timestamp derived from `lastUpdated` (already returned by `useWeather`), formatted "just now / 2m ago / 14:32". Re-renders on a 30s `setInterval`.
+To get the requested 3-column layout (stat cards stacked vertically + recap on the left; Memory Bank in the middle; insights on the right) **without touching data fetching or AI logic**, the GrowthCommandCenter render tree needs to be split into addressable slots. Its internal data loading stays byte-identical.
 
-## 2. Style Preview Actually Changes
-Update `STYLE_PRESETS` + render logic in `WeatherCard.tsx`:
-- **Standard** — unchanged (current purple gradient).
-- **Minimal** — true light theme: `background: linear-gradient(180deg,#fafafa,#ececec)`, swap all `text-primary-foreground*` to a dark-text variant via a `tone: "light" | "dark"` flag on the preset. Glass stat tiles become `bg-black/5 border border-black/10`. No blurs (already off). Branding text uses `text-black/40`.
-- **Cinematic** — keep existing dark radial bg, add:
-  - vignette overlay: absolute inset, `box-shadow: inset 0 0 120px 40px rgba(0,0,0,0.7)` + radial mask
-  - animated subtle glow: a slowly pulsing `radial-gradient` layer behind content using a new keyframe `cinematic-pulse` (8s ease-in-out infinite, opacity 0.4↔0.7).
-- Toggle is instant (already controlled by `cardStyle` state). Only presentation changes inside `WeatherCard`.
+## Refactor
 
-## 3. 5-Day Forecast Tappable
-- Add internal state `selectedDayIdx: number | null` in `WeatherCard`.
-- Each forecast tile becomes a `<button>`; clicking sets `selectedDayIdx`. Selected tile gets a ring (`ring-2 ring-primary/70`) and slight scale.
-- When a day is selected, the **main temp / condition / icon / description** block swaps to render that day's `tempHigh`, `tempLow`, condition + a small "Mon forecast · tap to reset" hint. Clicking the selected tile again (or a new "Today" pill) resets to live current.
-- Purely local component state; does not mutate `weather` or anything upstream → no pipeline impact.
+### 1. `src/components/GrowthCommandCenter.tsx` — slot prop, no logic changes
 
-## 4. Download Button Works (filename fix)
-- `handleExport` in `Index.tsx`: change filename to `skybrief-{citySlug}-{YYYY-MM-DD}.png`.
-  - `citySlug = (weather.city || "weather").toLowerCase().replace(/[^a-z0-9]+/g,"-")`
-  - Date via `new Date().toISOString().slice(0,10)`.
-- Logic (`toPng` on `cardRef`) already works; only filename + a fallback toast tweak.
+- Extract the existing `load` / `handleRefresh` / state into an internal `useGrowthCommandData()` hook **defined in the same file** (queries, intervals, toasts, and channel-save logic copied verbatim — no edits to SQL or behavior).
+- Export three new components that consume that hook and render only their respective sub-sections:
+  - `GrowthStatsCards` — stat cards (`Total Insights`, `Best Performing Hook`, `Experiments Running`) — rendered as a **vertical stack** (`grid-cols-1 gap-3`) for left column.
+  - `GrowthMemoryBank` — `Memory Bank` card with `<MemoryBankList />` inside, scroll height capped (`max-h-[720px] overflow-auto`).
+  - `GrowthWeeklyRecap` — Weekly Recap card with channel selector + recent posts preview.
+- Keep `<GrowthCommandCenter />` as a thin wrapper (`<GrowthStatsCards /> + <GrowthMemoryBank /> + <GrowthWeeklyRecap />`) so any other consumer is unaffected. Only call site is `Index.tsx` so this just preserves the public API.
+- The "Refresh" button stays inside `GrowthStatsCards`'s header — single instance, single refresh.
 
-## 5. Condition Icon Animates
-- Add three CSS animation utility classes in `src/index.css`:
-  - `.icon-anim-clear` → existing `animate-pulse-glow` style, slower (4s).
-  - `.icon-anim-rain` → tiny vertical drip: `@keyframes drip { 0%,100% { transform: translateY(0); opacity:1 } 50% { transform: translateY(2px); opacity:.7 } }` 1.6s infinite.
-  - `.icon-anim-storm` → flicker: opacity 1 → 0.4 → 1 with a quick jitter at 0.3s/2.4s cycle.
-- In `WeatherCard`, pick the class based on `weather.conditionIcon` / `weather.condition`:
-  - `sun`/`Clear` → clear
-  - `cloud-rain`/`cloud-drizzle` → rain
-  - `cloud-lightning`/Thunderstorm → storm
-  - others → no animation (or gentle float, already present).
-- Applied via `className` on the existing `<WeatherIcon>` — no API/shape change.
+⚠️ Important: because each slot calls the same hook independently, the hook MUST be a **shared context** to avoid 3× fetches. Implementation: add a `GrowthCommandProvider` that calls the load function once and shares state via `React.createContext`. Slot components read from context; if no provider is present, they fall back to running the hook themselves (so the standalone `<GrowthCommandCenter />` still works).
+
+### 2. `src/pages/Index.tsx` — replace the Growth tab body
+
+Replace the existing `<GrowthCommandCenter />` + `lg:grid-cols-[1.4fr_1fr]` block with:
+
+```text
+<GrowthCommandProvider>
+  max-w-[1600px] mx-auto space-y-6
+    header (Sparkles · Growth Insights Center · Refresh)
+    grid grid-cols-1 lg:grid-cols-12 gap-6
+      ├─ Left  (lg:col-span-3)  → GrowthStatsCards stacked + GrowthWeeklyRecap
+      ├─ Mid   (lg:col-span-5)  → GrowthMemoryBank (h-full)
+      └─ Right (lg:col-span-4)  → AiInsightsCard + GrowthDashboard (heatmap + top hooks) + SmartInsightsCard
+  GrowthLog (full width below the grid, unchanged)
+</GrowthCommandProvider>
+```
+
+- Each column wrapped in `space-y-4` so cards inside stay aligned.
+- Top-row top edges align because all three columns start at the same grid row.
+- Cards use `h-full` where it improves visual balance (Memory Bank, AI Insights).
 
 ## Out of scope
-- `useWeather`, `fetch-weather` edge function, caption/title generation, posting, scheduling, DB, Creatomate, all other components.
+
+- Any data queries, intervals, toasts, RLS, edge function calls.
+- `GrowthDashboard`, `AiInsightsCard`, `SmartInsightsCard`, `GrowthLog`, `GrowthInsights` internals.
+- All other tabs (`schedule`, `history`, `analytics`, `create`, `jobs`).
 
 ## Files touched
-- `src/components/WeatherCard.tsx` — style presets (light tone for minimal, cinematic vignette+glow), tappable forecast state, animated icon class.
-- `src/pages/Index.tsx` — refresh button + "Last updated" line above card stage; download filename change.
-- `src/index.css` — `cinematic-pulse`, `drip`, `flicker` keyframes + helper classes.
+
+- `src/components/GrowthCommandCenter.tsx` — split into provider + 3 slot components + thin wrapper. No query/logic changes.
+- `src/pages/Index.tsx` — Growth tab body only (lines ~1054–1082).

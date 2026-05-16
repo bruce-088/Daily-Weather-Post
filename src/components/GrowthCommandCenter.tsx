@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useContext, useEffect, useState, createContext, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -70,7 +70,12 @@ function nextSundayRecap(): Date {
   return d;
 }
 
-export function GrowthCommandCenter() {
+// ---------------------------------------------------------------------------
+// Internal data hook — copied verbatim from the original component body so
+// data fetching / mutations are byte-identical. Just lifted into a hook so it
+// can be shared across the three slot components via context.
+// ---------------------------------------------------------------------------
+function useGrowthCommandData() {
   const activeCity = useActiveCity();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -151,7 +156,6 @@ export function GrowthCommandCenter() {
     const channels = (ytRes.data as YouTubeChannel[]) || [];
     setYtChannels(channels);
 
-    // Default selection: saved value → channel matching active city → first.
     const saved = (settingsRes.data as any)?.recap_youtube_channel as string | undefined;
     let defaultChannel =
       (saved && channels.find((c) => c.id === saved)?.id) ||
@@ -169,18 +173,17 @@ export function GrowthCommandCenter() {
 
   useEffect(() => { setLoading(true); load(); }, [load]);
 
-  async function handleRefresh() {
+  const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     try { await load(); } finally { setRefreshing(false); }
-  }
+  }, [load]);
 
-  async function handleChannelChange(value: string) {
+  const handleChannelChange = useCallback(async (value: string) => {
     setRecapChannel(value);
     setSavingChannel(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      // Check-then-act (weather_settings has no unique constraint on user_id).
       const { data: existing } = await supabase
         .from("weather_settings")
         .select("id")
@@ -201,34 +204,59 @@ export function GrowthCommandCenter() {
     } finally {
       setSavingChannel(false);
     }
-  }
+  }, []);
 
-  const nextRecap = nextSundayRecap();
-  const recapLabel = nextRecap.toLocaleString(undefined, {
-    weekday: "long", month: "short", day: "numeric",
-    hour: "2-digit", minute: "2-digit", timeZone: "UTC",
-  });
+  return {
+    loading, refreshing, memories, bestHook, experimentsRunning,
+    recentPosts, ytChannels, recapChannel, savingChannel,
+    handleRefresh, handleChannelChange,
+  };
+}
 
-  if (loading) {
-    return <Card className="p-6 text-sm text-muted-foreground">Loading Growth Command Center…</Card>;
-  }
+type GrowthCtx = ReturnType<typeof useGrowthCommandData>;
+const GrowthCommandContext = createContext<GrowthCtx | null>(null);
 
+export function GrowthCommandProvider({ children }: { children: ReactNode }) {
+  const value = useGrowthCommandData();
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-end -mb-2">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleRefresh}
-          disabled={refreshing}
-          className="h-7 text-xs"
-        >
-          <RefreshCw size={12} className={refreshing ? "animate-spin" : ""} />
-          Refresh
-        </Button>
-      </div>
-      {/* Stat cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+    <GrowthCommandContext.Provider value={value}>
+      {children}
+    </GrowthCommandContext.Provider>
+  );
+}
+
+// Slot components fall back to running the hook themselves when no provider
+// is present, so standalone usage still works.
+function useGrowthSlot(): GrowthCtx {
+  const ctx = useContext(GrowthCommandContext);
+  const own = useGrowthCommandData();
+  return ctx ?? own;
+}
+
+// ---------------------------------------------------------------------------
+// Slot 1: Stat cards (Total Insights / Best Hook / Experiments Running)
+// Stacks vertically when used in a narrow column.
+// ---------------------------------------------------------------------------
+export function GrowthStatsCards({ stacked = false, showRefresh = true }: { stacked?: boolean; showRefresh?: boolean }) {
+  const { loading, refreshing, memories, bestHook, experimentsRunning, handleRefresh } = useGrowthSlot();
+  if (loading) return <Card className="p-4 text-xs text-muted-foreground">Loading…</Card>;
+  return (
+    <div className="space-y-3">
+      {showRefresh && (
+        <div className="flex items-center justify-end -mb-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="h-7 text-xs"
+          >
+            <RefreshCw size={12} className={refreshing ? "animate-spin" : ""} />
+            Refresh
+          </Button>
+        </div>
+      )}
+      <div className={stacked ? "grid grid-cols-1 gap-3" : "grid grid-cols-1 sm:grid-cols-3 gap-3"}>
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-xs flex items-center gap-2 text-muted-foreground font-medium">
@@ -273,83 +301,119 @@ export function GrowthCommandCenter() {
           </CardContent>
         </Card>
       </div>
-
-      {/* Memory bank */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <Brain size={14} className="text-primary" /> Memory Bank
-            <Badge variant="outline" className="text-[10px] ml-auto">All cities</Badge>
-          </CardTitle>
-          <CardDescription className="text-xs">
-            Every winning pattern the AI has learned. High-performance items are reused in future captions.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {memories.length === 0 ? (
-            <p className="text-xs text-muted-foreground italic">
-              Memory bank is empty. Once A/B tests resolve, winners will appear here.
-            </p>
-          ) : (
-            <MemoryBankList items={memories} />
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Weekly Recap */}
-      <Card className="border-primary/30 bg-gradient-to-br from-primary/5 to-transparent">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <CalendarClock size={14} className="text-primary" /> Weekly Recap
-            <Badge variant="outline" className="text-[10px] border-primary/40 text-primary ml-auto">
-              Auto{recapChannel && ytChannels.find((c) => c.id === recapChannel)
-                ? ` · ${ytChannels.find((c) => c.id === recapChannel)!.account_name}`
-                : ""}
-            </Badge>
-          </CardTitle>
-          <CardDescription className="text-xs">
-            Next Recap scheduled for <strong>{recapLabel} UTC</strong>. A long-form YouTube video is generated automatically.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {ytChannels.length > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] text-muted-foreground shrink-0">Post recap to:</span>
-              <Select
-                value={recapChannel}
-                onValueChange={handleChannelChange}
-                disabled={savingChannel}
-              >
-                <SelectTrigger className="h-8 text-xs flex-1">
-                  <SelectValue placeholder="Select YouTube channel" />
-                </SelectTrigger>
-                <SelectContent>
-                  {ytChannels.map((c) => (
-                    <SelectItem key={c.id} value={c.id} className="text-xs">
-                      {c.account_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-          <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
-            <Sparkles size={11} className="text-primary" /> Last 3 daily posts in the queue
-          </p>
-          {recentPosts.length === 0 ? (
-            <p className="text-xs text-muted-foreground italic">
-              No recent posts yet. The recap will populate after a few daily posts.
-            </p>
-          ) : (
-            <div className="grid grid-cols-3 gap-2">
-              {recentPosts.map((p) => (
-                <RecentPostThumb key={p.id} post={p} />
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Slot 2: Memory Bank (center column, scrollable)
+// ---------------------------------------------------------------------------
+export function GrowthMemoryBank({ className = "" }: { className?: string }) {
+  const { loading, memories } = useGrowthSlot();
+  return (
+    <Card className={className}>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center gap-2">
+          <Brain size={14} className="text-primary" /> Memory Bank
+          <Badge variant="outline" className="text-[10px] ml-auto">All cities</Badge>
+        </CardTitle>
+        <CardDescription className="text-xs">
+          Every winning pattern the AI has learned. High-performance items are reused in future captions.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {loading ? (
+          <p className="text-xs text-muted-foreground italic">Loading memory bank…</p>
+        ) : memories.length === 0 ? (
+          <p className="text-xs text-muted-foreground italic">
+            Memory bank is empty. Once A/B tests resolve, winners will appear here.
+          </p>
+        ) : (
+          <MemoryBankList items={memories} />
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Slot 3: Weekly Recap
+// ---------------------------------------------------------------------------
+export function GrowthWeeklyRecap() {
+  const { ytChannels, recapChannel, savingChannel, recentPosts, handleChannelChange } = useGrowthSlot();
+  const nextRecap = nextSundayRecap();
+  const recapLabel = nextRecap.toLocaleString(undefined, {
+    weekday: "long", month: "short", day: "numeric",
+    hour: "2-digit", minute: "2-digit", timeZone: "UTC",
+  });
+  return (
+    <Card className="border-primary/30 bg-gradient-to-br from-primary/5 to-transparent">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center gap-2">
+          <CalendarClock size={14} className="text-primary" /> Weekly Recap
+          <Badge variant="outline" className="text-[10px] border-primary/40 text-primary ml-auto">
+            Auto{recapChannel && ytChannels.find((c) => c.id === recapChannel)
+              ? ` · ${ytChannels.find((c) => c.id === recapChannel)!.account_name}`
+              : ""}
+          </Badge>
+        </CardTitle>
+        <CardDescription className="text-xs">
+          Next Recap scheduled for <strong>{recapLabel} UTC</strong>. A long-form YouTube video is generated automatically.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {ytChannels.length > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-muted-foreground shrink-0">Post recap to:</span>
+            <Select
+              value={recapChannel}
+              onValueChange={handleChannelChange}
+              disabled={savingChannel}
+            >
+              <SelectTrigger className="h-8 text-xs flex-1">
+                <SelectValue placeholder="Select YouTube channel" />
+              </SelectTrigger>
+              <SelectContent>
+                {ytChannels.map((c) => (
+                  <SelectItem key={c.id} value={c.id} className="text-xs">
+                    {c.account_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+          <Sparkles size={11} className="text-primary" /> Last 3 daily posts in the queue
+        </p>
+        {recentPosts.length === 0 ? (
+          <p className="text-xs text-muted-foreground italic">
+            No recent posts yet. The recap will populate after a few daily posts.
+          </p>
+        ) : (
+          <div className="grid grid-cols-3 gap-2">
+            {recentPosts.map((p) => (
+              <RecentPostThumb key={p.id} post={p} />
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Thin wrapper preserving the original public API.
+// ---------------------------------------------------------------------------
+export function GrowthCommandCenter() {
+  return (
+    <GrowthCommandProvider>
+      <div className="space-y-4">
+        <GrowthStatsCards />
+        <GrowthMemoryBank />
+        <GrowthWeeklyRecap />
+      </div>
+    </GrowthCommandProvider>
   );
 }
 
