@@ -24,6 +24,10 @@ const FEATURES: Array<[string, string, string]> = [
   ["Duplicate Post Protection", "✅ Working", "DB-level exclusion constraint + runtime dedupe checks."],
   ["City-to-Channel Routing Guard", "✅ Working", "Strict mapping prevents cross-city content contamination."],
   ["Slot-based Title & Caption Branding", "✅ Working", "Titles prefixed with [8 AM]/[1 PM]/[6 PM]; captions include location beacon."],
+  ["Advanced Analytics — Insight Engine", "✅ Working", "Per-post 0–100 performance_score with winning/losing factors; powered by analyze-performance over last 60d of post_analytics."],
+  ["Advanced Analytics — Pattern Detection", "✅ Working", "analyze-growth detects slot×tone, slot×hook, condition×tone winners (≥3 samples, ≥15% lift) into growth_insights."],
+  ["Advanced Analytics — Learning Feedback Loop", "✅ Working", "generate-caption injects PROVEN WINNERS block (winning themes + top-post few-shot from ai_memory) while preserving anti-clone and 70/30 exploit/explore."],
+  ["Advanced Analytics — Growth Command Center UI", "✅ Working", "Why It Won, Best Tone/Slot/Hook cards, actionable recommendation; per-post Performance pill in history."],
 ];
 
 const INTEGRATIONS: Array<[string, string]> = [
@@ -152,7 +156,14 @@ Rotated deterministically by \`(date + slot)\` index:
 ### Fail-Safe Behavior
 - All caption enhancements (personality, CTA, anti-repeat, similarity) are wrapped in try/catch.
 - Any failure silently falls back to base caption generation.
-- Posts are never blocked by caption enhancement failures.`;
+- Posts are never blocked by caption enhancement failures.
+
+### Learning Feedback Loop (Advanced Analytics)
+- \`buildLearningPromptBlock()\` in \`_shared/learning-patterns.ts\` injects a **PROVEN WINNERS** block into the prompt.
+- Sources: top \`winning_factors\` themes from high-scoring \`post_analytics\` rows + 1 few-shot example from \`ai_memory\` (\`memory_type='top_post'\`).
+- Safeguards: minimum sample size ≥5 posts per user (and ≥3 per pattern) before patterns are applied.
+- Variation preserved: 70/30 exploit/explore ratio; explicit instruction to vary opener and structure.
+- Fully fail-safe: wrapped in try/catch — falls back to base generation if learning context is unavailable.`;
 
 const ROUTING_GUARD = `Prevents cross-city content contamination (e.g., Gainesville content on Orlando channel).
 
@@ -191,7 +202,8 @@ const RESOLVED_ISSUES = `| Issue | Resolution |
 | Cross-city routing (Gainesville on Orlando channel) | Added pre-flight routing guard in publish step |
 | Identical post titles/captions | Added anti-clone logic, CTA rotation, personality rotation |
 | Silent pipeline failures | Added fail-safe try/catch wrappers on all caption enhancements |
-| Slot prefix inconsistency | Fixed via ensureSlotTitlePrefix in _shared/caption-style.ts — all sources now use single helper |`;
+| Slot prefix inconsistency | Fixed via ensureSlotTitlePrefix in _shared/caption-style.ts — all sources now use single helper |
+| Analytics limited to "Top Performer" badges | Upgraded to Insight Engine: per-post performance_score + winning/losing factors, growth_insights pattern detection, PROVEN WINNERS feedback loop into generate-caption |`;
 
 const DEPLOYMENT = `- **Frontend**: React 18 + Vite + TypeScript + Tailwind (Lovable Cloud)
 - **Backend**: Managed Postgres + Serverless Edge Runtime (Supabase via Lovable Cloud)
@@ -269,6 +281,26 @@ Deno.serve(async (req) => {
       system_health: [
         "id (text, PK)", "last_run_at (timestamptz)", "last_status (text)",
         "last_message (text)", "updated_at (timestamptz)",
+      ],
+      post_analytics: [
+        "id (uuid, PK)", "user_id (uuid)", "post_history_id (uuid)", "platform (text)", "city (text)",
+        "views / likes / comments / shares (int)", "view_ratio (numeric)", "engagement_rate (numeric)",
+        "performance_score (numeric, 0–100) — weighted blend: view ratio 50% + engagement 30% + retention 20% vs 60d user baseline",
+        "winning_factors (jsonb) — factors ≥+15% vs baseline (tone, hook, slot, condition, etc.)",
+        "losing_factors (jsonb) — factors ≤−15% vs baseline",
+        "created_at (timestamptz)",
+      ],
+      content_insights: [
+        "id (uuid, PK)", "user_id (uuid)", "insight_type (text)", "dimension (text)",
+        "value (text)", "score (numeric)", "sample_size (int)", "updated_at (timestamptz)",
+      ],
+      growth_insights: [
+        "id (uuid, PK)", "user_id (uuid)", "variable (text)", "winner_value (text)",
+        "loser_value (text)", "delta_pct (numeric)", "sample_size (int)", "title (text)", "created_at (timestamptz)",
+      ],
+      ai_memory: [
+        "id (uuid, PK)", "user_id (uuid)", "memory_type (text: top_post | ...)",
+        "content (jsonb)", "score (numeric)", "created_at (timestamptz)",
       ],
     };
 
