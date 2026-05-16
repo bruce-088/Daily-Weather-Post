@@ -46,7 +46,7 @@ import { AnalyticsPanel } from "@/components/AnalyticsPanel";
 import { SmartInsightsCard } from "@/components/SmartInsightsCard";
 import { GrowthSummaryCard } from "@/components/GrowthSummaryCard";
 import { GrowthDashboard } from "@/components/GrowthDashboard";
-import { GrowthCommandCenter, GrowthCommandProvider, GrowthStatsCards, GrowthMemoryBank, GrowthWeeklyRecap } from "@/components/GrowthCommandCenter";
+import { GrowthCommandProvider, GrowthStatsCards, GrowthMemoryBank, GrowthWeeklyRecap } from "@/components/GrowthCommandCenter";
 import { GrowthInsights } from "@/components/GrowthInsights";
 import { GrowthLog } from "@/components/GrowthLog";
 import { AiInsightsCard } from "@/components/AiInsightsCard";
