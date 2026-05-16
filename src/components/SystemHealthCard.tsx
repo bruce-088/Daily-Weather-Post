@@ -95,6 +95,7 @@ export function SystemHealthCard() {
 
   const [dryRunLoading, setDryRunLoading] = useState(false);
   const [dryRunResult, setDryRunResult] = useState<DryRunResponse | null>(null);
+  const [forceRunning, setForceRunning] = useState(false);
   const [perfRunning, setPerfRunning] = useState(false);
   const [growthRunning, setGrowthRunning] = useState(false);
 
