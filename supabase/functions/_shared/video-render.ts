@@ -386,22 +386,35 @@ async function fetchPexelsStillForCondition(condition: string, city: string): Pr
   const key = Deno.env.get("PEXELS_API_KEY");
   if (!key) return null;
   const c = (condition || "").toLowerCase();
-  let q = "sky";
-  if (c.includes("rain") || c.includes("storm")) q = "rain storm sky";
-  else if (c.includes("snow")) q = "snow landscape";
-  else if (c.includes("cloud")) q = "cloudy sky";
-  else if (c.includes("fog") || c.includes("mist")) q = "foggy landscape";
-  else q = "blue sky clouds";
+  let primary = "sky";
+  if (c.includes("rain") || c.includes("storm")) primary = "rain storm sky";
+  else if (c.includes("snow")) primary = "snow landscape";
+  else if (c.includes("cloud")) primary = "cloudy sky";
+  else if (c.includes("fog") || c.includes("mist")) primary = "foggy landscape";
+  else primary = "blue sky clouds";
+
+  // Random secondary keyword for thumbnail variety even on identical weather.
+  const SECONDARY = ["foliage", "architecture", "horizon", "aerial", "street", "skyline", "trees", "rooftop", "park", "downtown"];
+  const secondary = SECONDARY[Math.floor(Math.random() * SECONDARY.length)];
+
+  // City is included in the query so identical conditions in different cities
+  // never collide on the same stock photo. Future caching MUST include `city`
+  // in its cache key.
+  const cityPart = (city || "").trim();
+  const q = [primary, secondary, cityPart].filter(Boolean).join(" ");
+
   try {
     const r = await fetch(
-      `https://api.pexels.com/v1/search?per_page=5&orientation=portrait&query=${encodeURIComponent(q)}`,
+      `https://api.pexels.com/v1/search?per_page=10&orientation=portrait&query=${encodeURIComponent(q)}`,
       { headers: { Authorization: key } },
     );
     if (!r.ok) return null;
     const j: any = await r.json();
     const photos: any[] = Array.isArray(j?.photos) ? j.photos : [];
     if (!photos.length) return null;
-    const pick = photos[Math.floor(Math.random() * photos.length)];
+    const idx = Math.floor(Math.random() * photos.length);
+    const pick = photos[idx];
+    console.log(`[ken-burns] pexels q="${q}" picked=${idx + 1}/${photos.length}`);
     return pick?.src?.portrait || pick?.src?.large2x || pick?.src?.large || null;
   } catch (e) {
     console.warn("[ken-burns] pexels fetch failed:", (e as Error).message);
