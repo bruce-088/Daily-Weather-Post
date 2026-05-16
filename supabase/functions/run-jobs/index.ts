@@ -18,6 +18,7 @@ Deno.serve(async (req) => {
 
   const _gate = await requireCronOrUser(req);
   if (!_gate.ok) return _gate.response;
+  const triggerSource: "cron" | "user" = _gate.source;
 
 
   const supabase = createClient(
@@ -38,7 +39,7 @@ Deno.serve(async (req) => {
     id: "run-jobs",
     last_run_at: new Date().toISOString(),
     last_status: result.ok ? "ok" : "error",
-    last_message: JSON.stringify(result.summary ?? {}).slice(0, 500),
+    last_message: `source=${triggerSource} ${JSON.stringify(result.summary ?? {})}`.slice(0, 500),
     updated_at: new Date().toISOString(),
   });
 

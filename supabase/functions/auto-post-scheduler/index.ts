@@ -35,6 +35,7 @@ Deno.serve(async (req) => {
 
   const _gate = await requireCronOrUser(req);
   if (!_gate.ok) return _gate.response;
+  const triggerSource: "cron" | "user" = _gate.source;
 
 
   // Initialize client + heartbeat OUTSIDE the main try so heartbeat always runs first.
@@ -62,7 +63,10 @@ Deno.serve(async (req) => {
 
   // ── PROBE / WAKEUP fast path ──
   // Used by the System Health card's "Safe Reset" and by the Settings save flow.
-  // Writes a heartbeat row and returns immediately — never enters slot logic.
+  // Writes a SEPARATE heartbeat row (id='auto-post-scheduler-probe') and returns
+  // immediately — never enters slot logic and NEVER overwrites the real
+  // background-cron heartbeat (id='auto-post-scheduler'), so a manual probe
+  // cannot mask a stalled cron.
   if (isProbe) {
     try {
       const sb = createClient(
@@ -70,7 +74,7 @@ Deno.serve(async (req) => {
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
       );
       await sb.from("system_health").upsert({
-        id: "auto-post-scheduler",
+        id: "auto-post-scheduler-probe",
         last_run_at: new Date().toISOString(),
         last_status: "ok",
         last_message: "probe ok",
@@ -97,10 +101,10 @@ Deno.serve(async (req) => {
         id: "auto-post-scheduler",
         last_run_at: new Date().toISOString(),
         last_status: "running",
-        last_message: "tick started",
+        last_message: `tick started (source=${triggerSource})`,
         updated_at: new Date().toISOString(),
       });
-      console.log("[scheduler] ❤️  heartbeat recorded");
+      console.log(`[scheduler] ❤️  heartbeat recorded (source=${triggerSource})`);
     } catch (hbErr) {
       console.error("[scheduler] heartbeat write failed:", hbErr);
     }
@@ -818,7 +822,7 @@ Deno.serve(async (req) => {
           id: "auto-post-scheduler",
           last_run_at: new Date().toISOString(),
           last_status: "ok",
-          last_message: `triggered=${triggered}`,
+          last_message: `triggered=${triggered} (source=${triggerSource})`,
           updated_at: new Date().toISOString(),
         });
       } catch (_) { /* best-effort */ }
