@@ -4,14 +4,15 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Brain, Trophy, FlaskConical, CalendarClock, Sparkles, Cloud, RefreshCw,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
+  Brain, Trophy, FlaskConical, CalendarClock, Sparkles, RefreshCw,
+  Sun, Cloud, CloudRain, CloudSnow, CloudLightning, CloudFog,
 } from "lucide-react";
 import { useActiveCity } from "@/hooks/useActiveCity";
+import { toast } from "sonner";
 
-// Memory items are derived from hook_stats + winner_stats (the same sources
-// that power Growth Intelligence). ai_memory used to back this view but is
-// not consistently populated by the pipeline — hook_stats is, so we use it
-// as the canonical "what the AI has learned" store for the UI.
 interface MemoryRow {
   id: string;
   memory_type: string;
@@ -26,10 +27,38 @@ interface RecentPost {
   city: string;
   image_url: string | null;
   created_at: string;
+  condition: string | null;
+  temperature: number | null;
+}
+
+interface YouTubeChannel {
+  id: string;
+  account_name: string;
+  city_id: string | null;
 }
 
 const fmtDate = (s: string) =>
   new Date(s).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+
+function conditionIcon(cond: string | null) {
+  const c = (cond || "").toLowerCase();
+  if (c.includes("storm") || c.includes("thunder")) return CloudLightning;
+  if (c.includes("snow")) return CloudSnow;
+  if (c.includes("rain") || c.includes("drizzle")) return CloudRain;
+  if (c.includes("fog") || c.includes("mist") || c.includes("haze")) return CloudFog;
+  if (c.includes("clear") || c.includes("sun")) return Sun;
+  return Cloud;
+}
+
+function conditionTint(cond: string | null) {
+  const c = (cond || "").toLowerCase();
+  if (c.includes("storm") || c.includes("thunder")) return "from-violet-500/30 to-slate-900/60";
+  if (c.includes("snow")) return "from-sky-200/30 to-slate-900/60";
+  if (c.includes("rain") || c.includes("drizzle")) return "from-sky-500/25 to-slate-900/60";
+  if (c.includes("fog") || c.includes("mist") || c.includes("haze")) return "from-slate-400/25 to-slate-900/60";
+  if (c.includes("clear") || c.includes("sun")) return "from-amber-400/25 to-slate-900/60";
+  return "from-primary/20 to-slate-900/60";
+}
 
 // Sunday at 18:00 UTC
 function nextSundayRecap(): Date {
