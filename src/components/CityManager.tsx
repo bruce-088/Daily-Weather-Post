@@ -264,9 +264,14 @@ export function CityManager({ activeCityId, onActiveCityChange, onCitiesChange, 
         platform,
         scheduled_at: scheduledAt,
         status: "pending",
+        slot,
+        source: "manual_slot",
         caption: `[manual:${slot}]`,
         include_voiceover: voiceoverEnabled && VIDEO_PLATFORMS.has(platform),
       }));
+      console.log(
+        `[manual_slot] fired city=${activeCity.id} slot=${slot} platforms=[${platforms.join(",")}]`,
+      );
       const { data: inserted, error: insErr } = await supabase
         .from("scheduled_posts")
         .insert(rows)
@@ -287,7 +292,12 @@ export function CityManager({ activeCityId, onActiveCityChange, onCitiesChange, 
             "process-scheduled-posts",
             { body: { scheduled_post_id: (row as any).id, source: "manual_run_slot" } },
           );
-          if (invErr) {
+          const errStr = (invErr?.message || (res as any)?.error || "") as string;
+          if (/\[DEDUPED\]/i.test(errStr)) {
+            toast.info(
+              `${(row as any).platform}: already posted for ${slot} today — skipped`,
+            );
+          } else if (invErr) {
             toast.error(`${(row as any).platform} failed: ${invErr.message}`);
           } else if (res && (res as any).error) {
             toast.error(`${(row as any).platform} failed: ${(res as any).error}`);
