@@ -88,7 +88,6 @@ export function GrowthCommandCenter() {
       const bestHookRow = mem.find((x) => x.memory_type === "hook") || null;
       setBestHook(bestHookRow);
       setExperimentsRunning(e.count ?? 0);
-      setInsights((gi.data as InsightRow[]) || []);
       setRecentPosts((ph.data as RecentPost[]) || []);
       setLoading(false);
     })();
