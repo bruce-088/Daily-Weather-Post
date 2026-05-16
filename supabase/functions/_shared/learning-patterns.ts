@@ -294,6 +294,7 @@ export async function getTopPerformingPatterns(
     conditionLifts, hookPrefixes, baselineEngagement, sampleSize: totalN,
     provenWins, winningThemes,
     forbiddenOpeners, forbiddenThemes,
+    recentlyUsedAllowed,
   } as TopPatterns;
 }
 
