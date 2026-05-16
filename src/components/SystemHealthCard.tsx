@@ -227,10 +227,23 @@ export function SystemHealthCard() {
     return () => clearInterval(t);
   }, [fetchHealth, fetchDebugState]);
 
-  const isActive = lastRunIso
-    ? Date.now() - new Date(lastRunIso).getTime() < 12 * 60 * 1000
-    : false;
+  // Tri-state derivation: Active (≤5m & ok) / Stale (5–10m & ok) / Critical (>10m OR error)
+  const ageMs = lastRunIso ? Date.now() - new Date(lastRunIso).getTime() : Infinity;
   const hasError = status === "error";
+  const isCritical = hasError || ageMs > 10 * 60 * 1000;
+  const isStale = !isCritical && ageMs > 5 * 60 * 1000;
+  const isActive = !isCritical && !isStale;
+  const stateLabel = isActive ? "Active" : isStale ? "Stale" : "CRITICAL";
+  const stateBadgeClass = isActive
+    ? "bg-green-500/20 text-green-600 border-green-500/30 hover:bg-green-500/20"
+    : isStale
+    ? "bg-amber-500/20 text-amber-600 border-amber-500/30 hover:bg-amber-500/20"
+    : "bg-destructive/20 text-destructive border-destructive/40 hover:bg-destructive/20";
+  const stateDotClass = isActive
+    ? "bg-green-500 animate-pulse"
+    : isStale
+    ? "bg-amber-500"
+    : "bg-destructive";
 
   const voice = latestTrace
     ? voiceLine({
