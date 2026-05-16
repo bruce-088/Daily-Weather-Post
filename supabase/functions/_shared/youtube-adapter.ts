@@ -314,8 +314,18 @@ export class YouTubeAdapter implements PlatformAdapter {
       }
     }
 
-    const result = await uploadRes.json();
-    console.log("YouTube upload success! Video ID:", result.id);
+    // === Verbose response logging — surfaces silent 200-without-id failures ===
+    const rawBody = await uploadRes.text();
+    let result: any = {};
+    try { result = rawBody ? JSON.parse(rawBody) : {}; } catch { result = { _raw: rawBody }; }
+    console.log("[YT] upload status:", uploadRes.status, uploadRes.statusText);
+    console.log("[YT] full response body:", JSON.stringify(result));
+    if (result?.id) {
+      console.log(`✅ YouTube Upload Success! Video ID: ${result.id}`);
+    } else {
+      console.error(`❌ YouTube API returned ${uploadRes.status} but no Video ID found. Full Response: ${JSON.stringify(result)}`);
+      throw new Error(`YouTube upload returned no video ID: ${JSON.stringify(result).slice(0, 500)}`);
+    }
 
     // === AUTOMATED FIRST COMMENT ===
     // Posts a top-level comment on the freshly-uploaded Short. YouTube's API

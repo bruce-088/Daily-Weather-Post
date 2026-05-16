@@ -409,10 +409,30 @@ export default function JobsDashboard() {
                     {j.locked_by && <div>Locked by: {j.locked_by}</div>}
                   </div>
                   {j.last_error && (
-                    <div className="text-xs text-destructive bg-destructive/10 p-2 rounded font-mono space-y-1">
-                      <div className="font-semibold">Failed step: {stepLabel(j.type)}</div>
+                    <div
+                      className={
+                        j.status === "succeeded"
+                          ? "text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 p-2 rounded font-mono space-y-1"
+                          : "text-xs text-destructive bg-destructive/10 p-2 rounded font-mono space-y-1"
+                      }
+                    >
+                      <div className="font-semibold">
+                        {j.status === "succeeded"
+                          ? `⚠ Warning logged on succeeded step: ${stepLabel(j.type)}`
+                          : `Failed step: ${stepLabel(j.type)}`}
+                      </div>
                       <div className="whitespace-pre-wrap opacity-90">{j.last_error}</div>
                     </div>
+                  )}
+                  {j.result && (
+                    <details className="text-xs font-mono">
+                      <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                        Show job result payload
+                      </summary>
+                      <pre className="mt-1 p-2 bg-muted/40 rounded overflow-x-auto whitespace-pre-wrap break-all text-[11px] leading-snug">
+                        {JSON.stringify(j.result, null, 2)}
+                      </pre>
+                    </details>
                   )}
                   <div className="flex gap-2 pt-1">
                     {(j.status === "failed" || j.status === "cancelled") && (

@@ -1685,7 +1685,14 @@ Deno.serve(async (req) => {
         (post.caption?.match(/\[(?:auto|manual):(morning|afternoon|evening|manual|adhoc)\]/i)?.[1]) ||
         "adhoc";
       let lockAcquired = false;
-      if ((post as any).city_id) {
+      // TODO: remove after pipeline debugging — issue #pipeline-hardening
+      const isManualRun =
+        ((post as any).source === "manual_slot") ||
+        (typeof post.caption === "string" && /\[manual:/i.test(post.caption));
+      if (isManualRun) {
+        console.warn(`[lock] ⚠ DEDUP BYPASSED for manual run post=${post.id}`);
+      }
+      if ((post as any).city_id && !isManualRun) {
         try {
           const { data: gotLock, error: lockErr } = await supabase.rpc("acquire_publish_lock", {
             p_user: post.user_id,
@@ -2688,7 +2695,13 @@ Deno.serve(async (req) => {
         if (video) {
           // Video succeeded — post to all platforms
           for (const platformName of platformsToPost) {
+            console.log(`[publish] Attempting to write notification for user: ${post.user_id}, platform: ${platformName}`);
             const result = await postToPlatform(platformName, supabase, post.user_id, video.data, title, desc, video.mimeType, post.city_id || null);
+            // Hard guard: YouTube must return a real video_id. Throw so the
+            // publish_post job fails loudly instead of being marked succeeded.
+            if (platformName === "youtube" && result.success && !result.id) {
+              throw new Error("[YT_NO_VIDEO_ID] YouTube reported success without a video_id — failing job");
+            }
             if (result.success && result.id) {
               videoPostedAny = true;
               const acctName = (result as any).account_name || "unknown";
