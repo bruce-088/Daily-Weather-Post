@@ -571,3 +571,47 @@ export function isWeatherAlert(input: {
   return false;
 }
 
+
+// --- City-local timestamp helpers ---------------------------------------------
+// Used by title builders (daily-weather-post, process-scheduled-posts) and the
+// caption first-line stamp in generate-caption. Pure string helpers, no I/O.
+
+const CITY_TZ: Record<string, string> = {
+  Orlando: "America/New_York",
+  Gainesville: "America/New_York",
+  Miami: "America/New_York",
+  Tampa: "America/New_York",
+  Jacksonville: "America/New_York",
+  Tallahassee: "America/New_York",
+};
+
+export function getCityTimezone(city?: string | null): string {
+  if (!city) return "America/New_York";
+  return CITY_TZ[city.trim()] || "America/New_York";
+}
+
+/**
+ * Returns a city-local short stamp like "8 AM", "2 PM", "8:30 AM", "2:45 PM".
+ * Minutes are dropped unless the local time is :30 or :45 (so most slots are
+ * clean H AM/PM strings).
+ */
+export function getCityLocalStamp(city?: string | null, when: Date = new Date()): string {
+  const tz = getCityTimezone(city);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    hour: "numeric",
+    minute: "numeric",
+    hour12: true,
+  }).formatToParts(when);
+  const hour = parts.find((p) => p.type === "hour")?.value || "12";
+  const minute = parts.find((p) => p.type === "minute")?.value || "00";
+  const dayPeriod = (parts.find((p) => p.type === "dayPeriod")?.value || "AM").toUpperCase();
+  const m = parseInt(minute, 10);
+  if (m === 30 || m === 45) return `${hour}:${minute} ${dayPeriod}`;
+  return `${hour} ${dayPeriod}`;
+}
+
+/** True if a title already begins with a `[H...]` timestamp prefix. */
+export function titleHasTimestamp(title: string): boolean {
+  return /^\[\d{1,2}(:\d{2})?\s?(AM|PM)\]/i.test(title || "");
+}

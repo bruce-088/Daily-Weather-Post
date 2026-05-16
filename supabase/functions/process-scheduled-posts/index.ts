@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { buildStyleAddendum, normalizeTone, appendVoiceCTA, isWeatherAlert } from "../_shared/caption-style.ts";
+import { buildStyleAddendum, normalizeTone, appendVoiceCTA, isWeatherAlert, getCityLocalStamp, titleHasTimestamp } from "../_shared/caption-style.ts";
 import { LOCATION_ACCURACY_RULES, validateCaptionLocation, buildVerifiedLandmarksBlock, stripUnverifiedReferences } from "../_shared/location-guard.ts";
 import { generateVideoWithFallback } from "../_shared/video-render.ts";
 import { expandVisualMeta, getTopVisualStyle, classifyVisualTheme, classifyColorProfile } from "../_shared/experiments.ts";
@@ -281,9 +281,10 @@ function buildHookTitle(city: string, temp: number, condition: string, rainChanc
 
   // Deterministic-but-rotating pick (date + hour) so titles vary across slots
   const seed = new Date().getDate() * 24 + hour;
-  const title = pool[seed % pool.length];
-
-  return title.length > 95 ? title.substring(0, 92) + "..." : title;
+  const baseTitle = pool[seed % pool.length];
+  const stamp = getCityLocalStamp(city);
+  const stamped = `[${stamp}] ${baseTitle}`;
+  return stamped.length > 95 ? stamped.substring(0, 92) + "..." : stamped;
 }
 
 // --- Dynamic Handle System ---
@@ -2734,7 +2735,7 @@ Deno.serve(async (req) => {
           experiment_id: experimentCtx?.id ?? null,
           experiment_variant: experimentCtx?.variant ?? null,
           variant_id: (post as any).variant_id ?? experimentCtx?.variant ?? null,
-          visual_metadata: visualMeta,
+          visual_metadata: { ...(visualMeta || {}), has_timestamp_in_title: titleHasTimestamp(title) },
           health_score: healthScore,
           health_breakdown: healthBreakdown,
           // Persist hook + cinematic flags so the History UI shows them on

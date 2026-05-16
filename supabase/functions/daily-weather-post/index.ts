@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { buildStyleAddendum, normalizeTone, appendVoiceCTA, isWeatherAlert } from "../_shared/caption-style.ts";
+import { buildStyleAddendum, normalizeTone, appendVoiceCTA, isWeatherAlert, getCityLocalStamp, titleHasTimestamp } from "../_shared/caption-style.ts";
 import {
   LOCATION_ACCURACY_RULES,
   buildVerifiedLandmarksBlock,
@@ -240,8 +240,10 @@ function buildHookTitle(city: string, temp: number, condition: string, rainChanc
   }
 
   const seed = new Date().getDate() * 24 + hour;
-  const title = pool[seed % pool.length];
-  return title.length > 95 ? title.substring(0, 92) + "..." : title;
+  const baseTitle = pool[seed % pool.length];
+  const stamp = getCityLocalStamp(city);
+  const stamped = `[${stamp}] ${baseTitle}`;
+  return stamped.length > 95 ? stamped.substring(0, 92) + "..." : stamped;
 }
 
 // --- Dynamic Handle System ---
@@ -1926,6 +1928,8 @@ Deno.serve(async (req) => {
       source: "daily-weather-post",
     };
 
+    // Derive title used for posting (re-build deterministically for metadata).
+    const _titleForMeta = generateSkyBriefTitle(weather.city, weather.temperature, weather.condition, weather.rainChance);
     const { data: historyRow, error: historyError } = await supabase.from("post_history").insert({
       status, platform, city: weather.city, temperature: weather.temperature,
       condition: weather.condition, image_url: storedImageUrl, error_message: errorMessage,
@@ -1939,6 +1943,7 @@ Deno.serve(async (req) => {
       cinematic_trigger: cinematicTrigger,
       voice_name: voiceUrl ? "AI" : null,
       debug_trace: persistedTrace,
+      visual_metadata: { has_timestamp_in_title: titleHasTimestamp(_titleForMeta) },
     }).select("id").single();
     if (historyError) console.error("Failed to log post history:", historyError);
 

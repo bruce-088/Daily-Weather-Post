@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { verifyUser } from "../_shared/auth-helpers.ts";
-import { buildStyleAddendum, normalizeTone } from "../_shared/caption-style.ts";
+import { buildStyleAddendum, normalizeTone, getCityLocalStamp } from "../_shared/caption-style.ts";
 import {
   LOCATION_ACCURACY_RULES,
   buildVerifiedLandmarksBlock,
@@ -417,6 +417,23 @@ ${styleAddendum}${insightNote}`;
 
     // Final safety net regardless of retry path
     caption = stripUnverifiedReferences(caption, city);
+
+    // Prepend (or replace) a city-local timestamp stamp on the first line.
+    // Format: `📍 ${city} · ${H AM/PM} Update`. Fails silently if anything throws.
+    try {
+      const stamp = getCityLocalStamp(city);
+      const stampLine = `📍 ${city} · ${stamp} Update`;
+      const lines = caption.split(/\r?\n/);
+      const firstIdx = lines.findIndex((l) => l.trim().length > 0);
+      if (firstIdx >= 0 && /^\s*📍/.test(lines[firstIdx])) {
+        lines[firstIdx] = stampLine;
+        caption = lines.join("\n");
+      } else {
+        caption = `${stampLine}\n\n${caption.replace(/^\s+/, "")}`;
+      }
+    } catch (e) {
+      console.warn("[generate-caption] timestamp stamp failed:", e);
+    }
 
     return new Response(
       JSON.stringify({ caption, ai_optimized: aiOptimized }),
