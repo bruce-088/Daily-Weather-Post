@@ -13,6 +13,8 @@ export interface PostResult {
   success: boolean;
   id?: string;
   error?: string;
+  resolved_city_id?: string | null;
+  account_name?: string | null;
 }
 
 export interface PlatformAdapter {
