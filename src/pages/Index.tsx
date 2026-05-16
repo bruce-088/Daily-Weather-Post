@@ -1066,14 +1066,13 @@ const Index = () => {
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                  {/* Left: strategy + experiments + weekly recap */}
-                  <div className="lg:col-span-3 space-y-4">
+                  {/* Left: stat cards only */}
+                  <div className="lg:col-span-3">
                     <GrowthStatsCards stacked />
-                    <GrowthWeeklyRecap />
                   </div>
 
                   {/* Middle: Memory Bank */}
-                  <div className="lg:col-span-5 space-y-4">
+                  <div className="lg:col-span-5">
                     <GrowthMemoryBank className="h-full" />
                   </div>
 
@@ -1084,6 +1083,9 @@ const Index = () => {
                     <SmartInsightsCard />
                   </div>
                 </div>
+
+                {/* Full-width weekly recap */}
+                <GrowthWeeklyRecap />
 
                 {/* Full-width chronological wins feed */}
                 <GrowthLog />
