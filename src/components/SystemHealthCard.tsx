@@ -95,6 +95,29 @@ export function SystemHealthCard() {
 
   const [dryRunLoading, setDryRunLoading] = useState(false);
   const [dryRunResult, setDryRunResult] = useState<DryRunResponse | null>(null);
+  const [perfRunning, setPerfRunning] = useState(false);
+  const [growthRunning, setGrowthRunning] = useState(false);
+
+  const runAnalysis = useCallback(
+    async (fn: "analyze-performance" | "analyze-growth", setRunning: (b: boolean) => void) => {
+      setRunning(true);
+      try {
+        const { error } = await supabase.functions.invoke(fn, { body: {} });
+        if (error) throw error;
+        toast({ title: "✅ Analysis completed successfully" });
+      } catch (err) {
+        console.error(`[${fn}] manual trigger failed`, err);
+        toast({
+          title: "Failed to run analysis. Please check logs.",
+          description: err instanceof Error ? err.message : String(err),
+          variant: "destructive",
+        });
+      } finally {
+        setRunning(false);
+      }
+    },
+    [],
+  );
 
   const [debugEnabled, setDebugEnabled] = useState(false);
   const [debugSaving, setDebugSaving] = useState(false);
