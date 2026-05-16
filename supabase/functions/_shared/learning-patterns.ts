@@ -30,6 +30,25 @@ export interface TopPatterns {
   sampleSize: number;
   provenWins?: Array<{ variable: string; value: string; wins: number; winRate: number }>;
   winningThemes?: Array<{ label: string; count: number }>;
+  forbiddenOpeners?: string[];
+  forbiddenThemes?: string[];
+}
+
+const THEME_TOKENS = [
+  "beautiful day",
+  "comfortable",
+  "gorgeous",
+  "perfect day",
+  "lovely",
+  "nice day",
+];
+
+function normalizeHook(s: string): string {
+  return String(s || "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 const GENERIC_AVOID = [
