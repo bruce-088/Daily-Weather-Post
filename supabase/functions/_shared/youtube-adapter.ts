@@ -1,7 +1,24 @@
 import type { PlatformAdapter, UploadResult } from "./platform-adapter.ts";
 
+type ResolvedYTAccount = {
+  id: string;
+  access_token: string | null;
+  refresh_token: string | null;
+  token_expires_at: string | null;
+  account_name?: string | null;
+  city_id?: string | null;
+};
+
 export class YouTubeAdapter implements PlatformAdapter {
   name = "youtube";
+
+  /** Side-channel cache so uploadVideo() can recover the channel that
+   *  getValidToken() actually selected for this user+city combination. */
+  private _resolved: Map<string, ResolvedYTAccount> = new Map();
+
+  private _resolvedKey(userId: string, cityId?: string | null) {
+    return `${userId}::${cityId ?? "shared"}`;
+  }
 
   isConnected(settings: Record<string, unknown>): boolean {
     const expiresAt = settings.youtube_token_expires_at
