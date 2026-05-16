@@ -209,7 +209,12 @@ const DEPLOYMENT = `- **Frontend**: React 18 + Vite + TypeScript + Tailwind (Lov
 - **Backend**: Managed Postgres + Serverless Edge Runtime (Supabase via Lovable Cloud)
 - **Cron**: pg_cron extension, every 5 minutes, authenticated with service_role key
 - **Storage**: Supabase Storage (video/image assets)
-- **Auth**: Supabase Auth (email/password + OAuth)`;
+- **Auth**: Supabase Auth (email/password + OAuth)
+
+### Manual Override Controls (Settings → System Health)
+- **Run Performance Analysis** — invokes \`analyze-performance\` edge function on demand (bypasses 24h cron). Shows Loader2 spinner while running; disables button; success/error toast on completion.
+- **Run Growth Analysis** — invokes \`analyze-growth\` edge function on demand (bypasses 6h cron). Same loading/disabled/toast behavior.
+- Both buttons sit under the existing Safe Reset / Dry Run controls in the System Health card. They do not alter cron schedules, edge function code, DB schemas, or RLS — they are pure on-demand triggers for operator/debug use.`;
 
 function md(rows: string[]) {
   return rows.join("\n");
