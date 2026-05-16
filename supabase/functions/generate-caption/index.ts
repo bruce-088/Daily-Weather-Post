@@ -455,7 +455,8 @@ CTA ROTATION: For the final call-to-action line, use this exact CTA (or a close 
     // Prepend (or replace) a city-local timestamp stamp on the first line.
     // Format: `📍 ${city} · ${H AM/PM} Update`. Fails silently if anything throws.
     try {
-      const stamp = getCityLocalStamp(city);
+      const slotForBeacon = body.slot ?? period;
+      const stamp = slotForBeacon ? slotDisplayLabel(slotForBeacon) : getCityLocalStamp(city);
       const stampLine = `📍 ${city} · ${stamp} Update`;
       const lines = caption.split(/\r?\n/);
       const firstIdx = lines.findIndex((l) => l.trim().length > 0);
