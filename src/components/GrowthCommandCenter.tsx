@@ -63,11 +63,6 @@ export function GrowthCommandCenter() {
         .select("id", { count: "exact", head: true })
         .eq("user_id", user.id)
         .eq("status", "gathering_data");
-      let giQ = supabase.from("growth_insights")
-        .select("id, title, message, delta_pct, city, created_at")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(10);
       let phQ = supabase.from("post_history")
         .select("id, city, image_url, created_at")
         .eq("user_id", user.id)
@@ -76,17 +71,16 @@ export function GrowthCommandCenter() {
         .limit(3);
       if (activeCity.name) {
         expQ = expQ.ilike("city", activeCity.name);
-        giQ = giQ.ilike("city", activeCity.name);
         phQ = phQ.ilike("city", activeCity.name);
       }
 
-      const [m, e, gi, ph] = await Promise.all([
+      const [m, e, ph] = await Promise.all([
         supabase.from("ai_memory")
           .select("id, memory_type, content, performance_score, condition, created_at")
           .eq("user_id", user.id)
           .order("performance_score", { ascending: false })
           .limit(50),
-        expQ, giQ, phQ,
+        expQ, phQ,
       ]);
 
       const mem = (m.data as MemoryRow[]) || [];
