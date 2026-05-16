@@ -56,6 +56,7 @@ export function GrowthLog() {
   const [active, setActive] = useState<ExperimentRow[]>([]);
   const [wins, setWins] = useState<ExperimentWinRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -78,7 +79,7 @@ export function GrowthLog() {
       eQ = eQ.ilike("city", activeCity.name);
     }
 
-    const [i, e, w] = await Promise.all([
+    const [i, e, w, hs] = await Promise.all([
       iQ, eQ,
       supabase.from("experiment_wins")
         .select("variable, winning_value, wins, losses, win_rate, last_win_at")
@@ -86,12 +87,55 @@ export function GrowthLog() {
         .gte("wins", 2)
         .order("wins", { ascending: false })
         .limit(8),
+      // Fallback source: hook_stats. growth_insights only populates when an
+      // A/B experiment formally concludes — for active accounts this can take
+      // weeks. Surface the best-performing hooks as synthetic insights so the
+      // log isn't empty when the underlying data clearly exists.
+      supabase.from("hook_stats")
+        .select("id, hook_text, uses, avg_views, status, last_used_at, created_at")
+        .eq("user_id", user.id)
+        .gte("uses", 1)
+        .order("avg_views", { ascending: false })
+        .limit(10),
     ]);
-    setInsights((i.data as any) || []);
+
+    let insightRows = ((i.data as GrowthInsightRow[]) || []);
+    if (insightRows.length === 0) {
+      const hookRows = (hs.data as any[]) || [];
+      const overallAvg =
+        hookRows.reduce((s, r) => s + Number(r.avg_views || 0), 0) / Math.max(hookRows.length, 1);
+      insightRows = hookRows.slice(0, 8).map((h, idx) => {
+        const avgViews = Number(h.avg_views) || 0;
+        const delta = overallAvg > 0 ? ((avgViews - overallAvg) / overallAvg) * 100 : 0;
+        return {
+          id: `hook-${h.id}`,
+          experiment_id: null,
+          variable: "hook",
+          winner_variant: "A",
+          winner_value: h.hook_text,
+          loser_value: null,
+          delta_pct: delta,
+          title: idx === 0 ? "Top performing hook" : "Strong performing hook",
+          message: `"${h.hook_text}" — avg ${Math.round(avgViews)} views over ${h.uses} use${h.uses === 1 ? "" : "s"}.`,
+          post_id_a: null,
+          post_id_b: null,
+          city: null,
+          read: true,
+          created_at: h.last_used_at || h.created_at,
+        } as GrowthInsightRow;
+      });
+    }
+
+    setInsights(insightRows);
     setActive((e.data as any) || []);
     setWins((w.data as any) || []);
     setLoading(false);
   };
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    try { await load(); } finally { setRefreshing(false); }
+  }
 
   useEffect(() => {
     load();
