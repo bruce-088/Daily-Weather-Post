@@ -706,13 +706,16 @@ export async function triggerManualPipelinePost(
     source: opts?.experiment ? `manual-ab-${opts.experiment.selectedVariant}` : "manual-post-now",
   });
 
-  opts?.onPhase?.("queued", "Queued — running pipeline…");
+  opts?.onPhase?.("queued", "Post queued — processing in background");
 
-  // Poll the scheduled_post until terminal. Pipeline can take 60–120s.
-  const timeoutMs = opts?.timeoutMs ?? 5 * 60 * 1000;
+  // Decoupled UI: poll briefly for an early terminal status, but NEVER block
+  // the UI on the full pipeline. If still running after the soft window,
+  // return success with status="processing" so the UI can show
+  // "Still processing — will complete shortly" and stop spinning.
+  const softWindowMs = opts?.timeoutMs ?? 60 * 1000;
   const startedAt = Date.now();
   let lastStatus = "pending";
-  while (Date.now() - startedAt < timeoutMs) {
+  while (Date.now() - startedAt < softWindowMs) {
     await new Promise((r) => setTimeout(r, 4000));
     const { data: row } = await supabase
       .from("scheduled_posts")
@@ -722,12 +725,13 @@ export async function triggerManualPipelinePost(
     const status = (row?.status as string) ?? "pending";
     if (status !== lastStatus) {
       lastStatus = status;
-      if (status === "processing") opts?.onPhase?.("running", "Rendering video…");
-      else if (status === "rendering") opts?.onPhase?.("running", "Rendering video…");
-      else if (status === "publishing") opts?.onPhase?.("publishing", "Publishing to platform…");
+      if (status === "processing" || status === "rendering") {
+        opts?.onPhase?.("running", "Rendering video…");
+      } else if (status === "publishing") {
+        opts?.onPhase?.("publishing", "Publishing to platform…");
+      }
     }
     if (status === "posted" || status === "succeeded") {
-      // Lookup external_id from post_history for the URL
       const { data: hist } = await supabase
         .from("post_history")
         .select("external_id")
@@ -761,9 +765,11 @@ export async function triggerManualPipelinePost(
       };
     }
   }
+  // Soft success — pipeline is still running in the background. No hard timeout.
+  opts?.onPhase?.("running", "Still processing — will complete shortly");
   return {
-    success: false,
-    message: "Pipeline timed out waiting for completion",
+    success: true,
+    message: "Still processing — will complete shortly. Check Post History for the result.",
     scheduledPostId: inserted.id,
     status: lastStatus,
   };
