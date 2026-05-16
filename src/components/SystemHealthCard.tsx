@@ -286,9 +286,9 @@ export function SystemHealthCard() {
       <CardContent className="space-y-3">
         <div className="flex items-center justify-between">
           <span className="text-sm text-muted-foreground">Cron Status</span>
-          <Badge variant={isActive ? "default" : "secondary"} className={isActive ? "bg-green-500/20 text-green-600 border-green-500/30 hover:bg-green-500/20" : ""}>
-            <span className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${isActive ? "bg-green-500 animate-pulse" : "bg-muted-foreground"}`} />
-            {isActive ? "Active" : "Inactive"}
+          <Badge variant="outline" className={stateBadgeClass}>
+            <span className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${stateDotClass}`} />
+            {stateLabel}
           </Badge>
         </div>
         <div className="flex items-center justify-between">
@@ -315,14 +315,29 @@ export function SystemHealthCard() {
             {new Date(lastRunIso).toLocaleString()}
           </p>
         )}
-        {hasError && message && (
-          <p className="text-[11px] text-destructive">
-            {message}
-          </p>
+        {isCritical && (
+          <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2.5 space-y-1">
+            <p className="text-[11px] font-semibold text-destructive flex items-center gap-1.5">
+              <AlertTriangle size={12} /> CRITICAL — automation link is down
+            </p>
+            <p className="text-[11px] text-destructive/90">
+              {hasError && message
+                ? message
+                : `No tick in ${lastRunIso ? timeAgo(lastRunIso) : "a while"}. Scheduler should run every 5 minutes.`}
+            </p>
+            {probeError && (
+              <p className="text-[11px] font-mono text-destructive/90 break-all">
+                Probe: {probeError}
+              </p>
+            )}
+            <p className="text-[10px] text-muted-foreground">
+              Click <span className="font-semibold">Safe Reset</span> below to send a live test tick.
+            </p>
+          </div>
         )}
-        {!isActive && !hasError && (
+        {isStale && (
           <p className="text-[11px] text-amber-600 dark:text-amber-400">
-            No recent automation tick detected. Scheduler should run every 5 minutes.
+            Last tick was {lastRun}. Scheduler is delayed — should run every 5 minutes.
           </p>
         )}
 
