@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Download, FileText, Copy, Check, FileType, Share2, RefreshCw, Zap, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -98,9 +98,14 @@ const SpecSection = ({ title, description, content, filenamePrefix, showPdf = fa
 const ExportSpec = () => {
   const navigate = useNavigate();
   const [forcing, setForcing] = useState(false);
+  const [liveSpec, setLiveSpec] = useState<string | null>(null);
+  const [lastFetched, setLastFetched] = useState<Date | null>(null);
+  const [autoLoading, setAutoLoading] = useState(true);
+  const lastHashRef = useRef<string | null>(null);
 
-  const handleForceRefresh = async () => {
-    setForcing(true);
+  const fetchLiveSpec = useCallback(async (opts: { silent?: boolean; notifyOnChange?: boolean } = {}) => {
+    const { silent = false, notifyOnChange = false } = opts;
+    if (!silent) setAutoLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
@@ -116,15 +121,63 @@ const ExportSpec = () => {
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const md = await res.text();
-      downloadBlob(md, `skybrief-spec-fresh-${Date.now()}.md`, "text/markdown");
-      toast.success("Fresh spec downloaded!");
+      // Strip the auto-generated timestamp line so we only detect real spec changes.
+      const normalized = md.replace(/_Generated:[^_]+_/g, "");
+      let hash = 0;
+      for (let i = 0; i < normalized.length; i++) {
+        hash = ((hash << 5) - hash + normalized.charCodeAt(i)) | 0;
+      }
+      const h = String(hash);
+      const changed = lastHashRef.current !== null && lastHashRef.current !== h;
+      lastHashRef.current = h;
+      setLiveSpec(md);
+      setLastFetched(new Date());
+      if (notifyOnChange && changed) toast.success("Spec updated — new version detected.");
+      return md;
     } catch (e) {
-      console.error(e);
-      toast.error("Failed to refresh spec. Check logs.");
+      console.error("fetchLiveSpec failed", e);
+      if (!silent) toast.error("Failed to fetch live spec.");
+      return null;
+    } finally {
+      if (!silent) setAutoLoading(false);
+    }
+  }, []);
+
+  // Auto-fetch on mount, on tab focus/visibility, and every 30s while open.
+  useEffect(() => {
+    fetchLiveSpec();
+    const onFocus = () => fetchLiveSpec({ silent: true, notifyOnChange: true });
+    const onVisible = () => {
+      if (document.visibilityState === "visible") onFocus();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisible);
+    const interval = window.setInterval(() => {
+      fetchLiveSpec({ silent: true, notifyOnChange: true });
+    }, 30_000);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.clearInterval(interval);
+    };
+  }, [fetchLiveSpec]);
+
+  const handleForceRefresh = async () => {
+    setForcing(true);
+    try {
+      const md = await fetchLiveSpec({ silent: true });
+      if (md) {
+        downloadBlob(md, `skybrief-spec-fresh-${Date.now()}.md`, "text/markdown");
+        toast.success("Fresh spec downloaded!");
+      } else {
+        toast.error("Failed to refresh spec. Check logs.");
+      }
     } finally {
       setForcing(false);
     }
   };
+
+  const appSpecContent = liveSpec ?? MASTER_PROMPT;
 
   return (
     <div className="dark min-h-screen bg-background">
@@ -138,27 +191,23 @@ const ExportSpec = () => {
           >
             <ArrowLeft size={14} /> Back
           </Button>
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap items-center">
+            <span className="text-[11px] text-muted-foreground font-mono">
+              {autoLoading
+                ? "Fetching live spec…"
+                : lastFetched
+                  ? `Live spec @ ${lastFetched.toLocaleTimeString()}`
+                  : "Using bundled spec"}
+            </span>
             <Button
               variant="default"
               size="sm"
               onClick={handleForceRefresh}
-              disabled={forcing}
+              disabled={forcing || autoLoading}
               className="gap-1.5 text-xs"
             >
               {forcing ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
               {forcing ? "Refreshing…" : "Force Refresh Spec"}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                toast.success("Reloading latest spec…");
-                window.location.reload();
-              }}
-              className="gap-1.5 text-xs"
-            >
-              <RefreshCw size={14} /> Refresh Export Spec
             </Button>
           </div>
         </div>
@@ -176,8 +225,8 @@ const ExportSpec = () => {
           <TabsContent value="app-spec">
             <SpecSection
               title="Export App Specification"
-              description="Download or copy the full SkyBrief app spec for use with external LLMs or documentation."
-              content={MASTER_PROMPT}
+              description="Auto-refetched from generate-spec on load, focus, and every 30s — no manual refresh needed after redeploy."
+              content={appSpecContent}
               filenamePrefix="skybrief-spec"
               showPdf
             />
