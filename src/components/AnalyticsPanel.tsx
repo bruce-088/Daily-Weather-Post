@@ -38,6 +38,7 @@ import {
 import { toast } from "sonner";
 import { useActiveCity } from "@/hooks/useActiveCity";
 import { GrowthIntelligenceCard } from "@/components/GrowthIntelligenceCard";
+import { ChannelHealthCard } from "@/components/ChannelHealthCard";
 
 type AnalyticsRow = {
   id: string;
