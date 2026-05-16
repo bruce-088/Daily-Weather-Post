@@ -95,6 +95,7 @@ export function SystemHealthCard() {
 
   const [dryRunLoading, setDryRunLoading] = useState(false);
   const [dryRunResult, setDryRunResult] = useState<DryRunResponse | null>(null);
+  const [forceRunning, setForceRunning] = useState(false);
   const [perfRunning, setPerfRunning] = useState(false);
   const [growthRunning, setGrowthRunning] = useState(false);
 
@@ -277,6 +278,30 @@ export function SystemHealthCard() {
       });
     } finally {
       setDryRunLoading(false);
+    }
+  };
+
+  const forceRunScheduler = async () => {
+    setForceRunning(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("auto-post-scheduler", {
+        body: {},
+      });
+      if (error) throw error;
+      toast({
+        title: "Scheduler executed",
+        description: data?.message || "The scheduler ran successfully.",
+      });
+      await fetchHealth();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      toast({
+        title: "Scheduler run failed",
+        description: msg,
+        variant: "destructive",
+      });
+    } finally {
+      setForceRunning(false);
     }
   };
 
@@ -536,6 +561,18 @@ export function SystemHealthCard() {
             )}
           </div>
         )}
+
+        <Button
+          size="sm"
+          variant="default"
+          onClick={forceRunScheduler}
+          disabled={forceRunning}
+          className="w-full gap-2"
+          title="Manually trigger the auto-post scheduler for missed slots or testing."
+        >
+          <RefreshCw size={12} className={forceRunning ? "animate-spin" : ""} />
+          {forceRunning ? "Running scheduler…" : "Force Run Scheduler"}
+        </Button>
 
         <div className="grid grid-cols-2 gap-2 pt-1">
           <Button
