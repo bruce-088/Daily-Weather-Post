@@ -156,7 +156,14 @@ Rotated deterministically by \`(date + slot)\` index:
 ### Fail-Safe Behavior
 - All caption enhancements (personality, CTA, anti-repeat, similarity) are wrapped in try/catch.
 - Any failure silently falls back to base caption generation.
-- Posts are never blocked by caption enhancement failures.`;
+- Posts are never blocked by caption enhancement failures.
+
+### Learning Feedback Loop (Advanced Analytics)
+- \`buildLearningPromptBlock()\` in \`_shared/learning-patterns.ts\` injects a **PROVEN WINNERS** block into the prompt.
+- Sources: top \`winning_factors\` themes from high-scoring \`post_analytics\` rows + 1 few-shot example from \`ai_memory\` (\`memory_type='top_post'\`).
+- Safeguards: minimum sample size ≥5 posts per user (and ≥3 per pattern) before patterns are applied.
+- Variation preserved: 70/30 exploit/explore ratio; explicit instruction to vary opener and structure.
+- Fully fail-safe: wrapped in try/catch — falls back to base generation if learning context is unavailable.
 
 const ROUTING_GUARD = `Prevents cross-city content contamination (e.g., Gainesville content on Orlando channel).
 
