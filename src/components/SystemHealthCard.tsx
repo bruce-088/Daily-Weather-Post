@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Activity, RefreshCw, Beaker, CheckCircle2, XCircle, Mic, AlertTriangle, Bug, Copy, ChevronDown } from "lucide-react";
+import { Activity, RefreshCw, Beaker, CheckCircle2, XCircle, Mic, AlertTriangle, Bug, Copy, ChevronDown, BarChart3, TrendingUp, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -95,6 +95,29 @@ export function SystemHealthCard() {
 
   const [dryRunLoading, setDryRunLoading] = useState(false);
   const [dryRunResult, setDryRunResult] = useState<DryRunResponse | null>(null);
+  const [perfRunning, setPerfRunning] = useState(false);
+  const [growthRunning, setGrowthRunning] = useState(false);
+
+  const runAnalysis = useCallback(
+    async (fn: "analyze-performance" | "analyze-growth", setRunning: (b: boolean) => void) => {
+      setRunning(true);
+      try {
+        const { error } = await supabase.functions.invoke(fn, { body: {} });
+        if (error) throw error;
+        toast({ title: "✅ Analysis completed successfully" });
+      } catch (err) {
+        console.error(`[${fn}] manual trigger failed`, err);
+        toast({
+          title: "Failed to run analysis. Please check logs.",
+          description: err instanceof Error ? err.message : String(err),
+          variant: "destructive",
+        });
+      } finally {
+        setRunning(false);
+      }
+    },
+    [],
+  );
 
   const [debugEnabled, setDebugEnabled] = useState(false);
   const [debugSaving, setDebugSaving] = useState(false);
@@ -535,6 +558,29 @@ export function SystemHealthCard() {
           >
             <Beaker size={12} className={dryRunLoading ? "animate-pulse" : ""} />
             {dryRunLoading ? "Running…" : "Test Automation Logic (Dry Run)"}
+          </Button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => runAnalysis("analyze-performance", setPerfRunning)}
+            disabled={perfRunning}
+            className="gap-2"
+          >
+            {perfRunning ? <Loader2 size={12} className="animate-spin" /> : <BarChart3 size={12} />}
+            {perfRunning ? "Running…" : "Run Performance Analysis"}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => runAnalysis("analyze-growth", setGrowthRunning)}
+            disabled={growthRunning}
+            className="gap-2"
+          >
+            {growthRunning ? <Loader2 size={12} className="animate-spin" /> : <TrendingUp size={12} />}
+            {growthRunning ? "Running…" : "Run Growth Analysis"}
           </Button>
         </div>
 
