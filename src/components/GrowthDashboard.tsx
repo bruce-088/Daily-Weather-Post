@@ -320,7 +320,7 @@ interface RepostSuggestion {
   status: string;
 }
 
-export function OutperformingPosts() {
+export function OutperformingPosts({ className }: { className?: string } = {}) {
   const [items, setItems] = useState<RepostSuggestion[]>([]);
   const [loading, setLoading] = useState(true);
 
