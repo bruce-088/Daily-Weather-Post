@@ -974,8 +974,8 @@ const Index = () => {
 
           {/* SCHEDULE TAB */}
           <TabsContent value="schedule">
-            <div className="max-w-2xl mx-auto">
-              <div className="grid md:grid-cols-[320px_1fr] gap-6">
+             <div className="max-w-[1200px] mx-auto px-6">
+               <div className="grid md:grid-cols-[400px_1fr] gap-6 items-start">
                 <SchedulePostForm key={activeCityId || "default"} defaultCity={settings.location} onScheduled={loadScheduled} />
                 <div>
                   <div className="flex items-center justify-between mb-4">
