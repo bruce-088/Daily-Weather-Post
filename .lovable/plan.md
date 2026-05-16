@@ -1,69 +1,50 @@
-## Goal
+# Interactive Preview Card (UI Only)
 
-Prepend the city's local time to every generated post title and caption first-line, and track `has_timestamp_in_title` in `post_history.visual_metadata` so Growth Intelligence can measure lift. No schema changes, no video/posting pipeline changes, no overlay burn-in.
+Scope: `src/components/WeatherCard.tsx` + small bits of `src/pages/Index.tsx` and `src/index.css`. No edge functions, no posting pipeline, no DB.
 
-## Scope (what gets touched)
+## 1. Live Weather Refresh
+- In `Index.tsx`, next to the existing style/aspect controls (above the card), add a small refresh icon button (`RefreshCw` from lucide) labeled by tooltip "Refresh weather".
+- Place a tiny `MapPin · GAINESVILLE, US · 🔄` cluster + "Last updated: {relative}" line above the card.
+- onClick → `fetchWeather(settings.location, settings.state)` (already wired in `useWeather`). Spin the icon while `loading`.
+- Relative timestamp derived from `lastUpdated` (already returned by `useWeather`), formatted "just now / 2m ago / 14:32". Re-renders on a 30s `setInterval`.
 
-Only text-generation code paths:
+## 2. Style Preview Actually Changes
+Update `STYLE_PRESETS` + render logic in `WeatherCard.tsx`:
+- **Standard** — unchanged (current purple gradient).
+- **Minimal** — true light theme: `background: linear-gradient(180deg,#fafafa,#ececec)`, swap all `text-primary-foreground*` to a dark-text variant via a `tone: "light" | "dark"` flag on the preset. Glass stat tiles become `bg-black/5 border border-black/10`. No blurs (already off). Branding text uses `text-black/40`.
+- **Cinematic** — keep existing dark radial bg, add:
+  - vignette overlay: absolute inset, `box-shadow: inset 0 0 120px 40px rgba(0,0,0,0.7)` + radial mask
+  - animated subtle glow: a slowly pulsing `radial-gradient` layer behind content using a new keyframe `cinematic-pulse` (8s ease-in-out infinite, opacity 0.4↔0.7).
+- Toggle is instant (already controlled by `cardStyle` state). Only presentation changes inside `WeatherCard`.
 
-1. `supabase/functions/daily-weather-post/index.ts` — title builder + history insert metadata
-2. `supabase/functions/process-scheduled-posts/index.ts` — title builder + history insert metadata (mirror of #1; counts as title-generation, not pipeline)
-3. `supabase/functions/generate-caption/index.ts` — caption first-line stamp (post-processing only)
-4. `supabase/functions/_shared/caption-style.ts` — add a tiny shared helper for city → local hour string (avoids drift between the three call sites)
+## 3. 5-Day Forecast Tappable
+- Add internal state `selectedDayIdx: number | null` in `WeatherCard`.
+- Each forecast tile becomes a `<button>`; clicking sets `selectedDayIdx`. Selected tile gets a ring (`ring-2 ring-primary/70`) and slight scale.
+- When a day is selected, the **main temp / condition / icon / description** block swaps to render that day's `tempHigh`, `tempLow`, condition + a small "Mon forecast · tap to reset" hint. Clicking the selected tile again (or a new "Today" pill) resets to live current.
+- Purely local component state; does not mutate `weather` or anything upstream → no pipeline impact.
 
-No changes to: render pipeline, posting adapters, cron, schema, RLS, edge functions outside the four above.
+## 4. Download Button Works (filename fix)
+- `handleExport` in `Index.tsx`: change filename to `skybrief-{citySlug}-{YYYY-MM-DD}.png`.
+  - `citySlug = (weather.city || "weather").toLowerCase().replace(/[^a-z0-9]+/g,"-")`
+  - Date via `new Date().toISOString().slice(0,10)`.
+- Logic (`toPng` on `cardRef`) already works; only filename + a fallback toast tweak.
 
-## Change 1 — Title prefix `[H AM/PM]`
+## 5. Condition Icon Animates
+- Add three CSS animation utility classes in `src/index.css`:
+  - `.icon-anim-clear` → existing `animate-pulse-glow` style, slower (4s).
+  - `.icon-anim-rain` → tiny vertical drip: `@keyframes drip { 0%,100% { transform: translateY(0); opacity:1 } 50% { transform: translateY(2px); opacity:.7 } }` 1.6s infinite.
+  - `.icon-anim-storm` → flicker: opacity 1 → 0.4 → 1 with a quick jitter at 0.3s/2.4s cycle.
+- In `WeatherCard`, pick the class based on `weather.conditionIcon` / `weather.condition`:
+  - `sun`/`Clear` → clear
+  - `cloud-rain`/`cloud-drizzle` → rain
+  - `cloud-lightning`/Thunderstorm → storm
+  - others → no animation (or gentle float, already present).
+- Applied via `className` on the existing `<WeatherIcon>` — no API/shape change.
 
-Add a shared helper in `_shared/caption-style.ts`:
+## Out of scope
+- `useWeather`, `fetch-weather` edge function, caption/title generation, posting, scheduling, DB, Creatomate, all other components.
 
-```text
-CITY_TZ map: Orlando, Gainesville, Miami, Tampa, Jacksonville → America/New_York
-             (fallback: America/New_York; extendable later)
-
-getCityLocalStamp(city) →
-   Intl.DateTimeFormat("en-US", { timeZone, hour:"numeric", minute:"numeric", hour12:true })
-   round minutes: only render :30 or :45, otherwise drop minutes
-   → "8 AM" | "2 PM" | "8:30 AM" | "2:45 PM"
-```
-
-In both `buildHookTitle` functions (daily-weather-post + process-scheduled-posts), prepend `[${stamp}] ` to the chosen title and re-apply the 95-char clamp after prepending.
-
-Result: `[8 AM] Storms Rolling Into Orlando ⛈ 78° Today`
-
-Applies to manual posts (daily-weather-post) and auto posts (process-scheduled-posts) since both go through these title builders.
-
-## Change 2 — Caption first line
-
-In `generate-caption/index.ts`, after the model response is finalized (after `stripUnverifiedReferences`), post-process the caption:
-
-- Build `📍 ${city} · ${stamp} Update`
-- If the existing first non-empty line already starts with `📍` or already contains the stamp, replace it; otherwise prepend it as a new first line followed by a blank line.
-- Rest of the caption is untouched.
-
-Only the caption text changes; the AI prompt itself stays the same to avoid regressions in tone/length.
-
-## Change 3 — `has_timestamp_in_title` tracking
-
-`post_history` already has a `visual_metadata jsonb` column → no migration.
-
-In both history-insert sites (daily-weather-post line ~1929, and the equivalent insert in process-scheduled-posts), set:
-
-```text
-visual_metadata: { ...existingMetadata, has_timestamp_in_title: /^\[\d/.test(title) }
-```
-
-Detection regex matches the `[H` / `[H:30` opener so backfilled-without-stamp rows naturally read `false`. Growth Intelligence queries can then `group by visual_metadata->>'has_timestamp_in_title'`.
-
-## Out of scope (explicit guardrails)
-
-- No edits to `_shared/job-runner.ts`, `_shared/job-handlers.ts`, any platform adapter, Creatomate/JSON2Video calls, or cron.
-- No overlay/burn-in: the stamp lives in `title` + `caption` strings only.
-- No DB migration, no RLS change, no new column.
-- `generate-hooks` is untouched (hook titles are auxiliary and not used for the final post title).
-
-## Verification
-
-- Deploy the three edge functions.
-- Trigger a manual "Post Now" for Orlando → confirm title starts with `[H AM/PM]`, caption first line is `📍 Orlando · H AM/PM Update`, and the resulting `post_history` row has `visual_metadata.has_timestamp_in_title = true`.
-- Inspect a recent historical row → `has_timestamp_in_title` is absent/false, confirming the field is additive.
+## Files touched
+- `src/components/WeatherCard.tsx` — style presets (light tone for minimal, cinematic vignette+glow), tappable forecast state, animated icon class.
+- `src/pages/Index.tsx` — refresh button + "Last updated" line above card stage; download filename change.
+- `src/index.css` — `cinematic-pulse`, `drip`, `flicker` keyframes + helper classes.
