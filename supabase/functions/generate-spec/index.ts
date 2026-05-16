@@ -202,7 +202,8 @@ const RESOLVED_ISSUES = `| Issue | Resolution |
 | Cross-city routing (Gainesville on Orlando channel) | Added pre-flight routing guard in publish step |
 | Identical post titles/captions | Added anti-clone logic, CTA rotation, personality rotation |
 | Silent pipeline failures | Added fail-safe try/catch wrappers on all caption enhancements |
-| Slot prefix inconsistency | Fixed via ensureSlotTitlePrefix in _shared/caption-style.ts — all sources now use single helper |`;
+| Slot prefix inconsistency | Fixed via ensureSlotTitlePrefix in _shared/caption-style.ts — all sources now use single helper |
+| Analytics limited to "Top Performer" badges | Upgraded to Insight Engine: per-post performance_score + winning/losing factors, growth_insights pattern detection, PROVEN WINNERS feedback loop into generate-caption |`;
 
 const DEPLOYMENT = `- **Frontend**: React 18 + Vite + TypeScript + Tailwind (Lovable Cloud)
 - **Backend**: Managed Postgres + Serverless Edge Runtime (Supabase via Lovable Cloud)
