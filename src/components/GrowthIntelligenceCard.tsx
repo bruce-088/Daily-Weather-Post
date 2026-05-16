@@ -62,6 +62,7 @@ export function GrowthIntelligenceCard() {
   const activeCity = useActiveCity();
   const { user } = useAuth();
   const [stats, setStats] = useState<WinnerStats | null>(null);
+  const [voiceSamples, setVoiceSamples] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -75,7 +76,30 @@ export function GrowthIntelligenceCard() {
       .limit(1);
     if (activeCity.name) q = q.eq("city", activeCity.name);
     const { data } = await q;
-    setStats(((data as any[]) || [])[0] || null);
+    const row = ((data as any[]) || [])[0] || null;
+
+    // Recompute voice_lift_pct from post_history to match SmartInsightsCard
+    // (views-based, larger sample = source of truth).
+    let ph = supabase
+      .from("post_history")
+      .select("views_count, voice_status")
+      .eq("user_id", user.id)
+      .in("status", ["success", "posted"])
+      .limit(500);
+    if (activeCity.name) ph = ph.ilike("city", activeCity.name);
+    const { data: phRows } = await ph;
+    const on = (phRows || []).filter((r: any) => r.voice_status === "success").map((r: any) => Number(r.views_count) || 0);
+    const off = (phRows || []).filter((r: any) => r.voice_status !== "success").map((r: any) => Number(r.views_count) || 0);
+    const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
+    let lift: number | null = null;
+    if (on.length >= 3 && off.length >= 3) {
+      const a = mean(on);
+      const b = mean(off);
+      if (b > 0) lift = Math.round(((a - b) / b) * 100);
+      else if (a > 0) lift = 100;
+    }
+    setVoiceSamples(on.length + off.length);
+    setStats(row ? { ...row, voice_lift_pct: lift ?? row.voice_lift_pct } : row);
     setLoading(false);
   }
 
