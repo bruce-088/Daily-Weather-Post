@@ -76,6 +76,8 @@ export function SystemHealthCard() {
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
+  const [probing, setProbing] = useState(false);
+  const [probeError, setProbeError] = useState<string | null>(null);
 
   const [dryRunLoading, setDryRunLoading] = useState(false);
   const [dryRunResult, setDryRunResult] = useState<DryRunResponse | null>(null);
@@ -101,6 +103,45 @@ export function SystemHealthCard() {
       setLoading(false);
     }
   }, []);
+
+  const safeReset = useCallback(async () => {
+    setProbing(true);
+    setProbeError(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("auto-post-scheduler", {
+        body: { probe: true },
+      });
+      if (error) {
+        // FunctionsHttpError exposes .context with status + a Response
+        const anyErr = error as any;
+        const statusCode = anyErr?.context?.status ?? anyErr?.status;
+        let bodyText = "";
+        try {
+          if (anyErr?.context && typeof anyErr.context.text === "function") {
+            bodyText = await anyErr.context.text();
+          }
+        } catch { /* ignore */ }
+        const label = statusCode ? `${statusCode} ${anyErr?.message || "Error"}` : (anyErr?.message || "Probe failed");
+        const full = bodyText ? `${label} — ${bodyText.slice(0, 200)}` : label;
+        setProbeError(full);
+        toast({ title: "❌ Heartbeat failed", description: full, variant: "destructive" });
+      } else if (data?.ok) {
+        toast({ title: "✅ Heartbeat OK", description: "Scheduler responded — link is alive." });
+      } else {
+        const m = data?.error || "Unknown response";
+        setProbeError(m);
+        toast({ title: "❌ Heartbeat error", description: m, variant: "destructive" });
+      }
+    } catch (err) {
+      const m = err instanceof Error ? err.message : String(err);
+      setProbeError(m);
+      toast({ title: "❌ Heartbeat failed", description: m, variant: "destructive" });
+    } finally {
+      setProbing(false);
+      await fetchHealth();
+    }
+  }, [fetchHealth]);
+
 
   const fetchDebugState = useCallback(async () => {
     const { data: userData } = await supabase.auth.getUser();
