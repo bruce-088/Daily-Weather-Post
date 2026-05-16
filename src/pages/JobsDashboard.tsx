@@ -259,7 +259,7 @@ export default function JobsDashboard() {
               </p>
             </div>
           </div>
-          <Button variant="outline" size="sm" onClick={loadJobs} disabled={loading}>
+          <Button variant="outline" size="sm" onClick={() => loadJobs({ kick: true })} disabled={loading}>
             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
             Refresh
           </Button>
@@ -294,7 +294,7 @@ export default function JobsDashboard() {
                 onChange={(e) => setCityFilter(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && loadJobs()}
               />
-              <Button variant="outline" onClick={loadJobs}>Apply</Button>
+              <Button variant="outline" onClick={() => loadJobs()}>Apply</Button>
             </div>
           </div>
         </Card>
