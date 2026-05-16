@@ -301,14 +301,39 @@ export function GrowthCommandCenter() {
         <CardHeader className="pb-2">
           <CardTitle className="text-sm flex items-center gap-2">
             <CalendarClock size={14} className="text-primary" /> Weekly Recap
-            <Badge variant="outline" className="text-[10px] border-primary/40 text-primary ml-auto">Auto</Badge>
+            <Badge variant="outline" className="text-[10px] border-primary/40 text-primary ml-auto">
+              Auto{recapChannel && ytChannels.find((c) => c.id === recapChannel)
+                ? ` · ${ytChannels.find((c) => c.id === recapChannel)!.account_name}`
+                : ""}
+            </Badge>
           </CardTitle>
           <CardDescription className="text-xs">
             Next Recap scheduled for <strong>{recapLabel} UTC</strong>. A long-form YouTube video is generated automatically.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <p className="text-[11px] text-muted-foreground mb-2 flex items-center gap-1.5">
+        <CardContent className="space-y-3">
+          {ytChannels.length > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-muted-foreground shrink-0">Post recap to:</span>
+              <Select
+                value={recapChannel}
+                onValueChange={handleChannelChange}
+                disabled={savingChannel}
+              >
+                <SelectTrigger className="h-8 text-xs flex-1">
+                  <SelectValue placeholder="Select YouTube channel" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ytChannels.map((c) => (
+                    <SelectItem key={c.id} value={c.id} className="text-xs">
+                      {c.account_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
             <Sparkles size={11} className="text-primary" /> Last 3 daily posts in the queue
           </p>
           {recentPosts.length === 0 ? (
@@ -318,26 +343,47 @@ export function GrowthCommandCenter() {
           ) : (
             <div className="grid grid-cols-3 gap-2">
               {recentPosts.map((p) => (
-                <div
-                  key={p.id}
-                  className="aspect-video rounded-md overflow-hidden border border-border/40 bg-muted/30 relative"
-                >
-                  {p.image_url ? (
-                    <img src={p.image_url} alt={p.city} className="w-full h-full object-cover" loading="lazy" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <Cloud size={20} className="text-muted-foreground/50" />
-                    </div>
-                  )}
-                  <div className="absolute bottom-0 left-0 right-0 px-1.5 py-1 text-[9px] bg-gradient-to-t from-black/80 to-transparent text-white truncate">
-                    {p.city} · {fmtDate(p.created_at)}
-                  </div>
-                </div>
+                <RecentPostThumb key={p.id} post={p} />
               ))}
             </div>
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function RecentPostThumb({ post }: { post: RecentPost }) {
+  const [errored, setErrored] = useState(false);
+  const Icon = conditionIcon(post.condition);
+  const tint = conditionTint(post.condition);
+  const showImg = post.image_url && !errored;
+  return (
+    <div className="aspect-video rounded-md overflow-hidden border border-border/40 bg-muted/30 relative">
+      {showImg ? (
+        <img
+          src={post.image_url!}
+          alt={post.city}
+          className="w-full h-full object-cover"
+          loading="lazy"
+          onError={() => setErrored(true)}
+        />
+      ) : (
+        <div className={`w-full h-full flex flex-col items-center justify-center gap-1 bg-gradient-to-br ${tint}`}>
+          <Icon size={22} className="text-white/90 drop-shadow" />
+          <div className="text-[10px] font-medium text-white/90 px-2 text-center leading-tight truncate max-w-full">
+            {post.city}
+          </div>
+          {post.temperature != null && (
+            <div className="text-[9px] font-mono text-white/70">
+              {Math.round(Number(post.temperature))}°F
+            </div>
+          )}
+        </div>
+      )}
+      <div className="absolute bottom-0 left-0 right-0 px-1.5 py-1 text-[9px] bg-gradient-to-t from-black/80 to-transparent text-white truncate">
+        {post.city} · {fmtDate(post.created_at)}
+      </div>
     </div>
   );
 }
