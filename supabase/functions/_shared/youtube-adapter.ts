@@ -389,7 +389,7 @@ export class YouTubeAdapter implements PlatformAdapter {
         {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${accessToken}`,
+            Authorization: `Bearer ${activeToken}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
