@@ -2107,10 +2107,40 @@ Deno.serve(async (req) => {
           weather.city,
         );
 
+        // Resolve slot now (used by caption personality, beacon, and title prefix)
+        const _slotForGen = earlyTimePeriod || null;
+        const _slotLabel = slotDisplayLabel(_slotForGen);
+
+        // Fetch the most recent prior caption for this city to power anti-repeat
+        let _prevCaption: string | null = null;
+        try {
+          const { data: prev } = await supabase
+            .from("post_history")
+            .select("caption, created_at")
+            .eq("user_id", post.user_id)
+            .eq("city", weather.city)
+            .not("caption", "is", null)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          _prevCaption = (prev as any)?.caption || null;
+        } catch { /* best-effort */ }
+        const _prevOpener = firstContentLine(_prevCaption);
+
         if (!caption) {
           const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
           if (LOVABLE_API_KEY) {
             try {
+              const _rotCTA = rotatingCTA(_slotForGen);
+              const _personality = slotPersonalityDirective(_slotForGen);
+              const _diversityBlock = [
+                _personality,
+                _prevOpener
+                  ? `ANTI-REPEAT: Do NOT reuse the opening hook, first-sentence structure, or CTA verb from the previous post for this city. Previous opener was: "${_prevOpener}". Use a noticeably different angle.`
+                  : "",
+                `CTA ROTATION: For the final call-to-action line, use this exact CTA (or a close paraphrase): "${_rotCTA}". Do not invent additional CTAs.`,
+              ].filter(Boolean).join("\n\n");
+
               const baseUserContent =
                 buildSkyBriefUserPrompt(weather) +
                 "\n\n" + buildVerifiedLandmarksBlock(weather.city) +
@@ -2125,7 +2155,8 @@ Deno.serve(async (req) => {
                   lowTemp: weather.morningTemp ?? weather.temperature ?? 0,
                   conditions: weather.afternoonCondition || weather.condition || "",
                   platform: primaryPlatform,
-                });
+                }) +
+                (_diversityBlock ? "\n\n" + _diversityBlock : "");
               const sysPrompt = SKYBRIEF_SYSTEM_PROMPT + "\n\n" + LOCATION_ACCURACY_RULES;
               const callCap = async (extra = "") => {
                 const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -2171,11 +2202,52 @@ Deno.serve(async (req) => {
                   }
                 }
               }
+
+              // ── Similarity check vs previous post for this city ──
+              if (caption && _prevCaption) {
+                const sim = captionSimilarity(caption, _prevCaption);
+                if (sim >= 0.8) {
+                  console.warn(`[process-scheduled-posts] high similarity (${sim.toFixed(2)}) vs previous post for ${weather.city} — regenerating once`);
+                  try {
+                    await supabase.from("system_logs").insert({
+                      user_id: post.user_id,
+                      type: "caption_similarity_regen",
+                      message: `Caption ${sim.toFixed(2)} similar to previous post for ${weather.city}; triggered one-shot regen.`,
+                      context: { city: weather.city, slot: _slotForGen, similarity: sim, prev_opener: _prevOpener },
+                    });
+                  } catch { /* best-effort */ }
+                  const regen = await callCap(`\n\nREGENERATION REQUIRED: Your previous draft was too similar to the last post for this city ("${_prevOpener}"). Rewrite with a different opening hook, sentence rhythm, and CTA verb. Keep all factual weather data the same.`);
+                  if (regen) {
+                    const v3 = validateCaptionLocation(regen, weather.city);
+                    const cleaned = v3.ok ? regen : stripUnverifiedReferences(regen, weather.city);
+                    const sim2 = captionSimilarity(cleaned, _prevCaption);
+                    if (sim2 < sim) caption = cleaned;
+                  }
+                }
+              }
+
               // Final safety net
               if (caption) caption = stripUnverifiedReferences(caption, weather.city);
             } catch (e) {
               console.error("Caption generation failed:", e);
             }
+          }
+        }
+
+        // ── Location Beacon: ensure first non-empty line is "📍 City · Slot Update" ──
+        if (caption) {
+          try {
+            const beacon = `📍 ${weather.city} · ${_slotLabel} Update`;
+            const lines = caption.split(/\r?\n/);
+            const firstIdx = lines.findIndex((l) => l.trim().length > 0);
+            if (firstIdx >= 0 && /^\s*📍/.test(lines[firstIdx])) {
+              lines[firstIdx] = beacon;
+              caption = lines.join("\n");
+            } else {
+              caption = `${beacon}\n\n${caption.replace(/^\s+/, "")}`;
+            }
+          } catch (e) {
+            console.warn("[process-scheduled-posts] beacon injection failed:", e);
           }
         }
 
@@ -2185,7 +2257,7 @@ Deno.serve(async (req) => {
 
         // --- Platform Upload via Adapter ---
         const platformsToPost = post.platform === "both" ? ["youtube", "tiktok"] : post.platform.split(",").map((p: string) => p.trim());
-        const title = generateSkyBriefTitle(weather.city, weather.temperature, weather.condition, weather.rainChance);
+        const title = generateSkyBriefTitle(weather.city, weather.temperature, weather.condition, weather.rainChance, _slotForGen);
         const desc = caption || "Weather update for " + weather.city + ": " + weather.temperature + "°F, " + weather.description;
 
         // Extract slot (morning/afternoon/evening) from auto-post marker if present, so the
