@@ -117,8 +117,6 @@ const ExportSpec = () => {
         headers: {
           Authorization: `Bearer ${session?.access_token ?? ANON_KEY}`,
           apikey: ANON_KEY,
-          "Cache-Control": "no-cache, no-store, must-revalidate",
-          Pragma: "no-cache",
         },
       });
       if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
