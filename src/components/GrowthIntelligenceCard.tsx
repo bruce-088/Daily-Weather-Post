@@ -212,6 +212,7 @@ export function GrowthIntelligenceCard() {
                     : `${stats!.voice_lift_pct}% (silent wins)`
                 }
                 positive={stats!.voice_lift_pct >= 0}
+                hint={voiceSamples > 0 ? `${voiceSamples} samples` : undefined}
               />
             )}
             {stats!.worst_hour != null && (
