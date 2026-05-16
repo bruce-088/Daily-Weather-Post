@@ -28,7 +28,7 @@ const FEATURES: Array<[string, string, string]> = [
   ["Advanced Analytics — Pattern Detection", "✅ Working", "analyze-growth detects slot×tone, slot×hook, condition×tone winners (≥3 samples, ≥15% lift) into growth_insights."],
   ["Advanced Analytics — Learning Feedback Loop", "✅ Working", "generate-caption injects PROVEN WINNERS block (winning themes + top-post few-shot from ai_memory) while preserving anti-clone and 70/30 exploit/explore."],
   ["Advanced Analytics — Growth Command Center UI", "✅ Working", "Why It Won, Best Tone/Slot/Hook cards, actionable recommendation; per-post Performance pill in history."],
-  ["Creative Decay & Diversity Guard", "✅ Working", "48h per-city cooldown penalizes hooks used ≥2× (80% weight cut); FORBIDDEN REPETITIONS block lists last-3 openers + recurring themes; Diversity Guard + deterministic Focus Angle rotation (Landscape/Sky/Street Level/Atmospheric Detail/Human Activity) injected into generate-caption."],
+  ["Creative Decay & Diversity Guard", "✅ Working", "48h per-city cooldown uses tiered decay (1×=0, 2×=-40%, 3+×=-80%); proven winners (performance_score ≥85, not in last 2 posts) are rescued into a RECENTLY USED BUT ALLOWED tier that may be reused if rephrased; FORBIDDEN REPETITIONS narrowed to last 2 city openers + recurring themes; reworded Diversity Guard + deterministic Focus Angle rotation injected into generate-caption."],
   ["Background Variation (Pexels)", "✅ Working", "Ken-Burns fallback query combines weather condition + random secondary keyword (foliage/architecture/horizon/aerial/street/skyline/trees/rooftop/park/downtown) + city scope; randomized across top 10 results so identical conditions in different cities never collide."],
 ];
 
