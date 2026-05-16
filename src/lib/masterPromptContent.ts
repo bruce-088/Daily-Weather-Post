@@ -198,6 +198,89 @@ Trigger (manual / scheduled / automated)
 - Returns this document as live Markdown.
 - Pulls recent activity from \`post_history\` for the Recent Changes Log.
 
+### Full edge function inventory (live)
+\`analyze-growth\`, \`analyze-performance\`, \`auto-post-scheduler\`, \`compute-winner-stats\`, \`create-weekly-recap\`, \`daily-weather-post\`, \`detect-weather-trends\`, \`enqueue-preview-job\`, \`experiments-resolve\`, \`fetch-weather\`, \`generate-caption\`, \`generate-hooks\`, \`generate-spec\`, \`linkedin-auth\`, \`process-scheduled-posts\`, \`publish-preview-bundle\`, \`refresh-youtube-analytics\`, \`run-jobs\`, \`sync-cron-secret\`, \`sync-platform-metrics\`, \`sync-post-performance\`, \`sync-youtube-metrics\`, \`tiktok-auth\`, \`tts-preview\`, \`twitter-auth\`, \`upload-preview-video\`, \`youtube-auth\`, \`youtube-channel-stats\`, \`youtube-health-check\`.
+
+Shared modules under \`supabase/functions/_shared/\`: \`platform-adapter\`, \`youtube-adapter\`, \`tiktok-adapter\`, \`instagram-adapter\`, \`twitter-adapter\`, \`linkedin-adapter\`, \`video-render\` (3-tier: Creatomate → JSON2Video → JSON2Video Ken-Burns), \`visual-selector\`, \`caption-style\`, \`location-guard\`, \`auth-helpers\`, \`job-runner\`, \`job-handlers\`, \`learning-patterns\`, \`winning-recipes\`, \`voice-memory\`, \`experiments\`, \`auto-winner\`, \`style-rotation\`, \`city-accounts\`.
+
+---
+
+## 7b. Current Codebase Inventory (live)
+
+### Multi-city schema (in addition to legacy \`weather_settings\`)
+- \`cities\`, \`user_cities\` — many-cities-per-user setup driving \`CitySwitcher\` and \`useActiveCity\`.
+- \`social_accounts\` — per-city OAuth credentials (YouTube/TikTok/IG/X/LinkedIn).
+- \`automations\` — per-city × per-slot automation toggles, coexists with legacy \`auto_post_*\` flags on \`weather_settings\`.
+
+### Pipeline tables
+- \`jobs\` — every pipeline step (with \`engine_state\`, retry/attempt tracking).
+- \`pipeline_reflections\` — hidden 5th \`analyze_performance\` step output (24 h post-publish), read by the next \`generate_content\`.
+- \`video_renders\`, \`preview_bundles\`, \`publish_locks\`, \`weather_cache\`.
+
+### AI Learning & Growth tables
+- \`post_analytics\`, \`post_hooks\` — engagement ingestion.
+- \`content_insights\` — best tone × opener per condition × time-of-day (from \`analyze-performance\`).
+- \`hook_stats\`, \`time_slot_stats\`, \`trend_alerts\` — feed the Auto-Growth system.
+- \`growth_recommendations\`, \`growth_insights\` — refreshed every 6 h by \`analyze-growth\`.
+- \`experiments\`, \`experiment_wins\`, \`winner_stats\`, \`winner_repost_suggestions\` — A/B layer.
+- \`ai_memory\` — per-user winning examples injected as few-shot context.
+
+### System tables
+- \`system_health\`, \`system_logs\`, \`notifications\`.
+
+### Caption / brand layer (live)
+- Slot-based personality rotation (morning upbeat / afternoon informative / evening calm).
+- Rotating CTA pool, anti-repeat against previous post, **80% Jaccard similarity guard** with one-shot regeneration.
+- Voice & Tone presets (\`_shared/caption-style.ts\`): \`normalizeTone\`, \`buildStyleAddendum\`, weather life tips, time-of-day greeting, dynamic hashtag stack.
+- Dynamic per-city handles \`@SkyBrief<City>\`; foreign-handle & foreign-landmark sanitizers (\`_shared/location-guard.ts\`).
+- All caption enhancements wrapped in fail-safe try/catch (degrades silently to base prompt).
+
+### Render layer (live)
+- 3-tier fallback in \`_shared/video-render.ts\`: Creatomate → JSON2Video → JSON2Video Ken-Burns.
+- Success contract: real bytes + duration > 2 s. Explicit credit-exhaustion detection.
+- YouTube / TikTok / Instagram Reels never fall back to a static image (video-required).
+
+### Voice layer (live)
+- ElevenLabs voiceovers (\`tts-preview\`, \`process-scheduled-posts\`).
+- \`getBestVoice()\` override + voice A/B experiments via \`_shared/voice-memory.ts\`.
+
+### Platform adapters (live)
+All implement the shared \`PlatformAdapter\` interface.
+
+| Platform | Adapter | Notes |
+|---|---|---|
+| YouTube Shorts | \`youtube-adapter.ts\` | Data API v3, resumable upload, slot-prefixed SEO titles ≤95 chars, tag builder, like+subscribe double-hook |
+| TikTok | \`tiktok-adapter.ts\` | Content Posting API, photo fallback (PULL_FROM_URL), domain-verification text files in \`/public\` |
+| Instagram | \`instagram-adapter.ts\` | Graph API Reels + image posts |
+| X (Twitter) | \`twitter-adapter.ts\` | OAuth 1.0a + chunked media |
+| LinkedIn | \`linkedin-adapter.ts\` | API v202601, async video registration |
+
+### Frontend (live)
+- **Pages**: \`Index\`, \`Auth\`, \`JobsDashboard\`, \`ExportSpec\`, \`PrivacyPolicy\`, \`TermsOfService\`, callbacks (YouTube/TikTok/Twitter/LinkedIn).
+- **Growth UI**: \`AnalyticsPanel\`, \`GrowthDashboard\`, \`GrowthCommandCenter\`, \`GrowthSummaryCard\`, \`GrowthInsights\`, \`GrowthIntelligenceCard\`, \`GrowthLog\`, \`SmartInsightsCard\`, \`AiInsightsCard\`, \`ContentScoreCard\`, \`ChannelHealthCard\`, \`SystemHealthCard\`, \`ABComparePanel\`, \`AutoWinnerBadge\`, \`AutoWinnerSettings\`, \`ExperimentBadge\`.
+- **Multi-city UI**: \`CitySwitcher\`, \`CityManager\`, \`CityAccountsManager\`, \`YouTubeChannelsManager\`, \`ExpiredConnectionsBanner\`.
+- **Scheduling / review**: \`SchedulePostForm\`, \`ScheduledPostsList\`, \`EditScheduledPostDialog\`, \`StatusPipeline\`, \`PreviewPipelineStatus\`, \`RenderProgressTracker\`, \`PostHistoryList\`, \`VideoPreviewDialog\`, \`DebugLabels\`.
+- **Settings**: \`SettingsPanel\`, \`PerformanceLearningToggle\`, \`JobPipelineToggle\`.
+
+### Feature flags (\`src/lib/featureFlags.ts\`)
+- \`USE_PIPELINE_FOR_MANUAL_POSTS\`
+- \`ENABLE_POST_HEALTH_SCORE\` — gate publish at health ≥ 60 (\`postHealth.ts\`, persisted on \`post_history.health_score / health_breakdown\`)
+- \`ENABLE_AB_TESTING\`
+- \`SHOW_DEBUG_LABELS\` (default true) — shows Pipeline/Legacy, A/B, render engine, voice, health pills
+- All flags overridable via \`localStorage\`.
+
+### Storage buckets
+- \`generated-images\` — AI-generated card backgrounds and post stills.
+- \`brand-assets\` — public brand visuals.
+- Preview videos staged via \`upload-preview-video\`.
+
+### Cron jobs (pg_cron, bootstrapped by \`sync-cron-secret\`)
+- \`auto-post-scheduler\` — every 5 min, 10-min window.
+- \`analyze-growth\` — every 6 h.
+- \`detect-weather-trends\` — daily.
+- \`analyze-performance\` — 24 h post-publish.
+- Sync jobs (\`sync-platform-metrics\`, \`sync-youtube-metrics\`, \`sync-post-performance\`, \`refresh-youtube-analytics\`, \`compute-winner-stats\`, \`experiments-resolve\`) on their own intervals.
+
 ---
 
 ## 8. Idempotency & Duplicate Protection
