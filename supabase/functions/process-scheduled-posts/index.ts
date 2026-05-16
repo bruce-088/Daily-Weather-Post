@@ -284,8 +284,14 @@ function buildHookTitle(city: string, temp: number, condition: string, rainChanc
   const baseTitle = pool[seed % pool.length];
   // Slot-aware prefix: morning/afternoon/evening get fixed broadcast-style
   // times ([8 AM]/[1 PM]/[6 PM]). Adhoc/manual fall back to city-local stamp.
-  const stamp = slotTimePrefix(slot, city);
-  const stamped = `[${stamp}] ${baseTitle}`;
+  // Wrapped: any failure in slotTimePrefix degrades to the un-prefixed title.
+  let stamped = baseTitle;
+  try {
+    const stamp = slotTimePrefix(slot, city);
+    if (stamp) stamped = `[${stamp}] ${baseTitle}`;
+  } catch (err) {
+    console.warn("buildHookTitle: slot prefix failed, using base title", err);
+  }
   return stamped.length > 95 ? stamped.substring(0, 92) + "..." : stamped;
 }
 
