@@ -3,6 +3,10 @@
 
 export interface UploadResult {
   id: string;
+  /** city_id of the social_accounts row actually used for this upload, if resolvable */
+  resolved_city_id?: string | null;
+  /** account_name / handle of the channel actually used for this upload */
+  account_name?: string | null;
 }
 
 export interface PostResult {
