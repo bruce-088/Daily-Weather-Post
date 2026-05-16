@@ -221,6 +221,12 @@ export function CityManager({ activeCityId, onActiveCityChange, onCitiesChange, 
    */
   const handleRunSlotNow = async (slot: "morning" | "afternoon" | "evening") => {
     if (!activeCity || !automation) return;
+    // Global click guard — if ANY slot for ANY city is already running, refuse
+    // new clicks. Prevents double-clicks racing into duplicate inserts.
+    if (runningSlot) {
+      toast.error("Another slot is already running — wait for it to finish");
+      return;
+    }
     const platsKey =
       slot === "morning" ? "morning_platforms" : slot === "afternoon" ? "afternoon_platforms" : "evening_platforms";
     const platforms = ((automation as any)[platsKey] as string[]) || [];
