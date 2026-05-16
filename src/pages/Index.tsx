@@ -1083,17 +1083,15 @@ const Index = () => {
                 </div>
 
                 {/* Row 2: heatmap + smart insights */}
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
                   <div className="lg:col-span-7">
                     <GrowthDashboard />
                   </div>
-                  <div className="lg:col-span-5">
+                  <div className="lg:col-span-5 flex flex-col gap-6 h-full">
                     <SmartInsightsCard />
+                    <OutperformingPosts className="flex-1 min-h-0" />
                   </div>
                 </div>
-
-                {/* Full-width outperforming posts */}
-                <OutperformingPosts />
 
                 {/* Full-width weekly recap */}
                 <GrowthWeeklyRecap />
