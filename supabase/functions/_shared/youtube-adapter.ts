@@ -170,32 +170,55 @@ export class YouTubeAdapter implements PlatformAdapter {
     title: string,
     description: string,
     mimeType = "video/mp4",
+    _cityId?: string | null,
   ): Promise<UploadResult | null> {
     const shortTitle = appendTitleHashtags(title);
 
-    // Append permanent YouTube subscribe + notifications CTA to every Shorts
-    // description. Centralized here so it applies uniformly to manual posts,
-    // scheduled posts, and the auto-post scheduler — they all funnel through
-    // uploadVideo(). YouTube-only by design (other platforms call their own
-    // adapters and never hit this code path).
-    const YT_CHANNEL_URL = "https://www.youtube.com/@SkyBriefGNV?sub_confirmation=1";
-    const YT_CTA = `👉 Subscribe and turn on notifications for daily Gainesville weather alerts: ${YT_CHANNEL_URL} 🔔`;
-    // Top-of-description LIKE prompt — drives the strongest engagement signal
-    // for the YouTube Shorts algo. City is dynamic so multi-city accounts
-    // still feel local. Stripped + re-prepended on every upload to avoid
-    // duplicates if the description was previously processed.
-    const cityForLike = extractCityFromTitle(title) || "your area";
+    // Recover the channel that getValidToken() actually selected so we can
+    // build a CTA / subscribe URL that points to the RIGHT channel (not a
+    // hardcoded Gainesville one). Falls back to title-derived city if the
+    // cache miss for any reason.
+    const resolved = this._resolved.get(accessToken) || null;
+
+    const titleCity = extractCityFromTitle(title) || "your area";
+    const cityForLike = titleCity;
+
+    // Build a clean @handle for the subscribe URL:
+    //   1. Use the resolved channel's account_name (stripped to handle form).
+    //   2. Otherwise derive @SkyBrief{City} from the title.
+    //   3. As a last resort emit a generic CTA with no URL — NEVER hardcode
+    //      @SkyBriefGNV for non-Gainesville cities.
+    const cleanHandle = (() => {
+      const raw = (resolved?.account_name || "").trim();
+      if (raw) {
+        // Accept "@SkyBriefMiami", "SkyBriefMiami", or full channel URL.
+        const m = raw.match(/@?([A-Za-z0-9_.\-]{2,})/);
+        if (m && m[1]) return m[1];
+      }
+      const cityClean = titleCity.replace(/[^A-Za-z0-9]/g, "");
+      return cityClean ? `SkyBrief${cityClean}` : "";
+    })();
+
+    let YT_CTA: string;
+    if (cleanHandle) {
+      const YT_CHANNEL_URL = `https://www.youtube.com/@${cleanHandle}?sub_confirmation=1`;
+      YT_CTA = `👉 Subscribe and turn on notifications for daily ${titleCity} weather alerts: ${YT_CHANNEL_URL} 🔔`;
+    } else {
+      YT_CTA = `👉 Subscribe and turn on notifications for daily ${titleCity} weather alerts 🔔`;
+    }
+
     const YT_LIKE_PROMPT = `👍 Smash the LIKE button if you're enjoying the weather in ${cityForLike}!`;
     let baseDescription = (description || "").trimEnd();
-    // Strip any previously-prepended LIKE prompt (from earlier uploads) so we
-    // don't stack them.
+    // Strip any previously-prepended LIKE prompt so we don't stack them.
     baseDescription = baseDescription
       .replace(/^👍[^\n]*\n+/u, "")
       .trimStart();
-    // Strip any previously-appended CTA variants so we always end with the
-    // current notifications-focused line (and never stack duplicates).
+    // Strip ANY previously-appended subscribe CTA (any @handle, including the
+    // legacy hardcoded @SkyBriefGNV) so we always end with the current,
+    // correctly-routed CTA.
     baseDescription = baseDescription
-      .replace(/\n*👉[^\n]*@SkyBriefGNV\?sub_confirmation=1[^\n]*$/u, "")
+      .replace(/\n*👉[^\n]*sub_confirmation=1[^\n]*$/u, "")
+      .replace(/\n*👉[^\n]*subscribe[^\n]*$/iu, "")
       .trimEnd();
     // Strip any previously-appended hashtag block so we never stack duplicates.
     baseDescription = baseDescription
