@@ -242,6 +242,7 @@ function Row({
   avg,
   positive,
   muted,
+  hint,
 }: {
   icon: React.ReactNode;
   label: string;
