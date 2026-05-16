@@ -249,6 +249,7 @@ function Row({
   avg?: number | null;
   positive?: boolean;
   muted?: boolean;
+  hint?: string;
 }) {
   return (
     <div
@@ -268,6 +269,9 @@ function Row({
           <div className="text-[10px] font-mono text-muted-foreground">
             avg {Math.round(avg)} pts
           </div>
+        )}
+        {hint && (
+          <div className="text-[10px] font-mono text-muted-foreground">{hint}</div>
         )}
       </div>
     </div>
