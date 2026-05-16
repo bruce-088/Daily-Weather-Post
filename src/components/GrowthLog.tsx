@@ -167,6 +167,16 @@ export function GrowthLog() {
             <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-400 ml-auto">
               {insights.length} insight{insights.length === 1 ? "" : "s"}
             </Badge>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="h-6 px-2 text-[11px]"
+            >
+              <RefreshCw size={11} className={refreshing ? "animate-spin" : ""} />
+              Refresh
+            </Button>
           </CardTitle>
           <CardDescription className="text-xs">
             Every winning A/B test the AI discovers shows up here.
