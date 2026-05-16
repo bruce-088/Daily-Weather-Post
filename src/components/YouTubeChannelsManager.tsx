@@ -130,6 +130,10 @@ export function YouTubeChannelsManager({ cities = [], onChange }: Props) {
               ? new Date(ch.token_expires_at).getTime() < Date.now()
               : false;
             const cn = cityName(ch.city_id);
+            const health = ch.extra?.health?.status;
+            const showExpiredBadge = expired || health === "expired";
+            const showDisconnectedBadge = health === "disconnected";
+            const showHealthyBadge = !showExpiredBadge && !showDisconnectedBadge && health === "healthy";
             return (
               <div
                 key={ch.id}
@@ -158,6 +162,21 @@ export function YouTubeChannelsManager({ cities = [], onChange }: Props) {
                       <Globe size={10} /> Shared
                     </Badge>
                   )}
+                  {showHealthyBadge ? (
+                    <Badge variant="outline" className="text-[10px] border-emerald-500/40 text-emerald-500 bg-emerald-500/10" title={`Last checked ${ch.extra?.health?.checked_at ? new Date(ch.extra.health.checked_at).toLocaleString() : ""}`}>
+                      ✅ Connected
+                    </Badge>
+                  ) : null}
+                  {showExpiredBadge ? (
+                    <Badge variant="outline" className="text-[10px] border-yellow-500/40 text-yellow-500 bg-yellow-500/10" title="Token expired — reconnect this channel">
+                      ⚠️ Needs refresh
+                    </Badge>
+                  ) : null}
+                  {showDisconnectedBadge ? (
+                    <Badge variant="outline" className="text-[10px] border-destructive/40 text-destructive bg-destructive/10" title="YouTube API unreachable for this channel">
+                      ❌ Disconnected
+                    </Badge>
+                  ) : null}
                   {expired ? (
                     <Badge variant="outline" className="text-[10px] border-yellow-500/40 text-yellow-500 bg-yellow-500/10">
                       Reconnect
