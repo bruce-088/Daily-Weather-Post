@@ -233,5 +233,13 @@ export function buildLearningPromptBlock(p: TopPatterns): string {
     }
   }
 
+  if (p.winningThemes && p.winningThemes.length > 0) {
+    lines.push("");
+    lines.push("PROVEN WINNERS — your top-scoring posts share these traits (favor them, but vary opener and structure — do not copy verbatim):");
+    for (const t of p.winningThemes) {
+      lines.push(`  - ${t.label} (×${t.count})`);
+    }
+  }
+
   return lines.join("\n");
 }
