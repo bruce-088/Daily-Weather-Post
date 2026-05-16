@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Download, FileText, Copy, Check, FileType, Share2, RefreshCw, Zap, Loader2 } from "lucide-react";
 import { toast } from "sonner";
