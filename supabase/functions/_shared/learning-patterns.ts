@@ -350,9 +350,17 @@ export function buildLearningPromptBlock(p: TopPatterns): string {
     }
   }
 
+  if (p.recentlyUsedAllowed && p.recentlyUsedAllowed.length > 0) {
+    lines.push("");
+    lines.push("RECENTLY USED BUT ALLOWED (proven winners — may be reused, but MUST be rephrased with a new opening structure and angle; do NOT copy verbatim):");
+    for (const r of p.recentlyUsedAllowed) {
+      lines.push(`  - "${r.hook}" (score ${Math.round(r.score)}, used ${r.uses48h}× in 48h)`);
+    }
+  }
+
   if (hasForbidden) {
     lines.push("");
-    lines.push("FORBIDDEN REPETITIONS (used in the last 3 city posts — do NOT start with, paraphrase, or build the post around any of these):");
+    lines.push("FORBIDDEN REPETITIONS (used in the last 2 city posts — do NOT repeat verbatim or use as the opener):");
     for (const o of (p.forbiddenOpeners ?? [])) lines.push(`  - opener: "${o}"`);
     for (const t of (p.forbiddenThemes ?? [])) lines.push(`  - theme: "${t}"`);
   }
