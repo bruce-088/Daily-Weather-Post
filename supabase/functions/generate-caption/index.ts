@@ -419,6 +419,35 @@ ${styleAddendum}${insightNote}`;
     // Final safety net regardless of retry path
     caption = stripUnverifiedReferences(caption, city);
 
+    // City-handle sanitizer: replace any @SkyBrief* token that doesn't match
+    // the dynamic handle for this city. Prevents Orlando captions ending with
+    // "Follow @SkyBriefGNV" because the model recalled stale brand strings.
+    try {
+      const handleRe = /@SkyBrief[A-Za-z0-9_]+/g;
+      const foreign: string[] = [];
+      caption = caption.replace(handleRe, (m) => {
+        if (m === handle) return m;
+        foreign.push(m);
+        return handle;
+      });
+      if (foreign.length > 0) {
+        console.warn(`[generate-caption] foreign @SkyBrief handle(s) replaced for ${city}:`, foreign);
+        try {
+          const svc = createClient(
+            Deno.env.get("SUPABASE_URL")!,
+            Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+          );
+          await svc.from("system_logs").insert({
+            user_id: auth.userId,
+            type: "caption_handle_sanitized",
+            message: `Replaced foreign @SkyBrief handle(s) ${foreign.join(", ")} → ${handle} for city ${city}`,
+            context: { city, expected_handle: handle, foreign },
+          });
+        } catch { /* best-effort */ }
+      }
+    } catch (e) {
+      console.warn("[generate-caption] handle sanitizer failed:", e);
+    }
     // Prepend (or replace) a city-local timestamp stamp on the first line.
     // Format: `📍 ${city} · ${H AM/PM} Update`. Fails silently if anything throws.
     try {
