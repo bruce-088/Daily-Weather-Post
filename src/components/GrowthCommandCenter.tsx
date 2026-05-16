@@ -78,6 +78,9 @@ export function GrowthCommandCenter() {
   const [bestHook, setBestHook] = useState<MemoryRow | null>(null);
   const [experimentsRunning, setExperimentsRunning] = useState(0);
   const [recentPosts, setRecentPosts] = useState<RecentPost[]>([]);
+  const [ytChannels, setYtChannels] = useState<YouTubeChannel[]>([]);
+  const [recapChannel, setRecapChannel] = useState<string>("");
+  const [savingChannel, setSavingChannel] = useState(false);
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -87,10 +90,8 @@ export function GrowthCommandCenter() {
       .select("id", { count: "exact", head: true })
       .eq("user_id", user.id)
       .eq("status", "gathering_data");
-    // post_history.status uses "success" / "failed" / "pending" — not "posted".
-    // Accept both so legacy rows still surface.
     let phQ = supabase.from("post_history")
-      .select("id, city, image_url, created_at")
+      .select("id, city, image_url, created_at, condition, temperature")
       .eq("user_id", user.id)
       .in("status", ["success", "posted"])
       .order("created_at", { ascending: false })
@@ -100,10 +101,7 @@ export function GrowthCommandCenter() {
       phQ = phQ.ilike("city", activeCity.name);
     }
 
-    // Derive Memory Bank from hook_stats (real, populated data source).
-    // Minimum 1 use — every post in hook_stats already represents a real
-    // published post the AI has observed performance for.
-    const [hookStatsRes, contentRes, e, ph] = await Promise.all([
+    const [hookStatsRes, contentRes, e, ph, ytRes, settingsRes] = await Promise.all([
       supabase.from("hook_stats")
         .select("id, hook_text, uses, avg_views, status, last_used_at, created_at")
         .eq("user_id", user.id)
@@ -116,6 +114,16 @@ export function GrowthCommandCenter() {
         .order("avg_views", { ascending: false })
         .limit(20),
       expQ, phQ,
+      supabase.from("social_accounts")
+        .select("id, account_name, city_id")
+        .eq("user_id", user.id)
+        .eq("platform", "youtube")
+        .order("account_name", { ascending: true }),
+      supabase.from("weather_settings")
+        .select("recap_youtube_channel")
+        .eq("user_id", user.id)
+        .limit(1)
+        .maybeSingle(),
     ]);
 
     const hookRows = (hookStatsRes.data as any[]) || [];
@@ -140,18 +148,59 @@ export function GrowthCommandCenter() {
       })),
     ].sort((a, b) => b.performance_score - a.performance_score);
 
+    const channels = (ytRes.data as YouTubeChannel[]) || [];
+    setYtChannels(channels);
+
+    // Default selection: saved value → channel matching active city → first.
+    const saved = (settingsRes.data as any)?.recap_youtube_channel as string | undefined;
+    let defaultChannel =
+      (saved && channels.find((c) => c.id === saved)?.id) ||
+      (activeCity.id && channels.find((c) => c.city_id === activeCity.id)?.id) ||
+      channels[0]?.id ||
+      "";
+    setRecapChannel(defaultChannel);
+
     setMemories(mem);
     setBestHook(mem.find((x) => x.memory_type === "hook") || null);
     setExperimentsRunning(e.count ?? 0);
     setRecentPosts((ph.data as RecentPost[]) || []);
     setLoading(false);
-  }, [activeCity.name]);
+  }, [activeCity.name, activeCity.id]);
 
   useEffect(() => { setLoading(true); load(); }, [load]);
 
   async function handleRefresh() {
     setRefreshing(true);
     try { await load(); } finally { setRefreshing(false); }
+  }
+
+  async function handleChannelChange(value: string) {
+    setRecapChannel(value);
+    setSavingChannel(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      // Check-then-act (weather_settings has no unique constraint on user_id).
+      const { data: existing } = await supabase
+        .from("weather_settings")
+        .select("id")
+        .eq("user_id", user.id)
+        .limit(1)
+        .maybeSingle();
+      if (existing?.id) {
+        await supabase.from("weather_settings")
+          .update({ recap_youtube_channel: value } as any)
+          .eq("id", existing.id);
+      } else {
+        await supabase.from("weather_settings")
+          .insert({ user_id: user.id, recap_youtube_channel: value } as any);
+      }
+      toast.success("Recap channel saved");
+    } catch (err: any) {
+      toast.error("Couldn't save recap channel");
+    } finally {
+      setSavingChannel(false);
+    }
   }
 
   const nextRecap = nextSundayRecap();
