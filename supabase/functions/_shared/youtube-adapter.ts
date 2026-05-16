@@ -17,6 +17,11 @@ export class YouTubeAdapter implements PlatformAdapter {
    *  getValidToken() actually selected for this user+city combination. */
   private _resolved: Map<string, ResolvedYTAccount> = new Map();
 
+  /** Refresh-context cache: token → everything we need to mint a NEW token
+   *  if YouTube returns 401 mid-upload. Populated by getValidToken(),
+   *  consumed by uploadVideo()'s 401 self-heal path. */
+  private _refreshCtx: Map<string, { supabase: any; userId: string; cityId: string | null }> = new Map();
+
   private _resolvedKey(userId: string, cityId?: string | null) {
     return `${userId}::${cityId ?? "shared"}`;
   }
