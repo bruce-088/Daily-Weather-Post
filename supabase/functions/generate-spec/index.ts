@@ -15,23 +15,15 @@ const FEATURES: Array<[string, string, string]> = [
   ["History – Past post log with status badges", "✅ Working", "Reads post_history; tags Automated vs manual posts."],
   ["Automation – 3x/day auto-post (morning/afternoon/evening)", "✅ Working", "auto-post-scheduler runs every 5 minutes with a 10-minute trigger window and 30-minute duplicate guard."],
   ["AI Voiceover (ElevenLabs)", "✅ Working", "Per-user voice, speed, stability, similarity controls; live Test Voice preview."],
-  ["AI Captions (Lovable AI / Gemini)", "✅ Working", "generate-caption edge function."],
+  ["AI Captions (Lovable AI / Gemini)", "✅ Working", "generate-caption edge function with anti-clone, CTA rotation, and personality logic."],
   ["Notifications (in-app, realtime)", "✅ Working", "notifications table + realtime subscription."],
   ["Social integrations: TikTok, YouTube, X/Twitter, LinkedIn, Instagram", "✅ Working", "OAuth flows; Instagram via Graph API."],
   ["Video rendering via Creatomate (with Remotion fallback)", "⚠️ Partial", "Creatomate primary; fallback path is environment-dependent."],
   ["Export Spec (this document)", "✅ Working", "generate-spec edge function returns live Markdown."],
-];
-
-const EDGE_FUNCTIONS: Array<[string, string, string]> = [
-  ["auto-post-scheduler", "Cron every 5 min", "Evaluates user time slots; enqueues scheduled_posts within a 10-minute window."],
-  ["process-scheduled-posts", "Cron / triggered", "Renders video, generates voiceover, calls platform adapters; writes post_history."],
-  ["daily-weather-post", "Manual / cron", "Legacy single daily post entry point."],
-  ["fetch-weather", "User action", "Calls OpenWeather; returns enriched morning/afternoon/evening forecast."],
-  ["generate-caption", "User action", "Lovable AI Gemini caption generation."],
-  ["tts-preview", "User action", "ElevenLabs preview using current voice settings."],
-  ["upload-preview-video", "User action", "Uploads preview render to weather-videos bucket."],
-  ["tiktok-auth / youtube-auth / twitter-auth / linkedin-auth", "OAuth callback", "Exchanges code for tokens; stores in weather_settings."],
-  ["generate-spec", "User action (Export Spec button)", "Builds this Markdown file from live DB + code constants."],
+  ["Job Pipeline Dashboard", "✅ Working", "Visual pipeline showing step-by-step job progress per post."],
+  ["Duplicate Post Protection", "✅ Working", "DB-level exclusion constraint + runtime dedupe checks."],
+  ["City-to-Channel Routing Guard", "✅ Working", "Strict mapping prevents cross-city content contamination."],
+  ["Slot-based Title & Caption Branding", "✅ Working", "Titles prefixed with [8 AM]/[1 PM]/[6 PM]; captions include location beacon."],
 ];
 
 const INTEGRATIONS: Array<[string, string]> = [
@@ -47,18 +39,155 @@ const INTEGRATIONS: Array<[string, string]> = [
   ["Instagram Graph API", "Business/Creator account publishing."],
 ];
 
-const AUTOMATION = `- **Cron schedule**: \`auto-post-scheduler\` runs every 5 minutes.
-- **Time window**: a slot triggers when \`scheduled_time <= now <= scheduled_time + 10 minutes\`.
-- **Duplicate guard**: each slot can only fire once per 30-minute window per user.
-- **Slot platforms**: per-user \`morning_platforms\`, \`afternoon_platforms\`, \`evening_platforms\` JSONB arrays.
-- **Skip-once**: \`{slot}_skip_date\` columns let users skip a single occurrence.
-- **Rendering**: handed off to \`process-scheduled-posts\` which generates voiceover (if enabled), renders video, and posts.`;
+const SLOT_SYSTEM = `Slots define the three daily automation windows and drive caption tone, title prefix, and scheduling logic.
 
-const KNOWN_ISSUES = `- Voiceover generation depends on ElevenLabs availability; on failure the post still publishes without audio.
-- Creatomate fallback to a Remotion-based external renderer is environment-dependent.
-- Cron drift up to ~10 minutes is expected (matched window). Posts overdue >10 min show a red badge.
-- App version (\`${APP_VERSION}\`) is currently maintained as a constant inside \`generate-spec\`.
-- Recent Changes Log below is sourced from the latest \`post_history\` activity, not git commits (no git available at runtime).`;
+| Slot | Time | Title Prefix | Caption Personality |
+|---|---|---|---|
+| Morning | 8:00 AM (local) | [8 AM] | Upbeat / Energetic |
+| Afternoon | 1:00 PM (local) | [1 PM] | Informative / Direct |
+| Evening | 6:00 PM (local) | [6 PM] | Calm / Cinematic |
+
+- Slot times are stored per-city in \`weather_settings\` as \`morning_post_time\`, \`afternoon_post_time\`, \`evening_post_time\`.
+- All times are evaluated in the city's local timezone (stored in \`weather_settings.timezone\`).
+- Slots determine: posting time, caption personality, title prefix, and CTA rotation index.`;
+
+const EXECUTION_SOURCES = `Every post in SkyBrief originates from one of three sources. Each source is tagged internally to ensure isolation and prevent cross-triggering.
+
+| Source | Trigger | Tag |
+|---|---|---|
+| Manual | User clicks "Post Now" on Create page | \`source=manual\` |
+| Scheduled | User creates a future post via Schedule tab | \`source=scheduled\` |
+| Automated | Cron fires auto-post-scheduler every 5 minutes | \`source=automated\` |
+
+- "Run This Slot Now" executes ONLY the specific city_id + slot combination requested.
+- Automated runs bypass manual slot execution paths.
+- All sources feed into the same \`process-scheduled-posts\` pipeline.`;
+
+const PIPELINE_FLOW = "Every post (manual, scheduled, or automated) follows this pipeline:\n\n" +
+  "```\n" +
+  "Trigger (manual / scheduled / automated)\n" +
+  "  → auto-post-scheduler OR direct call\n" +
+  "  → process-scheduled-posts\n" +
+  "    → Create job in `jobs` table\n" +
+  "    → Step 1: generate_content (caption + title)\n" +
+  "    → Step 2: generate_voice (ElevenLabs, optional)\n" +
+  "    → Step 3: render_video (Creatomate)\n" +
+  "    → Step 4: publish_post (platform adapter)\n" +
+  "    → Step 5: analyze_performance (post-publish)\n" +
+  "  → Write result to `post_history`\n" +
+  "  → Insert notification for user\n" +
+  "```\n\n" +
+  "- Each step is independently retryable.\n" +
+  "- Earlier successful steps (including rendered video) are cached and reused on retry.\n" +
+  "- Failures at any step do not block future automation cycles.";
+
+const EDGE_FUNCTIONS_OVERVIEW = `### \`auto-post-scheduler\`
+- Runs every 5 minutes via pg_cron.
+- Checks all \`weather_settings\` rows for slots due within the current 10-minute window.
+- Creates \`scheduled_posts\` rows and triggers \`process-scheduled-posts\`.
+- Enforces 30-minute duplicate guard per slot per user.
+- Uses service_role key for authorization.
+
+### \`process-scheduled-posts\`
+- Core execution engine for all post types.
+- Runs the full pipeline: caption → voice → render → publish → analyze.
+- Creates and updates \`jobs\` table rows for each step.
+- Handles retries at the step level (not full pipeline restarts).
+- Caches rendered video to avoid duplicate render charges on retry.
+
+### \`generate-caption\`
+- Generates AI captions using Lovable AI Gateway (Google Gemini).
+- Accepts slot, city, weather data, and previous caption context.
+- Applies personality rotation, CTA rotation, and anti-repeat logic.
+- Includes similarity validation with one automatic regeneration cycle.
+- Fail-safe: any enhancement failure falls back to base caption logic silently.
+
+### \`generate-spec\`
+- Returns this document as live Markdown.
+- Pulls recent activity from \`post_history\` for the Recent Changes Log.`;
+
+const IDEMPOTENCY = `SkyBrief uses a multi-layer approach to prevent duplicate posts:
+
+### Layer 1 — Database Constraint
+- Exclusion constraint on \`jobs.scheduled_post_id\` prevents two active jobs for the same post.
+- Enforced at the Postgres level — cannot be bypassed by application code.
+
+### Layer 2 — Runtime Dedupe Check
+- Before publishing, the system checks \`post_history\` for a successful post with the same city + platform + date + slot within the last 60 minutes.
+- If found, the publish step is skipped and the existing post URL is returned.
+
+### Layer 3 — Slot Idempotency Key
+- Unique key format: \`city_id + local_date + slot_name + platform\`
+- Applied at both the \`scheduled_posts\` creation step and the \`publish_post\` step.`;
+
+const CAPTION_SYSTEM = `### Personality Rotation (by slot)
+| Slot | Personality |
+|---|---|
+| Morning | Upbeat / Energetic |
+| Afternoon | Informative / Direct |
+| Evening | Calm / Cinematic |
+
+### CTA Rotation Pool
+Rotated deterministically by \`(date + slot)\` index:
+1. "Tap ❤️ if this helped your plans."
+2. "Subscribe for tomorrow's brief."
+3. "Check the radar before you head out."
+4. "Drop your city's weather in the comments."
+
+### Anti-Clone Logic
+- Fetches the last 3 post captions for the same city before generating.
+- Instructs the AI to avoid the same opening hook, sentence structure, and CTA.
+- If generated caption is ≥80% similar to the previous post, triggers one automatic regeneration.
+- Maximum one regeneration attempt — never loops.
+
+### Fail-Safe Behavior
+- All caption enhancements (personality, CTA, anti-repeat, similarity) are wrapped in try/catch.
+- Any failure silently falls back to base caption generation.
+- Posts are never blocked by caption enhancement failures.`;
+
+const ROUTING_GUARD = `Prevents cross-city content contamination (e.g., Gainesville content on Orlando channel).
+
+### Pre-Flight Check
+- Before publishing, resolves the target channel ID directly from the \`city_id\` mapping in \`weather_settings\`.
+- Asserts that the city name in the post content matches the city assigned to the target channel.
+- If mismatch detected → job fails with \`ROUTING_VIOLATION\` error (does not publish).
+
+### Template Isolation
+- All template variables (city name, channel handle, subscribe URLs, state name) are cleared and reset for every generation cycle.
+- AI prompt explicitly scoped to the target city: "You are writing for the [CITY] channel only."`;
+
+const ERROR_STRATEGY = `SkyBrief uses a **fail-open philosophy**: posts should publish even if non-critical steps fail.
+
+| Failure | Behavior |
+|---|---|
+| Voiceover generation fails | Post continues without audio |
+| Caption enhancement fails | Fallback to base caption |
+| Similarity check fails | Keep original caption, log warning |
+| Rendering fails | Retry or fallback renderer |
+| Routing violation detected | Abort publish, log ROUTING_VIOLATION |
+| Duplicate detected | Skip publish, log dedupe event |
+| Any pipeline step fails | Log to system_logs + job record; future cycles unaffected |`;
+
+const KNOWN_ISSUES = "- Voiceover generation depends on ElevenLabs availability; on failure the post still publishes without audio.\n" +
+  "- Creatomate fallback to a Remotion-based external renderer is environment-dependent.\n" +
+  "- Cron drift up to ~10 minutes is expected (matched window). Posts overdue >10 min show a red badge.\n" +
+  "- App version (`" + APP_VERSION + "`) is currently maintained as a constant inside `generate-spec`.\n" +
+  "- Recent Changes Log below is sourced from the latest `post_history` activity, not git commits.";
+
+const RESOLVED_ISSUES = `| Issue | Resolution |
+|---|---|
+| Automation not firing | Fixed pg_cron using anon key instead of service_role key |
+| Timezone misalignment | Fixed slot time comparison to use city-local timezone |
+| Duplicate YouTube uploads | Added DB-level exclusion constraint on jobs table |
+| Cross-city routing (Gainesville on Orlando channel) | Added pre-flight routing guard in publish step |
+| Identical post titles/captions | Added anti-clone logic, CTA rotation, personality rotation |
+| Silent pipeline failures | Added fail-safe try/catch wrappers on all caption enhancements |`;
+
+const DEPLOYMENT = `- **Frontend**: React 18 + Vite + TypeScript + Tailwind (Lovable Cloud)
+- **Backend**: Managed Postgres + Serverless Edge Runtime (Supabase via Lovable Cloud)
+- **Cron**: pg_cron extension, every 5 minutes, authenticated with service_role key
+- **Storage**: Supabase Storage (video/image assets)
+- **Auth**: Supabase Auth (email/password + OAuth)`;
 
 function md(rows: string[]) {
   return rows.join("\n");
@@ -80,15 +209,7 @@ Deno.serve(async (req) => {
   try {
     const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
 
-    // --- Live DB introspection (no row counts; counts are infrastructure-disclosing) ---
-    const KNOWN_TABLES = ["weather_settings", "scheduled_posts", "post_history", "notifications", "system_health"];
-    const tableStats: Record<string, string> = {};
-    for (const t of KNOWN_TABLES) {
-      tableStats[t] = "—";
-    }
-
-    // Recent activity log (last 10 from post_history) — scoped to the requesting user
-    // and with error_message scrubbed to avoid leaking internal failure details.
+    // Recent activity log (last 10 from post_history) — scoped to the requesting user.
     const { data: recent } = await supabase
       .from("post_history")
       .select("created_at, status, platform, city")
@@ -106,8 +227,8 @@ Deno.serve(async (req) => {
     const SCHEMA_TABLES: Record<string, string[]> = {
       weather_settings: [
         "id (uuid, PK)", "user_id (uuid)", "city (text)", "state (text)", "timezone (text)",
-        "post_time (time)", "morning_post_time", "afternoon_post_time", "evening_post_time",
-        "auto_post_morning/afternoon/evening (bool)",
+        "post_time (time)", "morning_post_time (time)", "afternoon_post_time (time)", "evening_post_time (time)",
+        "auto_post_morning / auto_post_afternoon / auto_post_evening (bool)",
         "morning_platforms / afternoon_platforms / evening_platforms (jsonb)",
         "morning_skip_date / afternoon_skip_date / evening_skip_date (date)",
         "enable_voiceover (bool)", "voiceover_voice_id (text)", "voiceover_speed (numeric)",
@@ -124,6 +245,13 @@ Deno.serve(async (req) => {
         "condition (text)", "temperature (numeric)", "image_url (text)",
         "caption (text)", "status (text)", "error_message (text)", "created_at (timestamptz)",
       ],
+      jobs: [
+        "id (uuid, PK)", "scheduled_post_id (uuid, FK → scheduled_posts.id)", "user_id (uuid)",
+        "city (text)", "platform (text)",
+        "status (text: pending | running | retrying | succeeded | failed)",
+        "step (text: generate_content | generate_voice | render_video | publish_post | analyze)",
+        "error_message (text)", "created_at (timestamptz)", "updated_at (timestamptz)",
+      ],
       notifications: [
         "id (uuid, PK)", "user_id (uuid)", "title (text)", "message (text)",
         "type (text)", "read (bool)", "created_at (timestamptz)",
@@ -135,11 +263,11 @@ Deno.serve(async (req) => {
     };
 
     const now = new Date().toISOString();
-
     const docParts: string[] = [];
 
     docParts.push(`# ${APP_NAME} – Application Specification`);
-    docParts.push(`_Generated: ${now}_\n`);
+    docParts.push(`_Generated: ${now} | Version: ${APP_VERSION}_\n`);
+    docParts.push("---\n");
 
     docParts.push(`## 1. App Identity`);
     docParts.push(md([
@@ -151,48 +279,74 @@ Deno.serve(async (req) => {
       `- **Database**: PostgreSQL (managed)`,
       `- **Edge runtime**: Deno (Supabase Edge Functions)`,
     ]));
-    docParts.push("");
+    docParts.push("\n---\n");
 
     docParts.push(`## 2. Features`);
     docParts.push(table(["Feature", "Status", "Notes"], FEATURES.map(([f, s, n]) => [f, s, n])));
-    docParts.push("");
+    docParts.push("\n---\n");
 
-    docParts.push(`## 3. Database Schema`);
-    docParts.push("");
+    docParts.push(`## 3. Slot System\n`);
+    docParts.push(SLOT_SYSTEM);
+    docParts.push("\n---\n");
+
+    docParts.push(`## 4. Execution Sources\n`);
+    docParts.push(EXECUTION_SOURCES);
+    docParts.push("\n---\n");
+
+    docParts.push(`## 5. Pipeline Flow\n`);
+    docParts.push(PIPELINE_FLOW);
+    docParts.push("\n---\n");
+
+    docParts.push(`## 6. Database Schema\n`);
     for (const [t, cols] of Object.entries(SCHEMA_TABLES)) {
       docParts.push(`### \`${t}\``);
       docParts.push(cols.map((c) => `- ${c}`).join("\n"));
+      if (t === "jobs") {
+        docParts.push(`\n**Constraint:** \`unique_scheduled_post_job\` — exclusion constraint on \`scheduled_post_id\` where status IN ('pending', 'running', 'retrying', 'succeeded'). Prevents duplicate active jobs at the database level.`);
+      }
       docParts.push("");
     }
     docParts.push(`**Relationships**: All user-owned tables reference \`auth.users.id\` via \`user_id\` (no FK; enforced by RLS). \`scheduled_posts\` becomes \`post_history\` rows after processing.`);
-    docParts.push("");
+    docParts.push("\n---\n");
 
-    docParts.push(`## 4. Edge Functions`);
-    docParts.push(`_Internal function names redacted. Functional capabilities are described in section 2 (Features)._`);
-    docParts.push("");
+    docParts.push(`## 7. Edge Functions\n`);
+    docParts.push(EDGE_FUNCTIONS_OVERVIEW);
+    docParts.push("\n---\n");
 
-    docParts.push(`## 5. Automation Logic`);
-    docParts.push(AUTOMATION);
-    docParts.push("");
+    docParts.push(`## 8. Idempotency & Duplicate Protection\n`);
+    docParts.push(IDEMPOTENCY);
+    docParts.push("\n---\n");
 
-    docParts.push(`## 6. API Integrations`);
+    docParts.push(`## 9. Caption Generation System\n`);
+    docParts.push(CAPTION_SYSTEM);
+    docParts.push("\n---\n");
+
+    docParts.push(`## 10. City-to-Channel Routing Guard\n`);
+    docParts.push(ROUTING_GUARD);
+    docParts.push("\n---\n");
+
+    docParts.push(`## 11. Error Handling Strategy\n`);
+    docParts.push(ERROR_STRATEGY);
+    docParts.push("\n---\n");
+
+    docParts.push(`## 12. API Integrations`);
     docParts.push(table(["Integration", "Used for"], INTEGRATIONS.map(([n, u]) => [n, u])));
-    docParts.push("");
+    docParts.push("\n---\n");
 
-    docParts.push(`## 7. Known Issues / Limitations`);
+    docParts.push(`## 13. Known Issues / Limitations`);
     docParts.push(KNOWN_ISSUES);
-    docParts.push("");
+    docParts.push("\n---\n");
 
-    docParts.push(`## 8. Deployment`);
-    docParts.push(md([
-      `- **Frontend**: React 18 + Vite + TypeScript + Tailwind`,
-      `- **Backend**: managed Postgres + serverless edge runtime`,
-    ]));
-    docParts.push("");
+    docParts.push(`## 14. Recently Resolved Issues\n`);
+    docParts.push(RESOLVED_ISSUES);
+    docParts.push("\n---\n");
 
-    docParts.push(`## 9. Recent Changes Log`);
-    docParts.push(`Pulled live from your own \`post_history\` (last 10 events).`);
-    docParts.push("");
+    docParts.push(`## 15. Deployment`);
+    docParts.push(DEPLOYMENT);
+    docParts.push("\n---\n");
+
+    docParts.push(`## 16. Recent Changes Log`);
+    docParts.push(`_Pulled live from post_history (last 10 events)_\n`);
     if (recentRows.length === 0) {
       docParts.push(`_No recent activity recorded._`);
     } else {
