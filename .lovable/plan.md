@@ -1,27 +1,19 @@
-## Move Outperforming posts into the right column of row 2
-
-Goal: Outperforming posts sits next to (right of) the Top performing hooks + Best posting times heatmap stack, capped at the height of that left stack — no overflow past the heatmap's bottom, no full-width row below.
+## Cap Memory Bank to side-column height, scroll internally
 
 ### Changes
 
-1. **`src/pages/Index.tsx`** — Growth TabsContent row 2:
-   - Add `items-stretch` to the row-2 grid.
-   - Left column (`lg:col-span-7`) keeps `<GrowthDashboard />` (Top hooks + heatmap).
-   - Right column (`lg:col-span-5`) becomes a `flex flex-col gap-6 h-full` stack containing:
-     - `<SmartInsightsCard />` (natural height)
-     - `<OutperformingPosts className="flex-1 min-h-0" />` (fills remaining space, scrolls internally)
-   - Remove the existing standalone full-width `<OutperformingPosts />` row above Weekly Recap.
+1. **`src/components/GrowthCommandCenter.tsx`** — `GrowthMemoryBank`:
+   - Card root: add `h-full flex flex-col` (alongside the passed `className`).
+   - `CardHeader`: add `shrink-0`.
+   - `CardContent`: add `flex-1 min-h-0 overflow-auto` so the hook list scrolls inside the available card height instead of expanding it.
 
-2. **`src/components/GrowthDashboard.tsx`** — `OutperformingPosts`:
-   - Accept optional `className` prop, merge onto the root `<Card>` with `cn(...)`.
-   - Add `flex flex-col` to the Card and `flex-1 overflow-auto min-h-0` to the CardContent so the list scrolls inside the available space instead of pushing the card taller.
+2. **`src/pages/Index.tsx`** — Growth tab row 1:
+   - Change row 1 grid from `items-start` to `items-stretch` so all three columns share the tallest column's height.
+   - Left column wrapper (`lg:col-span-3`) and right column wrapper (`lg:col-span-4`) keep their content; their `<GrowthStatsCards stacked />` / `<AiInsightsCard />` define the row height.
+   - Middle column wrapper (`lg:col-span-5`) gets `h-full` so the `<GrowthMemoryBank />` inside stretches to fill the row.
 
 ### Result
 
-```text
-Row 2 (items-stretch, both columns same height):
-  [ Top hooks + Heatmap (col-7) ] | [ Smart Insights + Outperforming posts scroll (col-5) ]
-Then: Weekly Recap, Growth Log (full width, unchanged)
-```
+Row 1 columns are all the same height (= the taller of Stats stack vs AI Insights). Memory Bank fills that height exactly and scrolls its hook list, eliminating both the dead zone below Experiments Running and below AI Insights.
 
 No data, fetching, or business logic touched.

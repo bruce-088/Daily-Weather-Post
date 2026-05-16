@@ -311,8 +311,8 @@ export function GrowthStatsCards({ stacked = false, showRefresh = true }: { stac
 export function GrowthMemoryBank({ className = "" }: { className?: string }) {
   const { loading, memories } = useGrowthSlot();
   return (
-    <Card className={className}>
-      <CardHeader className="pb-2">
+    <Card className={`h-full flex flex-col ${className}`}>
+      <CardHeader className="pb-2 shrink-0">
         <CardTitle className="text-sm flex items-center gap-2">
           <Brain size={14} className="text-primary" /> Memory Bank
           <Badge variant="outline" className="text-[10px] ml-auto">All cities</Badge>
@@ -321,7 +321,7 @@ export function GrowthMemoryBank({ className = "" }: { className?: string }) {
           Every winning pattern the AI has learned. High-performance items are reused in future captions.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-2">
+      <CardContent className="space-y-2 flex-1 min-h-0 overflow-auto">
         {loading ? (
           <p className="text-xs text-muted-foreground italic">Loading memory bank…</p>
         ) : memories.length === 0 ? (
