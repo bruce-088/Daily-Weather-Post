@@ -16,15 +16,6 @@ interface MemoryRow {
   created_at: string;
 }
 
-interface InsightRow {
-  id: string;
-  title: string;
-  message: string;
-  delta_pct: number;
-  city: string | null;
-  created_at: string;
-}
-
 interface RecentPost {
   id: string;
   city: string;
