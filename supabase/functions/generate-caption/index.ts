@@ -395,6 +395,10 @@ ${buildLocalIdentityBlock(city)}
 
 ${styleAddendum}${insightNote}
 
+${diversityBlock}
+
+${focusBlock}
+
 ${personalityBlock}
 
 ${ctaBlock}${antiRepeatBlock ? `\n\n${antiRepeatBlock}` : ""}`;
