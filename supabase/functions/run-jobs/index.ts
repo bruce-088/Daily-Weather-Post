@@ -18,6 +18,7 @@ Deno.serve(async (req) => {
 
   const _gate = await requireCronOrUser(req);
   if (!_gate.ok) return _gate.response;
+  const triggerSource: "cron" | "user" = _gate.source;
 
 
   const supabase = createClient(
