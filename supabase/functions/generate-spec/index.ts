@@ -217,7 +217,8 @@ const RESOLVED_ISSUES = `| Issue | Resolution |
 | Identical post titles/captions | Added anti-clone logic, CTA rotation, personality rotation |
 | Silent pipeline failures | Added fail-safe try/catch wrappers on all caption enhancements |
 | Slot prefix inconsistency | Fixed via ensureSlotTitlePrefix in _shared/caption-style.ts — all sources now use single helper |
-| Analytics limited to "Top Performer" badges | Upgraded to Insight Engine: per-post performance_score + winning/losing factors, growth_insights pattern detection, PROVEN WINNERS feedback loop into generate-caption |`;
+| Analytics limited to "Top Performer" badges | Upgraded to Insight Engine: per-post performance_score + winning/losing factors, growth_insights pattern detection, PROVEN WINNERS feedback loop into generate-caption |
+| Gainesville posts repeating "Beautiful Day" hooks and styles | Added 48h per-city Creative Decay (80% weight penalty on overused hooks), FORBIDDEN REPETITIONS block, Diversity Guard, deterministic Focus Angle rotation, and Pexels secondary-keyword + city-scoped background variation |`;
 
 const DEPLOYMENT = `- **Frontend**: React 18 + Vite + TypeScript + Tailwind (Lovable Cloud)
 - **Backend**: Managed Postgres + Serverless Edge Runtime (Supabase via Lovable Cloud)
