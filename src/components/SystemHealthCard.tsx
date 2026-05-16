@@ -281,6 +281,30 @@ export function SystemHealthCard() {
     }
   };
 
+  const forceRunScheduler = async () => {
+    setForceRunning(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("auto-post-scheduler", {
+        body: {},
+      });
+      if (error) throw error;
+      toast({
+        title: "Scheduler executed",
+        description: data?.message || "The scheduler ran successfully.",
+      });
+      await fetchHealth();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      toast({
+        title: "Scheduler run failed",
+        description: msg,
+        variant: "destructive",
+      });
+    } finally {
+      setForceRunning(false);
+    }
+  };
+
   useEffect(() => {
     fetchHealth();
     fetchDebugState();
