@@ -9,7 +9,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Trophy, Sparkles, Beaker, Gem, ExternalLink, Clock, RefreshCw } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Trophy, Sparkles, Beaker, Gem, ExternalLink, Clock, RefreshCw, ChevronDown } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useActiveCity } from "@/hooks/useActiveCity";
 
@@ -52,6 +53,7 @@ interface ExperimentWinRow {
 
 export function GrowthLog() {
   const activeCity = useActiveCity();
+  const [logOpen, setLogOpen] = useState(true);
   const [insights, setInsights] = useState<GrowthInsightRow[]>([]);
   const [active, setActive] = useState<ExperimentRow[]>([]);
   const [wins, setWins] = useState<ExperimentWinRow[]>([]);
@@ -159,79 +161,89 @@ export function GrowthLog() {
   return (
     <div id="growth-log" className="space-y-4 scroll-mt-24">
       {/* Growth Log feed */}
-      <Card className="border-amber-500/30 bg-gradient-to-br from-amber-500/5 to-transparent">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <Gem size={14} className="text-amber-400" />
-            Growth Log
-            <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-400 ml-auto">
-              {insights.length} insight{insights.length === 1 ? "" : "s"}
-            </Badge>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleRefresh}
-              disabled={refreshing}
-              className="h-6 px-2 text-[11px]"
-            >
-              <RefreshCw size={11} className={refreshing ? "animate-spin" : ""} />
-              Refresh
-            </Button>
-          </CardTitle>
-          <CardDescription className="text-xs">
-            Every winning A/B test the AI discovers shows up here.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {insights.length === 0 ? (
-            <p className="text-xs text-muted-foreground italic">
-              {activeCity.name
-                ? `No data yet for ${activeCity.name} — start posting to generate insights.`
-                : "No insights yet. The engine is running A/B tests in the background — check back after a few posts publish."}
-            </p>
-          ) : (
-            insights.map((ins) => (
-              <div
-                key={ins.id}
-                className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 hover:bg-amber-500/10 transition-colors"
-              >
-                <div className="flex items-start gap-2">
-                  <Gem size={14} className="text-amber-400 mt-0.5 shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-amber-200">{ins.title}</p>
-                    <p className="text-xs text-foreground/80 mt-0.5 leading-relaxed">{ins.message}</p>
-                    <div className="flex items-center gap-2 mt-2 flex-wrap">
-                      <Badge variant="outline" className="text-[10px] capitalize">{ins.variable}</Badge>
-                      <Badge variant="outline" className="text-[10px] border-emerald-500/40 text-emerald-400">
-                        +{Math.round(ins.delta_pct)}%
-                      </Badge>
-                      {ins.city && <span className="text-[10px] text-muted-foreground">{ins.city}</span>}
-                      <span className="text-[10px] text-muted-foreground ml-auto">
-                        {formatDistanceToNow(new Date(ins.created_at), { addSuffix: true })}
-                      </span>
-                    </div>
-                    {(ins.post_id_a || ins.post_id_b) && (
-                      <div className="mt-2 flex items-center gap-2">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-6 text-[10px] gap-1 text-muted-foreground hover:text-foreground"
-                          onClick={() => {
-                            const ids = [ins.post_id_a, ins.post_id_b].filter(Boolean).join(",");
-                            window.location.hash = `#history-posts=${ids}`;
-                          }}
-                        >
-                          <ExternalLink size={10} /> View posts
-                        </Button>
+      <Collapsible open={logOpen} onOpenChange={setLogOpen} asChild>
+        <Card className="border-amber-500/30 bg-gradient-to-br from-amber-500/5 to-transparent">
+          <CollapsibleTrigger asChild>
+            <CardHeader className="pb-2 cursor-pointer select-none hover:bg-amber-500/5 transition-colors rounded-t-lg">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Gem size={14} className="text-amber-400" />
+                Growth Log
+                <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-400 ml-auto">
+                  {insights.length} insight{insights.length === 1 ? "" : "s"}
+                </Badge>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => { e.stopPropagation(); handleRefresh(); }}
+                  disabled={refreshing}
+                  className="h-6 px-2 text-[11px]"
+                >
+                  <RefreshCw size={11} className={refreshing ? "animate-spin" : ""} />
+                  Refresh
+                </Button>
+                <ChevronDown
+                  size={16}
+                  className={`text-muted-foreground transition-transform ${logOpen ? "rotate-180" : ""}`}
+                />
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Every winning A/B test the AI discovers shows up here.
+              </CardDescription>
+            </CardHeader>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <CardContent className="space-y-2">
+              {insights.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic">
+                  {activeCity.name
+                    ? `No data yet for ${activeCity.name} — start posting to generate insights.`
+                    : "No insights yet. The engine is running A/B tests in the background — check back after a few posts publish."}
+                </p>
+              ) : (
+                insights.map((ins) => (
+                  <div
+                    key={ins.id}
+                    className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 hover:bg-amber-500/10 transition-colors"
+                  >
+                    <div className="flex items-start gap-2">
+                      <Gem size={14} className="text-amber-400 mt-0.5 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-amber-200">{ins.title}</p>
+                        <p className="text-xs text-foreground/80 mt-0.5 leading-relaxed">{ins.message}</p>
+                        <div className="flex items-center gap-2 mt-2 flex-wrap">
+                          <Badge variant="outline" className="text-[10px] capitalize">{ins.variable}</Badge>
+                          <Badge variant="outline" className="text-[10px] border-emerald-500/40 text-emerald-400">
+                            +{Math.round(ins.delta_pct)}%
+                          </Badge>
+                          {ins.city && <span className="text-[10px] text-muted-foreground">{ins.city}</span>}
+                          <span className="text-[10px] text-muted-foreground ml-auto">
+                            {formatDistanceToNow(new Date(ins.created_at), { addSuffix: true })}
+                          </span>
+                        </div>
+                        {(ins.post_id_a || ins.post_id_b) && (
+                          <div className="mt-2 flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 text-[10px] gap-1 text-muted-foreground hover:text-foreground"
+                              onClick={() => {
+                                const ids = [ins.post_id_a, ins.post_id_b].filter(Boolean).join(",");
+                                window.location.hash = `#history-posts=${ids}`;
+                              }}
+                            >
+                              <ExternalLink size={10} /> View posts
+                            </Button>
+                          </div>
+                        )}
                       </div>
-                    )}
+                    </div>
                   </div>
-                </div>
-              </div>
-            ))
-          )}
-        </CardContent>
-      </Card>
+                ))
+              )}
+            </CardContent>
+          </CollapsibleContent>
+        </Card>
+      </Collapsible>
 
       {/* Growth Lab */}
       <Card>
