@@ -423,33 +423,66 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // Duplicate guard (live runs only): has any scheduled_posts row been created in the last 30 min?
-        const dupSince = new Date(now.getTime() - DUPLICATE_GUARD_MINUTES * 60 * 1000).toISOString();
+        // === PUBLISH LOCK PRE-CHECK ===
+        // Per platform, ask check_publish_lock whether today's slot is already
+        // held (manual run, prior cron tick, or in-flight scheduled_post).
+        // Falls back to caption ILIKE if city_id is missing (legacy rows).
         const slotMarker = `[auto:${period.name}]`;
-        let dupQuery = supabase
-          .from("scheduled_posts")
-          .select("id, created_at, caption")
-          .eq("user_id", target.user_id)
-          .eq("city", target.city)
-          .gte("created_at", dupSince)
-          .ilike("caption", `%${slotMarker}%`)
-          .limit(1);
-        if (target.city_id) dupQuery = dupQuery.eq("city_id", target.city_id);
-        if (target.automation_id) dupQuery = dupQuery.eq("automation_id", target.automation_id);
-        const { data: recentDupes, error: dupErr } = await dupQuery;
+        const allowedPlatforms: string[] = [];
+        for (const platform of period.platforms) {
+          if (target.city_id) {
+            try {
+              const { data: avail, error: lockErr } = await supabase.rpc("check_publish_lock", {
+                p_user: target.user_id,
+                p_city_id: target.city_id,
+                p_slot: period.name,
+                p_platform: platform,
+                p_tz: null,
+              });
+              if (lockErr) {
+                console.warn(`[scheduler]   check_publish_lock failed for ${platform}:`, lockErr.message);
+                allowedPlatforms.push(platform); // fail-open to legacy guard below
+              } else if (avail === false) {
+                console.log(`[scheduler]   🔒 lock held for ${period.name}/${platform} — skipped`);
+              } else {
+                allowedPlatforms.push(platform);
+              }
+            } catch (e) {
+              console.warn(`[scheduler]   lock rpc threw for ${platform}:`, (e as any)?.message);
+              allowedPlatforms.push(platform);
+            }
+          } else {
+            allowedPlatforms.push(platform);
+          }
+        }
 
-        if (dupErr) {
-          console.error(`[scheduler]   duplicate check failed for ${period.name}:`, dupErr);
-        } else if (recentDupes && recentDupes.length > 0) {
-          console.log(`[scheduler]   ⏭️  Skipped due to duplicate guard (${period.name}, already created ${recentDupes[0].created_at})`);
+        // Legacy caption-based duplicate guard for rows without city_id.
+        if (!target.city_id) {
+          const dupSince = new Date(now.getTime() - DUPLICATE_GUARD_MINUTES * 60 * 1000).toISOString();
+          const { data: recentDupes } = await supabase
+            .from("scheduled_posts")
+            .select("id, created_at")
+            .eq("user_id", target.user_id)
+            .eq("city", target.city)
+            .gte("created_at", dupSince)
+            .ilike("caption", `%${slotMarker}%`)
+            .limit(1);
+          if (recentDupes && recentDupes.length > 0) {
+            console.log(`[scheduler]   ⏭️  Legacy dup guard skipped ${period.name} (${recentDupes[0].created_at})`);
+            continue;
+          }
+        }
+
+        if (allowedPlatforms.length === 0) {
+          console.log(`[scheduler]   ⏭️  All platforms locked for ${period.name} — nothing to queue`);
           continue;
         }
 
         // Schedule slightly in the future to satisfy validate_scheduled_at trigger.
         const scheduledAt = new Date(now.getTime() + 5_000).toISOString();
 
-        // Insert one scheduled_posts row per platform — process-scheduled-posts will execute them.
-        const rows = period.platforms.map((platform) => ({
+        // Insert one scheduled_posts row per allowed platform.
+        const rows = allowedPlatforms.map((platform) => ({
           user_id: target.user_id,
           city: target.city,
           city_id: target.city_id,
@@ -457,6 +490,8 @@ Deno.serve(async (req) => {
           platform,
           scheduled_at: scheduledAt,
           status: "pending",
+          slot: period.name,
+          source: "auto_cron",
           caption: slotMarker,
           include_voiceover: voiceoverEnabled && VIDEO_PLATFORMS.has(platform),
         }));

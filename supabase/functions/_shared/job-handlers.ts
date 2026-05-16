@@ -130,7 +130,7 @@ const publishPost: JobHandler = async ({ job, supabase, log }): Promise<JobStepR
   // voiceover is required). Catches "silent video" bugs before we burn a render.
   const { data: preflight } = await supabase
     .from("scheduled_posts")
-    .select("include_voiceover, voiceover_url, voice_status")
+    .select("include_voiceover, voiceover_url, voice_status, city_id, slot, platform, user_id")
     .eq("id", job.scheduled_post_id)
     .maybeSingle();
   const voiceUrl = preflight?.voiceover_url ?? null;
@@ -142,6 +142,30 @@ const publishPost: JobHandler = async ({ job, supabase, log }): Promise<JobStepR
     has_voice_url: !!voiceUrl,
     voice_status: preflight?.voice_status ?? null,
   });
+
+  // ── PUBLISH LOCK (safety net for pipeline path) ──
+  // process-scheduled-posts also acquires the lock, but acquiring here too
+  // means a duplicate pipeline run short-circuits before delegating.
+  if (preflight?.city_id && preflight?.platform) {
+    const slot = preflight.slot || "adhoc";
+    try {
+      const { data: gotLock } = await supabase.rpc("acquire_publish_lock", {
+        p_user: preflight.user_id ?? job.user_id,
+        p_city_id: preflight.city_id,
+        p_slot: slot,
+        p_platform: preflight.platform,
+        p_tz: null,
+        p_scheduled_post_id: job.scheduled_post_id,
+      });
+      if (gotLock === false) {
+        await log("Skipped — publish lock held (pipeline)", { slot, platform: preflight.platform });
+        return { output: { skipped: "lock_held", slot, platform: preflight.platform }, done: true };
+      }
+    } catch (e) {
+      console.warn(`[publish_post] lock rpc failed (continuing): ${(e as Error)?.message}`);
+    }
+  }
+
 
   const url = `${SUPABASE_URL}/functions/v1/process-scheduled-posts`;
   const res = await fetch(url, {

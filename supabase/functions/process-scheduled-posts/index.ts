@@ -1673,43 +1673,123 @@ Deno.serve(async (req) => {
       // Reflect the claim locally so downstream code sees the right status.
       post.status = "processing";
 
-      // === DEDUPLICATION GUARD ===
-      // Prevent "burst" double-posts: if we already published a successful row to
-      // this same (user, city, platform) within the last 60 minutes, skip this one.
-      // Marks the duplicate as `posted` (with a clear error_message) so it leaves
-      // the Pending list and the Schedule tab stays in sync. We compare per
-      // platform string — exact match is fine because the scheduler always
-      // writes the same canonical platform string for a given slot.
-      try {
-        const sixtyMinAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-        const { data: recent } = await supabase
-          .from("post_history")
-          .select("id, created_at, platform")
-          .eq("user_id", post.user_id)
-          .eq("city", post.city)
-          .eq("platform", post.platform)
-          .eq("status", "success")
-          .gte("created_at", sixtyMinAgo)
-          .limit(1);
-        if (recent && recent.length > 0) {
-          console.log(`[dedupe] post ${post.id} skipped — duplicate of ${recent[0].id} (${post.city}/${post.platform}) posted ${recent[0].created_at}`);
-          await supabase.from("scheduled_posts").update({
-            status: "posted",
-            error_message: "[DEDUPED] Skipped — a successful post for this city/platform already exists within the last 60 minutes.",
-            last_attempt_at: new Date().toISOString(),
-          }).eq("id", post.id);
-          await supabase.from("system_logs").insert({
-            user_id: post.user_id,
-            type: "post_deduped",
-            message: `Skipped duplicate post for ${post.city} (${post.platform}); recent success at ${recent[0].created_at}`,
-            platform: post.platform,
-            context: { scheduled_post_id: post.id, duplicate_of: recent[0].id },
+      // === PUBLISH LOCK (global dedupe) ===
+      // Hard guarantee: per (user_id, city_id, slot, platform, local_date), only one
+      // successful publish can win — across manual runs, auto cron, and the job
+      // pipeline. The Postgres function `acquire_publish_lock` does an atomic
+      // INSERT ... ON CONFLICT DO NOTHING and returns false if the key is held.
+      // On any publish failure later in this loop, we MUST release the lock so
+      // retries can re-acquire (see release_publish_lock calls in failure paths).
+      const lockSlot: string =
+        (post as any).slot ||
+        (post.caption?.match(/\[(?:auto|manual):(morning|afternoon|evening|manual|adhoc)\]/i)?.[1]) ||
+        "adhoc";
+      let lockAcquired = false;
+      if ((post as any).city_id) {
+        try {
+          const { data: gotLock, error: lockErr } = await supabase.rpc("acquire_publish_lock", {
+            p_user: post.user_id,
+            p_city_id: (post as any).city_id,
+            p_slot: lockSlot,
+            p_platform: post.platform,
+            p_tz: null,
+            p_scheduled_post_id: post.id,
           });
-          processed++;
-          continue;
+          if (lockErr) {
+            console.warn(`[lock] acquire failed for ${post.id} — failing open:`, lockErr.message);
+          } else if (gotLock === false) {
+            console.log(`[lock] 🔒 post ${post.id} skipped — publish lock held for ${post.city_id}/${lockSlot}/${post.platform}`);
+            await supabase.from("scheduled_posts").update({
+              status: "posted",
+              error_message: `[DEDUPED] publish lock held for ${lockSlot}/${post.platform} today`,
+              last_attempt_at: new Date().toISOString(),
+            }).eq("id", post.id);
+            await supabase.from("system_logs").insert({
+              user_id: post.user_id,
+              type: "post_deduped",
+              message: `Skipped — publish lock held for ${post.city} ${lockSlot}/${post.platform}`,
+              platform: post.platform,
+              context: { scheduled_post_id: post.id, city_id: (post as any).city_id, slot: lockSlot },
+            });
+            processed++;
+            continue;
+          } else {
+            lockAcquired = true;
+          }
+        } catch (e) {
+          console.warn(`[lock] rpc threw for ${post.id}:`, (e as any)?.message);
         }
-      } catch (dedupErr) {
-        console.warn(`[dedupe] check failed for ${post.id} (continuing):`, dedupErr);
+      }
+
+      // Helper to release the lock on any failure path so retries can re-acquire.
+      const releaseLock = async () => {
+        if (!lockAcquired || !(post as any).city_id) return;
+        try {
+          await supabase.rpc("release_publish_lock", {
+            p_user: post.user_id,
+            p_city_id: (post as any).city_id,
+            p_slot: lockSlot,
+            p_platform: post.platform,
+            p_tz: null,
+          });
+        } catch (e) {
+          console.warn(`[lock] release failed for ${post.id}:`, (e as any)?.message);
+        }
+      };
+
+      // === HARD CITY ISOLATION ===
+      // Verify the resolved social_account for (user_id, platform, city_id) actually
+      // belongs to this city. Routing violations abort the publish immediately and
+      // are NOT retried — better to fail loudly than post Gainesville to Orlando.
+      if ((post as any).city_id) {
+        try {
+          const { data: acct } = await supabase
+            .from("social_accounts")
+            .select("id, city_id, platform")
+            .eq("user_id", post.user_id)
+            .eq("platform", post.platform)
+            .eq("city_id", (post as any).city_id)
+            .maybeSingle();
+          if (!acct) {
+            // No account bound to this exact city — check if one exists for the
+            // wrong city. If so, this is a routing violation. If none exists at
+            // all, let downstream legacy resolution try weather_settings tokens.
+            const { data: wrong } = await supabase
+              .from("social_accounts")
+              .select("id, city_id")
+              .eq("user_id", post.user_id)
+              .eq("platform", post.platform)
+              .neq("city_id", (post as any).city_id)
+              .limit(1);
+            if (wrong && wrong.length > 0) {
+              const msg = `[ROUTING_VIOLATION] No ${post.platform} account for city_id=${(post as any).city_id}; another city has one`;
+              console.error(`[isolate] ${post.id}: ${msg}`);
+              await supabase.from("scheduled_posts").update({
+                status: "failed",
+                error_message: msg,
+                last_attempt_at: new Date().toISOString(),
+              }).eq("id", post.id);
+              await supabase.from("system_logs").insert({
+                user_id: post.user_id,
+                type: "routing_violation",
+                message: msg,
+                platform: post.platform,
+                context: { scheduled_post_id: post.id, city_id: (post as any).city_id },
+              });
+              await supabase.from("notifications").insert({
+                user_id: post.user_id,
+                title: `⚠️ Routing blocked — no ${post.platform} channel for ${post.city}`,
+                message: `Connect a ${post.platform} account to ${post.city} in Settings, then retry.`,
+                type: "warning",
+              });
+              await releaseLock();
+              processed++;
+              continue;
+            }
+          }
+        } catch (e) {
+          console.warn(`[isolate] check failed for ${post.id} (continuing):`, (e as any)?.message);
+        }
       }
 
       // === DEBUG TRACE COLLECTOR ===
@@ -1892,6 +1972,7 @@ Deno.serve(async (req) => {
             error_message: `Pre-flight check failed: ${reason}`,
             last_attempt_at: new Date().toISOString(),
           }).eq("id", post.id);
+          await releaseLock();
           await supabase.from("system_logs").insert({
             user_id: post.user_id,
             type: "post_precheck_failed",
@@ -2728,6 +2809,8 @@ Deno.serve(async (req) => {
           image_url: storedImageUrl, error_message: errorMessage, caption,
           user_id: post.user_id, post_url: publishedPostUrl,
           external_id: primaryExternalId,
+          slot: (post as any).slot || null,
+          source: (post as any).source || null,
           voice_status: voiceStatus,
           voice_error: voiceError,
           voice_attempts: voiceAttemptsCount,
@@ -2922,6 +3005,18 @@ Deno.serve(async (req) => {
             next_retry_at: nextRetryAt,
             last_attempt_at: new Date().toISOString(),
           }).eq("id", post.id);
+          // Release the publish lock so the retry can re-acquire it.
+          try {
+            if ((post as any).city_id) {
+              await supabase.rpc("release_publish_lock", {
+                p_user: post.user_id,
+                p_city_id: (post as any).city_id,
+                p_slot: (post as any).slot || "adhoc",
+                p_platform: post.platform,
+                p_tz: null,
+              });
+            }
+          } catch (_) { /* best-effort */ }
           await supabase.from("system_logs").insert({
             user_id: post.user_id,
             type: "post_retry_scheduled",
@@ -2941,6 +3036,17 @@ Deno.serve(async (req) => {
             error_message: errMsg,
             last_attempt_at: new Date().toISOString(),
           }).eq("id", post.id);
+          try {
+            if ((post as any).city_id) {
+              await supabase.rpc("release_publish_lock", {
+                p_user: post.user_id,
+                p_city_id: (post as any).city_id,
+                p_slot: (post as any).slot || "adhoc",
+                p_platform: post.platform,
+                p_tz: null,
+              });
+            }
+          } catch (_) { /* best-effort */ }
           await supabase.from("system_logs").insert({
             user_id: post.user_id,
             type: "post_error",
