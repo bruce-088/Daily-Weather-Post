@@ -615,3 +615,77 @@ export function getCityLocalStamp(city?: string | null, when: Date = new Date())
 export function titleHasTimestamp(title: string): boolean {
   return /^\[\d{1,2}(:\d{2})?\s?(AM|PM)\]/i.test(title || "");
 }
+
+// --- Slot helpers (Morning/Afternoon/Evening branding) ---
+
+export type SlotName = "morning" | "afternoon" | "evening" | "adhoc" | "manual" | string;
+
+/** Fixed time prefix per slot. Falls back to city-local stamp for adhoc/manual. */
+export function slotTimePrefix(slot: SlotName | null | undefined, city?: string | null): string {
+  switch ((slot || "").toLowerCase()) {
+    case "morning": return "8 AM";
+    case "afternoon": return "1 PM";
+    case "evening": return "6 PM";
+    default: return getCityLocalStamp(city);
+  }
+}
+
+/** Title-case slot label for UI/beacons. */
+export function slotDisplayLabel(slot: SlotName | null | undefined): string {
+  const s = (slot || "").toLowerCase();
+  if (s === "morning") return "Morning";
+  if (s === "afternoon") return "Afternoon";
+  if (s === "evening") return "Evening";
+  return "Update";
+}
+
+/** Slot-driven personality directive for the caption AI. */
+export function slotPersonalityDirective(slot: SlotName | null | undefined): string {
+  switch ((slot || "").toLowerCase()) {
+    case "morning":
+      return "SLOT PERSONALITY: Upbeat / Energetic. This is a MORNING brief — open with energy, frame the day ahead, sound like someone helping people start their day right.";
+    case "afternoon":
+      return "SLOT PERSONALITY: Informative / Direct. This is an AFTERNOON check-in — be punchy and factual, mid-day update tone, no fluff.";
+    case "evening":
+      return "SLOT PERSONALITY: Calm / Cinematic. This is an EVENING wind-down — softer rhythm, slightly atmospheric language, help people settle into the night.";
+    default:
+      return "";
+  }
+}
+
+/** Rotating CTA pool. Picks deterministically by (date, slot). */
+const CTA_POOL = [
+  "Tap ❤️ if this helped your plans.",
+  "Subscribe for tomorrow's brief.",
+  "Check the radar before you head out.",
+  "Drop your city's weather in the comments.",
+];
+
+export function rotatingCTA(slot: SlotName | null | undefined, when: Date = new Date()): string {
+  const slotIdx = ["morning", "afternoon", "evening"].indexOf((slot || "").toLowerCase());
+  const dateIdx = Math.floor(when.getTime() / 86400000);
+  const idx = (dateIdx + (slotIdx >= 0 ? slotIdx : 0)) % CTA_POOL.length;
+  return CTA_POOL[idx];
+}
+
+/** Token-set Jaccard similarity over normalized text. Returns 0..1. */
+export function captionSimilarity(a: string | null | undefined, b: string | null | undefined): number {
+  const norm = (s: string) =>
+    s.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((t) => t.length > 2);
+  const A = new Set(norm(a || ""));
+  const B = new Set(norm(b || ""));
+  if (A.size === 0 || B.size === 0) return 0;
+  let inter = 0;
+  for (const t of A) if (B.has(t)) inter++;
+  const union = A.size + B.size - inter;
+  return union > 0 ? inter / union : 0;
+}
+
+/** First non-empty content line, used as the "previous opener" hint. */
+export function firstContentLine(s: string | null | undefined): string {
+  if (!s) return "";
+  const lines = s.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  // Skip a leading 📍 beacon line so we hint the actual hook
+  const idx = lines.findIndex((l) => !/^📍/.test(l));
+  return (idx >= 0 ? lines[idx] : lines[0] || "").slice(0, 160);
+}

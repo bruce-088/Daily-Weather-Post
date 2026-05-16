@@ -386,6 +386,34 @@ export function PostHistoryList({ posts, loading, onReuse, onChanged }: PostHist
                               {brand.label}
                             </span>
                           )}
+                          {(() => {
+                            // Slot badge (Morning / Afternoon / Evening / Manual).
+                            // Sourced from post_history.slot if present, else parsed
+                            // from the [auto|manual:slot] marker that lived in caption.
+                            const rawSlot = (post as any).slot
+                              ?? (post.caption?.match(/\[(?:auto|manual):(morning|afternoon|evening|manual|adhoc)\]/i)?.[1])
+                              ?? null;
+                            const s = String(rawSlot || "").toLowerCase();
+                            if (!s) return null;
+                            const map: Record<string, { label: string; cls: string }> = {
+                              morning:   { label: "Morning",   cls: "bg-amber-500/15 text-amber-300 border-amber-500/30" },
+                              afternoon: { label: "Afternoon", cls: "bg-sky-500/15 text-sky-300 border-sky-500/30" },
+                              evening:   { label: "Evening",   cls: "bg-indigo-500/15 text-indigo-300 border-indigo-500/30" },
+                              manual:    { label: "Manual",    cls: "bg-muted/40 text-muted-foreground border-border/40" },
+                              adhoc:     { label: "Manual",    cls: "bg-muted/40 text-muted-foreground border-border/40" },
+                            };
+                            const conf = map[s];
+                            if (!conf) return null;
+                            return (
+                              <span
+                                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium border ${conf.cls}`}
+                                title={`Slot: ${conf.label}`}
+                              >
+                                <Clock size={10} />
+                                {conf.label}
+                              </span>
+                            );
+                          })()}
                           {isAutomated && (
                             <span
                               className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium bg-primary/15 text-primary border border-primary/30"

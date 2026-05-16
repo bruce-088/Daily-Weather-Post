@@ -376,6 +376,7 @@ export interface PostHistoryItem {
   cinematic_mode?: boolean | null;
   cinematic_trigger?: string | null;
   voice_name?: string | null;
+  slot?: string | null;
 }
 
 export async function fetchPostHistory(limit = 10, offset = 0): Promise<PostHistoryItem[]> {
