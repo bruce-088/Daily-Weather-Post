@@ -1,30 +1,33 @@
-## Growth tab layout fix
+## Growth tab — kill the dead zones
 
-Edit only `src/pages/Index.tsx`, inside the `growth` TabsContent block (lines 1055–1091). No other files, no logic changes.
+The current dead space comes from the right column (`AI Recommendation` + `GrowthDashboard` heatmap/top hooks + `Smart Insights`) being roughly 2× taller than the left+middle columns, so everything beneath Memory Bank and Stats is empty purple void.
+
+Layout-only fix in `src/pages/Index.tsx` (Growth TabsContent, lines 1068–1085). No component internals, no data changes.
 
 ### New structure
 
 ```text
-[ Header: Growth Insights Center ]
-[ 3-col grid: Stats (col-span-3) | Memory Bank (col-span-5) | AI Insights stack (col-span-4) ]
-[ Weekly Recap — full width ]
-[ Growth Log — full width ]
+[ Header ]
+Row 1 (12-col grid):
+  Stats (col-3)  |  Memory Bank (col-5)  |  AI Recommendation (col-4)
+Row 2 (12-col grid):
+  Best posting times heatmap + Top hooks (col-7)  |  Smart Insights (col-5)
+Row 3: Outperforming posts (full width)
+Row 4: Weekly Recap (full width)
+Row 5: Growth Log (full width)
 ```
 
-### Changes
+### Concrete changes
 
-1. **Left column (`lg:col-span-3`)** — keep only `<GrowthStatsCards stacked />`. Remove the surrounding `space-y-4` wrapper's extra child so the column hugs the stat-card stack height (no min-height, no filler).
-2. **Weekly Recap** — move `<GrowthWeeklyRecap />` out of the left column to a sibling row directly below the grid, rendered full width (no col-span, no max-width override — inherits the `max-w-[1600px]` container).
-3. **Middle / Right columns** — unchanged (`GrowthMemoryBank`, then `AiInsightsCard` + `GrowthDashboard` + `SmartInsightsCard`).
-4. **Growth Log** — stays as the last full-width row, now sitting below Weekly Recap.
+1. Right column of row 1 keeps only `<AiInsightsCard />`.
+2. Move `<GrowthDashboard />` and `<SmartInsightsCard />` into a new second 12-col grid row directly below:
+   - `lg:col-span-7` → `<GrowthDashboard />`
+   - `lg:col-span-5` → `<SmartInsightsCard />`
+3. Add `items-start` to both grids; drop `h-full` from Memory Bank so it sizes to its own content instead of stretching to match the now-shorter right column.
+4. Outperforming posts, Weekly Recap, Growth Log stay full-width below — order unchanged.
 
-### Note on "Growth Lab"
+### Result
 
-There is no separate `GrowthLab` component in the codebase — "Experiments Running" is already one of the three cards inside `GrowthStatsCards` (left column). No move is needed; flagging in case you expected a distinct card.
-
-### Final order inside `max-w-[1600px] mx-auto space-y-6`
-
-1. Header row
-2. 3-col grid (stats / memory bank / ai-insights stack)
-3. `<GrowthWeeklyRecap />` (full width)
-4. `<GrowthLog />` (full width)
+- Left column's empty void disappears because row 1 ends at the shorter of the three columns (Stats / Memory Bank / AI Recommendation are roughly comparable now).
+- Heatmap + Smart Insights become a balanced 7/5 row that uses the full canvas instead of leaving the left half blank.
+- No padding/min-height hacks, no logic touched.
