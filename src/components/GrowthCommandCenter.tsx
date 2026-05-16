@@ -241,9 +241,9 @@ export function GrowthStatsCards({ stacked = false, showRefresh = true }: { stac
   const { loading, refreshing, memories, bestHook, experimentsRunning, handleRefresh } = useGrowthSlot();
   if (loading) return <Card className="p-4 text-xs text-muted-foreground">Loading…</Card>;
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col h-full space-y-3">
       {showRefresh && (
-        <div className="flex items-center justify-end -mb-1">
+        <div className="flex items-center justify-end -mb-1 shrink-0">
           <Button
             variant="ghost"
             size="sm"
@@ -256,26 +256,26 @@ export function GrowthStatsCards({ stacked = false, showRefresh = true }: { stac
           </Button>
         </div>
       )}
-      <div className={stacked ? "grid grid-cols-1 gap-3" : "grid grid-cols-1 sm:grid-cols-3 gap-3"}>
-        <Card>
+      <div className={stacked ? "grid grid-cols-1 grid-rows-3 gap-3 flex-1 min-h-0" : "grid grid-cols-1 sm:grid-cols-3 gap-3"}>
+        <Card className={stacked ? "h-full flex flex-col" : ""}>
           <CardHeader className="pb-2">
             <CardTitle className="text-xs flex items-center gap-2 text-muted-foreground font-medium">
               <Brain size={14} className="text-primary" /> Total Insights Found
             </CardTitle>
           </CardHeader>
-          <CardContent className="pb-4">
+          <CardContent className="pb-4 flex-1 flex flex-col justify-center">
             <p className="text-3xl font-bold tabular-nums">{memories.length}</p>
             <p className="text-[10px] text-muted-foreground mt-1">Patterns stored in AI memory · shared across all cities</p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className={stacked ? "h-full flex flex-col" : ""}>
           <CardHeader className="pb-2">
             <CardTitle className="text-xs flex items-center gap-2 text-muted-foreground font-medium">
               <Trophy size={14} className="text-amber-400" /> Best Performing Hook
             </CardTitle>
           </CardHeader>
-          <CardContent className="pb-4">
+          <CardContent className="pb-4 flex-1 flex flex-col justify-center">
             {bestHook ? (
               <>
                 <p className="text-sm line-clamp-2 leading-snug">"{bestHook.content}"</p>
@@ -289,13 +289,13 @@ export function GrowthStatsCards({ stacked = false, showRefresh = true }: { stac
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className={stacked ? "h-full flex flex-col" : ""}>
           <CardHeader className="pb-2">
             <CardTitle className="text-xs flex items-center gap-2 text-muted-foreground font-medium">
               <FlaskConical size={14} className="text-emerald-400" /> Experiments Running
             </CardTitle>
           </CardHeader>
-          <CardContent className="pb-4">
+          <CardContent className="pb-4 flex-1 flex flex-col justify-center">
             <p className="text-3xl font-bold tabular-nums">{experimentsRunning}</p>
             <p className="text-[10px] text-muted-foreground mt-1">Active A/B tests gathering data</p>
           </CardContent>
