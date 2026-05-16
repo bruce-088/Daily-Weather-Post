@@ -822,7 +822,7 @@ Deno.serve(async (req) => {
           id: "auto-post-scheduler",
           last_run_at: new Date().toISOString(),
           last_status: "ok",
-          last_message: `triggered=${triggered}`,
+          last_message: `triggered=${triggered} (source=${triggerSource})`,
           updated_at: new Date().toISOString(),
         });
       } catch (_) { /* best-effort */ }
