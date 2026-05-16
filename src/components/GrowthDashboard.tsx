@@ -9,6 +9,7 @@ import {
   ChevronLeft, ChevronRight, Flame,
 } from "lucide-react";
 import { useActiveCity } from "@/hooks/useActiveCity";
+import { InsightEnginePanel } from "@/components/InsightEnginePanel";
 
 interface HookStat {
   hook_text: string;
@@ -116,6 +117,9 @@ export function GrowthDashboard() {
 
   return (
     <div className="space-y-4">
+      {/* Phase 3 — Insight engine: Why It Won + Pattern Cards + Recommendation */}
+      <InsightEnginePanel />
+
       {/* Recommendation header */}
       <Card className="border-primary/30 bg-gradient-to-br from-primary/5 to-transparent">
         <CardHeader className="pb-2">

@@ -246,6 +246,83 @@ Deno.serve(async (req) => {
       recent_openers: recentOpeners,
       computed_at: new Date().toISOString(),
     });
+
+    // ===== 5. PATTERN PAIR DETECTION (Phase 2) =====
+    try {
+      const userAnalytics = analytics.filter((a) => a.user_id === userId);
+      if (userAnalytics.length >= 5) {
+        const baselineViews = userAnalytics.reduce((s, a) => s + (a.views || 0), 0) / userAnalytics.length;
+        if (baselineViews > 0) {
+          type PairAgg = { views: number; n: number };
+          const slotTone = new Map<string, PairAgg>();
+          const condTone = new Map<string, PairAgg>();
+          for (const a of userAnalytics) {
+            const tone = (a.tone || "").toLowerCase();
+            if (!tone) continue;
+            const ts = (a.post_id && postCreatedAt.get(a.post_id)) || a.created_at;
+            const hr = new Date(ts).getUTCHours();
+            const slot = hr < 11 ? "morning" : hr < 16 ? "afternoon" : hr < 21 ? "evening" : "night";
+            const sk = `${slot}|${tone}`;
+            const s = slotTone.get(sk) || { views: 0, n: 0 };
+            s.views += a.views || 0; s.n += 1;
+            slotTone.set(sk, s);
+            const cond = ((a as any).condition || "").toString().toLowerCase();
+            if (cond) {
+              const ck = `${cond}|${tone}`;
+              const c = condTone.get(ck) || { views: 0, n: 0 };
+              c.views += a.views || 0; c.n += 1;
+              condTone.set(ck, c);
+            }
+          }
+
+          const newInsights: any[] = [];
+          const pushPair = (variable: string, agg: PairAgg, winnerLabel: string, messageFn: (d: number) => string) => {
+            if (agg.n < 3) return;
+            const avg = agg.views / agg.n;
+            const delta = ((avg - baselineViews) / baselineViews) * 100;
+            if (Math.abs(delta) < 15) return;
+            newInsights.push({
+              user_id: userId,
+              variable,
+              winner_variant: delta >= 0 ? "A" : "B",
+              winner_value: delta >= 0 ? winnerLabel : null,
+              loser_value: delta < 0 ? winnerLabel : null,
+              delta_pct: Math.round(delta * 10) / 10,
+              title: delta >= 0 ? "Pattern Win" : "Underperforming Pattern",
+              message: messageFn(delta),
+            });
+          };
+
+          for (const [k, agg] of slotTone.entries()) {
+            const [slot, tone] = k.split("|");
+            pushPair("tone+slot", agg, `${tone} (${slot})`, (d) =>
+              `${tone[0].toUpperCase() + tone.slice(1)} tone ${d >= 0 ? "performs +" : ""}${Math.round(d)}% in ${slot} slot`);
+          }
+          for (const [k, agg] of condTone.entries()) {
+            const [cond, tone] = k.split("|");
+            pushPair("tone+condition", agg, `${tone} (${cond})`, (d) =>
+              `${tone[0].toUpperCase() + tone.slice(1)} tone on ${cond} ${d >= 0 ? "beats" : "trails"} your avg by ${d >= 0 ? "+" : ""}${Math.round(d)}%`);
+          }
+
+          if (newInsights.length > 0) {
+            const sinceDay = new Date(Date.now() - 24 * 3600_000).toISOString();
+            const { data: recent } = await supabase
+              .from("growth_insights")
+              .select("variable, winner_value, loser_value")
+              .eq("user_id", userId)
+              .gte("created_at", sinceDay);
+            const seen = new Set((recent || []).map((r: any) => `${r.variable}|${r.winner_value || ""}|${r.loser_value || ""}`));
+            const fresh = newInsights.filter((n) => !seen.has(`${n.variable}|${n.winner_value || ""}|${n.loser_value || ""}`));
+            if (fresh.length > 0) {
+              const { error: gErr } = await supabase.from("growth_insights").insert(fresh);
+              if (gErr) console.warn("[analyze-growth] growth_insights insert failed", userId, gErr.message);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("[analyze-growth] pattern-pair detection failed for", userId, e);
+    }
   }
 
   await supabase.from("system_health").upsert({

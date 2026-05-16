@@ -29,6 +29,7 @@ export interface TopPatterns {
   baselineEngagement: number;
   sampleSize: number;
   provenWins?: Array<{ variable: string; value: string; wins: number; winRate: number }>;
+  winningThemes?: Array<{ label: string; count: number }>;
 }
 
 const GENERIC_AVOID = [
@@ -152,10 +153,40 @@ export async function getTopPerformingPatterns(
     }));
   } catch { /* ignore */ }
 
+  // ── PROVEN WINNERS — themes from high performance_score posts (Phase 4) ──
+  // Pull winning_factors from posts scoring ≥75 in the last 60 days, tally
+  // the most common factor labels. Requires ≥5 high-scoring samples.
+  let winningThemes: Array<{ label: string; count: number }> = [];
+  try {
+    const { data: hot } = await supabase
+      .from("post_analytics")
+      .select("winning_factors")
+      .eq("user_id", userId)
+      .gte("performance_score", 75)
+      .gte("created_at", since)
+      .limit(50);
+    const hotRows = (hot || []) as Array<{ winning_factors: string[] | null }>;
+    if (hotRows.length >= 5) {
+      const counts = new Map<string, number>();
+      for (const r of hotRows) {
+        for (const f of (r.winning_factors || [])) {
+          // Skip raw hook text — too noisy for prompt
+          if (typeof f !== "string") continue;
+          if (f.startsWith("hook:")) continue;
+          counts.set(f, (counts.get(f) || 0) + 1);
+        }
+      }
+      winningThemes = Array.from(counts.entries())
+        .map(([label, count]) => ({ label, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 4);
+    }
+  } catch { /* non-fatal */ }
+
   return {
     topHooks, avoidPhrases, bestCondition, bestTimeOfDay,
     conditionLifts, hookPrefixes, baselineEngagement, sampleSize: totalN,
-    provenWins,
+    provenWins, winningThemes,
   } as TopPatterns;
 }
 
@@ -199,6 +230,14 @@ export function buildLearningPromptBlock(p: TopPatterns): string {
     lines.push("PROVEN WINS (validated by past A/B tests — favor these):");
     for (const w of p.provenWins) {
       lines.push(`  - ${w.variable}="${w.value}" wins ${Math.round(w.winRate * 100)}% of tests (${w.wins}+ wins)`);
+    }
+  }
+
+  if (p.winningThemes && p.winningThemes.length > 0) {
+    lines.push("");
+    lines.push("PROVEN WINNERS — your top-scoring posts share these traits (favor them, but vary opener and structure — do not copy verbatim):");
+    for (const t of p.winningThemes) {
+      lines.push(`  - ${t.label} (×${t.count})`);
     }
   }
 
