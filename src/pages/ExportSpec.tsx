@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Download, FileText, Copy, Check, FileType, Share2 } from "lucide-react";
+import { ArrowLeft, Download, FileText, Copy, Check, FileType, Share2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -100,14 +100,29 @@ const ExportSpec = () => {
   return (
     <div className="dark min-h-screen bg-background">
       <div className="container max-w-3xl px-4 py-8">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => navigate(-1)}
-          className="gap-1.5 text-xs text-muted-foreground mb-6"
-        >
-          <ArrowLeft size={14} /> Back
-        </Button>
+        <div className="flex items-center justify-between mb-6 gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate(-1)}
+            className="gap-1.5 text-xs text-muted-foreground"
+          >
+            <ArrowLeft size={14} /> Back
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              toast.success("Reloading latest spec…");
+              // Hard reload bypasses bundle cache so the freshly-built
+              // MASTER_PROMPT and any updated generate-spec output are picked up.
+              window.location.reload();
+            }}
+            className="gap-1.5 text-xs"
+          >
+            <RefreshCw size={14} /> Refresh Export Spec
+          </Button>
+        </div>
 
         <Tabs defaultValue="app-spec" className="space-y-4">
           <TabsList className="grid w-full grid-cols-2">
