@@ -1073,10 +1073,13 @@ const Index = () => {
 
                   {/* Memory Bank + AI Insights share a sub-row so they match each other's height */}
                   <div className="lg:col-span-9 grid grid-cols-1 lg:grid-cols-9 gap-6 items-stretch">
-                    <div className="lg:col-span-5 h-full">
-                      <GrowthMemoryBank />
+                    {/* Memory Bank wrapper is positioned so it inherits AI Insights' height instead of driving it */}
+                    <div className="lg:col-span-5 relative min-h-0">
+                      <div className="lg:absolute lg:inset-0">
+                        <GrowthMemoryBank />
+                      </div>
                     </div>
-                    <div className="lg:col-span-4 h-full">
+                    <div className="lg:col-span-4">
                       <AiInsightsCard />
                     </div>
                   </div>
