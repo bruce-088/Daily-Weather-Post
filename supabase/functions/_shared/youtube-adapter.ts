@@ -37,14 +37,7 @@ export class YouTubeAdapter implements PlatformAdapter {
     // 2. Otherwise (or if no city-specific row exists), use a row with
     //    city_id IS NULL (shared). If multiple shared rows exist, take the
     //    most recently updated one — preserves single-channel behavior.
-    let account: {
-      id: string;
-      access_token: string | null;
-      refresh_token: string | null;
-      token_expires_at: string | null;
-      account_name?: string | null;
-      city_id?: string | null;
-    } | null = null;
+    let account: ResolvedYTAccount | null = null;
 
     // Inventory all YouTube channels for this user so we can enforce strict
     // city→channel routing when multiple channels are connected.
@@ -59,18 +52,19 @@ export class YouTubeAdapter implements PlatformAdapter {
       account = channels.find((c: any) => c.city_id === cityId) || null;
     }
 
-    // STRICT routing: if there are multiple channels and the city has no
-    // explicit assignment, refuse to fall back to a "shared" channel — that
-    // is exactly how Gainesville posts ended up on the Orlando channel.
-    if (!account && cityId && channels.length > 1) {
+    // STRICT routing: when a cityId is supplied and the user has ANY connected
+    // channels, we require an explicit per-city mapping. Falling back to a
+    // shared/legacy channel is exactly how Gainesville posts ended up on the
+    // Orlando channel.
+    if (!account && cityId && channels.length >= 1) {
       const names = channels.map((c: any) => c.account_name || "channel").join(", ");
       throw new Error(
-        `No YouTube channel mapped to this city. Open Settings → City → Account Routing and assign one of your connected channels (${names}) to this city.`,
+        `[ROUTING_VIOLATION] No YouTube channel mapped to city_id=${cityId}. Open Settings → City → Account Routing and assign one of your connected channels (${names}) to this city.`,
       );
     }
 
     if (!account) {
-      // Single-channel installs (or no city context): use the shared row.
+      // No cityId context: legacy single-channel behavior — use shared row.
       account = channels.find((c: any) => c.city_id == null) || channels[0] || null;
     }
 
