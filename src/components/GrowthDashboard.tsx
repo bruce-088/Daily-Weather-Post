@@ -9,6 +9,7 @@ import {
   ChevronLeft, ChevronRight, Flame,
 } from "lucide-react";
 import { useActiveCity } from "@/hooks/useActiveCity";
+import { InsightEnginePanel } from "@/components/InsightEnginePanel";
 
 interface HookStat {
   hook_text: string;
