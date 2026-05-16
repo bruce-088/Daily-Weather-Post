@@ -697,13 +697,16 @@ export async function triggerManualPipelinePost(
     return { success: false, message: insErr?.message || "Failed to create job" };
   }
 
-  await enqueueGenerateContentJob({
-    userId: user.id,
-    scheduledPostId: inserted.id,
-    city: cityName,
-    platform,
-    scheduledFor: scheduledAtIso,
-    source: opts?.experiment ? `manual-ab-${opts.experiment.selectedVariant}` : "manual-post-now",
+  // Route manual posts through the EXACT same edge function auto-posts use:
+  // process-scheduled-posts in single-post mode. Fire-and-forget — the function
+  // runs the full pipeline server-side; we poll scheduled_posts for status.
+  void supabase.functions.invoke("process-scheduled-posts", {
+    body: {
+      scheduled_post_id: inserted.id,
+      source: opts?.experiment ? `manual-ab-${opts.experiment.selectedVariant}` : "manual-post-now",
+    },
+  }).catch((e) => {
+    console.warn("[manual-post] process-scheduled-posts invoke failed (will rely on cron sweep):", e);
   });
 
   opts?.onPhase?.("queued", "Post queued — processing in background");
@@ -716,7 +719,7 @@ export async function triggerManualPipelinePost(
   const startedAt = Date.now();
   let lastStatus = "pending";
   while (Date.now() - startedAt < softWindowMs) {
-    await new Promise((r) => setTimeout(r, 4000));
+    await new Promise((r) => setTimeout(r, 3000));
     const { data: row } = await supabase
       .from("scheduled_posts")
       .select("status, error_message")
