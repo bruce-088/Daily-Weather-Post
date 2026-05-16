@@ -303,7 +303,8 @@ export async function getTopPerformingPatterns(
  */
 export function buildLearningPromptBlock(p: TopPatterns): string {
   const hasForbidden = (p.forbiddenOpeners?.length ?? 0) > 0 || (p.forbiddenThemes?.length ?? 0) > 0;
-  if (p.topHooks.length === 0 && p.conditionLifts.length === 0 && !hasForbidden) return "";
+  const hasAllowed = (p.recentlyUsedAllowed?.length ?? 0) > 0;
+  if (p.topHooks.length === 0 && p.conditionLifts.length === 0 && !hasForbidden && !hasAllowed) return "";
 
   const explore = Math.random() < 0.3;
   const lines: string[] = ["", "PERFORMANCE LEARNING LOOP:"];
