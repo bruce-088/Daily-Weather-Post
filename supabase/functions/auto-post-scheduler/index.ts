@@ -62,7 +62,10 @@ Deno.serve(async (req) => {
 
   // ── PROBE / WAKEUP fast path ──
   // Used by the System Health card's "Safe Reset" and by the Settings save flow.
-  // Writes a heartbeat row and returns immediately — never enters slot logic.
+  // Writes a SEPARATE heartbeat row (id='auto-post-scheduler-probe') and returns
+  // immediately — never enters slot logic and NEVER overwrites the real
+  // background-cron heartbeat (id='auto-post-scheduler'), so a manual probe
+  // cannot mask a stalled cron.
   if (isProbe) {
     try {
       const sb = createClient(
@@ -70,7 +73,7 @@ Deno.serve(async (req) => {
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
       );
       await sb.from("system_health").upsert({
-        id: "auto-post-scheduler",
+        id: "auto-post-scheduler-probe",
         last_run_at: new Date().toISOString(),
         last_status: "ok",
         last_message: "probe ok",
