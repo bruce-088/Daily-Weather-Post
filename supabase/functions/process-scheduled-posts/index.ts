@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { buildStyleAddendum, normalizeTone, appendVoiceCTA, isWeatherAlert, getCityLocalStamp, titleHasTimestamp } from "../_shared/caption-style.ts";
+import { buildStyleAddendum, normalizeTone, appendVoiceCTA, isWeatherAlert, getCityLocalStamp, titleHasTimestamp, slotTimePrefix, slotDisplayLabel, slotPersonalityDirective, rotatingCTA, captionSimilarity, firstContentLine } from "../_shared/caption-style.ts";
 import { LOCATION_ACCURACY_RULES, validateCaptionLocation, buildVerifiedLandmarksBlock, stripUnverifiedReferences } from "../_shared/location-guard.ts";
 import { generateVideoWithFallback } from "../_shared/video-render.ts";
 import { expandVisualMeta, getTopVisualStyle, classifyVisualTheme, classifyColorProfile } from "../_shared/experiments.ts";
@@ -191,15 +191,15 @@ function getWeatherEmoji(condition: string): string {
   return "☀️";
 }
 
-function generateSkyBriefTitle(city: string, temp: number, condition: string, rainChance?: number): string {
-  return buildHookTitle(city, temp, condition, rainChance);
+function generateSkyBriefTitle(city: string, temp: number, condition: string, rainChance?: number, slot?: string | null): string {
+  return buildHookTitle(city, temp, condition, rainChance, slot);
 }
 
 // --- Hook-based YouTube title generator ---
 // Format: [Hook] + City + Weather Detail + Emoji
 // Drives CTR via curiosity + specificity. Capped at 95 chars to stay well under
 // YouTube's 100-char limit while leaving room for variation.
-function buildHookTitle(city: string, temp: number, condition: string, rainChance?: number): string {
+function buildHookTitle(city: string, temp: number, condition: string, rainChance?: number, slot?: string | null): string {
   const emoji = getWeatherEmoji(condition);
   const c = (condition || "").toLowerCase();
   const t = Math.round(temp);
@@ -282,7 +282,9 @@ function buildHookTitle(city: string, temp: number, condition: string, rainChanc
   // Deterministic-but-rotating pick (date + hour) so titles vary across slots
   const seed = new Date().getDate() * 24 + hour;
   const baseTitle = pool[seed % pool.length];
-  const stamp = getCityLocalStamp(city);
+  // Slot-aware prefix: morning/afternoon/evening get fixed broadcast-style
+  // times ([8 AM]/[1 PM]/[6 PM]). Adhoc/manual fall back to city-local stamp.
+  const stamp = slotTimePrefix(slot, city);
   const stamped = `[${stamp}] ${baseTitle}`;
   return stamped.length > 95 ? stamped.substring(0, 92) + "..." : stamped;
 }
