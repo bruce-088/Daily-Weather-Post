@@ -29,6 +29,7 @@ export interface TopPatterns {
   baselineEngagement: number;
   sampleSize: number;
   provenWins?: Array<{ variable: string; value: string; wins: number; winRate: number }>;
+  winningThemes?: Array<{ label: string; count: number }>;
 }
 
 const GENERIC_AVOID = [
