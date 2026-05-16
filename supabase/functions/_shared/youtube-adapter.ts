@@ -352,7 +352,11 @@ export class YouTubeAdapter implements PlatformAdapter {
       console.warn("YouTube first-comment error:", (e as Error).message);
     }
 
-    return { id: result.id };
+    return {
+      id: result.id,
+      resolved_city_id: resolved?.city_id ?? null,
+      account_name: resolved?.account_name ?? null,
+    };
   }
 }
 
