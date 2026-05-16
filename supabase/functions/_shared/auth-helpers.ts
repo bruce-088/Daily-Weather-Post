@@ -62,10 +62,20 @@ export async function requireCronOrUser(req: Request): Promise<
   | { ok: true; userId?: string; source: "cron" | "user" }
   | { ok: false; response: Response }
 > {
-  const cronSecretHeader = req.headers.get("x-cron-secret");
   const cronSecretEnv = Deno.env.get("CRON_SECRET");
-  if (cronSecretEnv && cronSecretHeader && cronSecretHeader === cronSecretEnv) {
-    return { ok: true, source: "cron" };
+  if (cronSecretEnv) {
+    // Accept the cron secret via either `x-cron-secret` OR `Authorization: Bearer <secret>`.
+    const xHeader = req.headers.get("x-cron-secret");
+    if (xHeader && xHeader === cronSecretEnv) {
+      return { ok: true, source: "cron" };
+    }
+    const authHeader = req.headers.get("Authorization");
+    if (authHeader?.startsWith("Bearer ")) {
+      const token = authHeader.slice("Bearer ".length).trim();
+      if (token === cronSecretEnv) {
+        return { ok: true, source: "cron" };
+      }
+    }
   }
 
   const auth = await verifyUser(req);
