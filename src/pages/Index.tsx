@@ -1065,20 +1065,20 @@ const Index = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                   {/* Left: stat cards only */}
                   <div className="lg:col-span-3">
                     <GrowthStatsCards stacked />
                   </div>
 
-                  {/* Middle: Memory Bank */}
-                  <div className="lg:col-span-5 h-full">
-                    <GrowthMemoryBank />
-                  </div>
-
-                  {/* Right: AI recommendation */}
-                  <div className="lg:col-span-4">
-                    <AiInsightsCard />
+                  {/* Memory Bank + AI Insights share a sub-row so they match each other's height */}
+                  <div className="lg:col-span-9 grid grid-cols-1 lg:grid-cols-9 gap-6 items-stretch">
+                    <div className="lg:col-span-5 h-full">
+                      <GrowthMemoryBank />
+                    </div>
+                    <div className="lg:col-span-4 h-full">
+                      <AiInsightsCard />
+                    </div>
                   </div>
                 </div>
 
