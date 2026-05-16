@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { verifyUser } from "../_shared/auth-helpers.ts";
-import { buildStyleAddendum, normalizeTone, getCityLocalStamp } from "../_shared/caption-style.ts";
+import { buildStyleAddendum, normalizeTone, getCityLocalStamp, slotDisplayLabel, slotPersonalityDirective, rotatingCTA } from "../_shared/caption-style.ts";
 import {
   LOCATION_ACCURACY_RULES,
   buildVerifiedLandmarksBlock,
