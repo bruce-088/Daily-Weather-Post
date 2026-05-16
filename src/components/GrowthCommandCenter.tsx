@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
-  Brain, Trophy, FlaskConical, Gem, CalendarClock, Sparkles, Cloud,
+  Brain, Trophy, FlaskConical, CalendarClock, Sparkles, Cloud,
 } from "lucide-react";
 import { useActiveCity } from "@/hooks/useActiveCity";
 
@@ -51,7 +51,6 @@ export function GrowthCommandCenter() {
   const [memories, setMemories] = useState<MemoryRow[]>([]);
   const [bestHook, setBestHook] = useState<MemoryRow | null>(null);
   const [experimentsRunning, setExperimentsRunning] = useState(0);
-  const [insights, setInsights] = useState<InsightRow[]>([]);
   const [recentPosts, setRecentPosts] = useState<RecentPost[]>([]);
 
   useEffect(() => {
