@@ -2217,24 +2217,28 @@ Deno.serve(async (req) => {
 
               // ── Similarity check vs previous post for this city ──
               if (caption && _prevCaption) {
-                const sim = captionSimilarity(caption, _prevCaption);
-                if (sim >= 0.8) {
-                  console.warn(`[process-scheduled-posts] high similarity (${sim.toFixed(2)}) vs previous post for ${weather.city} — regenerating once`);
-                  try {
-                    await supabase.from("system_logs").insert({
-                      user_id: post.user_id,
-                      type: "caption_similarity_regen",
-                      message: `Caption ${sim.toFixed(2)} similar to previous post for ${weather.city}; triggered one-shot regen.`,
-                      context: { city: weather.city, slot: _slotForGen, similarity: sim, prev_opener: _prevOpener },
-                    });
-                  } catch { /* best-effort */ }
-                  const regen = await callCap(`\n\nREGENERATION REQUIRED: Your previous draft was too similar to the last post for this city ("${_prevOpener}"). Rewrite with a different opening hook, sentence rhythm, and CTA verb. Keep all factual weather data the same.`);
-                  if (regen) {
-                    const v3 = validateCaptionLocation(regen, weather.city);
-                    const cleaned = v3.ok ? regen : stripUnverifiedReferences(regen, weather.city);
-                    const sim2 = captionSimilarity(cleaned, _prevCaption);
-                    if (sim2 < sim) caption = cleaned;
+                try {
+                  const sim = captionSimilarity(caption, _prevCaption);
+                  if (sim >= 0.8) {
+                    console.warn(`[process-scheduled-posts] high similarity (${sim.toFixed(2)}) vs previous post for ${weather.city} — regenerating once`);
+                    try {
+                      await supabase.from("system_logs").insert({
+                        user_id: post.user_id,
+                        type: "caption_similarity_regen",
+                        message: `Caption ${sim.toFixed(2)} similar to previous post for ${weather.city}; triggered one-shot regen.`,
+                        context: { city: weather.city, slot: _slotForGen, similarity: sim, prev_opener: _prevOpener },
+                      });
+                    } catch { /* best-effort */ }
+                    const regen = await callCap(`\n\nREGENERATION REQUIRED: Your previous draft was too similar to the last post for this city ("${_prevOpener}"). Rewrite with a different opening hook, sentence rhythm, and CTA verb. Keep all factual weather data the same.`);
+                    if (regen) {
+                      const v3 = validateCaptionLocation(regen, weather.city);
+                      const cleaned = v3.ok ? regen : stripUnverifiedReferences(regen, weather.city);
+                      const sim2 = captionSimilarity(cleaned, _prevCaption);
+                      if (sim2 < sim) caption = cleaned;
+                    }
                   }
+                } catch (err) {
+                  console.warn("Caption similarity check failed — keeping original caption", err);
                 }
               }
 
