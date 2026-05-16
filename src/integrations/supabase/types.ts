@@ -732,6 +732,8 @@ export type Database = {
           published_visual_source: string | null
           retention_rate: number | null
           retry_count: number
+          slot: string | null
+          source: string | null
           status: string
           temperature: number | null
           user_id: string | null
@@ -772,6 +774,8 @@ export type Database = {
           published_visual_source?: string | null
           retention_rate?: number | null
           retry_count?: number
+          slot?: string | null
+          source?: string | null
           status?: string
           temperature?: number | null
           user_id?: string | null
@@ -812,6 +816,8 @@ export type Database = {
           published_visual_source?: string | null
           retention_rate?: number | null
           retry_count?: number
+          slot?: string | null
+          source?: string | null
           status?: string
           temperature?: number | null
           user_id?: string | null
@@ -939,6 +945,36 @@ export type Database = {
         }
         Relationships: []
       }
+      publish_locks: {
+        Row: {
+          acquired_at: string
+          city_id: string
+          local_date: string
+          platform: string
+          scheduled_post_id: string | null
+          slot: string
+          user_id: string
+        }
+        Insert: {
+          acquired_at?: string
+          city_id: string
+          local_date: string
+          platform: string
+          scheduled_post_id?: string | null
+          slot: string
+          user_id: string
+        }
+        Update: {
+          acquired_at?: string
+          city_id?: string
+          local_date?: string
+          platform?: string
+          scheduled_post_id?: string | null
+          slot?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       scheduled_posts: {
         Row: {
           automation_id: string | null
@@ -958,6 +994,8 @@ export type Database = {
           platform: string
           retry_count: number
           scheduled_at: string
+          slot: string | null
+          source: string | null
           status: string
           user_id: string
           variant_id: string | null
@@ -984,6 +1022,8 @@ export type Database = {
           platform?: string
           retry_count?: number
           scheduled_at: string
+          slot?: string | null
+          source?: string | null
           status?: string
           user_id: string
           variant_id?: string | null
@@ -1010,6 +1050,8 @@ export type Database = {
           platform?: string
           retry_count?: number
           scheduled_at?: string
+          slot?: string | null
+          source?: string | null
           status?: string
           user_id?: string
           variant_id?: string | null
@@ -1579,7 +1621,28 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      acquire_publish_lock: {
+        Args: {
+          p_city_id: string
+          p_platform: string
+          p_scheduled_post_id?: string
+          p_slot: string
+          p_tz?: string
+          p_user: string
+        }
+        Returns: boolean
+      }
       admin_set_cron_secret: { Args: { p_value: string }; Returns: undefined }
+      check_publish_lock: {
+        Args: {
+          p_city_id: string
+          p_platform: string
+          p_slot: string
+          p_tz?: string
+          p_user: string
+        }
+        Returns: boolean
+      }
       claim_next_jobs: {
         Args: { p_limit?: number; p_worker_id: string }
         Returns: {
@@ -1627,6 +1690,20 @@ export type Database = {
         Returns: string
       }
       recover_stuck_jobs: { Args: never; Returns: number }
+      release_publish_lock: {
+        Args: {
+          p_city_id: string
+          p_platform: string
+          p_slot: string
+          p_tz?: string
+          p_user: string
+        }
+        Returns: undefined
+      }
+      resolve_city_timezone: {
+        Args: { p_city_id: string; p_user: string }
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never
