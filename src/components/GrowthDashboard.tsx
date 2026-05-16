@@ -357,7 +357,7 @@ export function OutperformingPosts({ className }: { className?: string } = {}) {
           </Badge>
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-2 pb-3">
+      <CardContent className="space-y-2 pb-3 flex-1 min-h-0 overflow-auto">
         {items.map((it) => (
           <div
             key={it.id}
