@@ -340,7 +340,7 @@ Deno.serve(async (req) => {
       }
 
       // ── Diversity Guard ──
-      diversityBlock = `DIVERSITY GUARD:\nCRITICAL: Do NOT reuse the "Beautiful Day" or "Comfortable" themes if they were used recently for this city. Force a shift to a different angle — wind, humidity, visibility, dew point, UV, specific local activities, or cinematic atmosphere. If conditions are mild, pick the SECONDARY most interesting weather signal and lead with that instead of temperature.`;
+      diversityBlock = `DIVERSITY GUARD:\nAvoid repeating recent hooks. If reusing a proven high-performing pattern, it MUST be rephrased with a new angle and different opening structure. Prefer secondary weather signals (wind, humidity, visibility, dew point, UV, local activity, cinematic atmosphere) when conditions are mild.`;
 
       // ── Focus Rotation (deterministic per city + day + slot) ──
       const focusPool = ["Landscape", "Sky", "Street Level", "Atmospheric Detail", "Human Activity"];
