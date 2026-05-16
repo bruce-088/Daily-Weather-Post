@@ -267,12 +267,16 @@ export class YouTubeAdapter implements PlatformAdapter {
       `Uploading to YouTube Shorts: ${shortTitle} (${videoData.byteLength} bytes)`,
     );
 
-    const initRes = await fetch(
+    // Wrap the init in a one-shot 401 self-heal: if the access_token is
+    // somehow stale (e.g. revoked between getValidToken() and now), force
+    // a refresh via _forceRefresh() and retry the init exactly once.
+    let activeToken = accessToken;
+    const doInit = (tok: string) => fetch(
       "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
       {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${tok}`,
           "Content-Type": "application/json",
           "X-Upload-Content-Type": mimeType,
           "X-Upload-Content-Length": String(videoData.byteLength),
@@ -291,6 +295,20 @@ export class YouTubeAdapter implements PlatformAdapter {
         }),
       },
     );
+
+    let initRes = await doInit(activeToken);
+
+    if (initRes.status === 401) {
+      console.warn("[youtube-auth] upload init returned 401 — attempting one-shot token refresh + retry");
+      const fresh = await this._forceRefresh(activeToken);
+      if (fresh) {
+        activeToken = fresh;
+        initRes = await doInit(activeToken);
+        if (initRes.ok) {
+          console.log("[youtube-auth] 401 self-heal succeeded — upload init retried with refreshed token");
+        }
+      }
+    }
 
     if (!initRes.ok) {
       const errText = await initRes.text();
