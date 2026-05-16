@@ -214,6 +214,16 @@ export function YouTubeChannelsManager({ cities = [], onChange }: Props) {
                   <Button
                     size="sm"
                     variant="ghost"
+                    onClick={() => handleRefreshChannel(ch.id)}
+                    disabled={refreshingId === ch.id}
+                    title="Silently refresh the access token and re-check API health"
+                    className="h-7 px-2 text-xs gap-1"
+                  >
+                    <RefreshCw size={12} className={refreshingId === ch.id ? "animate-spin" : ""} />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
                     onClick={() => handleDisconnectChannel(ch.id)}
                     className="h-7 px-2 text-xs text-destructive hover:text-destructive gap-1"
                   >
