@@ -17,6 +17,11 @@ export class YouTubeAdapter implements PlatformAdapter {
    *  getValidToken() actually selected for this user+city combination. */
   private _resolved: Map<string, ResolvedYTAccount> = new Map();
 
+  /** Refresh-context cache: token → everything we need to mint a NEW token
+   *  if YouTube returns 401 mid-upload. Populated by getValidToken(),
+   *  consumed by uploadVideo()'s 401 self-heal path. */
+  private _refreshCtx: Map<string, { supabase: any; userId: string; cityId: string | null }> = new Map();
+
   private _resolvedKey(userId: string, cityId?: string | null) {
     return `${userId}::${cityId ?? "shared"}`;
   }
@@ -94,15 +99,16 @@ export class YouTubeAdapter implements PlatformAdapter {
     const expiresAt = account.token_expires_at ? new Date(account.token_expires_at) : null;
     if (account.access_token && expiresAt && expiresAt.getTime() > Date.now() + 5 * 60 * 1000) {
       this._resolved.set(account.access_token, account);
+      this._refreshCtx.set(account.access_token, { supabase, userId, cityId: cityId ?? null });
       return account.access_token;
     }
 
     if (!account.refresh_token) {
-      console.error("No YouTube refresh token available");
+      console.error("[youtube-auth] No YouTube refresh token available — user must reconnect");
       return null;
     }
     if (!clientId || !clientSecret) {
-      console.error("YouTube client credentials not configured");
+      console.error("[youtube-auth] YouTube client credentials not configured");
       return null;
     }
 
@@ -119,8 +125,12 @@ export class YouTubeAdapter implements PlatformAdapter {
 
     const refreshData = await refreshRes.json();
     if (!refreshData.access_token) {
-      console.error("YouTube token refresh failed:", JSON.stringify(refreshData));
+      console.error("[youtube-auth] YouTube token refresh failed:", JSON.stringify(refreshData));
       const errorCode = (refreshData?.error || "").toString();
+      // Only clear refresh_token on TERMINAL errors (Google says the grant is
+      // permanently invalid). Treat anything else as transient — do NOT wipe
+      // the refresh_token, so the next attempt can succeed once Google
+      // recovers / rate-limit clears.
       if (errorCode === "invalid_grant" || errorCode === "invalid_token") {
         if (account.id) {
           await supabase
@@ -133,7 +143,7 @@ export class YouTubeAdapter implements PlatformAdapter {
             .update({ youtube_refresh_token: null })
             .eq("user_id", userId);
         }
-        console.warn("YouTube refresh_token cleared due to invalid_grant — user must reconnect");
+        console.warn("[youtube-auth] refresh_token invalidated — reconnect required");
       }
       return null;
     }
@@ -160,9 +170,31 @@ export class YouTubeAdapter implements PlatformAdapter {
         .eq("user_id", userId);
     }
 
-    console.log("YouTube token refreshed successfully");
-    this._resolved.set(refreshData.access_token, { ...account, access_token: refreshData.access_token, token_expires_at: newExpiresAt });
+    console.log("[youtube-auth] token refreshed successfully");
+    const refreshedAccount = { ...account, access_token: refreshData.access_token, token_expires_at: newExpiresAt };
+    this._resolved.set(refreshData.access_token, refreshedAccount);
+    this._refreshCtx.set(refreshData.access_token, { supabase, userId, cityId: cityId ?? null });
     return refreshData.access_token;
+  }
+
+  /** Force a fresh access_token by re-running the refresh path. Used by
+   *  the 401 self-heal in uploadVideo(). Returns null if reconnect needed. */
+  private async _forceRefresh(oldToken: string): Promise<string | null> {
+    const ctx = this._refreshCtx.get(oldToken);
+    if (!ctx) {
+      console.warn("[youtube-auth] _forceRefresh: no refresh context for token");
+      return null;
+    }
+    // Invalidate cached row so getValidToken treats it as expired.
+    const cached = this._resolved.get(oldToken);
+    if (cached) {
+      this._resolved.set(oldToken, { ...cached, token_expires_at: new Date(0).toISOString() });
+    }
+    const fresh = await this.getValidToken(ctx.supabase, ctx.userId, ctx.cityId);
+    if (fresh && fresh !== oldToken) {
+      console.log("[youtube-auth] 401 self-heal: minted new access_token");
+    }
+    return fresh;
   }
 
   async uploadVideo(
@@ -235,12 +267,16 @@ export class YouTubeAdapter implements PlatformAdapter {
       `Uploading to YouTube Shorts: ${shortTitle} (${videoData.byteLength} bytes)`,
     );
 
-    const initRes = await fetch(
+    // Wrap the init in a one-shot 401 self-heal: if the access_token is
+    // somehow stale (e.g. revoked between getValidToken() and now), force
+    // a refresh via _forceRefresh() and retry the init exactly once.
+    let activeToken = accessToken;
+    const doInit = (tok: string) => fetch(
       "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
       {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${tok}`,
           "Content-Type": "application/json",
           "X-Upload-Content-Type": mimeType,
           "X-Upload-Content-Length": String(videoData.byteLength),
@@ -259,6 +295,20 @@ export class YouTubeAdapter implements PlatformAdapter {
         }),
       },
     );
+
+    let initRes = await doInit(activeToken);
+
+    if (initRes.status === 401) {
+      console.warn("[youtube-auth] upload init returned 401 — attempting one-shot token refresh + retry");
+      const fresh = await this._forceRefresh(activeToken);
+      if (fresh) {
+        activeToken = fresh;
+        initRes = await doInit(activeToken);
+        if (initRes.ok) {
+          console.log("[youtube-auth] 401 self-heal succeeded — upload init retried with refreshed token");
+        }
+      }
+    }
 
     if (!initRes.ok) {
       const errText = await initRes.text();
@@ -339,7 +389,7 @@ export class YouTubeAdapter implements PlatformAdapter {
         {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${accessToken}`,
+            Authorization: `Bearer ${activeToken}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({

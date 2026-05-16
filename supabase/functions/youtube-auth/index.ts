@@ -84,9 +84,14 @@ Deno.serve(async (req) => {
         redirect_uri: redirect_uri,
         response_type: "code",
         scope: "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly",
+        // ⚠️ CONTRACT — DO NOT REMOVE THESE THREE PARAMS:
+        //   access_type=offline → required for Google to issue a refresh_token
+        //   prompt=consent      → guarantees a refresh_token even on re-auth
+        //                         (without it, Google returns no refresh_token
+        //                          if the user previously granted scope, and
+        //                          tokens silently expire every ~1h)
+        //   include_granted_scopes=true → preserves prior scopes on re-consent
         access_type: "offline",
-        // select_account → user can pick a different Google account or brand channel
-        // consent → guarantees we receive a refresh_token even on re-auth
         prompt: "select_account consent",
         include_granted_scopes: "true",
         state: csrfState,
@@ -192,6 +197,15 @@ Deno.serve(async (req) => {
         .eq("platform", "youtube")
         .eq("account_external_id", channelId)
         .maybeSingle();
+
+      // Visibility: warn if Google returned no refresh_token AND we have
+      // none on file — means long-lived auth is NOT possible for this row
+      // until the user reconnects with prompt=consent honored.
+      if (!refreshToken && !existingChannel?.refresh_token) {
+        console.warn(
+          `[youtube-auth] exchange_code: no refresh_token returned by Google AND none stored — long-lived auth NOT established for channel ${channelId}. User must reconnect with prompt=consent.`,
+        );
+      }
 
       if (existingChannel) {
         await supabaseAdmin
@@ -312,6 +326,10 @@ Deno.serve(async (req) => {
         })
         .eq("user_id", userId);
 
+      // BUG FIX: previously this updated EVERY youtube social_accounts row
+      // for the user with the same access_token — corrupting per-channel
+      // tokens in multi-channel setups. Scope strictly to the row whose
+      // refresh_token matches the one we just used to mint this access_token.
       const { data: socialRows } = await supabaseAdmin
         .from("social_accounts")
         .update({
@@ -321,16 +339,22 @@ Deno.serve(async (req) => {
         })
         .eq("user_id", userId)
         .eq("platform", "youtube")
+        .eq("refresh_token", settings.youtube_refresh_token)
         .select("id");
       if (!socialRows?.length) {
+        // No matching row — create one and tag it as the shared/legacy channel
+        // (city_id = null) so we don't accidentally claim a city-mapped slot.
         await supabaseAdmin.from("social_accounts").insert({
           user_id: userId,
           platform: "youtube",
           access_token: refreshData.access_token,
           refresh_token: settings.youtube_refresh_token,
           token_expires_at: expiresAt,
+          city_id: null,
         });
       }
+
+      console.log("[youtube-auth] token refreshed successfully");
 
       return new Response(
         JSON.stringify({ success: true }),
@@ -452,6 +476,10 @@ Deno.serve(async (req) => {
           },
         })
         .eq("id", row.id);
+
+      if (pingStatus === "healthy") {
+        console.log(`[youtube-auth] token refreshed successfully (channel=${row.account_name || row.id})`);
+      }
 
       return new Response(
         JSON.stringify({

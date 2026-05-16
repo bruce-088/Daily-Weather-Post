@@ -1,71 +1,41 @@
+
 ## Goal
-Soften Creative Decay so it prevents spam without starving the algorithm of proven winners. Add a tiered penalty, allow strategic reuse of top performers, and update the Diversity Guard wording.
+Stop frequent manual YouTube reconnects. The OAuth params already request `access_type=offline` + `prompt=consent`, and a refresh path exists, but three latent bugs cause refresh to silently fail or get corrupted, and there is no 401 retry on upload.
 
-## Changes
+## Changes (auth layer only — no posting/scheduling logic touched)
 
-### 1. `supabase/functions/_shared/learning-patterns.ts`
+### 1. `supabase/functions/youtube-auth/index.ts`
 
-**Track recency precisely.** Replace the single `recentUseCount` map with:
-- `recentUseCount` (still last 48h, all uses)
-- `last2Hooks: string[]` — normalized hooks from the 2 most recent city posts (used to block consecutive/last-2 reuse)
-- `lastHook: string | null` — most recent (consecutive guard)
+a. **Confirm OAuth params (already correct, keep)** — `access_type=offline`, `prompt=select_account consent`, `include_granted_scopes=true`. Add an explicit code comment that these MUST stay to guarantee a refresh_token.
 
-**Tiered weighted decay** (replaces the flat 0.2 penalty):
-```
-overused = recentUseCount.get(normalizedHook) || 0
-weight = overused <= 1 ? 1.0
-       : overused === 2 ? 0.6   // -40%
-       : 0.2                    // -80% for 3+
-```
+b. **`exchange_code` — never null out refresh_token (already preserved on update). Add safety log if Google returns no refresh_token AND no prior one exists** — surface as warning so we know reconnect was incomplete.
 
-**Strategic-reuse rescue.** Before applying the penalty, look up the hook's best `performance_score` from `post_analytics` (join via `hook_used` for this user, last 60d). If `bestScore >= 85` AND the normalized hook is NOT in `last2Hooks`, force `weight = 1.0` and tag it `rescued: true`.
+c. **`refresh_token` action — BUG FIX**: today it bulk-updates EVERY `social_accounts` row for `(user_id, platform=youtube)` with the same access_token from a single refresh. In multi-channel setups this overwrites other channels' tokens with a token that belongs to a different channel. Scope the update to the row whose `refresh_token` matches the one we actually used (the legacy `weather_settings.youtube_refresh_token`), OR limit to `city_id IS NULL` (legacy shared row). Prefer matching by refresh_token.
 
-**New `recentlyUsedAllowed` tier** on the returned `TopPatterns`:
-```
-recentlyUsedAllowed: Array<{ hook: string; score: number; uses48h: number }>
-```
-Populated with rescued hooks (high performance, not in last 2, not consecutive). Surface up to 3.
+d. **Standardize log prefix** to `[youtube-auth] token refreshed successfully` in both `refresh_token` and `refresh_channel`.
 
-**Forbidden list narrows** — `forbiddenOpeners` becomes ONLY `last2Hooks` (was last 3 distinct). Themes logic unchanged.
+### 2. `supabase/functions/_shared/youtube-adapter.ts`
 
-**Type updates.** Extend `TopPatterns` with `recentlyUsedAllowed`. Keep existing fields for backward compatibility.
+a. **`getValidToken`** — already refreshes when expiry < now+5min and writes back to the correct `social_accounts` row by `id`. Two small hardenings:
+   - Change log to `[youtube-auth] token refreshed successfully` (matches required string).
+   - Only clear `refresh_token` on `invalid_grant` (current behavior) — keep, but ALSO log `[youtube-auth] refresh_token invalidated — reconnect required` so we don't silently wipe tokens on transient errors. Treat any non-`invalid_grant`/`invalid_token` error as transient (return null without wiping) — current code already does this; add explicit comment.
 
-### 2. `buildLearningPromptBlock` (same file)
+b. **`uploadVideo` — add 401 retry (new)**: wrap the resumable init + PUT in a helper that, on `401`, calls a new private `forceRefresh(supabase, userId, cityId)` once, retries the request with the new token, then proceeds. Only the init call practically returns 401 (PUT uses the upload URL which is pre-authorized), but we'll guard both. After one retry, propagate failure as today.
+   - Signature stays `(token, videoData, title, description, mimeType, cityId)` to preserve `PlatformAdapter` interface. To enable refresh we need `supabase` + `userId`. Since the interface doesn't pass them, add an optional setter the adapter already uses via `_resolved` cache: store `{supabase, userId, cityId}` keyed by token in a parallel `_refreshCtx` map, populated at the end of `getValidToken`. `uploadVideo` looks it up by token and uses it to force-refresh.
 
-Add a new section when `recentlyUsedAllowed.length > 0`:
-```
-RECENTLY USED BUT ALLOWED (proven winners — may be reused, but MUST be rephrased with a new opening structure and angle):
-  - "<hook>" (score 88, used 2× in 48h)
-```
+### 3. `supabase/functions/generate-spec/index.ts`
 
-Tighten the FORBIDDEN block copy to: "used in the last 2 city posts — do NOT repeat verbatim or as the opener."
+Update the live spec with the Spec Delta below.
 
-### 3. `supabase/functions/generate-caption/index.ts` (line 343)
+## Spec Delta
 
-Replace the Diversity Guard string:
-```
-DIVERSITY GUARD:
-Avoid repeating recent hooks. If reusing a proven high-performing pattern,
-it MUST be rephrased with a new angle and different opening structure.
-Prefer secondary weather signals (wind, humidity, visibility, dew point,
-UV, local activity, cinematic atmosphere) when conditions are mild.
-```
-
-### 4. `supabase/functions/generate-spec/index.ts`
-
-Per the Spec Delta rule, update the Creative Decay / Learning Loop section of the live spec to document:
-- Tiered decay (0 / -40% / -80%)
-- Performance-score rescue (≥85 and not in last 2)
-- New "Recently Used but Allowed" tier
-- New Diversity Guard wording
-
-## Spec Delta (preview)
-- **What:** Creative Decay tiered penalty + strategic rescue of proven hooks; Diversity Guard rephrased.
-- **Why:** Flat 80% penalty at 2 uses was discarding algorithmically-validated winners.
-- **Behavior impact:** Top hooks (score ≥85) may reappear after a 2-post gap with a mandatory rephrase. 2-use hooks now decay -40% instead of -80%.
-- **Schema impact:** None.
-- **Spec sections updated:** Learning Loop → Creative Decay; Caption Prompt → Diversity Guard.
+- **YouTube auth — OAuth params hardening**: `access_type=offline` + `prompt=select_account consent` + `include_granted_scopes=true` are now contractually required and commented as such; removing them breaks long-lived auth.
+- **YouTube auth — refresh_token preservation**: `exchange_code` continues to fall back to the previously stored `refresh_token` when Google omits one on re-consent, and now logs a warning if neither exists.
+- **YouTube auth — refresh isolation (BUG FIX)**: the legacy `refresh_token` action no longer overwrites every channel's `social_accounts.access_token`. It scopes the update to the row matching the refresh_token actually used (or the shared `city_id IS NULL` row), preventing cross-channel token corruption in multi-channel setups.
+- **YouTube adapter — 401 self-heal (NEW)**: `uploadVideo` now performs ONE automatic refresh + retry on a 401 from YouTube's upload init before marking the post as failed.
+- **YouTube auth — logging**: standardized `[youtube-auth] token refreshed successfully` log line emitted by both edge-function refresh paths and the adapter's in-flight refresh, plus explicit `[youtube-auth] refresh_token invalidated — reconnect required` when Google returns `invalid_grant`.
 
 ## Out of scope
-- No schema changes, no new tables, no edge function additions.
-- `generate-caption` keeps its existing structure aside from the Diversity Guard string.
+- No DB migrations.
+- No changes to `process-scheduled-posts`, job pipeline, scheduling, captions, or any non-YouTube adapter.
+- No changes to the OAuth callback frontend.
