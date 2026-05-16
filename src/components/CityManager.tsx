@@ -284,30 +284,30 @@ export function CityManager({ activeCityId, onActiveCityChange, onCitiesChange, 
       toast.success(
         `Queued ${slot} for ${activeCity.name} → ${platforms.join(", ")}. Triggering worker…`,
       );
-      // Kick the worker right now so we don't wait for the cron tick.
-      // Process each inserted post sequentially and surface any error code.
+      // Enqueue a publish_post job per inserted scheduled_post so the run is
+      // visible in JobsDashboard (realtime), then kick run-jobs so it fires now.
       for (const row of inserted || []) {
         try {
-          const { data: res, error: invErr } = await supabase.functions.invoke(
-            "process-scheduled-posts",
-            { body: { scheduled_post_id: (row as any).id, source: "manual_run_slot" } },
-          );
-          const errStr = (invErr?.message || (res as any)?.error || "") as string;
-          if (/\[DEDUPED\]/i.test(errStr)) {
-            toast.info(
-              `${(row as any).platform}: already posted for ${slot} today — skipped`,
-            );
-          } else if (invErr) {
-            toast.error(`${(row as any).platform} failed: ${invErr.message}`);
-          } else if (res && (res as any).error) {
-            toast.error(`${(row as any).platform} failed: ${(res as any).error}`);
+          const { error: enqErr } = await supabase.rpc("enqueue_job", {
+            p_user_id: user.id,
+            p_type: "publish_post",
+            p_payload: { source: "manual_slot", slot, platform: (row as any).platform },
+            p_scheduled_post_id: (row as any).id,
+            p_city: cityLabel,
+            p_platform: (row as any).platform,
+          });
+          if (enqErr) {
+            console.error("[runNow] enqueue_job failed:", enqErr);
+            toast.error(`${(row as any).platform}: failed to enqueue (${enqErr.message})`);
           } else {
-            toast.success(`${(row as any).platform}: render started`);
+            toast.success(`${(row as any).platform}: queued in pipeline`);
           }
         } catch (e: any) {
           toast.error(`${(row as any).platform} failed: ${e?.message || "unknown error"}`);
         }
       }
+      // Fire-and-forget worker tick so the job runs without waiting for cron.
+      supabase.functions.invoke("run-jobs", { body: { source: "manual_run_slot" } }).catch(() => {});
     } finally {
       setRunningSlot(null);
     }

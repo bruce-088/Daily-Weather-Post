@@ -7,6 +7,7 @@ type ResolvedYTAccount = {
   token_expires_at: string | null;
   account_name?: string | null;
   city_id?: string | null;
+  account_external_id?: string | null;
 };
 
 export class YouTubeAdapter implements PlatformAdapter {
@@ -43,7 +44,7 @@ export class YouTubeAdapter implements PlatformAdapter {
     // city→channel routing when multiple channels are connected.
     const { data: allChannels } = await supabase
       .from("social_accounts")
-      .select("id, access_token, refresh_token, token_expires_at, account_name, city_id")
+      .select("id, access_token, refresh_token, token_expires_at, account_name, city_id, account_external_id")
       .eq("user_id", userId)
       .eq("platform", "youtube");
     const channels = allChannels || [];
@@ -183,29 +184,28 @@ export class YouTubeAdapter implements PlatformAdapter {
     const titleCity = extractCityFromTitle(title) || "your area";
     const cityForLike = titleCity;
 
-    // Build a clean @handle for the subscribe URL:
-    //   1. Use the resolved channel's account_name (stripped to handle form).
-    //   2. Otherwise derive @SkyBrief{City} from the title.
-    //   3. As a last resort emit a generic CTA with no URL — NEVER hardcode
-    //      @SkyBriefGNV for non-Gainesville cities.
-    const cleanHandle = (() => {
+    // Build a valid subscribe URL. Three-tier resolver — never fabricate
+    // handles from display names or city titles (that produced "@Sky?..." bugs):
+    //   a. account_name only if it looks like a real YouTube handle (no spaces).
+    //   b. account_external_id (channel ID, UCxxxx — always valid).
+    //   c. Generic CTA with no URL.
+    const subscribeUrl = (() => {
       const raw = (resolved?.account_name || "").trim();
-      if (raw) {
-        // Accept "@SkyBriefMiami", "SkyBriefMiami", or full channel URL.
-        const m = raw.match(/@?([A-Za-z0-9_.\-]{2,})/);
-        if (m && m[1]) return m[1];
+      // A real handle: 3–30 chars, alnum + . _ -, no spaces. Strip leading @.
+      const handleCandidate = raw.replace(/^@/, "");
+      if (/^[A-Za-z0-9_.\-]{3,30}$/.test(handleCandidate) && !/\s/.test(raw)) {
+        return `https://www.youtube.com/@${handleCandidate}?sub_confirmation=1`;
       }
-      const cityClean = titleCity.replace(/[^A-Za-z0-9]/g, "");
-      return cityClean ? `SkyBrief${cityClean}` : "";
+      const extId = (resolved?.account_external_id || "").trim();
+      if (/^UC[A-Za-z0-9_-]{20,24}$/.test(extId)) {
+        return `https://www.youtube.com/channel/${extId}?sub_confirmation=1`;
+      }
+      return null;
     })();
 
-    let YT_CTA: string;
-    if (cleanHandle) {
-      const YT_CHANNEL_URL = `https://www.youtube.com/@${cleanHandle}?sub_confirmation=1`;
-      YT_CTA = `👉 Subscribe and turn on notifications for daily ${titleCity} weather alerts: ${YT_CHANNEL_URL} 🔔`;
-    } else {
-      YT_CTA = `👉 Subscribe and turn on notifications for daily ${titleCity} weather alerts 🔔`;
-    }
+    const YT_CTA = subscribeUrl
+      ? `👉 Subscribe and turn on notifications for daily ${titleCity} weather alerts: ${subscribeUrl} 🔔`
+      : `👉 Subscribe and turn on notifications for daily ${titleCity} weather alerts 🔔`;
 
     const YT_LIKE_PROMPT = `👍 Smash the LIKE button if you're enjoying the weather in ${cityForLike}!`;
     let baseDescription = (description || "").trimEnd();

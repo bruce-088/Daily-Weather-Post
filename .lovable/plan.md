@@ -1,76 +1,115 @@
-## Goal
-Stop Gainesville content (and CTAs/links) from ever reaching another city's channel. Make city→channel routing a hard, asserted invariant at three layers: caption generation, platform adapter, and publish dispatch. Log successful publishes with the exact channel that received them.
+# Visibility + YouTube URL Hardening
 
-## Root causes found
+Five small, targeted fixes. No schema migration required — `jobs` table already holds the pipeline rows the dashboard reads, and `social_accounts.account_external_id` already stores the canonical YouTube channel ID.
 
-1. **Hardcoded `@SkyBriefGNV` in `youtube-adapter.ts`** (lines 168–169, 185): every Shorts description gets the Gainesville subscribe URL appended, no matter the city. This is the contamination of Orlando descriptions.
-2. **Soft fallback to "shared" channel** in `youtube-adapter.ts` (line 57): when a city has no explicit `social_accounts` row, the adapter falls back to the first channel found. With a single shared channel this looks fine; with multiple it can leak — and the per-account first-comment uses `extractCityFromTitle` only, which can mis-guess.
-3. **No positive assertion** at publish time that the resolved channel's `city_id` equals the scheduled post's `city_id`. Today we only check "does *a* row exist for this city" — we do not block the case where the adapter used a different one.
-4. **Caption prompt** does not explicitly forbid mentioning other cities or other channel handles, so the model can recall stale brand strings (e.g., `@SkyBriefGNV`).
-5. **No success log entry** records *which* channel received the post, so contamination is invisible after the fact.
+---
 
-## Fix plan
+## Fix 1 — Notify on every blocked publish (not only "another city has one")
 
-### 1. YouTube adapter — dynamic per-channel CTA + strict routing
-File: `supabase/functions/_shared/youtube-adapter.ts`
+**File:** `supabase/functions/process-scheduled-posts/index.ts` (around L1744–1793, the "HARD CITY ISOLATION" block)
 
-- Extend `PlatformAdapter.uploadVideo` signature with an optional `context: { cityId?: string|null; accountName?: string|null; subscribeHandle?: string|null }` (additive, all current callers keep working).
-- In `YouTubeAdapter.getValidToken`, return the resolved `account` (handle, channel id, city_id) via a side channel: store on `this._lastResolved` keyed by `userId|cityId`, OR resolve again inside `uploadVideo` using the new context. Cleanest: have `postToPlatform` pass `cityId` through to `uploadVideo`, then `uploadVideo` re-queries `social_accounts` for the same `(userId, "youtube", cityId)` row to read `account_name`.
-- Build `YT_CHANNEL_URL` / `YT_CTA` from `account.account_name` (`@SkyBriefOrlando`, `@SkyBriefMiami`, etc.). Fallback chain: `account_name` → derive `@SkyBrief{City}` from title → generic "Subscribe for daily weather updates" (no URL) — **never** a hardcoded `@SkyBriefGNV`.
-- Strict routing: if `cityId` is provided AND `channels.length >= 1` AND no row matches `cityId` → **throw `[ROUTING_VIOLATION] no YouTube channel mapped to city <id>`** instead of falling back to the shared row. Single-channel installs without `cityId` keep working.
+Today a notification is only inserted in the `wrong && wrong.length > 0` branch. If the city has **no** connected account at all (Gainesville's case), the code falls through to legacy `weather_settings` token resolution and may silently no-op later.
 
-### 2. Platform adapter dispatcher — pass cityId through and verify
-File: `supabase/functions/_shared/platform-adapter.ts`
+Change:
+- After the `social_accounts` lookup, if `!acct` AND no rows exist for `(user, platform)` whatsoever bound to a city, also write:
+  - `scheduled_posts.status = 'failed'`, `error_message = '[BLOCKED] No <platform> account connected for <city>'`
+  - `system_logs` row with `type: 'publish_blocked'`
+  - `notifications` row: `❌ Publish blocked — connect a <platform> channel for <city>`
+- Then `releaseLock()`, increment `processed`, `continue`.
 
-- Pass `cityId` into `adapter.uploadVideo(...)` so every adapter (YT, TikTok, IG, X, LinkedIn) can scope its own resources.
-- After `getValidToken` resolves an account, return that account's `id` + `city_id` from the adapter via an extended `UploadResult` (`{ id, channel_external_id?, resolved_city_id? }`) so `postToPlatform` can assert `resolved_city_id === cityId` before declaring success.
-- On mismatch: return `{ success: false, error: "[ROUTING_VIOLATION] resolved channel city does not match scheduled post city" }` — do NOT upload.
+Add the same notify + log on the existing routing-violation branch (already inserts notification — keep it, just also include the `slot` and `scheduled_post_id` in `context` so the JobsDashboard drilldown can correlate).
 
-### 3. Caption generation — explicit per-city scoping
-File: `supabase/functions/generate-caption/index.ts`
+---
 
-- Prepend a hard system directive: `You are generating content EXCLUSIVELY for {city}, {state}. Do NOT mention any other city, region, or social handle. The ONLY handle allowed is ${handle}. Never output @SkyBriefGNV unless city is Gainesville.`
-- Post-generation sanitizer (extend existing `stripUnverifiedReferences`): scan for any `@SkyBrief\w+` token that does not equal the dynamic handle and replace with the correct handle (or strip). Log a `system_logs` warning when this triggers.
+## Fix 2 — Manual "Run This Slot Now" must enqueue a pipeline job
 
-### 4. Other adapters — sweep for hardcoded city strings
-Files: `tiktok-adapter.ts`, `instagram-adapter.ts`, `twitter-adapter.ts`, `linkedin-adapter.ts`
+**File:** `src/components/CityManager.tsx` (`handleRunSlotNow`, L222–314)
 
-- Grep each for hardcoded city names, `SkyBriefGNV`, or `gainesville` literals. Replace any found CTAs/links with values derived from the resolved account (same pattern as YT). Apply the same strict routing rule (throw `[ROUTING_VIOLATION]` instead of soft fallback when `cityId` is set and no per-city row exists).
+Currently it inserts `scheduled_posts` and directly invokes `process-scheduled-posts` — bypassing the `jobs` table entirely, so JobsDashboard never sees the run.
 
-### 5. Publish-time routing assertion (defense in depth)
-File: `supabase/functions/process-scheduled-posts/index.ts`
+Change the loop body that invokes the worker: instead of (or in addition to) calling `process-scheduled-posts`, call the existing `enqueue_job` RPC to insert a `publish_post` job tied to the new `scheduled_post_id`:
 
-- We already check "does a `social_accounts` row exist for `(user_id, platform, city_id)`". Keep that.
-- ADD: after `postToPlatform` returns success, verify `result.resolved_city_id === post.city_id`. If not → mark post `failed`, write `system_logs { type: 'routing_violation', message: '[ROUTING_VIOLATION] ${platform} resolved to city ${result.resolved_city_id} but post was for ${post.city_id}' }`, release publish lock, do NOT retry.
+```ts
+await supabase.rpc("enqueue_job", {
+  p_user_id: user.id,
+  p_type: "publish_post",
+  p_payload: { source: "manual_slot", slot, platform: row.platform },
+  p_scheduled_post_id: row.id,
+  p_city: cityLabel,
+  p_platform: row.platform,
+});
+```
 
-### 6. Success logging — channel-level transparency
-File: `supabase/functions/process-scheduled-posts/index.ts` (publish success branch around line 2654)
+Then kick `run-jobs` (cheap fire-and-forget invoke) instead of `process-scheduled-posts`. The existing `publishPost` handler in `_shared/job-handlers.ts` already delegates to `process-scheduled-posts`, acquires the lock, and writes notifications on dedupe/auth-expired — so all routing/blocked notifications continue to fire, and the `jobs` row gives JobsDashboard a visible record.
 
-- On each successful platform upload, insert into `system_logs`:
-  - `type: 'post_published'`
-  - `platform: <platform>`
-  - `message: 'Success: {city} posted to {platform} channel: {account_name}'`
-  - `context: { scheduled_post_id, city_id, channel_external_id, account_name, external_post_id }`
-- Update `system_health` row id `last_publish` with `last_status='ok'`, `last_message='{city} → {platform} {account_name}'`.
+---
 
-### 7. No-op safeguards
-- `index.ts` (no DB migration needed — `social_accounts.account_name` already exists).
-- All changes are backward-compatible for single-channel installs that don't set `city_id` on their `social_accounts` row.
+## Fix 3 — JobsDashboard auto-refresh + force-fresh on click
 
-## Files to edit
-- `supabase/functions/_shared/platform-adapter.ts`
-- `supabase/functions/_shared/youtube-adapter.ts`
-- `supabase/functions/_shared/tiktok-adapter.ts`
-- `supabase/functions/_shared/instagram-adapter.ts`
-- `supabase/functions/_shared/twitter-adapter.ts`
-- `supabase/functions/_shared/linkedin-adapter.ts`
-- `supabase/functions/generate-caption/index.ts`
-- `supabase/functions/process-scheduled-posts/index.ts`
+**File:** `src/pages/JobsDashboard.tsx`
+
+Two small changes:
+
+1. **Realtime subscription is already wired on `jobs` table**, but only for INSERT/UPDATE inside the dashboard. After Fix 2, manual runs enqueue jobs → realtime will fire automatically. No further work needed for the open-page case.
+2. **Refresh button**: today `loadJobs` is just a re-`select`. Supabase-js doesn't HTTP-cache, but add `cache: 'no-store'` headers via `{ head: false }` isn't necessary — instead, give the user feedback that the click did something by also calling `supabase.functions.invoke("run-jobs", {})` (advance any due jobs) before reloading. Wrap in try/catch so failure doesn't block the reload.
+3. **Sort order**: already `order("created_at", { ascending: false })` — confirm `grouped` sorting also uses last-created descending (it does, L162–167). No change.
+
+---
+
+## Fix 4 — Correct YouTube subscribe URL
+
+**File:** `supabase/functions/_shared/youtube-adapter.ts` (L186–208 + tighter ResolvedYTAccount)
+
+Root cause: `account_name` is a YouTube **channel title** (display name like "Sky Brief Orlando"), not a handle. The current regex `@?([A-Za-z0-9_.\-]{2,})` greedy-matches the first word → `"Sky"` → `https://www.youtube.com/@Sky?sub_confirmation=1`.
+
+Changes:
+
+1. **Extend `ResolvedYTAccount`** to also carry `account_external_id` (channel ID, `UCxxxx`). It's already populated by `youtube-auth/index.ts` on connect.
+2. **In `getValidToken`** select `account_external_id` alongside the existing fields and pass it into `this._resolved.set(...)` (both warm-cache and post-refresh paths).
+3. **In `uploadVideo`**, replace the `cleanHandle` block with a 3-tier resolver:
+   - **a.** If `account_name` looks like a real handle (matches `^@?[A-Za-z0-9_.\-]{3,30}$` with **no spaces**) → use `https://www.youtube.com/@<handle>?sub_confirmation=1`.
+   - **b.** Else if `account_external_id` starts with `UC` and is 24 chars → use `https://www.youtube.com/channel/<id>?sub_confirmation=1` (always valid).
+   - **c.** Else → emit generic CTA with **no URL**: `👉 Subscribe and turn on notifications for daily <city> weather alerts 🔔`.
+   Never derive a handle from `account_name` words or from the title city when those don't correspond to a real channel.
+
+4. Remove the existing fallback that synthesizes `SkyBrief<City>` from the title (L198–199) — that's the path producing fake handles on multi-channel installs.
+
+---
+
+## Fix 5 — Status copy across UI
+
+Scope-limited touch-ups so users can read outcomes at a glance.
+
+- **`system_logs.type` taxonomy** (already in use): `post_published`, `post_deduped`, `routing_violation`, `publish_blocked` (new from Fix 1).
+- **`scheduled_posts.error_message` prefixes** drive the UI labels. After Fixes 1–2 these will be: `[DEDUPED] …`, `[ROUTING_VIOLATION] …`, `[BLOCKED] …`, plain text for hard failures.
+- **`PostHistoryList.tsx`** (read-only here, no change needed unless labels are already drifting — check after Fix 1 lands; if it shows raw error text, add a tiny label mapper):
+  - `[DEDUPED]` → `Skipped (deduped)`
+  - `[ROUTING_VIOLATION]` / `[BLOCKED]` → `Blocked`
+  - other `status=failed` → `Failed`
+  - `status=posted` → `Posted`
+- **`JobsDashboard.tsx`** already renders status via `statusBadge`; the "Blocked" reason is in `last_error` and surfaces in the drilldown — good as-is.
+
+---
+
+## Files touched
+
+- `supabase/functions/process-scheduled-posts/index.ts` — Fix 1
+- `src/components/CityManager.tsx` — Fix 2
+- `src/pages/JobsDashboard.tsx` — Fix 3
+- `supabase/functions/_shared/youtube-adapter.ts` — Fix 4
+- `src/components/PostHistoryList.tsx` — Fix 5 (only if current copy is raw)
 
 ## Out of scope
-No DB migration. No UI changes. No changes to scheduling, render pipeline, analytics, or A/B logic.
 
-## Acceptance
-- Orlando YouTube post description contains `@SkyBriefOrlando` (or generic CTA) — **never** `@SkyBriefGNV`.
-- Manual "Run This Slot Now" for Gainesville with a missing Gainesville YT mapping → fails fast with `[ROUTING_VIOLATION]` instead of posting to Orlando.
-- Every successful publish creates one `system_logs` row naming the city, platform, and channel handle.
+No DB migration. No changes to render pipeline, A/B logic, analytics, or other platform adapters. Only YouTube URL generation is changed; other adapters already use platform-specific account IDs.
+
+## Acceptance walkthrough
+
+1. **Disconnect Gainesville YouTube → Run Gainesville morning slot**
+   - `scheduled_posts` row created (manual_slot) → `enqueue_job` writes a `publish_post` job → JobsDashboard shows it in realtime.
+   - Isolation check fires `[BLOCKED]`, marks the post `failed`, releases lock, inserts `notifications` row → bell shows "Publish blocked — connect a YouTube channel for Gainesville".
+   - `publishPost` job receives the failed status → job marked `failed` with that reason → visible in dashboard with a Retry button.
+2. **Run Orlando morning slot** (channel connected)
+   - New job appears immediately via realtime; Refresh forces an extra `run-jobs` tick.
+   - Description CTA contains `https://www.youtube.com/@SkyBriefOrlando?sub_confirmation=1` (handle path) or `…/channel/UCxxxx?sub_confirmation=1` (channel-id fallback). Never `@Sky?...`.
+3. **Re-run same slot within the day** → lock blocks → `[DEDUPED]` notification, job ends `succeeded` with `skipped: "deduped"` (existing behavior).

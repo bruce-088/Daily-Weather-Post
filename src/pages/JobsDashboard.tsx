@@ -128,8 +128,16 @@ export default function JobsDashboard() {
   const [selectedRoot, setSelectedRoot] = useState<string | null>(null);
   const [selectedLogs, setSelectedLogs] = useState<SystemLogRow[]>([]);
 
-  const loadJobs = async () => {
+  const loadJobs = async (opts?: { kick?: boolean }) => {
     setLoading(true);
+    // Optionally kick the worker so any due jobs advance before we re-fetch.
+    if (opts?.kick) {
+      try {
+        await supabase.functions.invoke("run-jobs", { body: { source: "dashboard_refresh" } });
+      } catch {
+        // non-fatal — still re-fetch
+      }
+    }
     let query = supabase
       .from("jobs" as any)
       .select("*")
@@ -251,7 +259,7 @@ export default function JobsDashboard() {
               </p>
             </div>
           </div>
-          <Button variant="outline" size="sm" onClick={loadJobs} disabled={loading}>
+          <Button variant="outline" size="sm" onClick={() => loadJobs({ kick: true })} disabled={loading}>
             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
             Refresh
           </Button>
@@ -286,7 +294,7 @@ export default function JobsDashboard() {
                 onChange={(e) => setCityFilter(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && loadJobs()}
               />
-              <Button variant="outline" onClick={loadJobs}>Apply</Button>
+              <Button variant="outline" onClick={() => loadJobs()}>Apply</Button>
             </div>
           </div>
         </Card>

@@ -1753,7 +1753,10 @@ Deno.serve(async (req) => {
           if (!acct) {
             // No account bound to this exact city — check if one exists for the
             // wrong city. If so, this is a routing violation. If none exists at
-            // all, let downstream legacy resolution try weather_settings tokens.
+            // all but the user has connected this platform somewhere, treat it
+            // as BLOCKED (city missing channel). Only fall through silently when
+            // the user has never connected this platform (legacy single-channel
+            // weather_settings path may still hold tokens).
             const { data: wrong } = await supabase
               .from("social_accounts")
               .select("id, city_id")
@@ -1774,13 +1777,48 @@ Deno.serve(async (req) => {
                 type: "routing_violation",
                 message: msg,
                 platform: post.platform,
-                context: { scheduled_post_id: post.id, city_id: (post as any).city_id },
+                context: { scheduled_post_id: post.id, city_id: (post as any).city_id, slot: (post as any).slot ?? null },
               });
               await supabase.from("notifications").insert({
                 user_id: post.user_id,
                 title: `⚠️ Routing blocked — no ${post.platform} channel for ${post.city}`,
                 message: `Connect a ${post.platform} account to ${post.city} in Settings, then retry.`,
                 type: "warning",
+              });
+              await releaseLock();
+              processed++;
+              continue;
+            }
+            // Also block if the user has ANY social_accounts row for this
+            // platform (legacy shared row without city_id counts) — they've
+            // adopted the multi-channel model but Gainesville simply has no
+            // channel mapped. Surface it instead of silently no-op'ing.
+            const { data: anyAcct } = await supabase
+              .from("social_accounts")
+              .select("id")
+              .eq("user_id", post.user_id)
+              .eq("platform", post.platform)
+              .limit(1);
+            if (anyAcct && anyAcct.length > 0) {
+              const msg = `[BLOCKED] No ${post.platform} account connected for ${post.city}`;
+              console.error(`[isolate] ${post.id}: ${msg}`);
+              await supabase.from("scheduled_posts").update({
+                status: "failed",
+                error_message: msg,
+                last_attempt_at: new Date().toISOString(),
+              }).eq("id", post.id);
+              await supabase.from("system_logs").insert({
+                user_id: post.user_id,
+                type: "publish_blocked",
+                message: msg,
+                platform: post.platform,
+                context: { scheduled_post_id: post.id, city_id: (post as any).city_id, slot: (post as any).slot ?? null },
+              });
+              await supabase.from("notifications").insert({
+                user_id: post.user_id,
+                title: `❌ Publish blocked — connect a ${post.platform} channel for ${post.city}`,
+                message: `Open Settings → ${post.city} → Account Routing to connect a ${post.platform} account.`,
+                type: "error",
               });
               await releaseLock();
               processed++;
