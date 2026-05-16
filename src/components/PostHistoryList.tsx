@@ -139,29 +139,33 @@ export function PostHistoryList({ posts, loading, onReuse, onChanged }: PostHist
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [expandedError, setExpandedError] = useState<string | null>(null);
   const [viewsByPostId, setViewsByPostId] = useState<Record<string, number>>({});
+  const [scoreByPostId, setScoreByPostId] = useState<Record<string, number>>({});
 
-  // Fetch view counts for the visible posts so we can flag "Top Performer"
-  // (any post whose views are above the average of fetched posts).
+  // Fetch view counts + performance_score for the visible posts.
   useEffect(() => {
     const ids = posts.map((p) => p.id).filter(Boolean);
     if (ids.length === 0) {
       setViewsByPostId({});
+      setScoreByPostId({});
       return;
     }
     let cancelled = false;
     (async () => {
       const { data, error } = await supabase
         .from("post_analytics")
-        .select("post_id, views")
+        .select("post_id, views, performance_score")
         .in("post_id", ids);
       if (cancelled || error || !data) return;
-      const map: Record<string, number> = {};
-      for (const row of data as Array<{ post_id: string; views: number | null }>) {
+      const vmap: Record<string, number> = {};
+      const smap: Record<string, number> = {};
+      for (const row of data as Array<{ post_id: string; views: number | null; performance_score: number | null }>) {
         const v = Number(row.views) || 0;
-        // Keep the highest sample per post in case multiple platform rows exist.
-        if (!map[row.post_id] || v > map[row.post_id]) map[row.post_id] = v;
+        if (!vmap[row.post_id] || v > vmap[row.post_id]) vmap[row.post_id] = v;
+        const s = row.performance_score == null ? null : Number(row.performance_score);
+        if (s !== null && (!(row.post_id in smap) || s > smap[row.post_id])) smap[row.post_id] = s;
       }
-      setViewsByPostId(map);
+      setViewsByPostId(vmap);
+      setScoreByPostId(smap);
     })();
     return () => {
       cancelled = true;
