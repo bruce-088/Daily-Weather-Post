@@ -590,6 +590,29 @@ export function PostHistoryList({ posts, loading, onReuse, onChanged }: PostHist
                           healthScore={post.health_score ?? null}
                         />
 
+                        {/* Performance score pill (0–100, from post_analytics) */}
+                        {(() => {
+                          const s = scoreByPostId[post.id];
+                          const fallback = post.health_score ?? null;
+                          const score = s != null ? s : fallback;
+                          if (score == null) return null;
+                          const cls =
+                            score >= 75
+                              ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+                              : score >= 50
+                              ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
+                              : "bg-muted text-muted-foreground border-border/40";
+                          const label = s != null ? "Performance" : "Health";
+                          return (
+                            <Badge
+                              variant="outline"
+                              className={`mt-1.5 mr-1 text-[10px] tabular-nums ${cls}`}
+                              title={`${label} score (0–100)`}
+                            >
+                              {label} {Math.round(score)}
+                            </Badge>
+                          );
+                        })()}
                         {/* Quick actions */}
                         <div className="flex items-center gap-1.5 mt-2">
                           <Button
