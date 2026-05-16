@@ -2809,6 +2809,8 @@ Deno.serve(async (req) => {
           image_url: storedImageUrl, error_message: errorMessage, caption,
           user_id: post.user_id, post_url: publishedPostUrl,
           external_id: primaryExternalId,
+          slot: (post as any).slot || null,
+          source: (post as any).source || null,
           voice_status: voiceStatus,
           voice_error: voiceError,
           voice_attempts: voiceAttemptsCount,
