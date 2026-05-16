@@ -1579,6 +1579,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_set_cron_secret: { Args: { p_value: string }; Returns: undefined }
       claim_next_jobs: {
         Args: { p_limit?: number; p_worker_id: string }
         Returns: {
