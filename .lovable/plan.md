@@ -1,115 +1,48 @@
-# Visibility + YouTube URL Hardening
+# Pipeline Hardening & Silent Failure Debugging
 
-Five small, targeted fixes. No schema migration required — `jobs` table already holds the pipeline rows the dashboard reads, and `social_accounts.account_external_id` already stores the canonical YouTube channel ID.
+Goal: expose the hidden YouTube failure that's marking jobs Succeeded with no video and no notification.
 
----
+## 1. Verbose logging in YouTube adapter
+File: `supabase/functions/_shared/youtube-adapter.ts` — `uploadVideo()` (~lines 285–320)
 
-## Fix 1 — Notify on every blocked publish (not only "another city has one")
+Right after the resumable `PUT` to `uploadUrl` resolves, log full diagnostics whether or not `ok`:
+- `console.log("[YT] upload status:", uploadRes.status, uploadRes.statusText)`
+- Parse the body once into `responseBody` (string + JSON when possible) and `console.log("[YT] full response body:", JSON.stringify(responseBody))`
+- If `responseBody.id` present → `console.log("✅ YouTube Upload Success! Video ID: " + responseBody.id)`
+- Else → `console.error("❌ YouTube API returned " + uploadRes.status + " but no Video ID found. Full Response: " + JSON.stringify(responseBody))` and `throw new Error("YouTube upload returned no video ID: " + JSON.stringify(responseBody).slice(0,500))` so the caller fails loudly instead of returning `null`.
 
-**File:** `supabase/functions/process-scheduled-posts/index.ts` (around L1744–1793, the "HARD CITY ISOLATION" block)
+Keep the existing `!uploadRes.ok` branch but route through the same parsed body so we don't double-consume the stream.
 
-Today a notification is only inserted in the `wrong && wrong.length > 0` branch. If the city has **no** connected account at all (Gainesville's case), the code falls through to legacy `weather_settings` token resolution and may silently no-op later.
+## 2. Post-publish notification reliability
+File: `supabase/functions/process-scheduled-posts/index.ts` (~lines 2690–2740)
 
-Change:
-- After the `social_accounts` lookup, if `!acct` AND no rows exist for `(user, platform)` whatsoever bound to a city, also write:
-  - `scheduled_posts.status = 'failed'`, `error_message = '[BLOCKED] No <platform> account connected for <city>'`
-  - `system_logs` row with `type: 'publish_blocked'`
-  - `notifications` row: `❌ Publish blocked — connect a <platform> channel for <city>`
-- Then `releaseLock()`, increment `processed`, `continue`.
+- Right before the `postToPlatform` call, `console.log("[publish] Attempting to write notification for user: " + post.user_id + ", platform: " + platformName)` (the request asked for it before `insertNotifications`; this is the equivalent pre-publish hook in this codebase).
+- The branch at line 2733 (`result.success && !result.id`) already treats missing IDs as failure. Tighten it for YouTube specifically: if `platformName === "youtube"` and `result.success` is true but `result.id` is falsy, `throw new Error("[YT_NO_VIDEO_ID] YouTube reported success without a video_id — failing job")`. The surrounding try/catch in `publish_post` job handler will then mark the job FAILED instead of SUCCEEDED.
+- Add a `console.log("[publish] notification queued user=" + post.user_id + " platform=" + platformName + " status=" + (result.success ? "ok" : "fail"))` immediately after the `notifyFailure(...)` / success-log calls so we can see in edge logs whether notification writes actually fired.
 
-Add the same notify + log on the existing routing-violation branch (already inserts notification — keep it, just also include the `slot` and `scheduled_post_id` in `context` so the JobsDashboard drilldown can correlate).
+## 3. Manual-slot dedup bypass (TESTING ONLY)
+File: `supabase/functions/process-scheduled-posts/index.ts` (~lines 1688–1722)
 
----
+- Wrap the `acquire_publish_lock` block in `if (!post.caption?.includes("[manual:") && !((post as any).source === "manual_slot")) { ... }` so manual "Run This Slot Now" runs always proceed.
+- Add a `console.warn("[lock] ⚠ DEDUP BYPASSED for manual run post=" + post.id)` when bypassed.
+- Mark the block with a `// TODO: remove after pipeline debugging — issue #pipeline-hardening` comment so it's easy to revert.
 
-## Fix 2 — Manual "Run This Slot Now" must enqueue a pipeline job
+(Automated cron runs still honor the lock; only manual slot triggers bypass.)
 
-**File:** `src/components/CityManager.tsx` (`handleRunSlotNow`, L222–314)
+## 4. Enhanced Jobs Dashboard drilldown
+File: `src/pages/JobsDashboard.tsx` (drilldown sheet, ~lines 360–395)
 
-Currently it inserts `scheduled_posts` and directly invokes `process-scheduled-posts` — bypassing the `jobs` table entirely, so JobsDashboard never sees the run.
+- Today `last_error` is only rendered inside `if (j.last_error)` which works, but it's hidden behind the status badge styling. Move the error block out from under any status check so it renders for `succeeded` jobs too.
+- Change the heading from `"Failed step: ..."` to a status-aware label: `j.status === "succeeded" ? "⚠ Warning logged on succeeded step" : "Failed step: ..."`.
+- Use a warning style (amber background) for succeeded-with-error vs destructive (red) for actual failures so users can tell them apart at a glance.
+- Also surface `j.result` JSON (pretty-printed, collapsible <details>) in the drilldown so hidden adapter responses are visible without checking edge logs.
 
-Change the loop body that invokes the worker: instead of (or in addition to) calling `process-scheduled-posts`, call the existing `enqueue_job` RPC to insert a `publish_post` job tied to the new `scheduled_post_id`:
-
-```ts
-await supabase.rpc("enqueue_job", {
-  p_user_id: user.id,
-  p_type: "publish_post",
-  p_payload: { source: "manual_slot", slot, platform: row.platform },
-  p_scheduled_post_id: row.id,
-  p_city: cityLabel,
-  p_platform: row.platform,
-});
-```
-
-Then kick `run-jobs` (cheap fire-and-forget invoke) instead of `process-scheduled-posts`. The existing `publishPost` handler in `_shared/job-handlers.ts` already delegates to `process-scheduled-posts`, acquires the lock, and writes notifications on dedupe/auth-expired — so all routing/blocked notifications continue to fire, and the `jobs` row gives JobsDashboard a visible record.
-
----
-
-## Fix 3 — JobsDashboard auto-refresh + force-fresh on click
-
-**File:** `src/pages/JobsDashboard.tsx`
-
-Two small changes:
-
-1. **Realtime subscription is already wired on `jobs` table**, but only for INSERT/UPDATE inside the dashboard. After Fix 2, manual runs enqueue jobs → realtime will fire automatically. No further work needed for the open-page case.
-2. **Refresh button**: today `loadJobs` is just a re-`select`. Supabase-js doesn't HTTP-cache, but add `cache: 'no-store'` headers via `{ head: false }` isn't necessary — instead, give the user feedback that the click did something by also calling `supabase.functions.invoke("run-jobs", {})` (advance any due jobs) before reloading. Wrap in try/catch so failure doesn't block the reload.
-3. **Sort order**: already `order("created_at", { ascending: false })` — confirm `grouped` sorting also uses last-created descending (it does, L162–167). No change.
-
----
-
-## Fix 4 — Correct YouTube subscribe URL
-
-**File:** `supabase/functions/_shared/youtube-adapter.ts` (L186–208 + tighter ResolvedYTAccount)
-
-Root cause: `account_name` is a YouTube **channel title** (display name like "Sky Brief Orlando"), not a handle. The current regex `@?([A-Za-z0-9_.\-]{2,})` greedy-matches the first word → `"Sky"` → `https://www.youtube.com/@Sky?sub_confirmation=1`.
-
-Changes:
-
-1. **Extend `ResolvedYTAccount`** to also carry `account_external_id` (channel ID, `UCxxxx`). It's already populated by `youtube-auth/index.ts` on connect.
-2. **In `getValidToken`** select `account_external_id` alongside the existing fields and pass it into `this._resolved.set(...)` (both warm-cache and post-refresh paths).
-3. **In `uploadVideo`**, replace the `cleanHandle` block with a 3-tier resolver:
-   - **a.** If `account_name` looks like a real handle (matches `^@?[A-Za-z0-9_.\-]{3,30}$` with **no spaces**) → use `https://www.youtube.com/@<handle>?sub_confirmation=1`.
-   - **b.** Else if `account_external_id` starts with `UC` and is 24 chars → use `https://www.youtube.com/channel/<id>?sub_confirmation=1` (always valid).
-   - **c.** Else → emit generic CTA with **no URL**: `👉 Subscribe and turn on notifications for daily <city> weather alerts 🔔`.
-   Never derive a handle from `account_name` words or from the title city when those don't correspond to a real channel.
-
-4. Remove the existing fallback that synthesizes `SkyBrief<City>` from the title (L198–199) — that's the path producing fake handles on multi-channel installs.
-
----
-
-## Fix 5 — Status copy across UI
-
-Scope-limited touch-ups so users can read outcomes at a glance.
-
-- **`system_logs.type` taxonomy** (already in use): `post_published`, `post_deduped`, `routing_violation`, `publish_blocked` (new from Fix 1).
-- **`scheduled_posts.error_message` prefixes** drive the UI labels. After Fixes 1–2 these will be: `[DEDUPED] …`, `[ROUTING_VIOLATION] …`, `[BLOCKED] …`, plain text for hard failures.
-- **`PostHistoryList.tsx`** (read-only here, no change needed unless labels are already drifting — check after Fix 1 lands; if it shows raw error text, add a tiny label mapper):
-  - `[DEDUPED]` → `Skipped (deduped)`
-  - `[ROUTING_VIOLATION]` / `[BLOCKED]` → `Blocked`
-  - other `status=failed` → `Failed`
-  - `status=posted` → `Posted`
-- **`JobsDashboard.tsx`** already renders status via `statusBadge`; the "Blocked" reason is in `last_error` and surfaces in the drilldown — good as-is.
-
----
-
-## Files touched
-
-- `supabase/functions/process-scheduled-posts/index.ts` — Fix 1
-- `src/components/CityManager.tsx` — Fix 2
-- `src/pages/JobsDashboard.tsx` — Fix 3
-- `supabase/functions/_shared/youtube-adapter.ts` — Fix 4
-- `src/components/PostHistoryList.tsx` — Fix 5 (only if current copy is raw)
+## Verification
+1. Run "Run This Slot Now" for Orlando 3× in a row — all three should reach `process-scheduled-posts` (no dedup skip) and produce edge-function log lines starting with `[YT] upload status:` and either `✅` or `❌`.
+2. If YouTube returns a 200 without an `id`, the corresponding `publish_post` job appears as **FAILED** in `/jobs` with the `[YT_NO_VIDEO_ID]` error visible in the drilldown.
+3. If YouTube returns an `id`, a `post_published` system_log row is written and a notification row appears for the user.
+4. Open any previously-"succeeded" job in `/jobs` — if `last_error` exists, it now renders in the drilldown with the amber warning style.
 
 ## Out of scope
-
-No DB migration. No changes to render pipeline, A/B logic, analytics, or other platform adapters. Only YouTube URL generation is changed; other adapters already use platform-specific account IDs.
-
-## Acceptance walkthrough
-
-1. **Disconnect Gainesville YouTube → Run Gainesville morning slot**
-   - `scheduled_posts` row created (manual_slot) → `enqueue_job` writes a `publish_post` job → JobsDashboard shows it in realtime.
-   - Isolation check fires `[BLOCKED]`, marks the post `failed`, releases lock, inserts `notifications` row → bell shows "Publish blocked — connect a YouTube channel for Gainesville".
-   - `publishPost` job receives the failed status → job marked `failed` with that reason → visible in dashboard with a Retry button.
-2. **Run Orlando morning slot** (channel connected)
-   - New job appears immediately via realtime; Refresh forces an extra `run-jobs` tick.
-   - Description CTA contains `https://www.youtube.com/@SkyBriefOrlando?sub_confirmation=1` (handle path) or `…/channel/UCxxxx?sub_confirmation=1` (channel-id fallback). Never `@Sky?...`.
-3. **Re-run same slot within the day** → lock blocks → `[DEDUPED]` notification, job ends `succeeded` with `skipped: "deduped"` (existing behavior).
+- The unrelated `enqueue_job` "permission denied" RPC error visible in console logs (separate issue — would need a SECURITY DEFINER grant migration).
+- Reverting the dedup bypass — flagged with a TODO, to be removed once root cause is identified.
