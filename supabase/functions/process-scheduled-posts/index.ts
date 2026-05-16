@@ -2735,7 +2735,7 @@ Deno.serve(async (req) => {
           experiment_id: experimentCtx?.id ?? null,
           experiment_variant: experimentCtx?.variant ?? null,
           variant_id: (post as any).variant_id ?? experimentCtx?.variant ?? null,
-          visual_metadata: visualMeta,
+          visual_metadata: { ...(visualMeta || {}), has_timestamp_in_title: titleHasTimestamp(title) },
           health_score: healthScore,
           health_breakdown: healthBreakdown,
           // Persist hook + cinematic flags so the History UI shows them on
