@@ -241,9 +241,15 @@ function buildHookTitle(city: string, temp: number, condition: string, rainChanc
 
   const seed = new Date().getDate() * 24 + hour;
   const baseTitle = pool[seed % pool.length];
-  const stamp = getCityLocalStamp(city);
-  const stamped = `[${stamp}] ${baseTitle}`;
-  return stamped.length > 95 ? stamped.substring(0, 92) + "..." : stamped;
+  // Always force one of the three SkyBrief broadcast slot prefixes
+  // ([8 AM]/[1 PM]/[6 PM]). Default to "morning" — this function is the morning
+  // automated job, but callers may override via the slot arg.
+  try {
+    return ensureSlotTitlePrefix(baseTitle, slot || "morning", city);
+  } catch (err) {
+    console.warn("buildHookTitle: ensureSlotTitlePrefix failed, returning base title", err);
+    return baseTitle.length > 95 ? baseTitle.substring(0, 92) + "..." : baseTitle;
+  }
 }
 
 // --- Dynamic Handle System ---
