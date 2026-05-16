@@ -393,6 +393,8 @@ const Index = () => {
     setSaving(false);
     if (ok) {
       toast.success("✅ Settings saved", { description: "Your automation preferences are live." });
+      // Wake the scheduler so the System Health card immediately reflects a live link.
+      wakeupScheduler();
     } else {
       toast.error("❌ Couldn't save settings", {
         description: "Check your connection and try again.",
