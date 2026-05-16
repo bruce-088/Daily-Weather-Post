@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
-  Brain, Trophy, FlaskConical, Gem, CalendarClock, Sparkles, Cloud,
+  Brain, Trophy, FlaskConical, CalendarClock, Sparkles, Cloud,
 } from "lucide-react";
 import { useActiveCity } from "@/hooks/useActiveCity";
 
@@ -13,15 +13,6 @@ interface MemoryRow {
   content: string;
   performance_score: number;
   condition: string | null;
-  created_at: string;
-}
-
-interface InsightRow {
-  id: string;
-  title: string;
-  message: string;
-  delta_pct: number;
-  city: string | null;
   created_at: string;
 }
 
@@ -51,7 +42,6 @@ export function GrowthCommandCenter() {
   const [memories, setMemories] = useState<MemoryRow[]>([]);
   const [bestHook, setBestHook] = useState<MemoryRow | null>(null);
   const [experimentsRunning, setExperimentsRunning] = useState(0);
-  const [insights, setInsights] = useState<InsightRow[]>([]);
   const [recentPosts, setRecentPosts] = useState<RecentPost[]>([]);
 
   useEffect(() => {
@@ -64,11 +54,6 @@ export function GrowthCommandCenter() {
         .select("id", { count: "exact", head: true })
         .eq("user_id", user.id)
         .eq("status", "gathering_data");
-      let giQ = supabase.from("growth_insights")
-        .select("id, title, message, delta_pct, city, created_at")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(10);
       let phQ = supabase.from("post_history")
         .select("id, city, image_url, created_at")
         .eq("user_id", user.id)
@@ -77,17 +62,16 @@ export function GrowthCommandCenter() {
         .limit(3);
       if (activeCity.name) {
         expQ = expQ.ilike("city", activeCity.name);
-        giQ = giQ.ilike("city", activeCity.name);
         phQ = phQ.ilike("city", activeCity.name);
       }
 
-      const [m, e, gi, ph] = await Promise.all([
+      const [m, e, ph] = await Promise.all([
         supabase.from("ai_memory")
           .select("id, memory_type, content, performance_score, condition, created_at")
           .eq("user_id", user.id)
           .order("performance_score", { ascending: false })
           .limit(50),
-        expQ, giQ, phQ,
+        expQ, phQ,
       ]);
 
       const mem = (m.data as MemoryRow[]) || [];
@@ -95,7 +79,6 @@ export function GrowthCommandCenter() {
       const bestHookRow = mem.find((x) => x.memory_type === "hook") || null;
       setBestHook(bestHookRow);
       setExperimentsRunning(e.count ?? 0);
-      setInsights((gi.data as InsightRow[]) || []);
       setRecentPosts((ph.data as RecentPost[]) || []);
       setLoading(false);
     })();
@@ -178,48 +161,6 @@ export function GrowthCommandCenter() {
             </p>
           ) : (
             <MemoryBankList items={memories} />
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Growth log */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <Gem size={14} className="text-amber-300" /> Growth Log
-          </CardTitle>
-          <CardDescription className="text-xs">Chronological feed of A/B test wins.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {insights.length === 0 ? (
-            <p className="text-xs text-muted-foreground italic">
-              {activeCity.name
-                ? `No data yet for ${activeCity.name} — start posting to generate insights.`
-                : "No wins logged yet. Keep posting — A/B tests resolve after ~24h."}
-            </p>
-          ) : (
-            insights.map((i) => (
-              <div
-                key={i.id}
-                className="flex items-start gap-3 rounded-md border border-amber-500/20 bg-gradient-to-r from-amber-500/5 to-transparent p-2.5"
-              >
-                <Gem size={14} className="text-amber-300 mt-0.5 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs leading-snug">
-                    <span className="font-mono text-muted-foreground mr-1.5">{fmtDate(i.created_at)}:</span>
-                    {i.message}
-                  </p>
-                  <div className="mt-1 flex items-center gap-2 text-[10px] text-muted-foreground">
-                    {i.city && <Badge variant="outline" className="text-[10px]">{i.city}</Badge>}
-                    {i.delta_pct != null && (
-                      <Badge variant="outline" className="text-[10px] border-emerald-500/40 text-emerald-400">
-                        +{Number(i.delta_pct).toFixed(0)}%
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))
           )}
         </CardContent>
       </Card>
