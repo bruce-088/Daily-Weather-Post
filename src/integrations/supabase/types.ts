@@ -626,6 +626,8 @@ export type Database = {
           hook_type: string | null
           id: string
           likes: number
+          losing_factors: Json
+          performance_score: number | null
           platform: string
           post_id: string | null
           posted_at: string | null
@@ -639,6 +641,7 @@ export type Database = {
           views: number
           views_24h: number | null
           views_7d: number | null
+          winning_factors: Json
         }
         Insert: {
           avg_percentage_viewed?: number | null
@@ -656,6 +659,8 @@ export type Database = {
           hook_type?: string | null
           id?: string
           likes?: number
+          losing_factors?: Json
+          performance_score?: number | null
           platform: string
           post_id?: string | null
           posted_at?: string | null
@@ -669,6 +674,7 @@ export type Database = {
           views?: number
           views_24h?: number | null
           views_7d?: number | null
+          winning_factors?: Json
         }
         Update: {
           avg_percentage_viewed?: number | null
@@ -686,6 +692,8 @@ export type Database = {
           hook_type?: string | null
           id?: string
           likes?: number
+          losing_factors?: Json
+          performance_score?: number | null
           platform?: string
           post_id?: string | null
           posted_at?: string | null
@@ -699,6 +707,7 @@ export type Database = {
           views?: number
           views_24h?: number | null
           views_7d?: number | null
+          winning_factors?: Json
         }
         Relationships: []
       }
