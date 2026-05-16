@@ -477,6 +477,10 @@ Deno.serve(async (req) => {
         })
         .eq("id", row.id);
 
+      if (pingStatus === "healthy") {
+        console.log(`[youtube-auth] token refreshed successfully (channel=${row.account_name || row.id})`);
+      }
+
       return new Response(
         JSON.stringify({
           ok: pingStatus === "healthy",
