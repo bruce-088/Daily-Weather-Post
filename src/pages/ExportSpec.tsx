@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Download, FileText, Copy, Check, FileType, Share2, RefreshCw } from "lucide-react";
+import { ArrowLeft, Download, FileText, Copy, Check, FileType, Share2, RefreshCw, Zap, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MASTER_PROMPT } from "@/lib/masterPromptContent";
 import { SOCIAL_CONNECTIONS_PROMPT } from "@/lib/socialConnectionsPrompt";
 import { generateMasterPromptPdf } from "@/lib/masterPromptPdfGenerator";
+import { supabase } from "@/integrations/supabase/client";
 
 function downloadBlob(content: string, filename: string, type: string) {
   const blob = new Blob([content], { type });
