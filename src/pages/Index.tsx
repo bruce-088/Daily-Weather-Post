@@ -1073,13 +1073,21 @@ const Index = () => {
 
                   {/* Middle: Memory Bank */}
                   <div className="lg:col-span-5">
-                    <GrowthMemoryBank className="h-full" />
+                    <GrowthMemoryBank />
                   </div>
 
-                  {/* Right: AI insights + heatmap + smart insights */}
-                  <div className="lg:col-span-4 space-y-4">
+                  {/* Right: AI recommendation */}
+                  <div className="lg:col-span-4">
                     <AiInsightsCard />
+                  </div>
+                </div>
+
+                {/* Row 2: heatmap + smart insights */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                  <div className="lg:col-span-7">
                     <GrowthDashboard />
+                  </div>
+                  <div className="lg:col-span-5">
                     <SmartInsightsCard />
                   </div>
                 </div>
