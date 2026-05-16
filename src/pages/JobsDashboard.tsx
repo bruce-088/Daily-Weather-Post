@@ -128,8 +128,16 @@ export default function JobsDashboard() {
   const [selectedRoot, setSelectedRoot] = useState<string | null>(null);
   const [selectedLogs, setSelectedLogs] = useState<SystemLogRow[]>([]);
 
-  const loadJobs = async () => {
+  const loadJobs = async (opts?: { kick?: boolean }) => {
     setLoading(true);
+    // Optionally kick the worker so any due jobs advance before we re-fetch.
+    if (opts?.kick) {
+      try {
+        await supabase.functions.invoke("run-jobs", { body: { source: "dashboard_refresh" } });
+      } catch {
+        // non-fatal — still re-fetch
+      }
+    }
     let query = supabase
       .from("jobs" as any)
       .select("*")
