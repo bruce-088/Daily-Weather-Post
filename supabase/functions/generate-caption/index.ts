@@ -352,7 +352,8 @@ ${buildLocalIdentityBlock(city)}
 
 ${styleAddendum}${insightNote}`;
 
-    const systemPrompt = `${SKYBRIEF_SYSTEM_PROMPT}\n\n${LOCATION_ACCURACY_RULES}`;
+    const cityScopeDirective = `\n\nSTRICT CITY SCOPE: You are generating content EXCLUSIVELY for ${city}${body.state_or_region || body.stateOrRegion ? ", " + (body.state_or_region || body.stateOrRegion) : ""}. Do NOT mention any other city, region, or social handle. The ONLY @handle allowed is ${handle}. Never output @SkyBriefGNV, @SkyBriefMiami, @SkyBriefOrlando, @SkyBriefTampa or any other variant unless it exactly equals ${handle}. Do NOT include subscribe URLs for other channels.`;
+    const systemPrompt = `${SKYBRIEF_SYSTEM_PROMPT}\n\n${LOCATION_ACCURACY_RULES}${cityScopeDirective}`;
 
     const callModel = async (extraUserSuffix = "") => {
       const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
