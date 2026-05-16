@@ -193,17 +193,192 @@ Deno.serve(async (req) => {
     }
   }
 
+  // ====================================================================
+  // PHASE 1 — Per-post insight engine: performance_score + factors.
+  // Scores each post 0–100 vs the user's own 60d baseline and labels
+  // winning/losing factors. Updates post_analytics in batches.
+  // Min sample size: 5 posts per user (Phase 5 safeguard).
+  // ====================================================================
+
+  let scoredPosts = 0;
+  let scoredUsers = 0;
+  const memoryUpserts: any[] = [];
+
+  try {
+    // Pull full analytics rows (need id + retention + post_id + flags)
+    const { data: fullRows } = await supabase
+      .from("post_analytics")
+      .select("id, user_id, post_id, views, likes, comments, shares, tone, condition, time_of_day, has_voiceover, cinematic, hook_text, avg_percentage_viewed")
+      .gte("created_at", since);
+
+    const byUser = new Map<string, any[]>();
+    for (const r of (fullRows || []) as any[]) {
+      const arr = byUser.get(r.user_id) || [];
+      arr.push(r);
+      byUser.set(r.user_id, arr);
+    }
+
+    // Pull captions for ai_memory top-post seeding
+    const allPostIds = ((fullRows || []) as any[]).map((r) => r.post_id).filter(Boolean);
+    const captionByPost = new Map<string, { caption: string | null; city: string | null }>();
+    if (allPostIds.length > 0) {
+      for (let i = 0; i < allPostIds.length; i += 200) {
+        const chunk = allPostIds.slice(i, i + 200);
+        const { data: ph } = await supabase
+          .from("post_history")
+          .select("id, caption, city")
+          .in("id", chunk);
+        for (const p of (ph || []) as any[]) {
+          captionByPost.set(p.id, { caption: p.caption, city: p.city });
+        }
+      }
+    }
+
+    const updates: Array<{ id: string; performance_score: number; winning_factors: string[]; losing_factors: string[] }> = [];
+
+    for (const [userId, rows] of byUser.entries()) {
+      if (rows.length < 5) continue; // safeguard
+      scoredUsers += 1;
+
+      const avgViews = rows.reduce((s, r) => s + (r.views || 0), 0) / rows.length;
+      const avgEng = rows.reduce((s, r) => s + ((r.likes || 0) + (r.comments || 0) + (r.shares || 0)), 0) / rows.length;
+      const retentionRows = rows.filter((r) => typeof r.avg_percentage_viewed === "number" && r.avg_percentage_viewed > 0);
+      const avgRet = retentionRows.length
+        ? retentionRows.reduce((s, r) => s + (r.avg_percentage_viewed || 0), 0) / retentionRows.length
+        : 0;
+
+      // Per-factor baselines for tone/slot/condition/cinematic/voiceover/hook
+      const factorAvg = (key: "tone" | "time_of_day" | "condition" | "hook_text", value: string) => {
+        const matches = rows.filter((r) => (r[key] || "").toString().toLowerCase() === value.toLowerCase());
+        if (matches.length < 2) return null;
+        return matches.reduce((s, r) => s + (r.views || 0), 0) / matches.length;
+      };
+      const boolFactorAvg = (key: "cinematic" | "has_voiceover", value: boolean) => {
+        const matches = rows.filter((r) => !!r[key] === value);
+        if (matches.length < 2) return null;
+        return matches.reduce((s, r) => s + (r.views || 0), 0) / matches.length;
+      };
+
+      const topRowForMemory = { id: null as string | null, score: -1, caption: null as string | null, condition: null as string | null, tone: null as string | null, tod: null as string | null };
+
+      for (const r of rows) {
+        const viewRatio = avgViews > 0 ? (r.views || 0) / avgViews : 1;
+        const engVal = (r.likes || 0) + (r.comments || 0) + (r.shares || 0);
+        const engRatio = avgEng > 0 ? engVal / avgEng : 1;
+        const retVal = typeof r.avg_percentage_viewed === "number" ? r.avg_percentage_viewed : null;
+        const retRatio = retVal && avgRet > 0 ? retVal / avgRet : null;
+
+        // 50 / 30 / 20 weights; renormalize if retention is missing.
+        const wView = retRatio === null ? 0.625 : 0.5;
+        const wEng = retRatio === null ? 0.375 : 0.3;
+        const wRet = retRatio === null ? 0 : 0.2;
+        const blend = wView * viewRatio + wEng * engRatio + wRet * (retRatio ?? 0);
+        // ratio of 1.0 = baseline → 50; clamp blend to [0, 2]
+        const clamped = Math.max(0, Math.min(2, blend));
+        const performance_score = Math.round(clamped * 50);
+
+        // Factor labeling: ≥+15% wins, ≤−15% losers
+        const winning: string[] = [];
+        const losing: string[] = [];
+        const checkRatio = (label: string, ratio: number | null) => {
+          if (ratio === null) return;
+          if (ratio >= 1.15) winning.push(label);
+          else if (ratio <= 0.85) losing.push(label);
+        };
+
+        if (r.tone) {
+          const fa = factorAvg("tone", r.tone);
+          if (fa !== null && avgViews > 0) checkRatio(`tone:${r.tone}`, fa / avgViews);
+        }
+        if (r.time_of_day) {
+          const fa = factorAvg("time_of_day", r.time_of_day);
+          if (fa !== null && avgViews > 0) checkRatio(`slot:${r.time_of_day}`, fa / avgViews);
+        }
+        if (r.condition) {
+          const fa = factorAvg("condition", r.condition);
+          if (fa !== null && avgViews > 0) checkRatio(`condition:${r.condition}`, fa / avgViews);
+        }
+        if (r.hook_text) {
+          const fa = factorAvg("hook_text", r.hook_text);
+          if (fa !== null && avgViews > 0) checkRatio(`hook:${String(r.hook_text).slice(0, 60)}`, fa / avgViews);
+        }
+        if (r.cinematic === true || r.cinematic === false) {
+          const fa = boolFactorAvg("cinematic", true);
+          if (fa !== null && avgViews > 0 && r.cinematic === true) checkRatio("cinematic", fa / avgViews);
+        }
+        if (r.has_voiceover === true || r.has_voiceover === false) {
+          const fa = boolFactorAvg("has_voiceover", true);
+          if (fa !== null && avgViews > 0 && r.has_voiceover === true) checkRatio("voiceover", fa / avgViews);
+        }
+
+        updates.push({
+          id: r.id,
+          performance_score,
+          winning_factors: winning.slice(0, 6),
+          losing_factors: losing.slice(0, 6),
+        });
+        scoredPosts += 1;
+
+        // Track best post per user for ai_memory
+        if (performance_score > topRowForMemory.score && r.post_id) {
+          const ph = captionByPost.get(r.post_id);
+          if (ph?.caption) {
+            topRowForMemory.id = r.post_id;
+            topRowForMemory.score = performance_score;
+            topRowForMemory.caption = ph.caption;
+            topRowForMemory.condition = r.condition || null;
+            topRowForMemory.tone = r.tone || null;
+            topRowForMemory.tod = r.time_of_day || null;
+          }
+        }
+      }
+
+      if (topRowForMemory.id && topRowForMemory.score >= 70 && topRowForMemory.caption) {
+        memoryUpserts.push({
+          user_id: userId,
+          memory_type: "top_post",
+          content: String(topRowForMemory.caption).slice(0, 1200),
+          condition: topRowForMemory.condition,
+          voice_style: topRowForMemory.tone,
+          time_of_day: topRowForMemory.tod,
+          performance_score: topRowForMemory.score,
+          views: 0,
+        });
+      }
+    }
+
+    // Batch update post_analytics in chunks of 200 (one row at a time per Supabase JS;
+    // we use parallel batches via Promise.all to keep the function fast).
+    for (let i = 0; i < updates.length; i += 50) {
+      const batch = updates.slice(i, i + 50);
+      await Promise.all(batch.map((u) =>
+        supabase.from("post_analytics").update({
+          performance_score: u.performance_score,
+          winning_factors: u.winning_factors,
+          losing_factors: u.losing_factors,
+        }).eq("id", u.id)
+      ));
+    }
+
+    if (memoryUpserts.length > 0) {
+      const { error: memErr } = await supabase.from("ai_memory").insert(memoryUpserts);
+      if (memErr) console.warn("[analyze] ai_memory upsert failed:", memErr.message);
+    }
+  } catch (e) {
+    console.error("[analyze] phase-1 scoring failed:", e);
+  }
+
   await supabase.from("system_health").upsert({
     id: "analyze-performance",
     last_run_at: new Date().toISOString(),
     last_status: "ok",
-    last_message: `users=${userIds.length} insights=${inserted}`,
+    last_message: `users=${userIds.length} insights=${inserted} scored=${scoredPosts}`,
   });
 
-  console.log(`[analyze] done — users=${userIds.length} insights=${inserted}`);
+  console.log(`[analyze] done — users=${userIds.length} insights=${inserted} scored=${scoredPosts} (across ${scoredUsers} users) memories=${memoryUpserts.length}`);
 
   return new Response(
-    JSON.stringify({ users: userIds.length, insights: inserted, samples: all.length }),
+    JSON.stringify({ users: userIds.length, insights: inserted, samples: all.length, scored_posts: scoredPosts, scored_users: scoredUsers, memories_added: memoryUpserts.length }),
     { headers: { ...corsHeaders, "Content-Type": "application/json" } },
   );
 });
