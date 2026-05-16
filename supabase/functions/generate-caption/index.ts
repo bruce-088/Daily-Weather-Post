@@ -350,7 +350,11 @@ ${buildCityVisualBlock(city)}
 
 ${buildLocalIdentityBlock(city)}
 
-${styleAddendum}${insightNote}`;
+${styleAddendum}${insightNote}
+
+${slotPersonalityDirective(body.slot ?? period)}
+
+CTA ROTATION: For the final call-to-action line, use this exact CTA (or a close paraphrase): "${rotatingCTA(body.slot ?? period)}". Do not invent additional CTAs.${body.prev_opener ? `\n\nANTI-REPEAT: Do NOT reuse the opening hook, first-sentence structure, or CTA verb from the previous post for this city. Previous opener was: "${String(body.prev_opener).slice(0, 160)}". Use a noticeably different angle.` : ""}`;
 
     const cityScopeDirective = `\n\nSTRICT CITY SCOPE: You are generating content EXCLUSIVELY for ${city}${body.state_or_region || body.stateOrRegion ? ", " + (body.state_or_region || body.stateOrRegion) : ""}. Do NOT mention any other city, region, or social handle. The ONLY @handle allowed is ${handle}. Never output @SkyBriefGNV, @SkyBriefMiami, @SkyBriefOrlando, @SkyBriefTampa or any other variant unless it exactly equals ${handle}. Do NOT include subscribe URLs for other channels.`;
     const systemPrompt = `${SKYBRIEF_SYSTEM_PROMPT}\n\n${LOCATION_ACCURACY_RULES}${cityScopeDirective}`;
