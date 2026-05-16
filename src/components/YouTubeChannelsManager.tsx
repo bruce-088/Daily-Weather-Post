@@ -20,6 +20,7 @@ interface YTChannel {
   account_name: string | null;
   city_id: string | null;
   token_expires_at: string | null;
+  extra?: { health?: { status?: "healthy" | "expired" | "disconnected"; checked_at?: string } } | null;
 }
 
 interface CityRow { id: string; name: string; state: string | null }
