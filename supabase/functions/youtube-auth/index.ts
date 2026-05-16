@@ -338,6 +338,133 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Per-channel silent refresh used by the YouTube Channels Manager.
+    // Refreshes ONE social_accounts row using its own stored refresh_token,
+    // updates its access_token + expiry, then pings the channels API and
+    // writes the resulting health status back to social_accounts.extra.
+    if (action === "refresh_channel") {
+      const auth = await verifyUser(req);
+      if (auth.response) return auth.response;
+      const userId = auth.userId;
+      const channelRowId = body.channel_id as string | undefined;
+      if (!channelRowId) {
+        return new Response(
+          JSON.stringify({ error: "Missing channel_id" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      const { data: row, error: rowErr } = await supabaseAdmin
+        .from("social_accounts")
+        .select("id, user_id, refresh_token, account_name, extra")
+        .eq("id", channelRowId)
+        .eq("user_id", userId)
+        .eq("platform", "youtube")
+        .maybeSingle();
+
+      if (rowErr || !row) {
+        return new Response(
+          JSON.stringify({ ok: false, status: "not_found", error: "Channel not found" }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      if (!row.refresh_token) {
+        return new Response(
+          JSON.stringify({
+            ok: false,
+            status: "refresh_token_missing",
+            error: "No refresh token stored — reconnect required.",
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      const refreshRes = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: YOUTUBE_CLIENT_ID,
+          client_secret: YOUTUBE_CLIENT_SECRET,
+          grant_type: "refresh_token",
+          refresh_token: row.refresh_token,
+        }),
+      });
+      const refreshData = await refreshRes.json();
+
+      if (refreshData.error || !refreshData.access_token) {
+        // Mark disconnected/expired in extra.health for the UI
+        await supabaseAdmin
+          .from("social_accounts")
+          .update({
+            extra: {
+              ...((row.extra as Record<string, unknown>) || {}),
+              health: {
+                status: "expired",
+                http_status: 401,
+                checked_at: new Date().toISOString(),
+              },
+            },
+          })
+          .eq("id", row.id);
+        return new Response(
+          JSON.stringify({
+            ok: false,
+            status: "reauth_required",
+            error: refreshData.error_description || refreshData.error || "Refresh failed",
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      const expiresAt = new Date(Date.now() + refreshData.expires_in * 1000).toISOString();
+
+      // Verify the freshly issued access_token with a real API ping
+      let pingStatus: "healthy" | "expired" | "disconnected" = "healthy";
+      let pingHttp: number | null = null;
+      try {
+        const pingRes = await fetch(
+          "https://www.googleapis.com/youtube/v3/channels?part=id,snippet&mine=true",
+          { headers: { Authorization: `Bearer ${refreshData.access_token}` } },
+        );
+        pingHttp = pingRes.status;
+        if (pingRes.status === 200) pingStatus = "healthy";
+        else if (pingRes.status === 401 || pingRes.status === 403) pingStatus = "expired";
+        else pingStatus = "disconnected";
+      } catch {
+        pingStatus = "disconnected";
+      }
+
+      await supabaseAdmin
+        .from("social_accounts")
+        .update({
+          access_token: refreshData.access_token,
+          token_expires_at: expiresAt,
+          updated_at: new Date().toISOString(),
+          extra: {
+            ...((row.extra as Record<string, unknown>) || {}),
+            health: {
+              status: pingStatus,
+              http_status: pingHttp,
+              checked_at: new Date().toISOString(),
+            },
+          },
+        })
+        .eq("id", row.id);
+
+      return new Response(
+        JSON.stringify({
+          ok: pingStatus === "healthy",
+          status: pingStatus === "healthy" ? "refreshed" : "reauth_required",
+          channel_id: row.id,
+          token_expires_at: expiresAt,
+          ping_http: pingHttp,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     return new Response(
       JSON.stringify({ error: "Invalid action" }),
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
