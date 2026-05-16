@@ -1065,9 +1065,9 @@ const Index = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
                   {/* Left: stat cards only */}
-                  <div className="lg:col-span-3">
+                  <div className="lg:col-span-3 h-full">
                     <GrowthStatsCards stacked />
                   </div>
 
