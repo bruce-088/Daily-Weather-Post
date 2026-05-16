@@ -1972,6 +1972,7 @@ Deno.serve(async (req) => {
             error_message: `Pre-flight check failed: ${reason}`,
             last_attempt_at: new Date().toISOString(),
           }).eq("id", post.id);
+          await releaseLock();
           await supabase.from("system_logs").insert({
             user_id: post.user_id,
             type: "post_precheck_failed",
