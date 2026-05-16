@@ -3003,6 +3003,18 @@ Deno.serve(async (req) => {
             next_retry_at: nextRetryAt,
             last_attempt_at: new Date().toISOString(),
           }).eq("id", post.id);
+          // Release the publish lock so the retry can re-acquire it.
+          try {
+            if ((post as any).city_id) {
+              await supabase.rpc("release_publish_lock", {
+                p_user: post.user_id,
+                p_city_id: (post as any).city_id,
+                p_slot: (post as any).slot || "adhoc",
+                p_platform: post.platform,
+                p_tz: null,
+              });
+            }
+          } catch (_) { /* best-effort */ }
           await supabase.from("system_logs").insert({
             user_id: post.user_id,
             type: "post_retry_scheduled",
