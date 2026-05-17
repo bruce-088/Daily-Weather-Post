@@ -182,6 +182,14 @@ Rotated deterministically by \`(date + slot)\` index:
 - Secondary passes collapse double spaces and fix trailing spaces before punctuation.
 - Fully safe: it operates only on the finalized caption string and never modifies prompt logic, tone, CTA, or structural directives.
 
+### Local Voice Layer (Prompt Block)
+- A \`LOCAL VOICE\` block is appended to the caption user prompt alongside Diversity Guard, Focus Angle, and Personality.
+- **Voice rules**: avoid formal forecast phrasing ("conditions remain", "forecast indicates", "expect", "anticipate"); prefer casual openers ("Looks like…", "Feels like…", "Heads up…", "You might notice…"); use natural time references ("this afternoon", "later tonight", "heading into the evening").
+- **Micro-localization (opt-in, never forced)**: hot/humid → hydration, AC, pool weather; rain/storms → umbrella, wet commute, slick roads; clear/mild → great night to get outside, sunset, evening plans; cold/windy → layers, jacket weather.
+- **Opener variation**: do not always start with the city name — rotate weather-first, feeling-first, situation-first openers.
+- **Hard constraints preserved**: stays within current length limits, keeps the CTA line exactly as required by CTA ROTATION, does not change title / body / hashtag block structure.
+- Lives inside the existing fail-safe try/catch — any error silently drops the block.
+
 ### Background Variation (Pexels Ken-Burns fallback)
 - \`fetchPexelsStillForCondition()\` in \`_shared/video-render.ts\` now appends a random **secondary keyword** (\`foliage | architecture | horizon | aerial | street | skyline | trees | rooftop | park | downtown\`) and the **city name** to the condition-derived primary query.
 - Result pool widened from top 5 → top 10, then randomized. Identical conditions in different cities can no longer collide on the same stock photo.
@@ -227,7 +235,8 @@ const RESOLVED_ISSUES = `| Issue | Resolution |
 | Slot prefix inconsistency | Fixed via ensureSlotTitlePrefix in _shared/caption-style.ts — all sources now use single helper |
 | Analytics limited to "Top Performer" badges | Upgraded to Insight Engine: per-post performance_score + winning/losing factors, growth_insights pattern detection, PROVEN WINNERS feedback loop into generate-caption |
 | Gainesville posts repeating "Beautiful Day" hooks and styles | Added 48h per-city Creative Decay (80% weight penalty on overused hooks), FORBIDDEN REPETITIONS block, Diversity Guard, deterministic Focus Angle rotation, and Pexels secondary-keyword + city-scoped background variation |
-| AI captions producing awkward "in [Weather]" phrasing | Added `cleanWeatherPhrasing` regex cleaner in `generate-caption` final safety net — replaces "in Clear Skies/Rain/Wind/etc." with natural "with clear skies/rain/windy conditions" without hardcoded sentence replacements |`;
+| AI captions producing awkward "in [Weather]" phrasing | Added `cleanWeatherPhrasing` regex cleaner in `generate-caption` final safety net — replaces "in Clear Skies/Rain/Wind/etc." with natural "with clear skies/rain/windy conditions" without hardcoded sentence replacements |
+| Captions reading like formal forecasts ("conditions remain", "forecast indicates") | Added `LOCAL VOICE` prompt block: casual openers ("Looks like…", "Feels like…", "Heads up…"), natural time references, opt-in micro-localization (hydration/umbrella/sunset cues), and opener rotation away from city-name-first — all under hard constraints that preserve length, CTA, and structural blocks |`;
 
 const DEPLOYMENT = `- **Frontend**: React 18 + Vite + TypeScript + Tailwind (Lovable Cloud)
 - **Backend**: Managed Postgres + Serverless Edge Runtime (Supabase via Lovable Cloud)
