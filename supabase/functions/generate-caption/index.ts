@@ -446,6 +446,8 @@ ${diversityBlock}
 
 ${focusBlock}
 
+${localVoiceBlock}
+
 ${personalityBlock}
 
 ${ctaBlock}${antiRepeatBlock ? `\n\n${antiRepeatBlock}` : ""}`;
