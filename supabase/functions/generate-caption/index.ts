@@ -19,6 +19,27 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// --- Caption phrasing cleanup ---
+
+function cleanWeatherPhrasing(text: string): string {
+  return text
+    .replace(/\bin\s+(clear skies|rain|clouds|sunshine|snow|thunderstorms|fog|wind)\b/gi, (_m, p1) => {
+      const lower = String(p1).toLowerCase();
+      if (lower.includes("cloud")) return "with cloudy conditions";
+      if (lower.includes("rain")) return "with rain";
+      if (lower.includes("sun")) return "with sunshine";
+      if (lower.includes("snow")) return "with snow";
+      if (lower.includes("storm")) return "with storms";
+      if (lower.includes("fog")) return "with fog";
+      if (lower.includes("wind")) return "with windy conditions";
+      if (lower.includes("clear")) return "with clear skies";
+      return p1;
+    })
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+\./g, ".")
+    .trim();
+}
+
 // --- Dynamic Handle System ---
 
 const HANDLE_MAP: Record<string, string> = {
@@ -469,6 +490,7 @@ ${ctaBlock}${antiRepeatBlock ? `\n\n${antiRepeatBlock}` : ""}`;
 
     // Final safety net regardless of retry path
     caption = stripUnverifiedReferences(caption, city);
+    caption = cleanWeatherPhrasing(caption);
 
     // City-handle sanitizer: replace any @SkyBrief* token that doesn't match
     // the dynamic handle for this city. Prevents Orlando captions ending with
