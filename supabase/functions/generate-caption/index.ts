@@ -490,6 +490,7 @@ ${ctaBlock}${antiRepeatBlock ? `\n\n${antiRepeatBlock}` : ""}`;
 
     // Final safety net regardless of retry path
     caption = stripUnverifiedReferences(caption, city);
+    caption = cleanWeatherPhrasing(caption);
 
     // City-handle sanitizer: replace any @SkyBrief* token that doesn't match
     // the dynamic handle for this city. Prevents Orlando captions ending with
