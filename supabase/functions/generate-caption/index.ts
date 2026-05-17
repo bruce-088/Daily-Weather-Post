@@ -40,7 +40,13 @@ function cleanWeatherPhrasing(text: string): string {
     .trim();
 }
 
-// --- Dynamic Handle System ---
+function fixInvalidLocation(text: string, city: string): string {
+  if (!city) return text;
+  const escapedCity = city.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`\\bweather in (?!${escapedCity}\\b)[A-Za-z][A-Za-z\\s'-]{0,40}`, "gi");
+  return text.replace(re, `weather in ${city}`);
+}
+
 
 const HANDLE_MAP: Record<string, string> = {
   "Gainesville": "@SkyBriefGNV",
