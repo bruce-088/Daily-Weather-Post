@@ -361,9 +361,10 @@ Deno.serve(async (req) => {
     try {
       personalityBlock = slotPersonalityDirective(body.slot ?? period) || "";
       const _cta = rotatingCTA(body.slot ?? period);
+      const locationGuard = `CRITICAL: The phrase "weather in [X]" must ONLY use the actual city name (${city}). Never use style names, weather conditions, tone labels, or variation labels as a location.`;
       ctaBlock = _cta
-        ? `CTA ROTATION: For the final call-to-action line, use this exact CTA (or a close paraphrase): "${_cta}". Do not invent additional CTAs.`
-        : "";
+        ? `CTA ROTATION: For the final call-to-action line, use this exact CTA (or a close paraphrase): "${_cta}". Do not invent additional CTAs.\n${locationGuard}`
+        : locationGuard;
       if (body.prev_opener) {
         antiRepeatBlock = `ANTI-REPEAT: Do NOT reuse the opening hook, first-sentence structure, or CTA verb from the previous post for this city. Previous opener was: "${String(body.prev_opener).slice(0, 160)}". Use a noticeably different angle.`;
       }
