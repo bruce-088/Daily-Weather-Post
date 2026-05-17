@@ -40,6 +40,13 @@ function cleanWeatherPhrasing(text: string): string {
     .trim();
 }
 
+function fixInvalidLocation(text: string, city: string): string {
+  if (!city) return text;
+  const escapedCity = city.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`\\bweather in (?!${escapedCity}\\b)[A-Za-z][A-Za-z\\s'-]{0,40}`, "gi");
+  return text.replace(re, `weather in ${city}`);
+}
+
 // --- Dynamic Handle System ---
 
 const HANDLE_MAP: Record<string, string> = {
@@ -354,9 +361,10 @@ Deno.serve(async (req) => {
     try {
       personalityBlock = slotPersonalityDirective(body.slot ?? period) || "";
       const _cta = rotatingCTA(body.slot ?? period);
+      const locationGuard = `CRITICAL: The phrase "weather in [X]" must ONLY use the actual city name (${city}). Never use style names, weather conditions, tone labels, or variation labels as a location.`;
       ctaBlock = _cta
-        ? `CTA ROTATION: For the final call-to-action line, use this exact CTA (or a close paraphrase): "${_cta}". Do not invent additional CTAs.`
-        : "";
+        ? `CTA ROTATION: For the final call-to-action line, use this exact CTA (or a close paraphrase): "${_cta}". Do not invent additional CTAs.\n${locationGuard}`
+        : locationGuard;
       if (body.prev_opener) {
         antiRepeatBlock = `ANTI-REPEAT: Do NOT reuse the opening hook, first-sentence structure, or CTA verb from the previous post for this city. Previous opener was: "${String(body.prev_opener).slice(0, 160)}". Use a noticeably different angle.`;
       }
@@ -519,6 +527,7 @@ ${ctaBlock}${antiRepeatBlock ? `\n\n${antiRepeatBlock}` : ""}`;
     // Final safety net regardless of retry path
     caption = stripUnverifiedReferences(caption, city);
     caption = cleanWeatherPhrasing(caption);
+    caption = fixInvalidLocation(caption, city);
 
     // City-handle sanitizer: replace any @SkyBrief* token that doesn't match
     // the dynamic handle for this city. Prevents Orlando captions ending with

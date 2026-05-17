@@ -181,6 +181,8 @@ Rotated deterministically by \`(date + slot)\` index:
 - Fallback: if the pattern does not match a known condition, the original text is preserved.
 - Secondary passes collapse double spaces and fix trailing spaces before punctuation.
 - Fully safe: it operates only on the finalized caption string and never modifies prompt logic, tone, CTA, or structural directives.
+- A companion sanitizer `fixInvalidLocation` runs immediately after `cleanWeatherPhrasing`. It matches `\bweather in (?!<city>)[A-Za-z][A-Za-z\s'-]{0,40}` (city is regex-escaped) and rewrites the captured location back to the canonical city, fixing cases where the model substitutes a style/variation/tone label (e.g. "weather in But Comfortable") for the real city.
+- CTA prompt now carries a CRITICAL location guardrail: the phrase "weather in [X]" must only use the actual city name; style names, weather conditions, tone labels, and variation labels are forbidden as locations. The guardrail is appended to `ctaBlock` so it travels with every CTA rotation.
 
 ### Local Voice Layer (Prompt Block)
 - A \`LOCAL VOICE\` block is appended to the caption user prompt alongside Diversity Guard, Focus Angle, and Personality.
@@ -236,7 +238,8 @@ const RESOLVED_ISSUES = `| Issue | Resolution |
 | Analytics limited to "Top Performer" badges | Upgraded to Insight Engine: per-post performance_score + winning/losing factors, growth_insights pattern detection, PROVEN WINNERS feedback loop into generate-caption |
 | Gainesville posts repeating "Beautiful Day" hooks and styles | Added 48h per-city Creative Decay (80% weight penalty on overused hooks), FORBIDDEN REPETITIONS block, Diversity Guard, deterministic Focus Angle rotation, and Pexels secondary-keyword + city-scoped background variation |
 | AI captions producing awkward "in [Weather]" phrasing | Added `cleanWeatherPhrasing` regex cleaner in `generate-caption` final safety net — replaces "in Clear Skies/Rain/Wind/etc." with natural "with clear skies/rain/windy conditions" without hardcoded sentence replacements |
-| Captions reading like formal forecasts ("conditions remain", "forecast indicates") | Added `LOCAL VOICE` prompt block: casual openers ("Looks like…", "Feels like…", "Heads up…"), natural time references, opt-in micro-localization (hydration/umbrella/sunset cues), and opener rotation away from city-name-first — all under hard constraints that preserve length, CTA, and structural blocks |`;
+| Captions reading like formal forecasts ("conditions remain", "forecast indicates") | Added `LOCAL VOICE` prompt block: casual openers ("Looks like…", "Feels like…", "Heads up…"), natural time references, opt-in micro-localization (hydration/umbrella/sunset cues), and opener rotation away from city-name-first — all under hard constraints that preserve length, CTA, and structural blocks |
+| Style/variation labels appearing as locations in CTA (e.g. "weather in But Comfortable") | Added CRITICAL location guardrail to `ctaBlock` + post-generation `fixInvalidLocation` sanitizer that regex-rewrites any "weather in [non-city]" back to the canonical city name |`;
 
 const DEPLOYMENT = `- **Frontend**: React 18 + Vite + TypeScript + Tailwind (Lovable Cloud)
 - **Backend**: Managed Postgres + Serverless Edge Runtime (Supabase via Lovable Cloud)
