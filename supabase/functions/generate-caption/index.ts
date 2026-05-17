@@ -378,6 +378,30 @@ Deno.serve(async (req) => {
       const dayOfYear = Math.floor((now.getTime() - start.getTime()) / 86400000);
       const focus = focusPool[(cityHash + dayOfYear + slotIdx) % focusPool.length];
       focusBlock = `FOCUS ANGLE: Frame this post from a "${focus}" perspective. Do not default to a wide "beautiful day" overview.`;
+
+      localVoiceBlock = `LOCAL VOICE:
+Write like a local in ${city} speaking casually, not a weather report.
+- Avoid formal phrases like "conditions remain", "forecast indicates", "expect", "anticipate".
+- Prefer natural openers: "Looks like...", "Feels like...", "Heads up...", "You might notice...".
+- Reference time naturally: "this afternoon", "later tonight", "heading into the evening".
+- Conversational and slightly informal, still clear.
+
+MICRO-LOCALIZATION (only when it fits naturally — never force):
+- Hot/humid → hydration, AC, pool weather.
+- Rain/storms → umbrella, wet commute, slick roads.
+- Clear/mild → great night to get outside, sunset, evening plans.
+- Cold/windy → layers, jacket weather.
+
+OPENER VARIATION:
+Do NOT always start with the city name ("${city}..."). Rotate among:
+- Weather-first (e.g. "Clouds rolling in over ${city}...")
+- Feeling-first (e.g. "Feels like a slow afternoon...")
+- Situation-first (e.g. "Heads up if you're commuting home...")
+
+HARD CONSTRAINTS (do not override):
+- Keep within current length limits.
+- Keep the CTA line exactly as required by CTA ROTATION above.
+- Do not change title / body / hashtag block structure.`;
     } catch (err) {
       console.warn("Caption enhancement failed — falling back to default logic", err);
       personalityBlock = "";
@@ -385,6 +409,7 @@ Deno.serve(async (req) => {
       antiRepeatBlock = "";
       diversityBlock = "";
       focusBlock = "";
+      localVoiceBlock = "";
     }
 
     const userPrompt = `NOW USE THESE INPUTS TO WRITE TODAY'S CAPTION:
