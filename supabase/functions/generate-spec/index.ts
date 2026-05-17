@@ -181,6 +181,8 @@ Rotated deterministically by \`(date + slot)\` index:
 - Fallback: if the pattern does not match a known condition, the original text is preserved.
 - Secondary passes collapse double spaces and fix trailing spaces before punctuation.
 - Fully safe: it operates only on the finalized caption string and never modifies prompt logic, tone, CTA, or structural directives.
+- A companion sanitizer `fixInvalidLocation` runs immediately after `cleanWeatherPhrasing`. It matches `\bweather in (?!<city>)[A-Za-z][A-Za-z\s'-]{0,40}` (city is regex-escaped) and rewrites the captured location back to the canonical city, fixing cases where the model substitutes a style/variation/tone label (e.g. "weather in But Comfortable") for the real city.
+- CTA prompt now carries a CRITICAL location guardrail: the phrase "weather in [X]" must only use the actual city name; style names, weather conditions, tone labels, and variation labels are forbidden as locations. The guardrail is appended to `ctaBlock` so it travels with every CTA rotation.
 
 ### Local Voice Layer (Prompt Block)
 - A \`LOCAL VOICE\` block is appended to the caption user prompt alongside Diversity Guard, Focus Angle, and Personality.
