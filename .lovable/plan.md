@@ -1,56 +1,44 @@
-## Local Voice Layer for Captions
+## Fix Invalid Location Substitution in CTA
 
-Add a "LOCAL VOICE" block to the caption prompt so output sounds like a casual local, not a forecast. No structural, length, or CTA changes.
+Captions sometimes render style/variation labels (e.g. "But Comfortable") inside `weather in ___`. Fix with a prompt guardrail + a post-generation sanitizer. Pure prompt + string-fix change; structure/CTA shape untouched.
 
 ### File: `supabase/functions/generate-caption/index.ts`
 
-**1. Build a new prompt block (alongside `diversityBlock`, `focusBlock`, etc.) around line 379:**
+**1. Prompt guardrail (CTA section)**
+- The CTA constraints are added via `ctaBlock` around line 357 (after `rotatingCTA`). Append a critical-location line so the constraint travels with every CTA:
 
 ```ts
-const localVoiceBlock = `LOCAL VOICE:
-Write like a local in ${city} speaking casually, not a weather report.
-- Avoid formal phrases like "conditions remain", "forecast indicates", "expect", "anticipate".
-- Prefer natural openers: "Looks like...", "Feels like...", "Heads up...", "You might notice...".
-- Reference time naturally: "this afternoon", "later tonight", "heading into the evening".
-- Conversational and slightly informal, still clear.
-
-MICRO-LOCALIZATION (only when it fits naturally — never force):
-- Hot/humid → hydration, AC, pool weather.
-- Rain/storms → umbrella, wet commute, slick roads.
-- Clear/mild → great night to get outside, sunset, evening plans.
-- Cold/windy → layers, jacket weather.
-
-OPENER VARIATION:
-Do NOT always start with the city name ("${city}..."). Rotate among:
-- Weather-first ("Clouds rolling in over ${city}...")
-- Feeling-first ("Feels like a slow afternoon...")
-- Situation-first ("Heads up if you're commuting home...")
-
-HARD CONSTRAINTS (do not override):
-- Keep within current length limits.
-- Keep the CTA line exactly as required by CTA ROTATION above.
-- Do not change title / body / hashtag block structure.`;
+ctaBlock = _cta
+  ? `CTA ROTATION: For the final call-to-action line, use this exact CTA (or a close paraphrase): "${_cta}". Do not invent additional CTAs.\nCRITICAL: The phrase "weather in [X]" must ONLY use the actual city name (${city}). Never use style names, weather conditions, tone labels, or variation labels as a location.`
+  : `CRITICAL: The phrase "weather in [X]" must ONLY use the actual city name (${city}). Never use style names, weather conditions, tone labels, or variation labels as a location.`;
 ```
 
-Wrap in the existing try/catch so any failure leaves `localVoiceBlock = ""` (fail-safe parity with the other blocks).
-
-**2. Inject into `userPrompt` (around line 425), after `focusBlock` and before `personalityBlock`** so CTA rules still appear last and dominate:
+**2. Post-processing sanitizer**
+- Add helper near `cleanWeatherPhrasing` (top of file):
 
 ```ts
-${focusBlock}
+function fixInvalidLocation(text: string, city: string): string {
+  if (!city) return text;
+  const escapedCity = city.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // Replace "weather in <anything>" where <anything> is not already the city
+  const re = new RegExp(`\\bweather in (?!${escapedCity}\\b)[A-Za-z][A-Za-z\\s'-]{0,40}`, "gi");
+  return text.replace(re, `weather in ${city}`);
+}
+```
 
-${localVoiceBlock}
+- Invoke in the final safety net, right after `cleanWeatherPhrasing(caption)` (around current line 491):
 
-${personalityBlock}
-
-${ctaBlock}${antiRepeatBlock ? `\n\n${antiRepeatBlock}` : ""}`;
+```ts
+caption = cleanWeatherPhrasing(caption);
+caption = fixInvalidLocation(caption, city);
 ```
 
 ### Out of scope
-- No changes to `SKYBRIEF_SYSTEM_PROMPT`, `rotatingCTA`, structure rules, length caps, `cleanWeatherPhrasing`, or any other function.
-- No DB / schema / UI changes.
+- No changes to CTA rotation pool, structure blocks, length, tone, hashtags, system prompt, or other functions.
+- No DB/UI changes.
 
 ### Spec Delta (applied same turn after approval)
 Update `supabase/functions/generate-spec/index.ts`:
-- Add a "Local Voice Layer" subsection under `CAPTION_SYSTEM` describing the local voice rules, micro-localization triggers, opener rotation, and hard constraints (CTA + structure preserved).
-- Add a row to `RESOLVED_ISSUES` noting captions previously sounded like formal forecasts; now use casual local phrasing with optional lifestyle context.
+- Extend the **Phrasing Cleaner (Post-Generation)** subsection to mention `fixInvalidLocation` — regex `\bweather in (?!<city>)[A-Za-z…]+` rewrites bad substitutions back to the canonical city; runs after `cleanWeatherPhrasing` in the final safety net.
+- Note CTA prompt now carries a CRITICAL location guardrail forbidding style/condition/variation labels in `weather in ___`.
+- Add a `RESOLVED_ISSUES` row: "Style/variation labels appearing as locations in CTA (e.g. 'weather in But Comfortable') → fixed via CTA guardrail + `fixInvalidLocation` sanitizer."
