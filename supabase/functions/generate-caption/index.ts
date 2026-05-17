@@ -47,6 +47,7 @@ function fixInvalidLocation(text: string, city: string): string {
   return text.replace(re, `weather in ${city}`);
 }
 
+// --- Dynamic Handle System ---
 
 const HANDLE_MAP: Record<string, string> = {
   "Gainesville": "@SkyBriefGNV",
