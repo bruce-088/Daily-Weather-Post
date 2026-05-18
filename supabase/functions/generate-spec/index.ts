@@ -205,6 +205,12 @@ const ROUTING_GUARD = `Prevents cross-city content contamination (e.g., Gainesvi
 - Asserts that the city name in the post content matches the city assigned to the target channel.
 - If mismatch detected → job fails with \`ROUTING_VIOLATION\` error (does not publish).
 
+### City-Name Fallback (added)
+- If the strict \`social_accounts.city_id\` lookup returns no row, the resolver fetches the city's \`name\` from \`cities\` and searches the user's connected channels for one whose \`account_name\` contains the city name (case-insensitive).
+- On match: logs \`[routing] city_id lookup failed, falling back to city name match\` and uses that channel **without** mutating DB.
+- On miss: logs \`[routing] ROUTING_VIOLATION\` and aborts publish (existing behavior preserved).
+- Applied in both \`_shared/youtube-adapter.ts\` (\`getValidToken\`) and the hard city-isolation gate in \`process-scheduled-posts\`. Shared helper: \`matchAccountByCityName\` in \`_shared/city-accounts.ts\`.
+
 ### Template Isolation
 - All template variables (city name, channel handle, subscribe URLs, state name) are cleared and reset for every generation cycle.
 - AI prompt explicitly scoped to the target city: "You are writing for the [CITY] channel only."`;
