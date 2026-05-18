@@ -60,23 +60,26 @@ function fixInvalidLocation(text: string, city: string): string {
   return text.replace(weatherRe, `weather in ${city}`).replace(dailyRe, `daily ${city} weather alerts`);
 }
 
-// Hardcoded "no-fly zone" sanitizer — runs as the final step of the cleanup
-// chain. Forces any known style/variation label out of location slots like
-// "weather in X" or "daily X weather alerts". Patterns are fixed literals.
+// Strict whitelist sanitizer — runs as the final step of the cleanup chain.
+// Positive-match: anything in the "weather in ___" or "daily ___ weather alerts"
+// slots that isn't exactly ${city} gets rewritten to ${city}. Catches any
+// hallucinated label (style names, tone labels, "Weather Update", etc.) without
+// maintaining a blacklist.
 function forceCitySanity(text: string, city: string): string {
   if (!city) return text;
-  const badPatterns = ["Coming Up", "But Comfortable", "Clear Skies", "Rain", "Clouds", "Ahead"];
+  const escapedCity = city.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+  // Regex 1: any word(s) between "weather in " and end of sentence/line
+  // that is NOT exactly the city name.
+  const weatherInRegex = new RegExp(`weather in (?!${escapedCity}\\b)[^.!\\n]+`, "gi");
+
+  // Regex 2: any word(s) between "daily " and " weather alerts"
+  // that is NOT exactly the city name.
+  const alertsRegex = new RegExp(`daily (?!${escapedCity}\\b)[^.!\\n]+?(?= weather alerts)`, "gi");
+
   let cleaned = text;
-  for (const pattern of badPatterns) {
-    cleaned = cleaned.replace(
-      new RegExp(`weather in ${pattern}\\b`, "gi"),
-      `weather in ${city}`,
-    );
-    cleaned = cleaned.replace(
-      new RegExp(`daily ${pattern} weather alerts`, "gi"),
-      `daily ${city} weather alerts`,
-    );
-  }
+  cleaned = cleaned.replace(weatherInRegex, `weather in ${city}`);
+  cleaned = cleaned.replace(alertsRegex, `daily ${city}`);
   return cleaned;
 }
 
