@@ -64,10 +64,30 @@ export class YouTubeAdapter implements PlatformAdapter {
     // shared/legacy channel is exactly how Gainesville posts ended up on the
     // Orlando channel.
     if (!account && cityId && channels.length >= 1) {
-      const names = channels.map((c: any) => c.account_name || "channel").join(", ");
-      throw new Error(
-        `[ROUTING_VIOLATION] No YouTube channel mapped to city_id=${cityId}. Open Settings → City → Account Routing and assign one of your connected channels (${names}) to this city.`,
-      );
+      // Name-based fallback: if a channel's account_name contains the city's
+      // name (e.g. "Orlando Weather" for Orlando), accept it without mutating DB.
+      let cityName: string | null = null;
+      try {
+        const { data: cityRow } = await supabase
+          .from("cities")
+          .select("name")
+          .eq("id", cityId)
+          .maybeSingle();
+        cityName = cityRow?.name ?? null;
+      } catch (_) { /* ignore */ }
+      const nameMatch = matchAccountByCityName(channels, cityName);
+      if (nameMatch) {
+        console.log(
+          `[routing] city_id lookup failed, falling back to city name match (cityId=${cityId}, cityName=${cityName}, matched=${nameMatch.account_name})`,
+        );
+        account = nameMatch;
+      } else {
+        const names = channels.map((c: any) => c.account_name || "channel").join(", ");
+        console.error(`[routing] ROUTING_VIOLATION no YouTube channel for city_id=${cityId} (cityName=${cityName})`);
+        throw new Error(
+          `[ROUTING_VIOLATION] No YouTube channel mapped to city_id=${cityId}. Open Settings → City → Account Routing and assign one of your connected channels (${names}) to this city.`,
+        );
+      }
     }
 
     if (!account) {
