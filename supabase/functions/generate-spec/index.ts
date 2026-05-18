@@ -177,7 +177,7 @@ Rotated deterministically by \`(date + slot)\` index:
 
 ### Phrasing Cleaner (Post-Generation)
 - A lightweight regex-based cleaner (\`cleanWeatherPhrasing\`) runs in the final safety net after \`stripUnverifiedReferences\` and before timestamp stamping.
-- Pattern: `\bin\s+(clear skies|rain|clouds|sunshine|snow|thunderstorms|fog|wind)\b` is rewritten to use natural phrasing (e.g., "in Clear Skies" → "with clear skies", "in Rain" → "with rain", "in Wind" → "with windy conditions").
+- Pattern: \`\bin\s+(clear skies|rain|clouds|sunshine|snow|thunderstorms|fog|wind)\b\` is rewritten to use natural phrasing (e.g., "in Clear Skies" → "with clear skies", "in Rain" → "with rain", "in Wind" → "with windy conditions").
 - Fallback: if the pattern does not match a known condition, the original text is preserved.
 - Secondary passes collapse double spaces and fix trailing spaces before punctuation.
 - Fully safe: it operates only on the finalized caption string and never modifies prompt logic, tone, CTA, or structural directives.
