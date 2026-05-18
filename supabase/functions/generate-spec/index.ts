@@ -164,8 +164,17 @@ Rotated deterministically by \`(date + slot)\` index:
 - \`buildLearningPromptBlock()\` in \`_shared/learning-patterns.ts\` injects a **PROVEN WINNERS** block into the prompt.
 - Sources: top \`winning_factors\` themes from high-scoring \`post_analytics\` rows + 1 few-shot example from \`ai_memory\` (\`memory_type='top_post'\`).
 - Safeguards: minimum sample size ≥5 posts per user (and ≥3 per pattern) before patterns are applied.
-- Variation preserved: 70/30 exploit/explore ratio; explicit instruction to vary opener and structure.
+- Variation preserved: dynamic exploit ratio — default 70/30 exploit/explore, but auto-shifts to **80/20** when \`winningThemes\` contains an "Action Hooks"/"Action Titles" entry OR \`provenWins\` has a \`hook_type\` row with \`winRate ≥ 0.6\`. When that trigger fires the prompt also appends an \`ACTION DOMINANCE\` line instructing the model to use an action hook in 4 of every 5 posts.
 - Fully fail-safe: wrapped in try/catch — falls back to base generation if learning context is unavailable.
+
+### Hook Aggression Layer (Growth Phase 1)
+- A \`HOOK AGGRESSION LAYER\` block is appended to the caption user prompt alongside Diversity Guard, Focus Angle, Local Voice, and Personality.
+- **First-sentence rule**: the opening sentence MUST be an INSTRUCTIONAL hook (action verb: "Grab…", "Crank…", "Layer up…") or a SITUATIONAL hook ("If you're heading to…", "Heads up if you're…"). Data reporting is explicitly demoted below human relatability.
+- **Heat action trigger**: when \`afternoon_temp > 88°F\` OR \`feels_like / heat_index > 95°F\`, injects a directive forcing a high-intensity heat-action hook (tone of "Crank the AC", "Pool day is on", "Hydrate early", "Find shade by noon").
+- **Cold action trigger**: when \`afternoon_temp < 40°F\`, injects the cold counterpart (tone of "Layer up", "Warm the car early", "Bundle the kids").
+- **Curiosity Gap**: when morning and evening differ ≥10°F OR fall into different condition families (storm / rain / snow / cloud / clear / fog), the directive forces the template "Don't let the [morning weather] fool you, [evening weather] is coming." Used at most once per caption; offered as optional otherwise.
+- **Landmark Context Injection**: instructs the model to place ONE landmark from the VERIFIED LANDMARKS block into the first 3 seconds using the pattern "If you're heading to [Landmark] today, heads up — …". One landmark max; landmark invention forbidden.
+- Lives inside the existing fail-safe try/catch — any error silently drops the block.
 
 ### Creative Decay & Diversity Guard
 - **Per-city tiered cooldown** (\`getTopPerformingPatterns\` in \`_shared/learning-patterns.ts\`): queries the last 48h of \`post_history\` for \`(user_id, city)\` and counts normalized hook reuse. Weight multipliers: 1 use → ×1.0 (no penalty), 2 uses → ×0.6 (−40%), 3+ uses → ×0.2 (−80%) applied to \`avg_views\` before \`topHooks\` is sliced.
