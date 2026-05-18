@@ -306,13 +306,25 @@ export function buildLearningPromptBlock(p: TopPatterns): string {
   const hasAllowed = (p.recentlyUsedAllowed?.length ?? 0) > 0;
   if (p.topHooks.length === 0 && p.conditionLifts.length === 0 && !hasForbidden && !hasAllowed) return "";
 
-  const explore = Math.random() < 0.3;
+  // Growth Phase 1: dynamic exploit ratio when Action Hooks/Titles are winning.
+  const actionWinning =
+    (p.winningThemes ?? []).some((t) =>
+      /action\s+(hooks?|titles?)/i.test(String(t.label ?? "")),
+    ) ||
+    (p.provenWins ?? []).some(
+      (w) => String(w.variable) === "hook_type" && Number(w.winRate) >= 0.6,
+    );
+  const exploreThreshold = actionWinning ? 0.2 : 0.3;
+  const explore = Math.random() < exploreThreshold;
   const lines: string[] = ["", "PERFORMANCE LEARNING LOOP:"];
 
   if (explore) {
     lines.push("MODE: EXPLORATION — try a fresh angle today. Invent a new opener that still feels on-brand. Do NOT lean on the proven hook list verbatim.");
   } else {
     lines.push("MODE: EXPLOITATION — favor proven high-performing patterns.");
+    if (actionWinning) {
+      lines.push('ACTION DOMINANCE: Action hooks/titles win in your analytics — use one in 4 of every 5 posts.');
+    }
     if (p.topHooks.length > 0) {
       lines.push("Favor hooks similar to:");
       for (const h of p.topHooks) lines.push(`  - ${h}`);

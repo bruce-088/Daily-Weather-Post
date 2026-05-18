@@ -395,6 +395,7 @@ Deno.serve(async (req) => {
     let diversityBlock = "";
     let focusBlock = "";
     let localVoiceBlock = "";
+    let hookAggressionBlock = "";
     try {
       personalityBlock = slotPersonalityDirective(body.slot ?? period) || "";
       const _cta = rotatingCTA(body.slot ?? period);
@@ -447,6 +448,60 @@ HARD CONSTRAINTS (do not override):
 - Keep within current length limits.
 - Keep the CTA line exactly as required by CTA ROTATION above.
 - Do not change title / body / hashtag block structure.`;
+
+      // ── Growth Phase 1: Hook Aggression Layer ──
+      const haHighTemp = Number(body.afternoon_temp ?? body.afternoonTemp ?? body.temperature ?? 0);
+      const haMornTemp = Number(body.morning_temp ?? body.morningTemp ?? 0);
+      const haEveTemp = Number(body.evening_temp ?? body.eveningTemp ?? 0);
+      const haFeels = Number(body.feels_like ?? body.feelsLike ?? body.heat_index ?? body.heatIndex ?? 0);
+      const haMornCond = String(body.morning_condition ?? body.morningCondition ?? "").toLowerCase();
+      const haEveCond = String(body.evening_condition ?? body.eveningCondition ?? "").toLowerCase();
+
+      const condFamily = (c: string) => {
+        if (!c) return "";
+        if (c.includes("storm") || c.includes("thunder")) return "storm";
+        if (c.includes("rain") || c.includes("shower") || c.includes("drizzle")) return "rain";
+        if (c.includes("snow") || c.includes("sleet") || c.includes("flurr")) return "snow";
+        if (c.includes("cloud") || c.includes("overcast")) return "cloud";
+        if (c.includes("clear") || c.includes("sun")) return "clear";
+        if (c.includes("fog") || c.includes("mist") || c.includes("haze")) return "fog";
+        return c.split(/\s+/)[0] || "";
+      };
+      const haSwing = Math.abs(haEveTemp - haMornTemp) >= 10;
+      const haFamilyShift =
+        haMornCond && haEveCond && condFamily(haMornCond) !== condFamily(haEveCond);
+      const haCuriosityTrigger = haSwing || haFamilyShift;
+
+      const haParts: string[] = [
+        "HOOK AGGRESSION LAYER (Growth Phase 1):",
+        "- FIRST SENTENCE RULE: The opening sentence MUST be an INSTRUCTIONAL hook (lead with an action verb: \"Grab…\", \"Crank…\", \"Layer up…\") or a SITUATIONAL hook (\"If you're heading to…\", \"Heads up if you're…\"). Do NOT open with a data report. Human relatability outranks data reporting.",
+      ];
+
+      if (haHighTemp > 88 || haFeels > 95) {
+        haParts.push(
+          'HEAT ACTION REQUIRED: Open with a high-intensity action hook. Pick the tone of one of: "Crank the AC", "Pool day is on", "Hydrate early", "Find shade by noon". Do not copy verbatim — adapt to today\'s exact reading.',
+        );
+      } else if (haHighTemp > 0 && haHighTemp < 40) {
+        haParts.push(
+          'COLD ACTION REQUIRED: Open with a high-intensity action hook. Pick the tone of one of: "Layer up", "Warm the car early", "Bundle the kids". Adapt — do not copy verbatim.',
+        );
+      }
+
+      if (haCuriosityTrigger) {
+        haParts.push(
+          `CURIOSITY GAP REQUIRED: Morning and evening diverge meaningfully today. Use this pattern once (paraphrased to fit the actual data): "Don't let the [morning weather] fool you, [evening weather] is coming." Use at most once.`,
+        );
+      } else {
+        haParts.push(
+          `CURIOSITY GAP (optional): If morning and evening conditions differ, you may use once: "Don't let the [morning weather] fool you, [evening weather] is coming."`,
+        );
+      }
+
+      haParts.push(
+        `LANDMARK CONTEXT INJECTION: When natural, place ONE landmark from VERIFIED LANDMARKS above into the first 3 seconds using the pattern: "If you're heading to [Landmark] today, heads up — …". One landmark max per caption. Never invent a landmark.`,
+      );
+
+      hookAggressionBlock = haParts.join("\n");
     } catch (err) {
       console.warn("Caption enhancement failed — falling back to default logic", err);
       personalityBlock = "";
@@ -455,6 +510,7 @@ HARD CONSTRAINTS (do not override):
       diversityBlock = "";
       focusBlock = "";
       localVoiceBlock = "";
+      hookAggressionBlock = "";
     }
 
     const userPrompt = `NOW USE THESE INPUTS TO WRITE TODAY'S CAPTION:
@@ -486,6 +542,8 @@ ${buildCityVisualBlock(city)}
 ${buildLocalIdentityBlock(city)}
 
 ${styleAddendum}${insightNote}
+
+${hookAggressionBlock}
 
 ${diversityBlock}
 
