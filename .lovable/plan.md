@@ -1,39 +1,61 @@
-## Block style/variation labels from appearing as locations in CTA & hashtags
+## Goal
+Resolve `[ROUTING_VIOLATION] No youtube account for city_id=...` errors when a channel exists for the city but is not linked via `social_accounts.city_id`. Add a **name-based fallback** lookup before declaring a routing violation. No DB changes.
 
-Adds a hardcoded "no-fly zone" sanitizer on top of the existing `fixInvalidLocation` guard, plus a stronger CTA prompt instruction.
+## Root Cause
+Two routing checks rely strictly on `social_accounts.city_id` equality:
+1. `supabase/functions/_shared/youtube-adapter.ts` (lines 57–70) — `getValidToken`
+2. `supabase/functions/process-scheduled-posts/index.ts` (lines 1756–1803) — hard city-isolation gate
 
-### Changes in `supabase/functions/generate-caption/index.ts`
+If a YouTube account row was connected before the city mapping was assigned (or was assigned to a stale `city_id`), the strict `city_id` equality returns null and we throw `ROUTING_VIOLATION` — even when the channel's `account_name` clearly corresponds to the post's city (e.g. an "Orlando Weather" channel for an Orlando post).
 
-**1. New helper `forceCitySanity(text, city)`** (added next to `fixInvalidLocation`, ~line 43):
+## Fix (routing-only, no DB writes)
+
+### 1. `supabase/functions/_shared/youtube-adapter.ts`
+Inside `getValidToken`, after the strict `city_id` match fails and before throwing `ROUTING_VIOLATION`:
+
+- Look up the city's `name` from `cities` by `cityId`.
+- If found, search the user's YouTube `channels` for one whose `account_name` contains the city name (case-insensitive, word-boundary safe).
+- If a match is found:
+  - `console.log("[routing] city_id lookup failed, falling back to city name match", { cityId, cityName, matched: account.account_name })`
+  - Use that account (do NOT mutate DB).
+- Only if name fallback also fails:
+  - `console.error("[routing] ROUTING_VIOLATION ...")` and throw the existing error (current behavior preserved).
+
+### 2. `supabase/functions/process-scheduled-posts/index.ts` (HARD CITY ISOLATION block, ~L1756)
+Mirror the same fallback before the `wrong`-account branch fires:
+
+- After the initial `acct` lookup returns null, fetch `post.city` (already on `post`) and the user's full set of `social_accounts` for `post.platform`.
+- If any row's `account_name` contains `post.city` (case-insensitive), accept it as the resolved account:
+  - `console.log("[routing] city_id lookup failed, falling back to city name match", ...)`
+  - Skip the `wrong`/`BLOCKED` branches and let publishing proceed (the adapter will independently resolve the same way).
+- Only when both `city_id` and name-based lookups fail do we keep current `ROUTING_VIOLATION` / `BLOCKED` behavior (log + fail post + notify user).
+
+### 3. Helper (optional, internal only)
+Add a tiny shared helper in `supabase/functions/_shared/city-accounts.ts`:
 
 ```ts
-function forceCitySanity(text: string, city: string): string {
-  if (!city) return text;
-  const badPatterns = ["Coming Up", "But Comfortable", "Clear Skies", "Rain", "Clouds", "Ahead"];
-  let cleaned = text;
-  badPatterns.forEach((pattern) => {
-    cleaned = cleaned.replace(new RegExp(`weather in ${pattern}\\b`, "gi"), `weather in ${city}`);
-    cleaned = cleaned.replace(new RegExp(`daily ${pattern} weather alerts`, "gi"), `daily ${city} weather alerts`);
-  });
-  return cleaned;
+export function matchAccountByCityName(
+  accounts: Array<{ account_name?: string | null }>,
+  cityName?: string | null,
+) {
+  if (!cityName) return null;
+  const needle = cityName.trim().toLowerCase();
+  if (!needle) return null;
+  return accounts.find((a) =>
+    (a.account_name || "").toLowerCase().includes(needle)
+  ) ?? null;
 }
 ```
 
-Note: `pattern` strings here are fixed literals (no user input), so a regex-escape pass isn't required, but I'll wrap them in `\b` boundaries where useful to avoid partial matches.
+Both call sites use this helper to keep behavior consistent.
 
-**2. CTA prompt guard** (append to `ctaBlock` around line 365, alongside the existing CRITICAL line):
-> "In the CTA block, the only valid location is `${city}`. Do NOT use any style name, variation label, or weather condition (e.g. 'Coming Up', 'But Comfortable', 'Clear Skies') as a location. `weather in ___` and `daily ___ weather alerts` must always use `${city}`."
+## Out of Scope
+- No DB migrations.
+- No automatic backfill of `social_accounts.city_id` (logs make the mismatch visible; user can fix in Settings → Account Routing).
+- No changes to TikTok / Instagram / LinkedIn / Twitter adapters (problem reported only on YouTube; same pattern can be applied later if needed).
+- No spec doc edits unless you want them — I can add a `RESOLVED_ISSUES` row to `generate-spec/index.ts` if desired.
 
-**3. Wire into cleanup chain** (after line 530, final step before returning):
-```ts
-caption = forceCitySanity(caption, city);
-```
-
-Order becomes: `cleanWeatherPhrasing` → `fixInvalidLocation` → `forceCitySanity`.
-
-### Spec delta in `supabase/functions/generate-spec/index.ts`
-- Extend the **Phrasing Cleaner (Post-Generation)** subsection to document `forceCitySanity` as the final hardcoded no-fly-zone pass covering both `weather in <bad>` and `daily <bad> weather alerts`, listing the blocked patterns.
-- Add a `RESOLVED_ISSUES` row: "Style/variation labels leaking into hashtag-style 'daily X weather alerts' phrasing".
-
-### Out of scope
-No changes to CTA structure, hashtags content, length limits, system prompt, or other functions.
+## Files Touched
+- `supabase/functions/_shared/youtube-adapter.ts`
+- `supabase/functions/process-scheduled-posts/index.ts`
+- `supabase/functions/_shared/city-accounts.ts` (add helper only)
