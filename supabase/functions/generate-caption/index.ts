@@ -1,7 +1,14 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { verifyUser } from "../_shared/auth-helpers.ts";
-import { buildStyleAddendum, normalizeTone, getCityLocalStamp, slotDisplayLabel, slotPersonalityDirective, rotatingCTA } from "../_shared/caption-style.ts";
+import {
+  buildStyleAddendum,
+  normalizeTone,
+  getCityLocalStamp,
+  slotDisplayLabel,
+  slotPersonalityDirective,
+  rotatingCTA,
+} from "../_shared/caption-style.ts";
 import {
   LOCATION_ACCURACY_RULES,
   buildVerifiedLandmarksBlock,
@@ -43,17 +50,23 @@ function cleanWeatherPhrasing(text: string): string {
 function fixInvalidLocation(text: string, city: string): string {
   if (!city) return text;
   const escapedCity = city.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const re = new RegExp(`\\bweather in (?!${escapedCity}\\b)[A-Za-z][A-Za-z\\s'-]{0,40}`, "gi");
-  return text.replace(re, `weather in ${city}`);
+
+  // Fix: "weather in [Wrong]" -> "weather in [City]"
+  const weatherRe = new RegExp(`\\bweather in (?!${escapedCity}\\b)[A-Za-z][A-Za-z\\s'-]{0,40}`, "gi");
+
+  // Fix: "daily [Wrong] weather alerts" -> "daily [City] weather alerts"
+  const dailyRe = new RegExp(`\\bdaily (?!${escapedCity}\\b)[A-Za-z][A-Za-z\\s'-]{0,40} weather alerts`, "gi");
+
+  return text.replace(weatherRe, `weather in ${city}`).replace(dailyRe, `daily ${city} weather alerts`);
 }
 
 // --- Dynamic Handle System ---
 
 const HANDLE_MAP: Record<string, string> = {
-  "Gainesville": "@SkyBriefGNV",
-  "Miami": "@SkyBriefMiami",
-  "Orlando": "@SkyBriefOrlando",
-  "Tampa": "@SkyBriefTampa",
+  Gainesville: "@SkyBriefGNV",
+  Miami: "@SkyBriefMiami",
+  Orlando: "@SkyBriefOrlando",
+  Tampa: "@SkyBriefTampa",
 };
 
 function getDynamicHandle(city: string): string {
@@ -210,8 +223,8 @@ Deno.serve(async (req) => {
       styleStr === "minimal"
         ? "\n\nSTYLE: MINIMAL. Strip back. Shorter lines, fewer words, no emojis, no decorative phrasing. Prioritize ruthless clarity."
         : styleStr === "cinematic"
-        ? "\n\nSTYLE: CINEMATIC. Slightly more dramatic and evocative language. Use one strong opening line that paints the sky. Still concise; up to 2 weather emojis allowed."
-        : "";
+          ? "\n\nSTYLE: CINEMATIC. Slightly more dramatic and evocative language. Use one strong opening line that paints the sky. Still concise; up to 2 weather emojis allowed."
+          : "";
 
     const variation = !!body.variation;
     const variationNote = variation
@@ -224,7 +237,12 @@ Deno.serve(async (req) => {
     const highTemp = Number(body.afternoon_temp ?? body.afternoonTemp ?? body.temperature ?? 0);
     const lowTemp = Number(body.morning_temp ?? body.morningTemp ?? highTemp);
     const conditions = String(
-      body.condition ?? body.afternoon_condition ?? body.afternoonCondition ?? body.morning_condition ?? body.morningCondition ?? "",
+      body.condition ??
+        body.afternoon_condition ??
+        body.afternoonCondition ??
+        body.morning_condition ??
+        body.morningCondition ??
+        "",
     );
     const styleAddendum = buildStyleAddendum({
       tone,
@@ -242,10 +260,7 @@ Deno.serve(async (req) => {
     let insightNote = "";
     let aiOptimized = false;
     try {
-      const svc = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-      );
+      const svc = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
       const { data: settingsRow } = await svc
         .from("weather_settings")
         .select("use_performance_learning")
@@ -254,10 +269,7 @@ Deno.serve(async (req) => {
       const learningOn = (settingsRow as any)?.use_performance_learning !== false;
       if (learningOn) {
         const hourLocal = new Date().getHours();
-        const tod =
-          hourLocal < 11 ? "morning" :
-          hourLocal < 16 ? "afternoon" :
-          hourLocal < 21 ? "evening" : "night";
+        const tod = hourLocal < 11 ? "morning" : hourLocal < 16 ? "afternoon" : hourLocal < 21 ? "evening" : "night";
         const condKey = (conditions || "").toLowerCase().split(/[,;]/)[0]?.trim();
         if (condKey) {
           const { data: ins } = await svc
@@ -272,7 +284,9 @@ Deno.serve(async (req) => {
           if (top && (top as any).sample_size >= 3) {
             aiOptimized = true;
             const deltaTxt = (top as any).delta_pct ? ` (+${Math.round((top as any).delta_pct)}% vs your avg)` : "";
-            const hookTxt = (top as any).top_hook ? `\nA past high-performing opener for this pattern: "${(top as any).top_hook}". Use it as inspiration only — do not copy verbatim.` : "";
+            const hookTxt = (top as any).top_hook
+              ? `\nA past high-performing opener for this pattern: "${(top as any).top_hook}". Use it as inspiration only — do not copy verbatim.`
+              : "";
             insightNote = `\n\nPERFORMANCE LEARNING: Your past ${condKey} posts at ${tod} perform best with a ${(top as any).tone.toUpperCase()} tone${deltaTxt}. Lean into that voice.${hookTxt}`;
           }
         }
@@ -319,9 +333,7 @@ Deno.serve(async (req) => {
         try {
           const hourLocal2 = new Date().getHours();
           const tod2 =
-            hourLocal2 < 11 ? "morning" :
-            hourLocal2 < 16 ? "afternoon" :
-            hourLocal2 < 21 ? "evening" : "night";
+            hourLocal2 < 11 ? "morning" : hourLocal2 < 16 ? "afternoon" : hourLocal2 < 21 ? "evening" : "night";
           const condKey2 = (conditions || "").toLowerCase().split(/[,;]/)[0]?.trim() || null;
           const memories = await getRelevantMemories(svc, auth.userId, condKey2, tod2);
           console.log("AI memory injected:", memories.length);
@@ -341,7 +353,9 @@ Deno.serve(async (req) => {
           const recipe = await getWinningStyleForCondition(svc, auth.userId, condForRecipe, city);
           insightNote += formatRecipeDirective(recipe);
           aiOptimized = true;
-          console.log(`[generate-caption] 🎯 recipe (${recipe.source}, Δ${recipe.delta_pct}%): ${recipe.visual_style}/${recipe.voice_tone}/${recipe.hook_type}`);
+          console.log(
+            `[generate-caption] 🎯 recipe (${recipe.source}, Δ${recipe.delta_pct}%): ${recipe.visual_style}/${recipe.voice_tone}/${recipe.hook_type}`,
+          );
         } catch (e) {
           console.warn("[generate-caption] winning-recipe lookup failed:", e);
         }
@@ -485,15 +499,15 @@ ${ctaBlock}${antiRepeatBlock ? `\n\n${antiRepeatBlock}` : ""}`;
 
     if (!response.ok) {
       if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Rate limit exceeded. Please try again later." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }), {
+          status: 429,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
       if (response.status === 402) {
         return new Response(
           JSON.stringify({ error: "AI credits exhausted. Please add funds in your workspace settings." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
       const errorText = await response.text();
@@ -528,7 +542,7 @@ ${ctaBlock}${antiRepeatBlock ? `\n\n${antiRepeatBlock}` : ""}`;
     caption = stripUnverifiedReferences(caption, city);
     caption = cleanWeatherPhrasing(caption);
     caption = fixInvalidLocation(caption, city);
-
+    caption = forceCitySanity(caption, city);
     // City-handle sanitizer: replace any @SkyBrief* token that doesn't match
     // the dynamic handle for this city. Prevents Orlando captions ending with
     // "Follow @SkyBriefGNV" because the model recalled stale brand strings.
@@ -543,17 +557,16 @@ ${ctaBlock}${antiRepeatBlock ? `\n\n${antiRepeatBlock}` : ""}`;
       if (foreign.length > 0) {
         console.warn(`[generate-caption] foreign @SkyBrief handle(s) replaced for ${city}:`, foreign);
         try {
-          const svc = createClient(
-            Deno.env.get("SUPABASE_URL")!,
-            Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-          );
+          const svc = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
           await svc.from("system_logs").insert({
             user_id: auth.userId,
             type: "caption_handle_sanitized",
             message: `Replaced foreign @SkyBrief handle(s) ${foreign.join(", ")} → ${handle} for city ${city}`,
             context: { city, expected_handle: handle, foreign },
           });
-        } catch { /* best-effort */ }
+        } catch {
+          /* best-effort */
+        }
       }
     } catch (e) {
       console.warn("[generate-caption] handle sanitizer failed:", e);
@@ -576,16 +589,15 @@ ${ctaBlock}${antiRepeatBlock ? `\n\n${antiRepeatBlock}` : ""}`;
       console.warn("[generate-caption] timestamp stamp failed:", e);
     }
 
-    return new Response(
-      JSON.stringify({ caption, ai_optimized: aiOptimized }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ caption, ai_optimized: aiOptimized }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     console.error("generate-caption error:", message);
-    return new Response(
-      JSON.stringify({ error: message }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ error: message }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });
