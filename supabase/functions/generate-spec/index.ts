@@ -176,8 +176,8 @@ Rotated deterministically by \`(date + slot)\` index:
 - Both Diversity Guard and Focus Angle live inside the existing fail-safe try/catch — any error silently drops them.
 
 ### Phrasing Cleaner (Post-Generation)
-- A lightweight regex-based cleaner (`cleanWeatherPhrasing`) runs in the final safety net after `stripUnverifiedReferences` and before timestamp stamping.
-- Pattern: `\bin\s+(clear skies|rain|clouds|sunshine|snow|thunderstorms|fog|wind)\b` is rewritten to use natural phrasing (e.g., "in Clear Skies" → "with clear skies", "in Rain" → "with rain", "in Wind" → "with windy conditions").
+- A lightweight regex-based cleaner (\`cleanWeatherPhrasing\`) runs in the final safety net after \`stripUnverifiedReferences\` and before timestamp stamping.
+- Pattern: \`\bin\s+(clear skies|rain|clouds|sunshine|snow|thunderstorms|fog|wind)\b\` is rewritten to use natural phrasing (e.g., "in Clear Skies" → "with clear skies", "in Rain" → "with rain", "in Wind" → "with windy conditions").
 - Fallback: if the pattern does not match a known condition, the original text is preserved.
 - Secondary passes collapse double spaces and fix trailing spaces before punctuation.
 - Fully safe: it operates only on the finalized caption string and never modifies prompt logic, tone, CTA, or structural directives.
@@ -238,10 +238,10 @@ const RESOLVED_ISSUES = `| Issue | Resolution |
 | Slot prefix inconsistency | Fixed via ensureSlotTitlePrefix in _shared/caption-style.ts — all sources now use single helper |
 | Analytics limited to "Top Performer" badges | Upgraded to Insight Engine: per-post performance_score + winning/losing factors, growth_insights pattern detection, PROVEN WINNERS feedback loop into generate-caption |
 | Gainesville posts repeating "Beautiful Day" hooks and styles | Added 48h per-city Creative Decay (80% weight penalty on overused hooks), FORBIDDEN REPETITIONS block, Diversity Guard, deterministic Focus Angle rotation, and Pexels secondary-keyword + city-scoped background variation |
-| AI captions producing awkward "in [Weather]" phrasing | Added `cleanWeatherPhrasing` regex cleaner in `generate-caption` final safety net — replaces "in Clear Skies/Rain/Wind/etc." with natural "with clear skies/rain/windy conditions" without hardcoded sentence replacements |
-| Captions reading like formal forecasts ("conditions remain", "forecast indicates") | Added `LOCAL VOICE` prompt block: casual openers ("Looks like…", "Feels like…", "Heads up…"), natural time references, opt-in micro-localization (hydration/umbrella/sunset cues), and opener rotation away from city-name-first — all under hard constraints that preserve length, CTA, and structural blocks |
+| AI captions producing awkward "in [Weather]" phrasing | Added \`cleanWeatherPhrasing\` regex cleaner in \`generate-caption\` final safety net — replaces "in Clear Skies/Rain/Wind/etc." with natural "with clear skies/rain/windy conditions" without hardcoded sentence replacements |
+| Captions reading like formal forecasts ("conditions remain", "forecast indicates") | Added \`LOCAL VOICE\` prompt block: casual openers ("Looks like…", "Feels like…", "Heads up…"), natural time references, opt-in micro-localization (hydration/umbrella/sunset cues), and opener rotation away from city-name-first — all under hard constraints that preserve length, CTA, and structural blocks |
 | Style/variation labels appearing as locations in CTA (e.g. "weather in But Comfortable") | Added CRITICAL location guardrail to \`ctaBlock\` + post-generation \`fixInvalidLocation\` sanitizer that regex-rewrites any "weather in [non-city]" back to the canonical city name |
-| Style/variation labels leaking into "daily X weather alerts" phrasing (e.g. "daily Coming Up weather alerts") | Added final hardcoded \`forceCitySanity\` sanitizer that runs last in the cleanup chain and rewrites a fixed allow-list of offending labels (\`Coming Up\`, \`But Comfortable\`, \`Clear Skies\`, \`Rain\`, \`Clouds\`, \`Ahead\`) in both \`weather in <label>\` and \`daily <label> weather alerts\` to use the actual city |\`;
+| Style/variation labels leaking into "daily X weather alerts" phrasing (e.g. "daily Coming Up weather alerts") | Added final hardcoded \`forceCitySanity\` sanitizer that runs last in the cleanup chain and rewrites a fixed allow-list of offending labels (\`Coming Up\`, \`But Comfortable\`, \`Clear Skies\`, \`Rain\`, \`Clouds\`, \`Ahead\`) in both \`weather in <label>\` and \`daily <label> weather alerts\` to use the actual city |`;
 
 const DEPLOYMENT = `- **Frontend**: React 18 + Vite + TypeScript + Tailwind (Lovable Cloud)
 - **Backend**: Managed Postgres + Serverless Edge Runtime (Supabase via Lovable Cloud)
