@@ -1,44 +1,39 @@
-## Fix Invalid Location Substitution in CTA
+## Block style/variation labels from appearing as locations in CTA & hashtags
 
-Captions sometimes render style/variation labels (e.g. "But Comfortable") inside `weather in ___`. Fix with a prompt guardrail + a post-generation sanitizer. Pure prompt + string-fix change; structure/CTA shape untouched.
+Adds a hardcoded "no-fly zone" sanitizer on top of the existing `fixInvalidLocation` guard, plus a stronger CTA prompt instruction.
 
-### File: `supabase/functions/generate-caption/index.ts`
+### Changes in `supabase/functions/generate-caption/index.ts`
 
-**1. Prompt guardrail (CTA section)**
-- The CTA constraints are added via `ctaBlock` around line 357 (after `rotatingCTA`). Append a critical-location line so the constraint travels with every CTA:
-
-```ts
-ctaBlock = _cta
-  ? `CTA ROTATION: For the final call-to-action line, use this exact CTA (or a close paraphrase): "${_cta}". Do not invent additional CTAs.\nCRITICAL: The phrase "weather in [X]" must ONLY use the actual city name (${city}). Never use style names, weather conditions, tone labels, or variation labels as a location.`
-  : `CRITICAL: The phrase "weather in [X]" must ONLY use the actual city name (${city}). Never use style names, weather conditions, tone labels, or variation labels as a location.`;
-```
-
-**2. Post-processing sanitizer**
-- Add helper near `cleanWeatherPhrasing` (top of file):
+**1. New helper `forceCitySanity(text, city)`** (added next to `fixInvalidLocation`, ~line 43):
 
 ```ts
-function fixInvalidLocation(text: string, city: string): string {
+function forceCitySanity(text: string, city: string): string {
   if (!city) return text;
-  const escapedCity = city.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  // Replace "weather in <anything>" where <anything> is not already the city
-  const re = new RegExp(`\\bweather in (?!${escapedCity}\\b)[A-Za-z][A-Za-z\\s'-]{0,40}`, "gi");
-  return text.replace(re, `weather in ${city}`);
+  const badPatterns = ["Coming Up", "But Comfortable", "Clear Skies", "Rain", "Clouds", "Ahead"];
+  let cleaned = text;
+  badPatterns.forEach((pattern) => {
+    cleaned = cleaned.replace(new RegExp(`weather in ${pattern}\\b`, "gi"), `weather in ${city}`);
+    cleaned = cleaned.replace(new RegExp(`daily ${pattern} weather alerts`, "gi"), `daily ${city} weather alerts`);
+  });
+  return cleaned;
 }
 ```
 
-- Invoke in the final safety net, right after `cleanWeatherPhrasing(caption)` (around current line 491):
+Note: `pattern` strings here are fixed literals (no user input), so a regex-escape pass isn't required, but I'll wrap them in `\b` boundaries where useful to avoid partial matches.
 
+**2. CTA prompt guard** (append to `ctaBlock` around line 365, alongside the existing CRITICAL line):
+> "In the CTA block, the only valid location is `${city}`. Do NOT use any style name, variation label, or weather condition (e.g. 'Coming Up', 'But Comfortable', 'Clear Skies') as a location. `weather in ___` and `daily ___ weather alerts` must always use `${city}`."
+
+**3. Wire into cleanup chain** (after line 530, final step before returning):
 ```ts
-caption = cleanWeatherPhrasing(caption);
-caption = fixInvalidLocation(caption, city);
+caption = forceCitySanity(caption, city);
 ```
 
-### Out of scope
-- No changes to CTA rotation pool, structure blocks, length, tone, hashtags, system prompt, or other functions.
-- No DB/UI changes.
+Order becomes: `cleanWeatherPhrasing` → `fixInvalidLocation` → `forceCitySanity`.
 
-### Spec Delta (applied same turn after approval)
-Update `supabase/functions/generate-spec/index.ts`:
-- Extend the **Phrasing Cleaner (Post-Generation)** subsection to mention `fixInvalidLocation` — regex `\bweather in (?!<city>)[A-Za-z…]+` rewrites bad substitutions back to the canonical city; runs after `cleanWeatherPhrasing` in the final safety net.
-- Note CTA prompt now carries a CRITICAL location guardrail forbidding style/condition/variation labels in `weather in ___`.
-- Add a `RESOLVED_ISSUES` row: "Style/variation labels appearing as locations in CTA (e.g. 'weather in But Comfortable') → fixed via CTA guardrail + `fixInvalidLocation` sanitizer."
+### Spec delta in `supabase/functions/generate-spec/index.ts`
+- Extend the **Phrasing Cleaner (Post-Generation)** subsection to document `forceCitySanity` as the final hardcoded no-fly-zone pass covering both `weather in <bad>` and `daily <bad> weather alerts`, listing the blocked patterns.
+- Add a `RESOLVED_ISSUES` row: "Style/variation labels leaking into hashtag-style 'daily X weather alerts' phrasing".
+
+### Out of scope
+No changes to CTA structure, hashtags content, length limits, system prompt, or other functions.

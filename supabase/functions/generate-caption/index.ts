@@ -60,6 +60,26 @@ function fixInvalidLocation(text: string, city: string): string {
   return text.replace(weatherRe, `weather in ${city}`).replace(dailyRe, `daily ${city} weather alerts`);
 }
 
+// Hardcoded "no-fly zone" sanitizer — runs as the final step of the cleanup
+// chain. Forces any known style/variation label out of location slots like
+// "weather in X" or "daily X weather alerts". Patterns are fixed literals.
+function forceCitySanity(text: string, city: string): string {
+  if (!city) return text;
+  const badPatterns = ["Coming Up", "But Comfortable", "Clear Skies", "Rain", "Clouds", "Ahead"];
+  let cleaned = text;
+  for (const pattern of badPatterns) {
+    cleaned = cleaned.replace(
+      new RegExp(`weather in ${pattern}\\b`, "gi"),
+      `weather in ${city}`,
+    );
+    cleaned = cleaned.replace(
+      new RegExp(`daily ${pattern} weather alerts`, "gi"),
+      `daily ${city} weather alerts`,
+    );
+  }
+  return cleaned;
+}
+
 // --- Dynamic Handle System ---
 
 const HANDLE_MAP: Record<string, string> = {
@@ -375,7 +395,7 @@ Deno.serve(async (req) => {
     try {
       personalityBlock = slotPersonalityDirective(body.slot ?? period) || "";
       const _cta = rotatingCTA(body.slot ?? period);
-      const locationGuard = `CRITICAL: The phrase "weather in [X]" must ONLY use the actual city name (${city}). Never use style names, weather conditions, tone labels, or variation labels as a location.`;
+      const locationGuard = `CRITICAL: In the CTA block, the only valid location is ${city}. The phrase "weather in [X]" and "daily [X] weather alerts" must ALWAYS use ${city}. Do NOT use any style name, variation label, tone label, or weather condition (e.g. "Coming Up", "But Comfortable", "Clear Skies", "Rain", "Clouds", "Ahead") as a location.`;
       ctaBlock = _cta
         ? `CTA ROTATION: For the final call-to-action line, use this exact CTA (or a close paraphrase): "${_cta}". Do not invent additional CTAs.\n${locationGuard}`
         : locationGuard;
