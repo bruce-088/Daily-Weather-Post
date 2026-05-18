@@ -205,6 +205,12 @@ const ROUTING_GUARD = `Prevents cross-city content contamination (e.g., Gainesvi
 - Asserts that the city name in the post content matches the city assigned to the target channel.
 - If mismatch detected → job fails with \`ROUTING_VIOLATION\` error (does not publish).
 
+### City-Name Fallback (added)
+- If the strict \`social_accounts.city_id\` lookup returns no row, the resolver fetches the city's \`name\` from \`cities\` and searches the user's connected channels for one whose \`account_name\` contains the city name (case-insensitive).
+- On match: logs \`[routing] city_id lookup failed, falling back to city name match\` and uses that channel **without** mutating DB.
+- On miss: logs \`[routing] ROUTING_VIOLATION\` and aborts publish (existing behavior preserved).
+- Applied in both \`_shared/youtube-adapter.ts\` (\`getValidToken\`) and the hard city-isolation gate in \`process-scheduled-posts\`. Shared helper: \`matchAccountByCityName\` in \`_shared/city-accounts.ts\`.
+
 ### Template Isolation
 - All template variables (city name, channel handle, subscribe URLs, state name) are cleared and reset for every generation cycle.
 - AI prompt explicitly scoped to the target city: "You are writing for the [CITY] channel only."`;
@@ -241,7 +247,8 @@ const RESOLVED_ISSUES = `| Issue | Resolution |
 | AI captions producing awkward "in [Weather]" phrasing | Added \`cleanWeatherPhrasing\` regex cleaner in \`generate-caption\` final safety net — replaces "in Clear Skies/Rain/Wind/etc." with natural "with clear skies/rain/windy conditions" without hardcoded sentence replacements |
 | Captions reading like formal forecasts ("conditions remain", "forecast indicates") | Added \`LOCAL VOICE\` prompt block: casual openers ("Looks like…", "Feels like…", "Heads up…"), natural time references, opt-in micro-localization (hydration/umbrella/sunset cues), and opener rotation away from city-name-first — all under hard constraints that preserve length, CTA, and structural blocks |
 | Style/variation labels appearing as locations in CTA (e.g. "weather in But Comfortable") | Added CRITICAL location guardrail to \`ctaBlock\` + post-generation \`fixInvalidLocation\` sanitizer that regex-rewrites any "weather in [non-city]" back to the canonical city name |
-| Style/variation labels leaking into "daily X weather alerts" phrasing (e.g. "daily Coming Up weather alerts") | Added final hardcoded \`forceCitySanity\` sanitizer that runs last in the cleanup chain and rewrites a fixed allow-list of offending labels (\`Coming Up\`, \`But Comfortable\`, \`Clear Skies\`, \`Rain\`, \`Clouds\`, \`Ahead\`) in both \`weather in <label>\` and \`daily <label> weather alerts\` to use the actual city |`;
+| Style/variation labels leaking into "daily X weather alerts" phrasing (e.g. "daily Coming Up weather alerts") | Added final hardcoded \`forceCitySanity\` sanitizer that runs last in the cleanup chain and rewrites a fixed allow-list of offending labels (\`Coming Up\`, \`But Comfortable\`, \`Clear Skies\`, \`Rain\`, \`Clouds\`, \`Ahead\`) in both \`weather in <label>\` and \`daily <label> weather alerts\` to use the actual city |
+| ROUTING_VIOLATION on YouTube when channel exists but \`social_accounts.city_id\` is unset/stale (e.g. Orlando channel not matched to Orlando city_id) | Added city-name fallback via \`matchAccountByCityName\` helper — when strict \`city_id\` lookup misses, resolver checks if any connected channel's \`account_name\` contains the city's name and uses it; logs \`[routing] city_id lookup failed, falling back to city name match\`. Applied in \`youtube-adapter.getValidToken\` and \`process-scheduled-posts\` isolation gate. No DB writes |`;
 
 const DEPLOYMENT = `- **Frontend**: React 18 + Vite + TypeScript + Tailwind (Lovable Cloud)
 - **Backend**: Managed Postgres + Serverless Edge Runtime (Supabase via Lovable Cloud)
