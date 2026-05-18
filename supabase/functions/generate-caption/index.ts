@@ -395,6 +395,7 @@ Deno.serve(async (req) => {
     let diversityBlock = "";
     let focusBlock = "";
     let localVoiceBlock = "";
+    let hookAggressionBlock = "";
     try {
       personalityBlock = slotPersonalityDirective(body.slot ?? period) || "";
       const _cta = rotatingCTA(body.slot ?? period);
