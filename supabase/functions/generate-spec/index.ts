@@ -181,8 +181,8 @@ Rotated deterministically by \`(date + slot)\` index:
 - Fallback: if the pattern does not match a known condition, the original text is preserved.
 - Secondary passes collapse double spaces and fix trailing spaces before punctuation.
 - Fully safe: it operates only on the finalized caption string and never modifies prompt logic, tone, CTA, or structural directives.
-- A companion sanitizer \`fixInvalidLocation\` runs immediately after \`cleanWeatherPhrasing\`. It matches \`\\bweather in (?!<city>)[A-Za-z][A-Za-z\\s'-]{0,40}\` (city is regex-escaped) and rewrites the captured location back to the canonical city, fixing cases where the model substitutes a style/variation/tone label (e.g. "weather in But Comfortable") for the real city. It also rewrites \`daily [non-city] weather alerts\` back to the canonical city.
-- A final hardcoded "no-fly zone" pass \`forceCitySanity\` runs last in the cleanup chain (\`cleanWeatherPhrasing\` → \`fixInvalidLocation\` → \`forceCitySanity\`). It iterates a fixed list of known offending labels (\`Coming Up\`, \`But Comfortable\`, \`Clear Skies\`, \`Rain\`, \`Clouds\`, \`Ahead\`) and case-insensitively rewrites both \`weather in <label>\` and \`daily <label> weather alerts\` to use the actual city. Acts as a deterministic guard against any pattern the regex sanitizer misses.
+- A companion sanitizer \`fixInvalidLocation\` runs immediately after \`cleanWeatherPhrasing\`. It matches \`\bweather in (?!<city>)[A-Za-z][A-Za-z\s'-]{0,40}\` (city is regex-escaped) and rewrites the captured location back to the canonical city, fixing cases where the model substitutes a style/variation/tone label (e.g. "weather in But Comfortable") for the real city. It also rewrites \`daily [non-city] weather alerts\` back to the canonical city.
+- A final strict-whitelist pass \`forceCitySanity\` runs last in the cleanup chain (\`cleanWeatherPhrasing\` → \`fixInvalidLocation\` → \`forceCitySanity\`). It uses positive-match regexes: anything in the \`weather in ___\` or \`daily ___ weather alerts\` slots that is NOT exactly the city name gets rewritten to the actual city. This catches hallucinated labels (style names, tone labels, "Weather Update", etc.) without maintaining a blacklist. Deterministic and safe — operates only on the finalized caption string.
 - CTA prompt now carries a CRITICAL location guardrail: in the CTA block the only valid location is the actual city; style names, variation labels, tone labels, and weather conditions (e.g. "Coming Up", "But Comfortable", "Clear Skies", "Rain", "Clouds", "Ahead") are explicitly forbidden as locations. The guardrail is appended to \`ctaBlock\` so it travels with every CTA rotation.
 
 ### Local Voice Layer (Prompt Block)
@@ -247,7 +247,7 @@ const RESOLVED_ISSUES = `| Issue | Resolution |
 | AI captions producing awkward "in [Weather]" phrasing | Added \`cleanWeatherPhrasing\` regex cleaner in \`generate-caption\` final safety net — replaces "in Clear Skies/Rain/Wind/etc." with natural "with clear skies/rain/windy conditions" without hardcoded sentence replacements |
 | Captions reading like formal forecasts ("conditions remain", "forecast indicates") | Added \`LOCAL VOICE\` prompt block: casual openers ("Looks like…", "Feels like…", "Heads up…"), natural time references, opt-in micro-localization (hydration/umbrella/sunset cues), and opener rotation away from city-name-first — all under hard constraints that preserve length, CTA, and structural blocks |
 | Style/variation labels appearing as locations in CTA (e.g. "weather in But Comfortable") | Added CRITICAL location guardrail to \`ctaBlock\` + post-generation \`fixInvalidLocation\` sanitizer that regex-rewrites any "weather in [non-city]" back to the canonical city name |
-| Style/variation labels leaking into "daily X weather alerts" phrasing (e.g. "daily Coming Up weather alerts") | Added final hardcoded \`forceCitySanity\` sanitizer that runs last in the cleanup chain and rewrites a fixed allow-list of offending labels (\`Coming Up\`, \`But Comfortable\`, \`Clear Skies\`, \`Rain\`, \`Clouds\`, \`Ahead\`) in both \`weather in <label>\` and \`daily <label> weather alerts\` to use the actual city |
+| Style/variation labels leaking into "daily X weather alerts" phrasing (e.g. "daily Coming Up weather alerts") | Refactored \`forceCitySanity\` from hardcoded blacklist to strict whitelist: positive-match regex forces any non-city value in \`weather in ___\` or \`daily ___ weather alerts\` back to the canonical city. Catches hallucinated labels (style names, tone labels, "Weather Update", etc.) without maintaining a blacklist |
 | ROUTING_VIOLATION on YouTube when channel exists but \`social_accounts.city_id\` is unset/stale (e.g. Orlando channel not matched to Orlando city_id) | Added city-name fallback via \`matchAccountByCityName\` helper — when strict \`city_id\` lookup misses, resolver checks if any connected channel's \`account_name\` contains the city's name and uses it; logs \`[routing] city_id lookup failed, falling back to city name match\`. Applied in \`youtube-adapter.getValidToken\` and \`process-scheduled-posts\` isolation gate. No DB writes |`;
 
 const DEPLOYMENT = `- **Frontend**: React 18 + Vite + TypeScript + Tailwind (Lovable Cloud)
@@ -425,7 +425,7 @@ Deno.serve(async (req) => {
     docParts.push(table(["Integration", "Used for"], INTEGRATIONS.map(([n, u]) => [n, u])));
     docParts.push("\n---\n");
 
-    docParts.push(`## 13. Known Issues / Limitations`);
+    docParts.push(`## 13. Known Issues / Limitations\n`);
     docParts.push(KNOWN_ISSUES);
     docParts.push("\n---\n");
 
@@ -433,7 +433,7 @@ Deno.serve(async (req) => {
     docParts.push(RESOLVED_ISSUES);
     docParts.push("\n---\n");
 
-    docParts.push(`## 15. Deployment`);
+    docParts.push(`## 15. Deployment\n`);
     docParts.push(DEPLOYMENT);
     docParts.push("\n---\n");
 
