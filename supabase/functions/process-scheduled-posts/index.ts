@@ -1763,6 +1763,24 @@ Deno.serve(async (req) => {
             .eq("city_id", (post as any).city_id)
             .maybeSingle();
           if (!acct) {
+            // Name-based fallback: accept a channel whose account_name contains
+            // the post's city name before declaring a routing violation.
+            const { data: userAccts } = await supabase
+              .from("social_accounts")
+              .select("id, city_id, account_name")
+              .eq("user_id", post.user_id)
+              .eq("platform", post.platform);
+            const cityNeedle = (post.city || "").trim().toLowerCase();
+            const nameMatch = cityNeedle
+              ? (userAccts || []).find((a: any) =>
+                  (a.account_name || "").toLowerCase().includes(cityNeedle))
+              : null;
+            if (nameMatch) {
+              console.log(
+                `[routing] city_id lookup failed, falling back to city name match (post=${post.id}, city=${post.city}, matched=${nameMatch.account_name})`,
+              );
+              // Treat as resolved; let adapter perform the same fallback for the token.
+            } else {
             // No account bound to this exact city — check if one exists for the
             // wrong city. If so, this is a routing violation. If none exists at
             // all but the user has connected this platform somewhere, treat it
