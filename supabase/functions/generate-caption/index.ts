@@ -543,6 +543,8 @@ ${buildLocalIdentityBlock(city)}
 
 ${styleAddendum}${insightNote}
 
+${hookAggressionBlock}
+
 ${diversityBlock}
 
 ${focusBlock}
