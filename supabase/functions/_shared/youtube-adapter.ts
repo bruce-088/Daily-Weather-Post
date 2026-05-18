@@ -1,4 +1,5 @@
 import type { PlatformAdapter, UploadResult } from "./platform-adapter.ts";
+import { matchAccountByCityName } from "./city-accounts.ts";
 
 type ResolvedYTAccount = {
   id: string;
