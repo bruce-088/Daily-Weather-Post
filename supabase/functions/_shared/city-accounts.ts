@@ -71,3 +71,14 @@ export async function setAccountCity(
   }
   return true;
 }
+
+/** Fallback matcher: find an account whose account_name contains the city name. */
+export function matchAccountByCityName<T extends { account_name?: string | null }>(
+  accounts: T[],
+  cityName?: string | null,
+): T | null {
+  if (!cityName) return null;
+  const needle = cityName.trim().toLowerCase();
+  if (!needle) return null;
+  return accounts.find((a) => (a.account_name || "").toLowerCase().includes(needle)) ?? null;
+}
