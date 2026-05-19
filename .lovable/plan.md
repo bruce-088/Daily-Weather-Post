@@ -1,62 +1,82 @@
-## Current state
+## Root cause
 
-Most of the requested work is already in place from a prior pass:
+`postToPlatform` in `supabase/functions/_shared/platform-adapter.ts` runs:
 
-- `_shared/caption-style.ts` already exports `ensureSlotTitlePrefix(baseTitle, slot, city, maxLen=95)` and `inferSlotFromCityHour(city)` exactly per spec (morning → `[8 AM] `, afternoon → `[1 PM] `, evening → `[6 PM] `, strips any existing `[H(:MM)? AM|PM]` prefix, caps at 95 chars).
-- `process-scheduled-posts/index.ts` `buildHookTitle` already ends with `ensureSlotTitlePrefix(baseTitle, slot, city)`.
-- `daily-weather-post/index.ts` `buildHookTitle` already accepts `slot`, defaults to `"morning"`, and wraps with `ensureSlotTitlePrefix`.
-- The legacy `getCityLocalStamp` fallback in title construction has already been removed from both `buildHookTitle` paths.
+```ts
+const stripTags = (s: string) =>
+  (s || "").replace(/\[[^\]]*\]/g, "")...
+const cleanTitle = stripTags(title);
+const cleanDescription = stripTags(description);
+```
 
-What is missing vs. the new spec:
+That regex was added to strip internal analytics tags like `[auto:afternoon]` and `[exp:B]`, but it also eats the broadcast-slot prefix (`[8 AM]`, `[1 PM]`, `[6 PM]`) that `ensureSlotTitlePrefix` carefully adds upstream. Every adapter (YouTube, TikTok, Instagram, X, LinkedIn) flows through this function, so the prefix is wiped for all platforms — matching the reported symptom.
 
-1. The `try/catch` fallback in both `buildHookTitle`s returns the raw `baseTitle` (no prefix) if the helper throws — this is the only path that can still emit a title without `[8 AM]/[1 PM]/[6 PM]`.
-2. No "Verification Guard" log exists.
+`buildHookTitle` and `generateSkyBriefTitle` are returning the prefixed title correctly; it only disappears between `buildHookTitle` output and the adapter `uploadVideo` call.
 
 ## Changes
 
-### A. `supabase/functions/_shared/caption-style.ts`
-Add a tiny helper, used by both edge functions and any future caller:
+### 1. `supabase/functions/_shared/platform-adapter.ts` — surgical strip + final guard
 
-```ts
-export function assertSlotTitlePrefix(title: string, context: string = ""): void {
-  if (!titleHasTimestamp(title)) {
-    console.warn(
-      `[title_system] WARNING: Title generated without broadcast slot prefix.${context ? " ctx=" + context : ""} title="${title}"`,
-    );
-  }
-}
-```
+Replace the blanket `[...]` regex with one that targets only known internal tags, then re-assert the slot prefix as the last step before upload.
 
-(`titleHasTimestamp` already exists — checks `^\[\d{1,2}(:\d{2})?\s?(AM|PM)\]`.)
+- Import `ensureSlotTitlePrefix` and `inferSlotFromCityHour` from `_shared/caption-style.ts`.
+- Extend `postToPlatform` signature with two optional params used purely for the final guard:
+  - `slot?: "morning" | "afternoon" | "evening" | null`
+  - `cityName?: string | null` (for `inferSlotFromCityHour` fallback when `slot` is missing)
+- New `stripInternalTags` that only removes a known allow-list:
+  ```ts
+  const INTERNAL_TAG = /\[(auto|exp|ab|variant|debug|test|pipeline|engine|voice|render|src):[^\]]*\]/gi;
+  const stripInternalTags = (s: string) =>
+    (s || "").replace(INTERNAL_TAG, "").replace(/[ \t]{2,}/g, " ").replace(/\s+\n/g, "\n").trim();
+  ```
+  Slot prefixes like `[8 AM]`, `[1 PM]`, `[6 PM]` no longer match and survive.
+- After `stripInternalTags`, re-wrap title with `ensureSlotTitlePrefix(cleanTitle, slot ?? null, cityName ?? null)` as the final guard.
+- Add the lifecycle debug logs the user requested:
+  ```ts
+  console.log("[title_debug] postToPlatform received title:", title);
+  console.log("[title_debug] after stripInternalTags:", cleanTitle);
+  console.log("[title_debug] final title sent to", adapter.name, ":", cleanTitle);
+  ```
+- If `assertSlotTitlePrefix` exists in `caption-style.ts` (from prior pass), call it on the final title for the existing warning channel.
 
-### B. `supabase/functions/process-scheduled-posts/index.ts`
-- Import `assertSlotTitlePrefix`.
-- In `buildHookTitle`, replace the `catch` branch so it still attempts a hard-coded prefix from `slotTimePrefix(slot, city)` (already imported) before truncating, then call `assertSlotTitlePrefix(result, "process-scheduled-posts:buildHookTitle")` before `return`.
-- After the `const title = generateSkyBriefTitle(...)` call at L2296, add one `assertSlotTitlePrefix(title, "process-scheduled-posts:dispatch")` so we also catch any future code path that bypasses `buildHookTitle`.
-- Drop the now-unused `getCityLocalStamp` import (it's no longer referenced in title code; keep only if used elsewhere in the file — quick re-grep before removing).
+### 2. Pass `slot` + `cityName` from the two callers
 
-### C. `supabase/functions/daily-weather-post/index.ts`
-- Import `assertSlotTitlePrefix` and `slotTimePrefix`.
-- Same `catch`-branch hardening as B: build `\`[${slotTimePrefix(slot || "morning", city)}] \` + truncated base` as the last-resort fallback.
-- After both `generateSkyBriefTitle(...)` call sites (L1902 and L1938), add `assertSlotTitlePrefix(title, "daily-weather-post")`.
-- Ensure the L1902 / L1938 calls pass through a `slot` (default `"morning"` for the daily morning job; if a slot variable is already in scope, use it).
-- Drop unused `getCityLocalStamp` import if no other references remain.
+So the final guard can always rebuild the prefix even if upstream somehow lost it.
 
-### D. `supabase/functions/generate-spec/index.ts`
-Add one RESOLVED_ISSUES row:
+- `supabase/functions/process-scheduled-posts/index.ts` — every `postToPlatform(...)` call site: pass the post's `slot` (already in scope from the scheduled-post row) and `cityName`.
+- `supabase/functions/daily-weather-post/index.ts` — pass `"morning"` (the daily job is always the morning slot) and `cityName`.
+- `supabase/functions/upload-preview-video/index.ts` — pass `null` for slot (let the adapter infer from city hour) and `resolvedCityName`.
 
-> `Titles emitted without [8 AM]/[1 PM]/[6 PM] prefix on edge-case fallback paths | Added assertSlotTitlePrefix() guard in _shared/caption-style.ts, hardened buildHookTitle catch branches in process-scheduled-posts and daily-weather-post to force slotTimePrefix() fallback, and added post-call assertions at every title dispatch site.`
+No other callers of `postToPlatform` exist (verified via the registry — those three files plus the adapters themselves).
 
-No other spec text changes (the slot-prefix system is already documented).
+### 3. `supabase/functions/generate-spec/index.ts` — RESOLVED_ISSUES delta
+
+Add one row:
+
+> Slot time prefix `[8 AM]/[1 PM]/[6 PM]` stripped from published titles | `postToPlatform` in `_shared/platform-adapter.ts` was running `replace(/\[[^\]]*\]/g, "")` to strip internal tags and accidentally removed the broadcast-slot prefix on every platform. Replaced with an allow-list regex that only matches known internal tags (`auto`, `exp`, `ab`, `variant`, `debug`, `test`, `pipeline`, `engine`, `voice`, `render`, `src`), then re-applies `ensureSlotTitlePrefix` as a final guard immediately before adapter upload. Added `[title_debug]` lifecycle logs at three checkpoints (buildHookTitle output, generateSkyBriefTitle output, final title sent to YouTube/TikTok/IG/X/LinkedIn).
+
+## Verification
+
+1. Deploy `process-scheduled-posts`, `daily-weather-post`, `upload-preview-video`, `generate-spec`.
+2. Trigger one manual post via "Post Now".
+3. Confirm log sequence:
+   - `[title_debug] buildHookTitle output: [1 PM] …`
+   - `[title_debug] postToPlatform received title: [1 PM] …`
+   - `[title_debug] after stripInternalTags: [1 PM] …`
+   - `[title_debug] final title sent to youtube: [1 PM] …`
+4. Confirm published YouTube title shows `[1 PM]` prefix.
 
 ## Out of scope
-- No DB changes.
-- No changes to `generate-caption` (it does not own title generation — it only consumes/returns captions; the `getCityLocalStamp` import there is used for in-caption beacons, not titles).
-- No changes to platform adapters, JSON schemas, or UI.
-- No changes to the hook-pool content or selection logic.
+
+- No DB / schema changes.
+- No changes to caption body handling (only title).
+- No changes to hook generation or `ensureSlotTitlePrefix` itself.
+- Adapters unchanged — fix is centralized in `postToPlatform`.
 
 ## Files touched
-- `supabase/functions/_shared/caption-style.ts` (add `assertSlotTitlePrefix`)
-- `supabase/functions/process-scheduled-posts/index.ts` (harden catch, add guard call, prune import)
-- `supabase/functions/daily-weather-post/index.ts` (harden catch, add guard call, ensure slot pass-through, prune import)
+
+- `supabase/functions/_shared/platform-adapter.ts`
+- `supabase/functions/process-scheduled-posts/index.ts` (pass slot/city to postToPlatform; add buildHookTitle debug log)
+- `supabase/functions/daily-weather-post/index.ts` (pass slot/city; add buildHookTitle debug log)
+- `supabase/functions/upload-preview-video/index.ts` (pass slot=null/city)
 - `supabase/functions/generate-spec/index.ts` (RESOLVED_ISSUES row)
