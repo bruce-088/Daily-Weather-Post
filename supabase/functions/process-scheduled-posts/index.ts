@@ -287,6 +287,7 @@ function buildHookTitle(city: string, temp: number, condition: string, rainChanc
   try {
     const result = ensureSlotTitlePrefix(baseTitle, slot, city);
     assertSlotTitlePrefix(result, "process-scheduled-posts:buildHookTitle");
+    console.log("[title_debug] buildHookTitle output:", result);
     return result;
   } catch (err) {
     console.warn("buildHookTitle: ensureSlotTitlePrefix failed, applying hard fallback prefix", err);
