@@ -82,7 +82,7 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      const r = await postToPlatform(platform, supabase, userId, assetBytes, title, description, mimeType, bundle.city_id);
+      const r = await postToPlatform(platform, supabase, userId, assetBytes, title, description, mimeType, bundle.city_id, null, cityName);
       const externalId = r.success ? (r.id ?? null) : null;
       let postUrl: string | null = null;
       if (r.success && externalId) {

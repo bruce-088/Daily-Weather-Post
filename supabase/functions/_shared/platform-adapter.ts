@@ -44,6 +44,7 @@ import { TikTokAdapter } from "./tiktok-adapter.ts";
 import { InstagramAdapter } from "./instagram-adapter.ts";
 import { TwitterAdapter } from "./twitter-adapter.ts";
 import { LinkedInAdapter } from "./linkedin-adapter.ts";
+import { ensureSlotTitlePrefix, assertSlotTitlePrefix } from "./caption-style.ts";
 
 const adapters: PlatformAdapter[] = [
   new YouTubeAdapter(),
@@ -73,6 +74,8 @@ export async function postToPlatform(
   description: string,
   mimeType = "video/mp4",
   cityId?: string | null,
+  slot?: "morning" | "afternoon" | "evening" | null,
+  cityName?: string | null,
 ): Promise<PostResult> {
   const adapter = getAdapter(platform);
   if (!adapter) {
@@ -85,12 +88,21 @@ export async function postToPlatform(
       return { success: false, error: `Failed to obtain valid ${adapter.name} access token` };
     }
 
-    // Strip internal tracking tags like [auto:afternoon] or [exp:B] from
-    // public-facing caption/title before sending to any platform. These tags
-    // are still preserved upstream in the DB for analytics/logging.
-    const stripTags = (s: string) => (s || "").replace(/\[[^\]]*\]/g, "").replace(/[ \t]{2,}/g, " ").replace(/\s+\n/g, "\n").trim();
-    const cleanTitle = stripTags(title);
-    const cleanDescription = stripTags(description);
+    // Strip ONLY known internal analytics/tracking tags like [auto:afternoon],
+    // [exp:B], [ab:variant_a]. Critically, do NOT strip the broadcast-slot
+    // prefix [8 AM] / [1 PM] / [6 PM] — that must reach the platform.
+    const INTERNAL_TAG = /\[(auto|manual|exp|ab|variant|debug|test|pipeline|engine|voice|render|src):[^\]]*\]/gi;
+    const stripInternalTags = (s: string) =>
+      (s || "").replace(INTERNAL_TAG, "").replace(/[ \t]{2,}/g, " ").replace(/\s+\n/g, "\n").trim();
+    console.log(`[title_debug] postToPlatform received title:`, title);
+    let cleanTitle = stripInternalTags(title);
+    const cleanDescription = stripInternalTags(description);
+    console.log(`[title_debug] after stripInternalTags:`, cleanTitle);
+
+    // Final guard: re-assert the broadcast-slot prefix immediately before upload.
+    cleanTitle = ensureSlotTitlePrefix(cleanTitle, slot ?? null, cityName ?? null);
+    assertSlotTitlePrefix(cleanTitle, `postToPlatform:${adapter.name}`);
+    console.log(`[title_debug] final title sent to ${adapter.name}:`, cleanTitle);
 
     const result = await adapter.uploadVideo(token, videoData, cleanTitle, cleanDescription, mimeType, cityId ?? null);
     if (!result) {

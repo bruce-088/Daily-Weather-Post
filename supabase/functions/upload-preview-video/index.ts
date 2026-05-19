@@ -81,6 +81,8 @@ Deno.serve(async (req) => {
       description || caption || "Daily weather update",
       "video/mp4",
       resolvedCityId,
+      null,
+      resolvedCityName,
     );
 
     if (!result.success) {

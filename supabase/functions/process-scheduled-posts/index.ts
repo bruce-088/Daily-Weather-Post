@@ -287,6 +287,7 @@ function buildHookTitle(city: string, temp: number, condition: string, rainChanc
   try {
     const result = ensureSlotTitlePrefix(baseTitle, slot, city);
     assertSlotTitlePrefix(result, "process-scheduled-posts:buildHookTitle");
+    console.log("[title_debug] buildHookTitle output:", result);
     return result;
   } catch (err) {
     console.warn("buildHookTitle: ensureSlotTitlePrefix failed, applying hard fallback prefix", err);
@@ -2814,7 +2815,8 @@ Deno.serve(async (req) => {
           // Video succeeded — post to all platforms
           for (const platformName of platformsToPost) {
             console.log(`[publish] Attempting to write notification for user: ${post.user_id}, platform: ${platformName}`);
-            const result = await postToPlatform(platformName, supabase, post.user_id, video.data, title, desc, video.mimeType, post.city_id || null);
+            console.log(`[title_debug] dispatch title for ${platformName}:`, title);
+            const result = await postToPlatform(platformName, supabase, post.user_id, video.data, title, desc, video.mimeType, post.city_id || null, (timePeriod as any) || null, post.city || null);
             // Hard guard: YouTube must return a real video_id. Throw so the
             // publish_post job fails loudly instead of being marked succeeded.
             if (platformName === "youtube" && result.success && !result.id) {
