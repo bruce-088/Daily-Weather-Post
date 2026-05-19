@@ -251,6 +251,7 @@ const RESOLVED_ISSUES = `| Issue | Resolution |
 | Identical post titles/captions | Added anti-clone logic, CTA rotation, personality rotation |
 | Silent pipeline failures | Added fail-safe try/catch wrappers on all caption enhancements |
 | Slot prefix inconsistency | Fixed via ensureSlotTitlePrefix in _shared/caption-style.ts — all sources now use single helper |
+| Titles emitted without [8 AM]/[1 PM]/[6 PM] prefix on edge-case fallback paths | Added assertSlotTitlePrefix() guard in _shared/caption-style.ts, hardened buildHookTitle catch branches in process-scheduled-posts and daily-weather-post to force slotTimePrefix() fallback, and added post-call assertions at every title dispatch site |
 | Analytics limited to "Top Performer" badges | Upgraded to Insight Engine: per-post performance_score + winning/losing factors, growth_insights pattern detection, PROVEN WINNERS feedback loop into generate-caption |
 | Gainesville posts repeating "Beautiful Day" hooks and styles | Added 48h per-city Creative Decay (80% weight penalty on overused hooks), FORBIDDEN REPETITIONS block, Diversity Guard, deterministic Focus Angle rotation, and Pexels secondary-keyword + city-scoped background variation |
 | AI captions producing awkward "in [Weather]" phrasing | Added \`cleanWeatherPhrasing\` regex cleaner in \`generate-caption\` final safety net — replaces "in Clear Skies/Rain/Wind/etc." with natural "with clear skies/rain/windy conditions" without hardcoded sentence replacements |

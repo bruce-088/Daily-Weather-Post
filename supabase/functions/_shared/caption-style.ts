@@ -616,6 +616,19 @@ export function titleHasTimestamp(title: string): boolean {
   return /^\[\d{1,2}(:\d{2})?\s?(AM|PM)\]/i.test(title || "");
 }
 
+/**
+ * Verification guard: log a warning when a generated title lacks a
+ * `[H AM|PM]` broadcast slot prefix. Non-throwing — purely observability so
+ * we can catch any future code path that bypasses ensureSlotTitlePrefix.
+ */
+export function assertSlotTitlePrefix(title: string, context: string = ""): void {
+  if (!titleHasTimestamp(title)) {
+    console.warn(
+      `[title_system] WARNING: Title generated without broadcast slot prefix.${context ? " ctx=" + context : ""} title="${title}"`,
+    );
+  }
+}
+
 // --- Slot helpers (Morning/Afternoon/Evening branding) ---
 
 export type SlotName = "morning" | "afternoon" | "evening" | "adhoc" | "manual" | string;

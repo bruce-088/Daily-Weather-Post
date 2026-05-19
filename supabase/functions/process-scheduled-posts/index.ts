@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { buildStyleAddendum, normalizeTone, appendVoiceCTA, isWeatherAlert, getCityLocalStamp, titleHasTimestamp, slotTimePrefix, slotDisplayLabel, slotPersonalityDirective, rotatingCTA, captionSimilarity, firstContentLine, ensureSlotTitlePrefix, inferSlotFromCityHour } from "../_shared/caption-style.ts";
+import { buildStyleAddendum, normalizeTone, appendVoiceCTA, isWeatherAlert, titleHasTimestamp, slotTimePrefix, slotDisplayLabel, slotPersonalityDirective, rotatingCTA, captionSimilarity, firstContentLine, ensureSlotTitlePrefix, inferSlotFromCityHour, assertSlotTitlePrefix } from "../_shared/caption-style.ts";
 import { LOCATION_ACCURACY_RULES, validateCaptionLocation, buildVerifiedLandmarksBlock, stripUnverifiedReferences } from "../_shared/location-guard.ts";
 import { generateVideoWithFallback } from "../_shared/video-render.ts";
 import { expandVisualMeta, getTopVisualStyle, classifyVisualTheme, classifyColorProfile } from "../_shared/experiments.ts";
@@ -285,10 +285,17 @@ function buildHookTitle(city: string, temp: number, condition: string, rainChanc
   // Slot-aware prefix: always force one of [8 AM]/[1 PM]/[6 PM]. The helper
   // strips any stale prefix, never duplicates, and keeps total length ≤ 95.
   try {
-    return ensureSlotTitlePrefix(baseTitle, slot, city);
+    const result = ensureSlotTitlePrefix(baseTitle, slot, city);
+    assertSlotTitlePrefix(result, "process-scheduled-posts:buildHookTitle");
+    return result;
   } catch (err) {
-    console.warn("buildHookTitle: ensureSlotTitlePrefix failed, returning base title", err);
-    return baseTitle.length > 95 ? baseTitle.substring(0, 92) + "..." : baseTitle;
+    console.warn("buildHookTitle: ensureSlotTitlePrefix failed, applying hard fallback prefix", err);
+    const prefix = `[${slotTimePrefix(slot, city)}] `;
+    const budget = Math.max(1, 95 - prefix.length);
+    const body = baseTitle.length > budget ? baseTitle.substring(0, budget - 1) + "…" : baseTitle;
+    const result = prefix + body;
+    assertSlotTitlePrefix(result, "process-scheduled-posts:buildHookTitle:fallback");
+    return result;
   }
 }
 
@@ -2294,6 +2301,7 @@ Deno.serve(async (req) => {
         // --- Platform Upload via Adapter ---
         const platformsToPost = post.platform === "both" ? ["youtube", "tiktok"] : post.platform.split(",").map((p: string) => p.trim());
         const title = generateSkyBriefTitle(weather.city, weather.temperature, weather.condition, weather.rainChance, _slotForGen);
+        assertSlotTitlePrefix(title, "process-scheduled-posts:dispatch");
         const desc = caption || "Weather update for " + weather.city + ": " + weather.temperature + "°F, " + weather.description;
 
         // Extract slot (morning/afternoon/evening) from auto-post marker if present, so the
