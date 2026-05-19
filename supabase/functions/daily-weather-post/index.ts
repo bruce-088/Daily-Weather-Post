@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { buildStyleAddendum, normalizeTone, appendVoiceCTA, isWeatherAlert, getCityLocalStamp, titleHasTimestamp, ensureSlotTitlePrefix } from "../_shared/caption-style.ts";
+import { buildStyleAddendum, normalizeTone, appendVoiceCTA, isWeatherAlert, titleHasTimestamp, ensureSlotTitlePrefix, slotTimePrefix, assertSlotTitlePrefix } from "../_shared/caption-style.ts";
 import {
   LOCATION_ACCURACY_RULES,
   buildVerifiedLandmarksBlock,
