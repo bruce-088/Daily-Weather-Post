@@ -2301,6 +2301,7 @@ Deno.serve(async (req) => {
         // --- Platform Upload via Adapter ---
         const platformsToPost = post.platform === "both" ? ["youtube", "tiktok"] : post.platform.split(",").map((p: string) => p.trim());
         const title = generateSkyBriefTitle(weather.city, weather.temperature, weather.condition, weather.rainChance, _slotForGen);
+        assertSlotTitlePrefix(title, "process-scheduled-posts:dispatch");
         const desc = caption || "Weather update for " + weather.city + ": " + weather.temperature + "°F, " + weather.description;
 
         // Extract slot (morning/afternoon/evening) from auto-post marker if present, so the
