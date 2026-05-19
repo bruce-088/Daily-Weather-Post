@@ -285,10 +285,17 @@ function buildHookTitle(city: string, temp: number, condition: string, rainChanc
   // Slot-aware prefix: always force one of [8 AM]/[1 PM]/[6 PM]. The helper
   // strips any stale prefix, never duplicates, and keeps total length ≤ 95.
   try {
-    return ensureSlotTitlePrefix(baseTitle, slot, city);
+    const result = ensureSlotTitlePrefix(baseTitle, slot, city);
+    assertSlotTitlePrefix(result, "process-scheduled-posts:buildHookTitle");
+    return result;
   } catch (err) {
-    console.warn("buildHookTitle: ensureSlotTitlePrefix failed, returning base title", err);
-    return baseTitle.length > 95 ? baseTitle.substring(0, 92) + "..." : baseTitle;
+    console.warn("buildHookTitle: ensureSlotTitlePrefix failed, applying hard fallback prefix", err);
+    const prefix = `[${slotTimePrefix(slot, city)}] `;
+    const budget = Math.max(1, 95 - prefix.length);
+    const body = baseTitle.length > budget ? baseTitle.substring(0, budget - 1) + "…" : baseTitle;
+    const result = prefix + body;
+    assertSlotTitlePrefix(result, "process-scheduled-posts:buildHookTitle:fallback");
+    return result;
   }
 }
 
