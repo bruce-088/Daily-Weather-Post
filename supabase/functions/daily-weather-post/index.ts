@@ -245,10 +245,17 @@ function buildHookTitle(city: string, temp: number, condition: string, rainChanc
   // ([8 AM]/[1 PM]/[6 PM]). Default to "morning" — this function is the morning
   // automated job, but callers may override via the slot arg.
   try {
-    return ensureSlotTitlePrefix(baseTitle, slot || "morning", city);
+    const result = ensureSlotTitlePrefix(baseTitle, slot || "morning", city);
+    assertSlotTitlePrefix(result, "daily-weather-post:buildHookTitle");
+    return result;
   } catch (err) {
-    console.warn("buildHookTitle: ensureSlotTitlePrefix failed, returning base title", err);
-    return baseTitle.length > 95 ? baseTitle.substring(0, 92) + "..." : baseTitle;
+    console.warn("buildHookTitle: ensureSlotTitlePrefix failed, applying hard fallback prefix", err);
+    const prefix = `[${slotTimePrefix(slot || "morning", city)}] `;
+    const budget = Math.max(1, 95 - prefix.length);
+    const body = baseTitle.length > budget ? baseTitle.substring(0, budget - 1) + "…" : baseTitle;
+    const result = prefix + body;
+    assertSlotTitlePrefix(result, "daily-weather-post:buildHookTitle:fallback");
+    return result;
   }
 }
 
