@@ -2814,7 +2814,8 @@ Deno.serve(async (req) => {
           // Video succeeded — post to all platforms
           for (const platformName of platformsToPost) {
             console.log(`[publish] Attempting to write notification for user: ${post.user_id}, platform: ${platformName}`);
-            const result = await postToPlatform(platformName, supabase, post.user_id, video.data, title, desc, video.mimeType, post.city_id || null);
+            console.log(`[title_debug] dispatch title for ${platformName}:`, title);
+            const result = await postToPlatform(platformName, supabase, post.user_id, video.data, title, desc, video.mimeType, post.city_id || null, (timePeriod as any) || null, post.city || null);
             // Hard guard: YouTube must return a real video_id. Throw so the
             // publish_post job fails loudly instead of being marked succeeded.
             if (platformName === "youtube" && result.success && !result.id) {
