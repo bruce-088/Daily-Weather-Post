@@ -1906,7 +1906,8 @@ Deno.serve(async (req) => {
       errorMessage = realRenderError;
       for (const a of connectedAdapters) recordResult(a.name, false, `Video render failed: ${realRenderError}`);
     } else if (userId) {
-      const title = generateSkyBriefTitle(weather.city, weather.temperature, weather.condition, weather.rainChance);
+      const title = generateSkyBriefTitle(weather.city, weather.temperature, weather.condition, weather.rainChance, "morning");
+      assertSlotTitlePrefix(title, "daily-weather-post:dispatch");
       const desc = caption || "Weather update for " + weather.city + ": " + weather.temperature + "\u00B0F, " + weather.description;
 
       for (const adapter of connectedAdapters) {
