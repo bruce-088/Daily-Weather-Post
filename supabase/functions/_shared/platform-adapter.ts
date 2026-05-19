@@ -44,6 +44,7 @@ import { TikTokAdapter } from "./tiktok-adapter.ts";
 import { InstagramAdapter } from "./instagram-adapter.ts";
 import { TwitterAdapter } from "./twitter-adapter.ts";
 import { LinkedInAdapter } from "./linkedin-adapter.ts";
+import { ensureSlotTitlePrefix, assertSlotTitlePrefix } from "./caption-style.ts";
 
 const adapters: PlatformAdapter[] = [
   new YouTubeAdapter(),
