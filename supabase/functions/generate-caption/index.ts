@@ -628,6 +628,60 @@ ${ctaBlock}${antiRepeatBlock ? `\n\n${antiRepeatBlock}` : ""}`;
     caption = cleanWeatherPhrasing(caption);
     caption = fixInvalidLocation(caption, city);
     caption = forceCitySanity(caption, city);
+
+    // GLOBAL PROXY REPLACEMENT — final guard, CONTEXT-BOUND.
+    // Only replaces blacklist terms when they appear in CTA/location slots
+    // or as hashtags. Descriptive narration (e.g. "clear skies over the bay")
+    // is intentionally left alone.
+    {
+      const BLACKLIST = ["Not Need", "Weather Update", "Coming Up", "But Comfortable", "Clear Skies"];
+      const cityNoSpaces = city.replace(/\s+/g, "");
+      const blacklistHits: string[] = [];
+
+      for (const term of BLACKLIST) {
+        const esc = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const noSpace = term.replace(/\s+/g, "");
+        const escNoSpace = noSpace.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+        const ctaPatterns: Array<{ re: RegExp; sub: string }> = [
+          { re: new RegExp(`\\bweather in ${esc}\\b`, "gi"), sub: `weather in ${city}` },
+          { re: new RegExp(`\\bdaily ${esc} weather alerts\\b`, "gi"), sub: `daily ${city} weather alerts` },
+          { re: new RegExp(`\\bfollow for ${esc} updates\\b`, "gi"), sub: `follow for ${city} updates` },
+          { re: new RegExp(`\\bsubscribe for ${esc} weather alerts\\b`, "gi"), sub: `subscribe for ${city} weather alerts` },
+        ];
+        for (const { re, sub } of ctaPatterns) {
+          if (re.test(caption)) {
+            blacklistHits.push(`${term} (cta)`);
+            caption = caption.replace(re, sub);
+          }
+        }
+
+        const tagRe = new RegExp(`#${escNoSpace}\\b`, "gi");
+        if (tagRe.test(caption)) {
+          blacklistHits.push(`${term} (hashtag)`);
+          caption = caption.replace(tagRe, `#${cityNoSpaces}`);
+        }
+      }
+
+      caption = caption
+        .replace(new RegExp(`##+${cityNoSpaces}`, "gi"), `#${cityNoSpaces}`)
+        .replace(new RegExp(`#\\s+${cityNoSpaces}`, "gi"), `#${cityNoSpaces}`);
+
+      if (blacklistHits.length > 0) {
+        console.warn(`[generate-caption] blacklist proxy terms replaced for ${city}:`, blacklistHits);
+        try {
+          const svc = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+          await svc.from("system_logs").insert({
+            user_id: auth.userId,
+            type: "caption_blacklist_sanitized",
+            message: `Replaced proxy term(s) ${blacklistHits.join(", ")} → ${city}`,
+            context: { city, hits: blacklistHits },
+          });
+        } catch {
+          /* best-effort */
+        }
+      }
+    }
     // City-handle sanitizer: replace any @SkyBrief* token that doesn't match
     // the dynamic handle for this city. Prevents Orlando captions ending with
     // "Follow @SkyBriefGNV" because the model recalled stale brand strings.
