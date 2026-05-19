@@ -1943,7 +1943,8 @@ Deno.serve(async (req) => {
     };
 
     // Derive title used for posting (re-build deterministically for metadata).
-    const _titleForMeta = generateSkyBriefTitle(weather.city, weather.temperature, weather.condition, weather.rainChance);
+    const _titleForMeta = generateSkyBriefTitle(weather.city, weather.temperature, weather.condition, weather.rainChance, "morning");
+    assertSlotTitlePrefix(_titleForMeta, "daily-weather-post:metadata");
     const { data: historyRow, error: historyError } = await supabase.from("post_history").insert({
       status, platform, city: weather.city, temperature: weather.temperature,
       condition: weather.condition, image_url: storedImageUrl, error_message: errorMessage,
