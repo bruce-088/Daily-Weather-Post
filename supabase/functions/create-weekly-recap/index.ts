@@ -142,6 +142,16 @@ Title must include the phrase "Weekly Recap".`;
 
 interface StitchResult { url: string; data: Uint8Array; }
 
+// Remove #Shorts-style hashtags so YouTube does not auto-classify the upload
+// as a Short. Long-form recap MUST never carry these tags.
+function stripShortsHashtag(s: string): string {
+  return (s || "")
+    .replace(/#shorts\b/gi, "")
+    .replace(/#ytshorts\b/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 async function stitchSlideshow(posts: PostRow[], title: string): Promise<StitchResult | null> {
   if (!CREATOMATE_API_KEY) {
     console.warn("[recap] CREATOMATE_API_KEY missing — skipping stitch");
@@ -153,7 +163,11 @@ async function stitchSlideshow(posts: PostRow[], title: string): Promise<StitchR
     return null;
   }
 
-  const SLIDE_DUR = 4;
+  // 9s per slide ensures even a 5-slide week (5*9 + title + outro = 63s)
+  // clears the 60s YouTube Short threshold. A full 7-slide week = 81s.
+  const SLIDE_DUR = 9;
+  const city = posts[0]?.city ?? "your city";
+
   const elements: any[] = [];
   // Title card
   elements.push({
