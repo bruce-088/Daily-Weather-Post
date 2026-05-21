@@ -121,25 +121,9 @@ export async function postToPlatform(
 
     console.log(`${adapter.name} upload success! ID: ${result.id} channel=${result.account_name ?? "unknown"} city=${result.resolved_city_id ?? "shared"}`);
 
-    // Phase 1 Growth Loop — fire-and-forget post_performance insert.
-    // Never block publish on failure; always swallow errors inside.
-    if (cityName) {
-      await recordPostPerformance(supabase, {
-        postId: performanceMeta?.postId ?? null,
-        city: cityName,
-        platform: adapter.name,
-        slot: slot ?? null,
-        title: cleanTitle,
-        caption: performanceMeta?.caption ?? cleanDescription ?? null,
-        hookText: performanceMeta?.hookText ?? null,
-        tone: performanceMeta?.tone ?? null,
-        style: performanceMeta?.style ?? null,
-        weatherCondition: performanceMeta?.weatherCondition ?? null,
-        postedWithVoice: performanceMeta?.postedWithVoice ?? false,
-        publishedAt: performanceMeta?.publishedAt ?? new Date().toISOString(),
-        source: performanceMeta?.source ?? "system",
-      });
-    }
+    // NOTE: Phase 1 Growth Loop post_performance rows are recorded by the
+    // caller AFTER it inserts the post_history row, so we can link post_id.
+    void performanceMeta; // currently unused in dispatcher; retained for future use
 
     return { success: true, id: result.id, resolved_city_id: result.resolved_city_id ?? null, account_name: result.account_name ?? null };
   } catch (e) {
