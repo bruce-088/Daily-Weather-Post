@@ -238,11 +238,12 @@ async function stitchSlideshow(posts: PostRow[], title: string): Promise<StitchR
   const body = {
     output_format: "mp4",
     frame_rate: 30,
-    render_scale: 0.75,
+    // Drop render_scale so YouTube gets a full 1920x1080 long-form file —
+    // 0.75 produced 1440x810 which YouTube was flagging as "invalid /
+    // processing abandoned" on text-only recaps.
     source: {
       width: 1920, height: 1080, // long-form 16:9
       duration: totalDuration,
-
       fill_color: "#0f172a",
       elements,
     },
