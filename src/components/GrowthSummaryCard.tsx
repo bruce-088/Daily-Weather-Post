@@ -128,6 +128,22 @@ export function GrowthSummaryCard({ onOpenAnalytics }: { onOpenAnalytics?: () =>
             <span className="opacity-60">· {Math.round(rec.best_slot.avg_views).toLocaleString()} avg views</span>
           </div>
         )}
+        {winner && (
+          <div className="rounded-md border border-primary/20 bg-primary/5 p-2 space-y-1">
+            <div className="flex items-center gap-1.5 text-[11px] text-primary font-medium">
+              <Trophy size={11} />
+              Recent Winners{activeCity.name ? ` · ${activeCity.name}` : ""}
+              <span className="ml-auto opacity-60 font-normal">{winner.sampleSize} posts · 14d</span>
+            </div>
+            {winner.topTitle && (
+              <p className="text-xs text-foreground/90 line-clamp-2 leading-snug">"{winner.topTitle}"</p>
+            )}
+            <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+              {winner.bestSlot && <span>Best slot: <span className="text-foreground font-medium capitalize">{winner.bestSlot}</span></span>}
+              <span className="opacity-60">· {winner.avgViews.toLocaleString()} avg views</span>
+            </div>
+          </div>
+        )}
         {onOpenAnalytics && (
           <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 px-2" onClick={onOpenAnalytics}>
             Open Growth dashboard <ChevronRight size={12} />
