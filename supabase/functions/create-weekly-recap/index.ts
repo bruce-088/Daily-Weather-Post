@@ -204,7 +204,28 @@ async function stitchSlideshow(posts: PostRow[], title: string): Promise<StitchR
     });
   });
 
-  const totalDuration = (slides.length + 1) * SLIDE_DUR;
+  // Outro card — guarantees the long-form clears 60s even on short weeks.
+  const outroStart = (slides.length + 1) * SLIDE_DUR;
+  elements.push({
+    type: "text",
+    text: `Thanks for watching!\nLike + subscribe for daily ${city} weather.`,
+    x: "50%", y: "50%", width: "90%",
+    font_family: "Inter", font_weight: "800",
+    font_size: "7 vh", fill_color: "#ffffff",
+    background_color: "rgba(0,0,0,0.55)", padding: 24,
+    time: outroStart, duration: SLIDE_DUR,
+    enter_animation: { type: "fade", duration: 0.4 },
+    exit_animation: { type: "fade", duration: 0.4 },
+  });
+
+  let totalDuration = (slides.length + 2) * SLIDE_DUR; // title + slides + outro
+  if (totalDuration < 65) {
+    const pad = 65 - totalDuration;
+    elements[elements.length - 1].duration += pad;
+    totalDuration += pad;
+  }
+  console.log(`[recap] stitch duration=${totalDuration}s slides=${slides.length}`);
+
   const body = {
     output_format: "mp4",
     frame_rate: 30,
@@ -212,6 +233,7 @@ async function stitchSlideshow(posts: PostRow[], title: string): Promise<StitchR
     source: {
       width: 1920, height: 1080, // long-form 16:9
       duration: totalDuration,
+
       fill_color: "#0f172a",
       elements,
     },
