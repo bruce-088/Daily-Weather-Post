@@ -91,7 +91,7 @@ Deno.serve(async (req) => {
       }
 
       // Persist correlation between preview bundle and posted asset
-      await supabase.from("post_history").insert({
+      const { data: historyRow } = await supabase.from("post_history").insert({
         user_id: userId,
         status: r.success ? "success" : "failed",
         platform,
@@ -111,7 +111,35 @@ Deno.serve(async (req) => {
           content_type: bundle.content_type,
           storage_path: bundle.storage_path,
         },
-      });
+      }).select("id").maybeSingle();
+
+      // Phase 1 Growth Loop — seed post_performance for successful preview publishes.
+      if (r.success && historyRow?.id) {
+        try {
+          const { error: perfErr } = await supabase.from("post_performance").upsert({
+            post_id: historyRow.id,
+            city: cityName,
+            platform,
+            slot: (bundle as any).slot ?? null,
+            title,
+            caption: captionText || null,
+            hook_text: (captionText || "").split("\n").map((s: string) => s.trim()).filter(Boolean)[0] || null,
+            tone: (bundle as any).tone ?? null,
+            style: (bundle as any).visual_source ?? null,
+            weather_condition: weather?.condition ?? null,
+            posted_with_voice: !!(bundle as any).voice_url,
+            published_at: new Date().toISOString(),
+            source: "preview",
+          }, { onConflict: "post_id,platform", ignoreDuplicates: true });
+          if (perfErr) {
+            console.warn(`[analytics] post_performance seed failed for preview ${bundle.id} (${platform}):`, perfErr.message);
+          } else {
+            console.log(`[analytics] inserted post_performance row for ${cityName} ${platform} (preview)`);
+          }
+        } catch (e) {
+          console.warn(`[analytics] post_performance preview seed exception:`, e instanceof Error ? e.message : e);
+        }
+      }
 
       results.push({ platform, success: r.success, id: externalId, url: postUrl, error: r.error });
     }
