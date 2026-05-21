@@ -660,10 +660,12 @@ ${ctaBlock}${antiRepeatBlock ? `\n\n${antiRepeatBlock}` : ""}`;
         const escNoSpace = noSpace.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
         const ctaPatterns: Array<{ re: RegExp; sub: string }> = [
-          { re: new RegExp(`\\bweather in ${esc}\\b`, "gi"), sub: `weather in ${city}` },
-          { re: new RegExp(`\\bdaily ${esc} weather alerts\\b`, "gi"), sub: `daily ${city} weather alerts` },
-          { re: new RegExp(`\\bfollow for ${esc} updates\\b`, "gi"), sub: `follow for ${city} updates` },
-          { re: new RegExp(`\\bsubscribe for ${esc} weather alerts\\b`, "gi"), sub: `subscribe for ${city} weather alerts` },
+          { re: new RegExp(`\\benjoying the weather in ${esc}(?=[^a-zA-Z]|$)`, "gi"), sub: `enjoying the weather in ${city}` },
+          { re: new RegExp(`\\bweather in ${esc}(?=[^a-zA-Z]|$)`, "gi"), sub: `weather in ${city}` },
+          { re: new RegExp(`\\bdaily ${esc} weather alerts(?=[^a-zA-Z]|$)`, "gi"), sub: `daily ${city} weather alerts` },
+          { re: new RegExp(`\\bdaily ${esc} updates(?=[^a-zA-Z]|$)`, "gi"), sub: `daily ${city} updates` },
+          { re: new RegExp(`\\bfollow for ${esc} updates(?=[^a-zA-Z]|$)`, "gi"), sub: `follow for ${city} updates` },
+          { re: new RegExp(`\\bsubscribe for ${esc} weather alerts(?=[^a-zA-Z]|$)`, "gi"), sub: `subscribe for ${city} weather alerts` },
         ];
         for (const { re, sub } of ctaPatterns) {
           if (re.test(caption)) {
