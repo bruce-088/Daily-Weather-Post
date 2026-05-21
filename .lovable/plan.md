@@ -1,48 +1,54 @@
-## Goal
-Make the caption blacklist match "Weather Update" even when spacing/casing varies (e.g. "WeatherUpdate", "Weather  Update", "weather update").
+## Plan: stop corrupt/invalid weekly recap uploads before YouTube
 
-## Change (single file: `supabase/functions/generate-caption/index.ts`, ~lines 658–670)
+### 1. Validate Creatomate render output immediately after completion
+In `supabase/functions/create-weekly-recap/index.ts`, update the successful Creatomate render branch to inspect the rendered URL before returning it:
 
-Inside the existing `for (const term of BLACKLIST)` loop, build the term regex so internal whitespace becomes `\s*` instead of a literal space. This makes every CTA pattern (and not just "Weather Update") space-insensitive automatically.
+- Fetch/render-download the output URL and capture:
+  - `bytes` from the downloaded `ArrayBuffer`
+  - `contentType` from the response header
+  - `contentLength` from headers when available
+- Add the required log:
+  - `[recap] render output size={bytes} type={contentType}`
+- Abort the stitch result if:
+  - downloaded bytes are `< 1_000_000`
+  - content type is not `video/mp4` compatible
+- Add the required abort log:
+  - `[recap] ABORT: render output invalid`
 
-Replacement logic:
+### 2. Log and warn on Creatomate-reported duration
+In the same successful render branch:
+
+- Read the duration from the Creatomate render status payload.
+- Add:
+  - `[recap] render duration reported by Creatomate: {duration}s`
+- If reported duration is a number below 60 seconds, add:
+  - `[recap] WARNING: duration under 60s, YouTube will reject`
+
+### 3. Force YouTube-safe Creatomate output settings
+The function already sets `output_format: "mp4"`, `frame_rate: 30`, and `source.width/height` to `1920x1080`.
+
+I’ll add the missing explicit Creatomate codec field:
 
 ```ts
-const esc = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-// NEW: allow any (or no) whitespace between the words of the blacklisted term
-const escFlex = esc.replace(/\\?\s+/g, "\\s*");
-const noSpace = term.replace(/\s+/g, "");
-const escNoSpace = noSpace.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-const ctaPatterns: Array<{ re: RegExp; sub: string }> = [
-  { re: new RegExp(`\\benjoying the weather in ${escFlex}(?=[^a-zA-Z]|$)`, "gi"),
-    sub: `enjoying the weather in ${city}` },
-  { re: new RegExp(`\\bweather in ${escFlex}(?=[^a-zA-Z]|$)`, "gi"),
-    sub: `weather in ${city}` },
-  { re: new RegExp(`\\bdaily ${escFlex} weather alerts(?=[^a-zA-Z]|$)`, "gi"),
-    sub: `daily ${city} weather alerts` },
-  { re: new RegExp(`\\bdaily ${escFlex} updates(?=[^a-zA-Z]|$)`, "gi"),
-    sub: `daily ${city} updates` },
-  { re: new RegExp(`\\bfollow for ${escFlex} updates(?=[^a-zA-Z]|$)`, "gi"),
-    sub: `follow for ${city} updates` },
-  { re: new RegExp(`\\bsubscribe for ${escFlex} weather alerts(?=[^a-zA-Z]|$)`, "gi"),
-    sub: `subscribe for ${city} weather alerts` },
-];
+codec: "h264"
 ```
 
-Notes on the user-supplied snippet:
-- It used single-backslash `\b` / `\s*` inside a regular string literal, which would not produce real regex metachars. The plan uses double-escaped `\\b` / `\\s*` to match the existing file style.
-- It only covered the "Weather Update" term, but the same fix applies cleanly to every blacklist term by deriving `escFlex` from `esc`.
-- Hashtag handling already uses `escNoSpace`, so it already tolerates the no-space variant — no change needed there.
+I’ll keep `width` and `height` in the `source` object because that matches the current Creatomate payload structure already in use.
 
-## Spec / Living Doc
-- Update `supabase/functions/generate-spec/index.ts` Sanitization section: note that blacklist CTA matching is now whitespace-insensitive (`Weather Update`, `WeatherUpdate`, `Weather  Update` all sanitized).
+### 4. Add a final pre-upload guard
+Before `uploadLongFormToYouTube(...)` runs, validate the `stitched.url` with a `HEAD` request:
 
-## Verification
-- Deploy `generate-caption`.
-- Run generate-caption for Gainesville; confirm `[generate-caption] blacklist proxy terms replaced` log fires for a synthetic input containing `weather in WeatherUpdate`.
-- Inspect `system_logs` rows of type `caption_blacklist_sanitized`.
+- Check `Content-Length` if present.
+- Check `Content-Type` if present.
+- Abort upload if `Content-Length < 1_000_000` or content type is clearly not MP4.
+- Log the guard result with a `[recap]` prefix.
 
-## Out of scope
-- No changes to narration sanitization, hashtag rules, or other edge functions.
-- No schema changes.
+To support this cleanly, extend `StitchResult` to carry enough metadata from the render validation step, while still using the existing `stitched.data` upload path.
+
+### 5. Deploy and verify
+After implementation:
+
+- Deploy only `create-weekly-recap`.
+- Pull fresh function logs to confirm deployment/boot and that the new log points are present for the next run.
+
+No schema changes, no daily pipeline changes, and no frontend changes.
