@@ -48,16 +48,18 @@ interface PostRow {
 
 // ───────────────── helpers ─────────────────
 
-async function getLast7Posts(svc: any, userId: string): Promise<PostRow[]> {
+async function getLast7Posts(svc: any, userId: string, cityFilter?: string): Promise<PostRow[]> {
   const since = new Date(Date.now() - 8 * 86400 * 1000).toISOString();
-  const { data, error } = await svc
+  let q = svc
     .from("post_history")
     .select("id, city, temperature, condition, caption, image_url, post_url, created_at")
     .eq("user_id", userId)
     .in("status", ["succeeded", "success"])
     .gte("created_at", since)
     .order("created_at", { ascending: true })
-    .limit(20);
+    .limit(50);
+  if (cityFilter) q = q.ilike("city", `%${cityFilter}%`);
+  const { data, error } = await q;
   if (error) throw new Error(`post_history fetch failed: ${error.message}`);
   // Dedupe by day so multi-platform same-day posts collapse to one slide
   const byDay = new Map<string, PostRow>();
