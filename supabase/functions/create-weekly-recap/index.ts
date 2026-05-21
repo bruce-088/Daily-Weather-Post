@@ -54,7 +54,7 @@ async function getLast7Posts(svc: any, userId: string): Promise<PostRow[]> {
     .from("post_history")
     .select("id, city, temperature, condition, caption, image_url, post_url, created_at")
     .eq("user_id", userId)
-    .eq("status", "succeeded")
+    .in("status", ["succeeded", "success"])
     .gte("created_at", since)
     .order("created_at", { ascending: true })
     .limit(20);
