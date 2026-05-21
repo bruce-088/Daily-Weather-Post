@@ -565,8 +565,9 @@ ${ctaBlock}${antiRepeatBlock ? `\n\n${antiRepeatBlock}` : ""}`;
     let performanceBlock = "";
     try {
       const { loadCityPerformanceInsights, formatPerformanceGuidanceBlock } = await import("../_shared/performance-insights.ts");
-      const platformForInsights = (body.platform || "youtube").toString().toLowerCase();
-      const insights = await loadCityPerformanceInsights(supabase, { city, platform: platformForInsights });
+      const svcForInsights = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const platformForInsights = ((body as any).platform || "youtube").toString().toLowerCase();
+      const insights = await loadCityPerformanceInsights(svcForInsights, { city, platform: platformForInsights });
       if (insights) {
         performanceBlock = `\n\n${formatPerformanceGuidanceBlock(insights)}`;
         console.log(`[analytics] injecting performance guidance into title generation city=${city} platform=${platformForInsights} sampleSize=${insights.sampleSize}`);
