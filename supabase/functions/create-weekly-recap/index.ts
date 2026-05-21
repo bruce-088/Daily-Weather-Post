@@ -560,8 +560,8 @@ import { requireCronOrUser } from "../_shared/auth-helpers.ts";
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
-  const _gate = await requireCronOrUser(req);
-  if (!_gate.ok) return _gate.response;
+  const gate = await requireCronOrUser(req);
+  if (!gate.ok) return gate.response;
 
   const svc = createClient(SUPABASE_URL, SERVICE_ROLE, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -583,7 +583,11 @@ Deno.serve(async (req) => {
     .from("weather_settings")
     .select("user_id, youtube_refresh_token, youtube_access_token")
     .or("youtube_refresh_token.not.is.null,youtube_access_token.not.is.null");
-  if (userFilter) cq = cq.eq("user_id", userFilter);
+  if (gate.source === "user") {
+    cq = cq.eq("user_id", gate.userId);
+  } else if (userFilter) {
+    cq = cq.eq("user_id", userFilter);
+  }
   const { data: candidates, error } = await cq;
 
   if (error) {
