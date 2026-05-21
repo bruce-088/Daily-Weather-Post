@@ -3,8 +3,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Sparkles, TrendingUp, AlertTriangle, ChevronRight } from "lucide-react";
+import { Sparkles, TrendingUp, AlertTriangle, ChevronRight, Trophy } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useActiveCity } from "@/hooks/useActiveCity";
 
 interface Recommendation {
   recommendation: string;
