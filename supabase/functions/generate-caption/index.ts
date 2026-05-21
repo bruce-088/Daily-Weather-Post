@@ -560,7 +560,22 @@ ${personalityBlock}
 ${ctaBlock}${antiRepeatBlock ? `\n\n${antiRepeatBlock}` : ""}`;
 
     const cityScopeDirective = `\n\nSTRICT CITY SCOPE: You are generating content EXCLUSIVELY for ${city}${body.state_or_region || body.stateOrRegion ? ", " + (body.state_or_region || body.stateOrRegion) : ""}. Do NOT mention any other city, region, or social handle. The ONLY @handle allowed is ${handle}. Never output @SkyBriefGNV, @SkyBriefMiami, @SkyBriefOrlando, @SkyBriefTampa or any other variant unless it exactly equals ${handle}. Do NOT include subscribe URLs for other channels.`;
-    const systemPrompt = `${SKYBRIEF_SYSTEM_PROMPT}\n\n${LOCATION_ACCURACY_RULES}${cityScopeDirective}`;
+
+    // Phase 1 Growth Loop — inject directional performance guidance.
+    let performanceBlock = "";
+    try {
+      const { loadCityPerformanceInsights, formatPerformanceGuidanceBlock } = await import("../_shared/performance-insights.ts");
+      const platformForInsights = (body.platform || "youtube").toString().toLowerCase();
+      const insights = await loadCityPerformanceInsights(supabase, { city, platform: platformForInsights });
+      if (insights) {
+        performanceBlock = `\n\n${formatPerformanceGuidanceBlock(insights)}`;
+        console.log(`[analytics] injecting performance guidance into title generation city=${city} platform=${platformForInsights} sampleSize=${insights.sampleSize}`);
+      }
+    } catch (e) {
+      console.warn("[analytics] performance guidance injection skipped:", e instanceof Error ? e.message : e);
+    }
+
+    const systemPrompt = `${SKYBRIEF_SYSTEM_PROMPT}\n\n${LOCATION_ACCURACY_RULES}${cityScopeDirective}${performanceBlock}`;
 
     const callModel = async (extraUserSuffix = "") => {
       const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
