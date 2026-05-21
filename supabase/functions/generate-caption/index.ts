@@ -657,16 +657,19 @@ ${ctaBlock}${antiRepeatBlock ? `\n\n${antiRepeatBlock}` : ""}`;
 
       for (const term of BLACKLIST) {
         const esc = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        // Allow any (or no) whitespace between the words of the blacklisted term
+        // so "Weather Update", "WeatherUpdate", and "Weather  Update" all match.
+        const escFlex = esc.replace(/\s+/g, "\\s*");
         const noSpace = term.replace(/\s+/g, "");
         const escNoSpace = noSpace.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
         const ctaPatterns: Array<{ re: RegExp; sub: string }> = [
-          { re: new RegExp(`\\benjoying the weather in ${esc}(?=[^a-zA-Z]|$)`, "gi"), sub: `enjoying the weather in ${city}` },
-          { re: new RegExp(`\\bweather in ${esc}(?=[^a-zA-Z]|$)`, "gi"), sub: `weather in ${city}` },
-          { re: new RegExp(`\\bdaily ${esc} weather alerts(?=[^a-zA-Z]|$)`, "gi"), sub: `daily ${city} weather alerts` },
-          { re: new RegExp(`\\bdaily ${esc} updates(?=[^a-zA-Z]|$)`, "gi"), sub: `daily ${city} updates` },
-          { re: new RegExp(`\\bfollow for ${esc} updates(?=[^a-zA-Z]|$)`, "gi"), sub: `follow for ${city} updates` },
-          { re: new RegExp(`\\bsubscribe for ${esc} weather alerts(?=[^a-zA-Z]|$)`, "gi"), sub: `subscribe for ${city} weather alerts` },
+          { re: new RegExp(`\\benjoying the weather in ${escFlex}(?=[^a-zA-Z]|$)`, "gi"), sub: `enjoying the weather in ${city}` },
+          { re: new RegExp(`\\bweather in ${escFlex}(?=[^a-zA-Z]|$)`, "gi"), sub: `weather in ${city}` },
+          { re: new RegExp(`\\bdaily ${escFlex} weather alerts(?=[^a-zA-Z]|$)`, "gi"), sub: `daily ${city} weather alerts` },
+          { re: new RegExp(`\\bdaily ${escFlex} updates(?=[^a-zA-Z]|$)`, "gi"), sub: `daily ${city} updates` },
+          { re: new RegExp(`\\bfollow for ${escFlex} updates(?=[^a-zA-Z]|$)`, "gi"), sub: `follow for ${city} updates` },
+          { re: new RegExp(`\\bsubscribe for ${escFlex} weather alerts(?=[^a-zA-Z]|$)`, "gi"), sub: `subscribe for ${city} weather alerts` },
         ];
         for (const { re, sub } of ctaPatterns) {
           if (re.test(caption)) {
