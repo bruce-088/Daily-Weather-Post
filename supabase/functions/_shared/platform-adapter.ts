@@ -45,6 +45,7 @@ import { InstagramAdapter } from "./instagram-adapter.ts";
 import { TwitterAdapter } from "./twitter-adapter.ts";
 import { LinkedInAdapter } from "./linkedin-adapter.ts";
 import { ensureSlotTitlePrefix, assertSlotTitlePrefix } from "./caption-style.ts";
+import { recordPostPerformance, type PerformanceMeta } from "./performance-insights.ts";
 
 const adapters: PlatformAdapter[] = [
   new YouTubeAdapter(),
