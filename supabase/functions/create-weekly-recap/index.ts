@@ -154,7 +154,58 @@ function stripShortsHashtag(s: string): string {
     .trim();
 }
 
-async function stitchSlideshow(posts: PostRow[], title: string): Promise<StitchResult | null> {
+function writeAscii(view: DataView, offset: number, value: string) {
+  for (let i = 0; i < value.length; i++) view.setUint8(offset + i, value.charCodeAt(i));
+}
+
+function createSilentWav(durationSeconds: number): Uint8Array {
+  const sampleRate = 48000;
+  const channels = 1;
+  const bitsPerSample = 16;
+  const bytesPerSample = bitsPerSample / 8;
+  const samples = Math.ceil(durationSeconds * sampleRate);
+  const dataSize = samples * channels * bytesPerSample;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+
+  writeAscii(view, 0, "RIFF");
+  view.setUint32(4, 36 + dataSize, true);
+  writeAscii(view, 8, "WAVE");
+  writeAscii(view, 12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, channels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * channels * bytesPerSample, true);
+  view.setUint16(32, channels * bytesPerSample, true);
+  view.setUint16(34, bitsPerSample, true);
+  writeAscii(view, 36, "data");
+  view.setUint32(40, dataSize, true);
+
+  return new Uint8Array(buffer);
+}
+
+async function createSignedSilentAudio(svc: any, userId: string, durationSeconds: number): Promise<string | null> {
+  const roundedDuration = Math.max(65, Math.ceil(durationSeconds));
+  const wav = createSilentWav(roundedDuration);
+  const path = `weekly-recap-audio/${userId}/${Date.now()}-${roundedDuration}s.wav`;
+  const { error: uploadError } = await svc.storage.from("generated-images")
+    .upload(path, wav, { contentType: "audio/wav", upsert: true });
+  if (uploadError) {
+    console.error("[recap] silent audio upload failed:", uploadError.message);
+    return null;
+  }
+  const { data: signed, error: signedError } = await svc.storage.from("generated-images")
+    .createSignedUrl(path, 60 * 60);
+  if (signedError || !signed?.signedUrl) {
+    console.error("[recap] silent audio signed url failed:", signedError?.message ?? "missing signed URL");
+    return null;
+  }
+  console.log(`[recap] silent audio ready: duration=${roundedDuration}s bytes=${wav.byteLength}`);
+  return signed.signedUrl;
+}
+
+async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title: string): Promise<StitchResult | null> {
   if (!CREATOMATE_API_KEY) {
     console.warn("[recap] CREATOMATE_API_KEY missing — skipping stitch");
     return null;
@@ -234,6 +285,18 @@ async function stitchSlideshow(posts: PostRow[], title: string): Promise<StitchR
     totalDuration += pad;
   }
   console.log(`[recap] stitch duration=${totalDuration}s slides=${slides.length}`);
+  const silentAudioUrl = await createSignedSilentAudio(svc, userId, totalDuration);
+  if (silentAudioUrl) {
+    elements.push({
+      type: "audio",
+      source: silentAudioUrl,
+      time: 0,
+      duration: totalDuration,
+      volume: 0.01,
+    });
+  } else {
+    console.warn("[recap] continuing without silent audio track; YouTube may abandon processing");
+  }
 
   const body = {
     output_format: "mp4",
@@ -423,7 +486,7 @@ async function runForUser(svc: any, userId: string, cityFilter?: string): Promis
   const description = `${script}\n\n#WeeklyRecap #Weather #SkyBrief`;
 
   // Try video stitch
-  const stitched = await stitchSlideshow(posts, finalTitle);
+  const stitched = await stitchSlideshow(svc, userId, posts, finalTitle);
 
   if (stitched) {
     const token = await getYouTubeToken(svc, userId);
@@ -497,8 +560,8 @@ import { requireCronOrUser } from "../_shared/auth-helpers.ts";
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
-  const _gate = await requireCronOrUser(req);
-  if (!_gate.ok) return _gate.response;
+  const gate = await requireCronOrUser(req);
+  if (!gate.ok) return gate.response;
 
   const svc = createClient(SUPABASE_URL, SERVICE_ROLE, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -520,7 +583,11 @@ Deno.serve(async (req) => {
     .from("weather_settings")
     .select("user_id, youtube_refresh_token, youtube_access_token")
     .or("youtube_refresh_token.not.is.null,youtube_access_token.not.is.null");
-  if (userFilter) cq = cq.eq("user_id", userFilter);
+  if (gate.source === "user") {
+    cq = cq.eq("user_id", gate.userId);
+  } else if (userFilter) {
+    cq = cq.eq("user_id", userFilter);
+  }
   const { data: candidates, error } = await cq;
 
   if (error) {
