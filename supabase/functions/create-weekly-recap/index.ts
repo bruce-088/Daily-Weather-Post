@@ -424,21 +424,25 @@ async function runForUser(svc: any, userId: string): Promise<{ ok: boolean; deta
       });
       return { ok: false, detail: "No YouTube token" };
     }
-    const videoId = await uploadLongFormToYouTube(token, stitched.data, finalTitle, description);
+    const cleanTitle = stripShortsHashtag(finalTitle);
+    const cleanDesc = stripShortsHashtag(description);
+    const videoId = await uploadLongFormToYouTube(token, stitched.data, cleanTitle, cleanDesc);
     if (videoId) {
+      console.log(`[recap] uploaded to YouTube as videoId: ${videoId}`);
       await svc.from("post_history").insert({
         user_id: userId, status: "succeeded", platform: "youtube",
-        city: posts[0].city, caption: finalTitle,
+        city: posts[0].city, caption: cleanTitle,
         post_url: `https://www.youtube.com/watch?v=${videoId}`,
         external_id: videoId,
       });
       await svc.from("notifications").insert({
         user_id: userId, type: "success",
         title: "📺 Weekly Recap published!",
-        message: `${finalTitle} is live on YouTube.`,
+        message: `${cleanTitle} is live on YouTube.`,
       });
       return { ok: true, detail: `Uploaded ${videoId}` };
     }
+
     // upload failed -> fall through to infographic fallback
     console.warn("[recap] YT upload failed — falling back to infographic");
   }
