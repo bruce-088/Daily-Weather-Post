@@ -517,6 +517,26 @@ async function runForUser(svc: any, userId: string, cityFilter?: string): Promis
     }
     const cleanTitle = stripShortsHashtag(finalTitle);
     const cleanDesc = stripShortsHashtag(description);
+
+    // Pre-upload guard: HEAD the rendered URL one more time before pushing to YouTube.
+    try {
+      const head = await fetch(stitched.url, { method: "HEAD" });
+      const hLen = Number(head.headers.get("content-length") || "0");
+      const hType = head.headers.get("content-type") || "unknown";
+      console.log(`[recap] pre-upload HEAD check: status=${head.status} length=${hLen} type=${hType}`);
+      if ((hLen > 0 && hLen < 1_000_000) || (hType !== "unknown" && !/video\/mp4/i.test(hType))) {
+        console.error(`[recap] ABORT: pre-upload guard rejected file (length=${hLen} type=${hType})`);
+        await svc.from("post_history").insert({
+          user_id: userId, status: "failed", platform: "youtube",
+          city: posts[0].city, caption: finalTitle,
+          error_message: `Pre-upload guard rejected file (length=${hLen} type=${hType})`,
+        });
+        return { ok: false, detail: "Pre-upload guard rejected file" };
+      }
+    } catch (e) {
+      console.warn(`[recap] pre-upload HEAD check failed (continuing): ${(e as Error).message}`);
+    }
+
     const videoId = await uploadLongFormToYouTube(token, stitched.data, cleanTitle, cleanDesc);
     if (videoId) {
       console.log(`[recap] uploaded to YouTube as videoId: ${videoId}`);
