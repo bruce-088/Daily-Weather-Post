@@ -8,6 +8,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { YouTubeAdapter } from "../_shared/youtube-adapter.ts";
 import { TikTokAdapter } from "../_shared/tiktok-adapter.ts";
+import { updatePostPerformanceMetrics, computeEngagementScore } from "../_shared/performance-insights.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
