@@ -403,10 +403,10 @@ high contrast. No watermark.`;
 
 // ───────────────── per-user runner ─────────────────
 
-async function runForUser(svc: any, userId: string): Promise<{ ok: boolean; detail: string }> {
-  const posts = await getLast7Posts(svc, userId);
+async function runForUser(svc: any, userId: string, cityFilter?: string): Promise<{ ok: boolean; detail: string }> {
+  const posts = await getLast7Posts(svc, userId, cityFilter);
   if (posts.length < 3) {
-    return { ok: false, detail: `Only ${posts.length} posts in last 7 days — skipping recap` };
+    return { ok: false, detail: `Only ${posts.length} posts in last 7 days${cityFilter ? ` for ${cityFilter}` : ""} — skipping recap` };
   }
   const topHooks = await getTopHooks(svc, userId);
   const { title, script } = await generateWeeklyScript(posts, topHooks);
