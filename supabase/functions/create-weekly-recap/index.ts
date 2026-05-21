@@ -48,16 +48,18 @@ interface PostRow {
 
 // ───────────────── helpers ─────────────────
 
-async function getLast7Posts(svc: any, userId: string): Promise<PostRow[]> {
+async function getLast7Posts(svc: any, userId: string, cityFilter?: string): Promise<PostRow[]> {
   const since = new Date(Date.now() - 8 * 86400 * 1000).toISOString();
-  const { data, error } = await svc
+  let q = svc
     .from("post_history")
     .select("id, city, temperature, condition, caption, image_url, post_url, created_at")
     .eq("user_id", userId)
-    .eq("status", "succeeded")
+    .in("status", ["succeeded", "success"])
     .gte("created_at", since)
     .order("created_at", { ascending: true })
-    .limit(20);
+    .limit(50);
+  if (cityFilter) q = q.ilike("city", `%${cityFilter}%`);
+  const { data, error } = await q;
   if (error) throw new Error(`post_history fetch failed: ${error.message}`);
   // Dedupe by day so multi-platform same-day posts collapse to one slide
   const byDay = new Map<string, PostRow>();
@@ -157,11 +159,16 @@ async function stitchSlideshow(posts: PostRow[], title: string): Promise<StitchR
     console.warn("[recap] CREATOMATE_API_KEY missing — skipping stitch");
     return null;
   }
-  const slides = posts.filter((p) => p.image_url).slice(0, 7);
+  // Use up to 7 of the most recent posts. Image is optional — when missing,
+  // the slide falls back to a solid gradient background so the recap still
+  // renders (and still clears the YouTube long-form threshold).
+  const slides = posts.slice(-7);
   if (slides.length < 2) {
-    console.warn("[recap] Not enough image_urls to stitch (need 2+):", slides.length);
+    console.warn("[recap] Not enough posts to stitch (need 2+):", slides.length);
     return null;
   }
+  const imageCount = slides.filter((p) => p.image_url).length;
+  console.log(`[recap] stitch inputs: slides=${slides.length}, with_image=${imageCount}`);
 
   // 9s per slide ensures even a 5-slide week (5*9 + title + outro = 63s)
   // clears the 60s YouTube Short threshold. A full 7-slide week = 81s.
@@ -182,23 +189,25 @@ async function stitchSlideshow(posts: PostRow[], title: string): Promise<StitchR
   });
   slides.forEach((p, i) => {
     const start = (i + 1) * SLIDE_DUR;
-    elements.push({
-      type: "image", source: p.image_url,
-      time: start, duration: SLIDE_DUR,
-      fit: "cover",
-      enter_animation: { type: "fade", duration: 0.4 },
-      exit_animation: { type: "fade", duration: 0.4 },
-    });
+    if (p.image_url) {
+      elements.push({
+        type: "image", source: p.image_url,
+        time: start, duration: SLIDE_DUR,
+        fit: "cover",
+        enter_animation: { type: "fade", duration: 0.4 },
+        exit_animation: { type: "fade", duration: 0.4 },
+      });
+    }
     const day = new Date(p.created_at).toLocaleDateString("en-US", { weekday: "long" });
     const temp = p.temperature != null ? `${Math.round(p.temperature)}°F` : "";
     const cond = p.condition ?? "";
     elements.push({
       type: "text",
       text: `${day}\n${temp}  ${cond}`.trim(),
-      x: "50%", y: "85%", width: "90%",
+      x: "50%", y: "50%", width: "90%",
       font_family: "Inter", font_weight: "700",
-      font_size: "5 vh", fill_color: "#ffffff",
-      background_color: "rgba(0,0,0,0.55)", padding: 18,
+      font_size: "7 vh", fill_color: "#ffffff",
+      background_color: "rgba(0,0,0,0.55)", padding: 24,
       time: start, duration: SLIDE_DUR,
       enter_animation: { type: "slide", direction: "up", duration: 0.4 },
     });
@@ -379,7 +388,7 @@ high contrast. No watermark.`;
       method: "POST",
       headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-image-preview",
+        model: "google/gemini-2.5-flash-image",
         prompt,
         size: "1792x1024",
       }),
@@ -401,10 +410,10 @@ high contrast. No watermark.`;
 
 // ───────────────── per-user runner ─────────────────
 
-async function runForUser(svc: any, userId: string): Promise<{ ok: boolean; detail: string }> {
-  const posts = await getLast7Posts(svc, userId);
+async function runForUser(svc: any, userId: string, cityFilter?: string): Promise<{ ok: boolean; detail: string }> {
+  const posts = await getLast7Posts(svc, userId, cityFilter);
   if (posts.length < 3) {
-    return { ok: false, detail: `Only ${posts.length} posts in last 7 days — skipping recap` };
+    return { ok: false, detail: `Only ${posts.length} posts in last 7 days${cityFilter ? ` for ${cityFilter}` : ""} — skipping recap` };
   }
   const topHooks = await getTopHooks(svc, userId);
   const { title, script } = await generateWeeklyScript(posts, topHooks);
@@ -493,11 +502,24 @@ Deno.serve(async (req) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
+  // Optional body: { city?: string, user_id?: string } for manual test runs.
+  let cityFilter: string | undefined;
+  let userFilter: string | undefined;
+  try {
+    if (req.method === "POST") {
+      const body = await req.json().catch(() => ({}));
+      if (body && typeof body.city === "string" && body.city.trim()) cityFilter = body.city.trim();
+      if (body && typeof body.user_id === "string" && body.user_id.trim()) userFilter = body.user_id.trim();
+    }
+  } catch { /* ignore */ }
+
   // Find users with YouTube connected
-  const { data: candidates, error } = await svc
+  let cq = svc
     .from("weather_settings")
     .select("user_id, youtube_refresh_token, youtube_access_token")
     .or("youtube_refresh_token.not.is.null,youtube_access_token.not.is.null");
+  if (userFilter) cq = cq.eq("user_id", userFilter);
+  const { data: candidates, error } = await cq;
 
   if (error) {
     return new Response(JSON.stringify({ ok: false, error: error.message }), {
@@ -510,7 +532,7 @@ Deno.serve(async (req) => {
   for (const c of (candidates || [])) {
     if (!c.user_id) continue;
     try {
-      const r = await runForUser(svc, c.user_id);
+      const r = await runForUser(svc, c.user_id, cityFilter);
       results.push({ user_id: c.user_id, ...r });
     } catch (e) {
       const msg = (e as Error).message;
