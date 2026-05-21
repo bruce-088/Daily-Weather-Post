@@ -142,6 +142,16 @@ Title must include the phrase "Weekly Recap".`;
 
 interface StitchResult { url: string; data: Uint8Array; }
 
+// Remove #Shorts-style hashtags so YouTube does not auto-classify the upload
+// as a Short. Long-form recap MUST never carry these tags.
+function stripShortsHashtag(s: string): string {
+  return (s || "")
+    .replace(/#shorts\b/gi, "")
+    .replace(/#ytshorts\b/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 async function stitchSlideshow(posts: PostRow[], title: string): Promise<StitchResult | null> {
   if (!CREATOMATE_API_KEY) {
     console.warn("[recap] CREATOMATE_API_KEY missing — skipping stitch");
@@ -153,7 +163,11 @@ async function stitchSlideshow(posts: PostRow[], title: string): Promise<StitchR
     return null;
   }
 
-  const SLIDE_DUR = 4;
+  // 9s per slide ensures even a 5-slide week (5*9 + title + outro = 63s)
+  // clears the 60s YouTube Short threshold. A full 7-slide week = 81s.
+  const SLIDE_DUR = 9;
+  const city = posts[0]?.city ?? "your city";
+
   const elements: any[] = [];
   // Title card
   elements.push({
@@ -190,7 +204,28 @@ async function stitchSlideshow(posts: PostRow[], title: string): Promise<StitchR
     });
   });
 
-  const totalDuration = (slides.length + 1) * SLIDE_DUR;
+  // Outro card — guarantees the long-form clears 60s even on short weeks.
+  const outroStart = (slides.length + 1) * SLIDE_DUR;
+  elements.push({
+    type: "text",
+    text: `Thanks for watching!\nLike + subscribe for daily ${city} weather.`,
+    x: "50%", y: "50%", width: "90%",
+    font_family: "Inter", font_weight: "800",
+    font_size: "7 vh", fill_color: "#ffffff",
+    background_color: "rgba(0,0,0,0.55)", padding: 24,
+    time: outroStart, duration: SLIDE_DUR,
+    enter_animation: { type: "fade", duration: 0.4 },
+    exit_animation: { type: "fade", duration: 0.4 },
+  });
+
+  let totalDuration = (slides.length + 2) * SLIDE_DUR; // title + slides + outro
+  if (totalDuration < 65) {
+    const pad = 65 - totalDuration;
+    elements[elements.length - 1].duration += pad;
+    totalDuration += pad;
+  }
+  console.log(`[recap] stitch duration=${totalDuration}s slides=${slides.length}`);
+
   const body = {
     output_format: "mp4",
     frame_rate: 30,
@@ -198,6 +233,7 @@ async function stitchSlideshow(posts: PostRow[], title: string): Promise<StitchR
     source: {
       width: 1920, height: 1080, // long-form 16:9
       duration: totalDuration,
+
       fill_color: "#0f172a",
       elements,
     },
@@ -298,23 +334,30 @@ async function uploadLongFormToYouTube(
     },
   );
   if (!initRes.ok) {
-    console.error("[recap] YT init failed:", initRes.status, await initRes.text());
+    const errText = await initRes.text();
+    console.error(`[recap] YouTube upload failed: ${initRes.status} ${errText.slice(0, 500)}`);
     return null;
   }
   const uploadUrl = initRes.headers.get("Location");
-  if (!uploadUrl) return null;
+  if (!uploadUrl) {
+    console.error("[recap] YouTube upload failed: missing resumable Location header");
+    return null;
+  }
   const up = await fetch(uploadUrl, {
     method: "PUT",
     headers: { "Content-Type": "video/mp4" },
     body: videoData,
   });
   if (!up.ok) {
-    console.error("[recap] YT upload failed:", up.status, await up.text());
+    const errText = await up.text();
+    console.error(`[recap] YouTube upload failed: ${up.status} ${errText.slice(0, 500)}`);
     return null;
   }
   const j = await up.json();
+  console.log(`[recap] YT response: ${JSON.stringify(j).slice(0, 500)}`);
   return j?.id ?? null;
 }
+
 
 // ───────────────── infographic fallback ─────────────────
 
@@ -381,21 +424,25 @@ async function runForUser(svc: any, userId: string): Promise<{ ok: boolean; deta
       });
       return { ok: false, detail: "No YouTube token" };
     }
-    const videoId = await uploadLongFormToYouTube(token, stitched.data, finalTitle, description);
+    const cleanTitle = stripShortsHashtag(finalTitle);
+    const cleanDesc = stripShortsHashtag(description);
+    const videoId = await uploadLongFormToYouTube(token, stitched.data, cleanTitle, cleanDesc);
     if (videoId) {
+      console.log(`[recap] uploaded to YouTube as videoId: ${videoId}`);
       await svc.from("post_history").insert({
         user_id: userId, status: "succeeded", platform: "youtube",
-        city: posts[0].city, caption: finalTitle,
+        city: posts[0].city, caption: cleanTitle,
         post_url: `https://www.youtube.com/watch?v=${videoId}`,
         external_id: videoId,
       });
       await svc.from("notifications").insert({
         user_id: userId, type: "success",
         title: "📺 Weekly Recap published!",
-        message: `${finalTitle} is live on YouTube.`,
+        message: `${cleanTitle} is live on YouTube.`,
       });
       return { ok: true, detail: `Uploaded ${videoId}` };
     }
+
     // upload failed -> fall through to infographic fallback
     console.warn("[recap] YT upload failed — falling back to infographic");
   }
