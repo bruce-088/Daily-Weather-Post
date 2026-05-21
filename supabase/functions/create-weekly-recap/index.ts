@@ -142,7 +142,7 @@ Title must include the phrase "Weekly Recap".`;
 
 // ───────────────── Creatomate stitch ─────────────────
 
-interface StitchResult { url: string; data: Uint8Array; }
+interface StitchResult { url: string; data: Uint8Array; contentType: string; reportedDuration?: number; }
 
 // Remove #Shorts-style hashtags so YouTube does not auto-classify the upload
 // as a Short. Long-form recap MUST never carry these tags.
@@ -300,6 +300,7 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
 
   const body = {
     output_format: "mp4",
+    codec: "h264",
     frame_rate: 30,
     // Drop render_scale so YouTube gets a full 1920x1080 long-form file —
     // 0.75 produced 1440x810 which YouTube was flagging as "invalid /
@@ -335,11 +336,27 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
     if (!sr.ok) continue;
     const sd = await sr.json();
     if (sd.status === "succeeded" && sd.url) {
+      const reportedDuration: number | undefined =
+        typeof sd.duration === "number" ? sd.duration : undefined;
+      console.log(`[recap] render duration reported by Creatomate: ${reportedDuration ?? "?"}s`);
+      if (typeof reportedDuration === "number" && reportedDuration < 60) {
+        console.warn(`[recap] WARNING: duration under 60s, YouTube will reject`);
+      }
       const dl = await fetch(sd.url);
-      if (!dl.ok) return null;
+      if (!dl.ok) {
+        console.error(`[recap] ABORT: render output invalid (download status=${dl.status})`);
+        return null;
+      }
+      const contentType = dl.headers.get("content-type") || "unknown";
       const ab = await dl.arrayBuffer();
-      console.log(`[recap] stitched mp4 ready: url=${sd.url} bytes=${ab.byteLength}`);
-      return { url: sd.url, data: new Uint8Array(ab) };
+      const bytes = ab.byteLength;
+      console.log(`[recap] render output size=${bytes} type=${contentType}`);
+      if (bytes < 1_000_000 || !/video\/mp4/i.test(contentType)) {
+        console.error(`[recap] ABORT: render output invalid (bytes=${bytes} type=${contentType})`);
+        return null;
+      }
+      console.log(`[recap] stitched mp4 ready: url=${sd.url} bytes=${bytes}`);
+      return { url: sd.url, data: new Uint8Array(ab), contentType, reportedDuration };
     }
     if (sd.status === "failed") {
       console.error("[recap] Creatomate render failed:", sd.error_message);
