@@ -173,6 +173,31 @@ Deno.serve(async (req) => {
     ttUpd += r.updated; ttFail += r.failed;
   }
 
+  // Backfill: any post_performance rows from the last 14 days with NULL
+  // engagement_score get one computed from currently-stored metrics.
+  try {
+    const since14 = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+    const { data: stale } = await supabase
+      .from("post_performance")
+      .select("id, views, likes, comments, ctr")
+      .is("engagement_score", null)
+      .gte("published_at", since14)
+      .limit(500);
+    for (const r of (stale || []) as any[]) {
+      const score = computeEngagementScore({ views: r.views, likes: r.likes, comments: r.comments, ctr: r.ctr });
+      await supabase
+        .from("post_performance")
+        .update({ engagement_score: score, updated_at: new Date().toISOString() })
+        .eq("id", r.id);
+    }
+    if (stale && stale.length > 0) {
+      console.log(`[analytics] backfilled engagement_score on ${stale.length} post_performance rows`);
+    }
+  } catch (e) {
+    console.warn("[analytics] engagement_score backfill failed:", e instanceof Error ? e.message : e);
+  }
+
+
   await supabase.from("system_health").upsert({
     id: "sync-post-performance",
     last_run_at: new Date().toISOString(),
