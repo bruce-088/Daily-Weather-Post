@@ -876,6 +876,81 @@ export type Database = {
         }
         Relationships: []
       }
+      post_performance: {
+        Row: {
+          caption: string | null
+          city: string
+          comments: number
+          created_at: string
+          ctr: number | null
+          engagement_score: number | null
+          hook_text: string | null
+          id: string
+          impressions: number | null
+          likes: number
+          platform: string
+          post_id: string | null
+          posted_with_voice: boolean
+          published_at: string
+          slot: string | null
+          source: string
+          style: string | null
+          title: string
+          tone: string | null
+          updated_at: string
+          views: number
+          weather_condition: string | null
+        }
+        Insert: {
+          caption?: string | null
+          city: string
+          comments?: number
+          created_at?: string
+          ctr?: number | null
+          engagement_score?: number | null
+          hook_text?: string | null
+          id?: string
+          impressions?: number | null
+          likes?: number
+          platform: string
+          post_id?: string | null
+          posted_with_voice?: boolean
+          published_at: string
+          slot?: string | null
+          source?: string
+          style?: string | null
+          title: string
+          tone?: string | null
+          updated_at?: string
+          views?: number
+          weather_condition?: string | null
+        }
+        Update: {
+          caption?: string | null
+          city?: string
+          comments?: number
+          created_at?: string
+          ctr?: number | null
+          engagement_score?: number | null
+          hook_text?: string | null
+          id?: string
+          impressions?: number | null
+          likes?: number
+          platform?: string
+          post_id?: string | null
+          posted_with_voice?: boolean
+          published_at?: string
+          slot?: string | null
+          source?: string
+          style?: string | null
+          title?: string
+          tone?: string | null
+          updated_at?: string
+          views?: number
+          weather_condition?: string | null
+        }
+        Relationships: []
+      }
       preview_bundles: {
         Row: {
           asset_url: string | null

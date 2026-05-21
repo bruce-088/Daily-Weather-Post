@@ -8,6 +8,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { YouTubeAdapter } from "../_shared/youtube-adapter.ts";
 import { TikTokAdapter } from "../_shared/tiktok-adapter.ts";
+import { updatePostPerformanceMetrics, computeEngagementScore } from "../_shared/performance-insights.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -67,6 +68,9 @@ async function syncYouTube(supabase: any, userId: string, posts: PostRow[]) {
         })
         .eq("id", postId);
       if (error) failed++; else updated++;
+      await updatePostPerformanceMetrics(supabase, {
+        postId, platform: "youtube", views, likes, comments,
+      });
     }
   }
   return { updated, failed };
@@ -114,6 +118,9 @@ async function syncTikTok(supabase: any, userId: string, posts: PostRow[]) {
         })
         .eq("id", postId);
       if (error) failed++; else updated++;
+      await updatePostPerformanceMetrics(supabase, {
+        postId, platform: "tiktok", views, likes, comments,
+      });
     }
   }
   return { updated, failed };
@@ -165,6 +172,31 @@ Deno.serve(async (req) => {
     const r = await syncTikTok(supabase, uid, list);
     ttUpd += r.updated; ttFail += r.failed;
   }
+
+  // Backfill: any post_performance rows from the last 14 days with NULL
+  // engagement_score get one computed from currently-stored metrics.
+  try {
+    const since14 = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+    const { data: stale } = await supabase
+      .from("post_performance")
+      .select("id, views, likes, comments, ctr")
+      .is("engagement_score", null)
+      .gte("published_at", since14)
+      .limit(500);
+    for (const r of (stale || []) as any[]) {
+      const score = computeEngagementScore({ views: r.views, likes: r.likes, comments: r.comments, ctr: r.ctr });
+      await supabase
+        .from("post_performance")
+        .update({ engagement_score: score, updated_at: new Date().toISOString() })
+        .eq("id", r.id);
+    }
+    if (stale && stale.length > 0) {
+      console.log(`[analytics] backfilled engagement_score on ${stale.length} post_performance rows`);
+    }
+  } catch (e) {
+    console.warn("[analytics] engagement_score backfill failed:", e instanceof Error ? e.message : e);
+  }
+
 
   await supabase.from("system_health").upsert({
     id: "sync-post-performance",

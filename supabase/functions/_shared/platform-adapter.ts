@@ -45,6 +45,7 @@ import { InstagramAdapter } from "./instagram-adapter.ts";
 import { TwitterAdapter } from "./twitter-adapter.ts";
 import { LinkedInAdapter } from "./linkedin-adapter.ts";
 import { ensureSlotTitlePrefix, assertSlotTitlePrefix } from "./caption-style.ts";
+import { recordPostPerformance, type PerformanceMeta } from "./performance-insights.ts";
 
 const adapters: PlatformAdapter[] = [
   new YouTubeAdapter(),
@@ -76,6 +77,7 @@ export async function postToPlatform(
   cityId?: string | null,
   slot?: "morning" | "afternoon" | "evening" | null,
   cityName?: string | null,
+  performanceMeta?: Partial<Omit<PerformanceMeta, "city" | "platform" | "slot" | "title">> | null,
 ): Promise<PostResult> {
   const adapter = getAdapter(platform);
   if (!adapter) {
@@ -118,6 +120,11 @@ export async function postToPlatform(
     }
 
     console.log(`${adapter.name} upload success! ID: ${result.id} channel=${result.account_name ?? "unknown"} city=${result.resolved_city_id ?? "shared"}`);
+
+    // NOTE: Phase 1 Growth Loop post_performance rows are recorded by the
+    // caller AFTER it inserts the post_history row, so we can link post_id.
+    void performanceMeta; // currently unused in dispatcher; retained for future use
+
     return { success: true, id: result.id, resolved_city_id: result.resolved_city_id ?? null, account_name: result.account_name ?? null };
   } catch (e) {
     const msg = e instanceof Error ? e.message : `${adapter.name} upload failed`;
