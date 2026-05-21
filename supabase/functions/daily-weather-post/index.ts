@@ -1997,6 +1997,35 @@ Deno.serve(async (req) => {
         if (seedErr) console.error("Failed to seed post_analytics:", seedErr);
         else console.log(`Seeded ${seedRows.length} post_analytics row(s) for ${historyRow.id}`);
 
+        // Phase 1 Growth Loop — seed post_performance per platform.
+        try {
+          const hookText = (caption || "").split("\n").map((s: string) => s.trim()).filter(Boolean)[0] || null;
+          const perfRows = successful.map((r) => ({
+            post_id: historyRow.id,
+            city: weather.city,
+            platform: r.name,
+            slot: "morning" as const,
+            title: _titleForMeta,
+            caption: caption || null,
+            hook_text: hookText,
+            tone: (settings as any)?.caption_tone || null,
+            style: null,
+            weather_condition: weather.condition || null,
+            posted_with_voice: !!voiceUrl,
+            published_at: new Date().toISOString(),
+            source: "auto",
+          }));
+          if (perfRows.length > 0) {
+            const { error: perfErr } = await supabase
+              .from("post_performance")
+              .upsert(perfRows, { onConflict: "post_id,platform", ignoreDuplicates: true });
+            if (perfErr) console.warn(`[analytics] post_performance seed failed:`, perfErr.message);
+            else console.log(`[analytics] inserted post_performance row for ${weather.city} (${perfRows.map(r => r.platform).join(",")})`);
+          }
+        } catch (e) {
+          console.warn(`[analytics] post_performance seed exception:`, e instanceof Error ? e.message : e);
+        }
+
         // Seed post_hooks for the auto-growth analyzer
         try {
           const lines = (caption || "").split("\n").map((s: string) => s.trim()).filter(Boolean);
