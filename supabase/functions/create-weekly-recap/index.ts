@@ -159,11 +159,16 @@ async function stitchSlideshow(posts: PostRow[], title: string): Promise<StitchR
     console.warn("[recap] CREATOMATE_API_KEY missing — skipping stitch");
     return null;
   }
-  const slides = posts.filter((p) => p.image_url).slice(0, 7);
+  // Use up to 7 of the most recent posts. Image is optional — when missing,
+  // the slide falls back to a solid gradient background so the recap still
+  // renders (and still clears the YouTube long-form threshold).
+  const slides = posts.slice(-7);
   if (slides.length < 2) {
-    console.warn("[recap] Not enough image_urls to stitch (need 2+):", slides.length);
+    console.warn("[recap] Not enough posts to stitch (need 2+):", slides.length);
     return null;
   }
+  const imageCount = slides.filter((p) => p.image_url).length;
+  console.log(`[recap] stitch inputs: slides=${slides.length}, with_image=${imageCount}`);
 
   // 9s per slide ensures even a 5-slide week (5*9 + title + outro = 63s)
   // clears the 60s YouTube Short threshold. A full 7-slide week = 81s.
@@ -184,23 +189,25 @@ async function stitchSlideshow(posts: PostRow[], title: string): Promise<StitchR
   });
   slides.forEach((p, i) => {
     const start = (i + 1) * SLIDE_DUR;
-    elements.push({
-      type: "image", source: p.image_url,
-      time: start, duration: SLIDE_DUR,
-      fit: "cover",
-      enter_animation: { type: "fade", duration: 0.4 },
-      exit_animation: { type: "fade", duration: 0.4 },
-    });
+    if (p.image_url) {
+      elements.push({
+        type: "image", source: p.image_url,
+        time: start, duration: SLIDE_DUR,
+        fit: "cover",
+        enter_animation: { type: "fade", duration: 0.4 },
+        exit_animation: { type: "fade", duration: 0.4 },
+      });
+    }
     const day = new Date(p.created_at).toLocaleDateString("en-US", { weekday: "long" });
     const temp = p.temperature != null ? `${Math.round(p.temperature)}°F` : "";
     const cond = p.condition ?? "";
     elements.push({
       type: "text",
       text: `${day}\n${temp}  ${cond}`.trim(),
-      x: "50%", y: "85%", width: "90%",
+      x: "50%", y: "50%", width: "90%",
       font_family: "Inter", font_weight: "700",
-      font_size: "5 vh", fill_color: "#ffffff",
-      background_color: "rgba(0,0,0,0.55)", padding: 18,
+      font_size: "7 vh", fill_color: "#ffffff",
+      background_color: "rgba(0,0,0,0.55)", padding: 24,
       time: start, duration: SLIDE_DUR,
       enter_animation: { type: "slide", direction: "up", duration: 0.4 },
     });
