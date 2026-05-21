@@ -674,6 +674,7 @@ ${ctaBlock}${antiRepeatBlock ? `\n\n${antiRepeatBlock}` : ""}`;
         for (const { re, sub } of ctaPatterns) {
           if (re.test(caption)) {
             blacklistHits.push(`${term} (cta)`);
+            console.log(`[generate-caption] blacklist CTA sanitized term="${term}" city="${city}"`);
             caption = caption.replace(re, sub);
           }
         }
@@ -681,6 +682,7 @@ ${ctaBlock}${antiRepeatBlock ? `\n\n${antiRepeatBlock}` : ""}`;
         const tagRe = new RegExp(`#${escNoSpace}\\b`, "gi");
         if (tagRe.test(caption)) {
           blacklistHits.push(`${term} (hashtag)`);
+          console.log(`[generate-caption] blacklist hashtag sanitized term="${term}" city="${city}"`);
           caption = caption.replace(tagRe, `#${cityNoSpaces}`);
         }
       }
