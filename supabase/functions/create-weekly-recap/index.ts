@@ -275,6 +275,7 @@ async function stitchSlideshow(posts: PostRow[], title: string): Promise<StitchR
       const dl = await fetch(sd.url);
       if (!dl.ok) return null;
       const ab = await dl.arrayBuffer();
+      console.log(`[recap] stitched mp4 ready: url=${sd.url} bytes=${ab.byteLength}`);
       return { url: sd.url, data: new Uint8Array(ab) };
     }
     if (sd.status === "failed") {
