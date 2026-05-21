@@ -68,6 +68,9 @@ async function syncYouTube(supabase: any, userId: string, posts: PostRow[]) {
         })
         .eq("id", postId);
       if (error) failed++; else updated++;
+      await updatePostPerformanceMetrics(supabase, {
+        postId, platform: "youtube", views, likes, comments,
+      });
     }
   }
   return { updated, failed };
