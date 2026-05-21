@@ -403,7 +403,8 @@ Deno.serve(async (req) => {
 - The ONLY valid location string anywhere in the caption is "${city}".
 - The strings "Not Need", "Weather Update", "Coming Up", "But Comfortable", "Clear Skies", or any style/tone/variation label, or any weather condition word (Rain, Clouds, Sunny, Ahead, etc.) must NEVER appear as a location.
 - Every time you refer to the location — in body text, CTA, hashtags, or anywhere else — you MUST use exactly "${city}".
-- "weather in [X]" and "daily [X] weather alerts" MUST always use "${city}".`;
+- "weather in [X]" and "daily [X] weather alerts" MUST always use "${city}".
+- If you mention the broadcast slot (Morning, Afternoon, Evening), it must be purely descriptive of the timeframe and NEVER used as a replacement for the city name "${city}".`;
       ctaBlock = _cta
         ? `CTA ROTATION: For the final call-to-action line, use this exact CTA (or a close paraphrase): "${_cta}". Do not invent additional CTAs.\n${locationGuard}`
         : locationGuard;
@@ -660,10 +661,12 @@ ${ctaBlock}${antiRepeatBlock ? `\n\n${antiRepeatBlock}` : ""}`;
         const escNoSpace = noSpace.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
         const ctaPatterns: Array<{ re: RegExp; sub: string }> = [
-          { re: new RegExp(`\\bweather in ${esc}\\b`, "gi"), sub: `weather in ${city}` },
-          { re: new RegExp(`\\bdaily ${esc} weather alerts\\b`, "gi"), sub: `daily ${city} weather alerts` },
-          { re: new RegExp(`\\bfollow for ${esc} updates\\b`, "gi"), sub: `follow for ${city} updates` },
-          { re: new RegExp(`\\bsubscribe for ${esc} weather alerts\\b`, "gi"), sub: `subscribe for ${city} weather alerts` },
+          { re: new RegExp(`\\benjoying the weather in ${esc}(?=[^a-zA-Z]|$)`, "gi"), sub: `enjoying the weather in ${city}` },
+          { re: new RegExp(`\\bweather in ${esc}(?=[^a-zA-Z]|$)`, "gi"), sub: `weather in ${city}` },
+          { re: new RegExp(`\\bdaily ${esc} weather alerts(?=[^a-zA-Z]|$)`, "gi"), sub: `daily ${city} weather alerts` },
+          { re: new RegExp(`\\bdaily ${esc} updates(?=[^a-zA-Z]|$)`, "gi"), sub: `daily ${city} updates` },
+          { re: new RegExp(`\\bfollow for ${esc} updates(?=[^a-zA-Z]|$)`, "gi"), sub: `follow for ${city} updates` },
+          { re: new RegExp(`\\bsubscribe for ${esc} weather alerts(?=[^a-zA-Z]|$)`, "gi"), sub: `subscribe for ${city} weather alerts` },
         ];
         for (const { re, sub } of ctaPatterns) {
           if (re.test(caption)) {
