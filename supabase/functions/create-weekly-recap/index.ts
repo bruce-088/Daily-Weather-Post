@@ -334,23 +334,30 @@ async function uploadLongFormToYouTube(
     },
   );
   if (!initRes.ok) {
-    console.error("[recap] YT init failed:", initRes.status, await initRes.text());
+    const errText = await initRes.text();
+    console.error(`[recap] YouTube upload failed: ${initRes.status} ${errText.slice(0, 500)}`);
     return null;
   }
   const uploadUrl = initRes.headers.get("Location");
-  if (!uploadUrl) return null;
+  if (!uploadUrl) {
+    console.error("[recap] YouTube upload failed: missing resumable Location header");
+    return null;
+  }
   const up = await fetch(uploadUrl, {
     method: "PUT",
     headers: { "Content-Type": "video/mp4" },
     body: videoData,
   });
   if (!up.ok) {
-    console.error("[recap] YT upload failed:", up.status, await up.text());
+    const errText = await up.text();
+    console.error(`[recap] YouTube upload failed: ${up.status} ${errText.slice(0, 500)}`);
     return null;
   }
   const j = await up.json();
+  console.log(`[recap] YT response: ${JSON.stringify(j).slice(0, 500)}`);
   return j?.id ?? null;
 }
+
 
 // ───────────────── infographic fallback ─────────────────
 
