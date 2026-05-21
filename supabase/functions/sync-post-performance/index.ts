@@ -118,6 +118,9 @@ async function syncTikTok(supabase: any, userId: string, posts: PostRow[]) {
         })
         .eq("id", postId);
       if (error) failed++; else updated++;
+      await updatePostPerformanceMetrics(supabase, {
+        postId, platform: "tiktok", views, likes, comments,
+      });
     }
   }
   return { updated, failed };
