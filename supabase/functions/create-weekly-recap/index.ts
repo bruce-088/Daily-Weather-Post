@@ -285,6 +285,18 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
     totalDuration += pad;
   }
   console.log(`[recap] stitch duration=${totalDuration}s slides=${slides.length}`);
+  const silentAudioUrl = await createSignedSilentAudio(svc, userId, totalDuration);
+  if (silentAudioUrl) {
+    elements.push({
+      type: "audio",
+      source: silentAudioUrl,
+      time: 0,
+      duration: totalDuration,
+      volume: 0.01,
+    });
+  } else {
+    console.warn("[recap] continuing without silent audio track; YouTube may abandon processing");
+  }
 
   const body = {
     output_format: "mp4",
@@ -474,7 +486,7 @@ async function runForUser(svc: any, userId: string, cityFilter?: string): Promis
   const description = `${script}\n\n#WeeklyRecap #Weather #SkyBrief`;
 
   // Try video stitch
-  const stitched = await stitchSlideshow(posts, finalTitle);
+  const stitched = await stitchSlideshow(svc, userId, posts, finalTitle);
 
   if (stitched) {
     const token = await getYouTubeToken(svc, userId);
