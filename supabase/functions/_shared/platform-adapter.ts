@@ -77,6 +77,7 @@ export async function postToPlatform(
   cityId?: string | null,
   slot?: "morning" | "afternoon" | "evening" | null,
   cityName?: string | null,
+  performanceMeta?: Partial<Omit<PerformanceMeta, "city" | "platform" | "slot" | "title">> | null,
 ): Promise<PostResult> {
   const adapter = getAdapter(platform);
   if (!adapter) {
@@ -119,6 +120,27 @@ export async function postToPlatform(
     }
 
     console.log(`${adapter.name} upload success! ID: ${result.id} channel=${result.account_name ?? "unknown"} city=${result.resolved_city_id ?? "shared"}`);
+
+    // Phase 1 Growth Loop — fire-and-forget post_performance insert.
+    // Never block publish on failure; always swallow errors inside.
+    if (cityName) {
+      await recordPostPerformance(supabase, {
+        postId: performanceMeta?.postId ?? null,
+        city: cityName,
+        platform: adapter.name,
+        slot: slot ?? null,
+        title: cleanTitle,
+        caption: performanceMeta?.caption ?? cleanDescription ?? null,
+        hookText: performanceMeta?.hookText ?? null,
+        tone: performanceMeta?.tone ?? null,
+        style: performanceMeta?.style ?? null,
+        weatherCondition: performanceMeta?.weatherCondition ?? null,
+        postedWithVoice: performanceMeta?.postedWithVoice ?? false,
+        publishedAt: performanceMeta?.publishedAt ?? new Date().toISOString(),
+        source: performanceMeta?.source ?? "system",
+      });
+    }
+
     return { success: true, id: result.id, resolved_city_id: result.resolved_city_id ?? null, account_name: result.account_name ?? null };
   } catch (e) {
     const msg = e instanceof Error ? e.message : `${adapter.name} upload failed`;
