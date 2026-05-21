@@ -495,11 +495,24 @@ Deno.serve(async (req) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
+  // Optional body: { city?: string, user_id?: string } for manual test runs.
+  let cityFilter: string | undefined;
+  let userFilter: string | undefined;
+  try {
+    if (req.method === "POST") {
+      const body = await req.json().catch(() => ({}));
+      if (body && typeof body.city === "string" && body.city.trim()) cityFilter = body.city.trim();
+      if (body && typeof body.user_id === "string" && body.user_id.trim()) userFilter = body.user_id.trim();
+    }
+  } catch { /* ignore */ }
+
   // Find users with YouTube connected
-  const { data: candidates, error } = await svc
+  let cq = svc
     .from("weather_settings")
     .select("user_id, youtube_refresh_token, youtube_access_token")
     .or("youtube_refresh_token.not.is.null,youtube_access_token.not.is.null");
+  if (userFilter) cq = cq.eq("user_id", userFilter);
+  const { data: candidates, error } = await cq;
 
   if (error) {
     return new Response(JSON.stringify({ ok: false, error: error.message }), {
@@ -512,7 +525,7 @@ Deno.serve(async (req) => {
   for (const c of (candidates || [])) {
     if (!c.user_id) continue;
     try {
-      const r = await runForUser(svc, c.user_id);
+      const r = await runForUser(svc, c.user_id, cityFilter);
       results.push({ user_id: c.user_id, ...r });
     } catch (e) {
       const msg = (e as Error).message;
