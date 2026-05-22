@@ -337,6 +337,51 @@ function getHabitCTA(city: string): string {
   return ctas[dayIndex % ctas.length];
 }
 
+// --- City-proxy sanitizer (mirrors generate-caption BLACKLIST + nuclear fallback) ---
+// Auto_cron posts generate captions inline here and previously skipped the hardened
+// sanitization in generate-caption. Run AFTER caption generation, BEFORE publish.
+function sanitizeCityProxies(caption: string, city: string): string {
+  if (!caption || !city) return caption;
+  const BLACKLIST = [
+    "Not Need", "Weather Update", "Coming Up", "But Comfortable", "Clear Skies",
+    "Sunny", "Cloudy", "Overcast", "Rainy", "Stormy", "Foggy", "Windy", "Humid",
+    "Hot", "Cold", "Warm", "Cool", "Mild", "Breezy",
+    "Partly Cloudy", "Mostly Cloudy", "Mostly Sunny", "Partly Sunny",
+    "Scattered Showers", "Thunderstorms", "Drizzle", "Light Rain", "Heavy Rain",
+    "Snow", "Sleet", "Haze", "Mist", "Hazy", "Showers",
+    "Afternoon", "Morning", "Evening", "Tonight", "Today", "Ahead", "Update",
+    "SkyBrief",
+  ];
+  const cityNoSpaces = city.replace(/\s+/g, "");
+  let out = caption;
+  for (const term of BLACKLIST) {
+    const esc = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s*");
+    const noSpaceEsc = term.replace(/\s+/g, "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const patterns: Array<{ re: RegExp; sub: string }> = [
+      { re: new RegExp(`\\benjoying the weather in ${esc}(?=[^a-zA-Z]|$)`, "gi"), sub: `enjoying the weather in ${city}` },
+      { re: new RegExp(`\\bweather in ${esc}(?=[^a-zA-Z]|$)`, "gi"), sub: `weather in ${city}` },
+      { re: new RegExp(`\\bdaily ${esc} weather alerts(?=[^a-zA-Z]|$)`, "gi"), sub: `daily ${city} weather alerts` },
+      { re: new RegExp(`\\bdaily ${esc} updates(?=[^a-zA-Z]|$)`, "gi"), sub: `daily ${city} updates` },
+      { re: new RegExp(`\\bfollow for ${esc} updates(?=[^a-zA-Z]|$)`, "gi"), sub: `follow for ${city} updates` },
+      { re: new RegExp(`\\bsubscribe for ${esc} weather alerts(?=[^a-zA-Z]|$)`, "gi"), sub: `subscribe for ${city} weather alerts` },
+    ];
+    for (const { re, sub } of patterns) out = out.replace(re, sub);
+    out = out.replace(new RegExp(`#${noSpaceEsc}\\b`, "gi"), `#${cityNoSpaces}`);
+  }
+  // Nuclear fallback: any non-city token in the critical CTA slots becomes the city.
+  const cityEsc = city.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  out = out.replace(new RegExp(`(enjoying the weather in )(?!${cityEsc}\\b)([^!.\\n]+)`, "gi"), `$1${city}`);
+  out = out.replace(new RegExp(`(daily )(?!${cityEsc}\\b)([^\\n]+?)( weather alerts)`, "gi"), `$1${city}$3`);
+  out = out.replace(new RegExp(`(subscribe for )(?!${cityEsc}\\b)([^\\n]+?)( weather alerts)`, "gi"), `$1${city}$3`);
+  // Foreign @SkyBrief handle → city-correct handle.
+  const expectedHandle = getDynamicHandle(city);
+  out = out.replace(/@SkyBrief[A-Za-z0-9_]+/g, (m) => (m === expectedHandle ? m : expectedHandle));
+  out = out
+    .replace(new RegExp(`##+${cityNoSpaces}`, "gi"), `#${cityNoSpaces}`)
+    .replace(new RegExp(`#\\s+${cityNoSpaces}`, "gi"), `#${cityNoSpaces}`);
+  return out;
+}
+
 // --- Caption Prompt ---
 
 const SKYBRIEF_SYSTEM_PROMPT = `You are the caption-writing engine for a social media weather brand called SkyBrief.
@@ -2297,11 +2342,24 @@ Deno.serve(async (req) => {
 
               // Final safety net
               if (caption) caption = stripUnverifiedReferences(caption, weather.city);
+              // City-proxy sanitizer (BLACKLIST + nuclear fallback + handle guard).
+              // Catches "weather in Clear Skies", foreign @SkyBrief* handles, hashtag drift.
+              if (caption) {
+                const before = caption;
+                caption = sanitizeCityProxies(caption, weather.city);
+                if (before !== caption) {
+                  console.log(`[process-scheduled-posts] city-proxy sanitized for ${weather.city} (post=${post.id})`);
+                }
+              }
             } catch (e) {
               console.error("Caption generation failed:", e);
             }
           }
         }
+
+        // Sanitize regardless of generation path (covers pre-populated post.caption).
+        if (caption) caption = sanitizeCityProxies(caption, weather.city);
+
 
         // ── Location Beacon: ensure first non-empty line is "📍 City · Slot Update" ──
         if (caption) {
