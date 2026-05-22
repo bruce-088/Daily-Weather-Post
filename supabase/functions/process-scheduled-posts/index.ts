@@ -964,35 +964,62 @@ function clampVoiceParam(n: any, min: number, max: number, fallback: number): nu
   return Math.min(max, Math.max(min, v));
 }
 
+/** Time-of-day greeting derived from slot or local hour. */
+function broadcastGreetingFor(slot?: string | null): string {
+  const s = (slot || "").toLowerCase();
+  if (s === "morning") return "Good morning";
+  if (s === "afternoon") return "Good afternoon";
+  if (s === "evening") return "Good evening";
+  const h = new Date().getUTCHours();
+  if (h < 11) return "Good morning";
+  if (h < 17) return "Good afternoon";
+  return "Good evening";
+}
+
 async function generateVoiceScript(
   weather: WeatherResponse,
   tone?: string,
   platforms?: string[],
-  ctaOpts?: { subscribeCta?: boolean; city?: string | null },
+  ctaOpts?: { subscribeCta?: boolean; city?: string | null; slot?: string | null },
 ): Promise<string> {
-  const fallback = `Good day, ${weather.city}. Expect ${weather.description.toLowerCase()} with a high near ${weather.temperature} degrees today.`;
   const ctaCity = ctaOpts?.city ?? weather.city;
   const subscribeCta = ctaOpts?.subscribeCta ?? false;
+  const slot = ctaOpts?.slot ?? null;
+  const greeting = broadcastGreetingFor(slot);
+  const feels = typeof weather.feelsLike === "number" ? Math.round(weather.feelsLike) : null;
+  const temp = Math.round(weather.temperature);
+  const cond = weather.description.toLowerCase();
+  // Broadcast-style fallback always includes greeting + city + temp + feels-like.
+  const fallback = feels != null && Math.abs(feels - temp) >= 2
+    ? `${greeting}, ${weather.city}. Right now it's ${temp} degrees, feels like ${feels}, with ${cond}. Here's your quick weather update.`
+    : `${greeting}, ${weather.city}. It's currently ${temp} degrees with ${cond}. Here's your quick weather update.`;
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) return appendVoiceCTA(fallback, { tone, platforms, subscribeCta, city: ctaCity });
   const userPrompt = [
     `City: ${weather.city}`,
+    `Slot: ${slot ?? "(unknown)"}  → opening greeting: "${greeting}, ${weather.city}"`,
     `Condition: ${weather.description}`,
-    `Current temp: ${weather.temperature}°F`,
+    `Current temp: ${temp}°F`,
+    feels != null ? `Feels like: ${feels}°F` : `Feels like: (unavailable — do not invent)`,
     `Rain chance: ${weather.rainChance}%`,
     "",
-    "Write a SPOKEN weather script. Strict rules:",
-    "- HARD CAP: 25 words MAX for the weather summary. Shorter is better.",
-    "- LEAD with the most important data first: high temp + rain chance.",
-    "- 1–2 sentences. Sound natural read aloud (no emojis, no hashtags, no special chars).",
-    "- Mention the city once, the dominant condition, and the key temperature.",
-    "- You MAY include AT MOST ONE local reference, but ONLY from the verified list below, and ONLY if it fits the weather naturally. Otherwise omit it.",
-    "- Do NOT include any subscribe / follow / notification / bell call-to-action — that is appended automatically as a separate final paragraph. End on the weather, not a CTA.",
+    "Write a BROADCAST WEATHER SCRIPT for a 10–15 second on-air read. Strict rules:",
+    `- OPEN with the greeting verbatim: "${greeting}, ${weather.city}." (or a close variant like "Checking in on ${weather.city}").`,
+    "- 2–3 short sentences, 30–45 words total. Sound like a local weather anchor — warm, conversational, never robotic.",
+    "- MUST include the current temperature in degrees.",
+    feels != null && Math.abs(feels - temp) >= 2
+      ? "- MUST mention 'feels like' followed by the feels-like temperature (the gap is noticeable)."
+      : "- You MAY skip 'feels like' if it's within 1 degree of the actual temp.",
+    "- Mention the dominant weather condition in plain words (e.g. 'clear skies', 'light rain', 'partly cloudy').",
+    "- One brief outlook phrase is welcome (e.g. 'staying mild through the evening', 'rain easing overnight').",
+    "- No emojis, no hashtags, no special characters, no abbreviations like 'F' — say 'degrees'.",
+    "- You MAY include AT MOST ONE local reference from the verified list below, only if it fits naturally. Otherwise omit.",
+    "- Do NOT include any subscribe / follow / notification / bell CTA — that is appended automatically. End on the weather, not a CTA.",
     "- Return ONLY the script text. No labels, no quotes.",
     "",
     buildVerifiedLandmarksBlock(weather.city),
   ].join("\n");
-  const systemPrompt = `You are a concise broadcast weather scriptwriter. Output spoken-style scripts only.\n\n${LOCATION_ACCURACY_RULES}`;
+  const systemPrompt = `You are a professional local broadcast weather anchor writing a 10–15 second on-air script. Warm, conversational, accurate. Output spoken-style scripts only.\n\n${LOCATION_ACCURACY_RULES}`;
   const alertMode = isWeatherAlert({
     condition: weather.description,
     temperature: weather.temperature,
