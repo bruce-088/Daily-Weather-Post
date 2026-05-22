@@ -151,8 +151,13 @@ export function SchedulerAnalytics() {
   const platformData = useMemo(() => {
     const map = new Map<string, number>();
     rows.forEach((r) => {
-      const p = (r.platform || "unknown").toLowerCase();
-      map.set(p, (map.get(p) ?? 0) + 1);
+      const raw = (r.platform || "unknown").toLowerCase();
+      const platforms = raw.includes(",") ? raw.split(",") : [raw];
+      platforms.forEach((p) => {
+        const key = p.trim();
+        if (!key) return;
+        map.set(key, (map.get(key) ?? 0) + 1);
+      });
     });
     return Array.from(map.entries()).map(([name, value]) => ({ name, value }));
   }, [rows]);
