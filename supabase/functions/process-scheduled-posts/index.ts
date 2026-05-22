@@ -3400,6 +3400,7 @@ Deno.serve(async (req) => {
         failed,
         mode: skipPost ? "dev" : "post",
         preview_url: previewUrl,
+        build: PROCESS_SCHEDULED_POSTS_BUILD,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
