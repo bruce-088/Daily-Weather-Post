@@ -365,12 +365,17 @@ function gradientForSlide(createdAt?: string): { from: string; to: string; label
 function buildAnimatedGradientBg(
   time: number,
   duration: number,
-  grad: { from: string; to: string },
+  grad: { from: string; to: string; label?: string },
+  slideNum?: number,
 ): any {
-  // Creatomate-native animation syntax: `animations` array with scope=element,
-  // scale object, start_scale object, explicit time/duration. Using the
-  // built-in scale animation guarantees frame-to-frame change so Creatomate
-  // emits a real MP4 (and not a 15KB JPEG snapshot of a static composition).
+  // Creatomate gradient fill: pass color stops as an array with
+  // fill_color_type="linear-gradient" + an explicit angle so themed
+  // warm/cool/neutral backgrounds render instead of a flat solid color.
+  if (typeof slideNum === "number") {
+    console.log(
+      `[recap] slide ${slideNum} background gradient=${grad.label ?? "?"} ${grad.from}\u2192${grad.to}`,
+    );
+  }
   return {
     type: "shape",
     shape_type: "rectangle",
@@ -378,7 +383,12 @@ function buildAnimatedGradientBg(
     height: "100%",
     x: "50%",
     y: "50%",
-    fill_color: grad.from, // solid fill — Creatomate rectangles don't support gradient stops natively
+    fill_color: [
+      { position: 0, color: grad.from },
+      { position: 1, color: grad.to },
+    ],
+    fill_color_type: "linear-gradient",
+    fill_color_angle: 135,
     time,
     duration,
   };
@@ -443,7 +453,7 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
 
   // ── Title card ── (gradient → scrim → text)
   const titleGrad = gradientForSlide();
-  elements.push(buildAnimatedGradientBg(0, SLIDE_DUR, titleGrad));
+  elements.push(buildAnimatedGradientBg(0, SLIDE_DUR, { ...titleGrad }, 1));
   elements.push(buildScrim(0, SLIDE_DUR));
   elements.push({
     type: "text", text: title,
@@ -466,7 +476,7 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
     const textPos = layoutTextProps(layout);
 
     // 1. Themed gradient base (safety net + motion guarantee)
-    elements.push(buildAnimatedGradientBg(start, SLIDE_DUR, grad));
+    elements.push(buildAnimatedGradientBg(start, SLIDE_DUR, { ...grad, label: themeKey }, i + 2));
     // 2. Image on top of gradient (if available) — subtle Ken Burns pan
     if (p.image_url) {
       const imgEl: any = {
@@ -524,7 +534,7 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
   const outroStart = (slides.length + 1) * SLIDE_DUR;
   const outroGrad = gradientForSlide();
   const outroBgIdx = elements.length;
-  elements.push(buildAnimatedGradientBg(outroStart, SLIDE_DUR, outroGrad));
+  elements.push(buildAnimatedGradientBg(outroStart, SLIDE_DUR, { ...outroGrad }, slides.length + 2));
   const outroScrimIdx = elements.length;
   elements.push(buildScrim(outroStart, SLIDE_DUR));
   const outroTextIdx = elements.length;

@@ -1,76 +1,62 @@
-# Dev Shadow Runs for City Command Center
+# Fix recap background gradients
 
-Add a second row of buttons per city — **Dev: Test Daily / Weekly / Monthly** — that runs the full generation pipeline (image/video render, voice + music mix, AI caption) but **skips the social upload** and instead returns the rendered media URL for review.
+Weekly and monthly recap videos currently render with a flat dark-blue background instead of the warm/cool/neutral themed gradients. The background rectangle helper passes a single hex string to `fill_color`, which Creatomate doesn't treat as a gradient — so the themed look never appears.
 
-## 1. UI — `src/components/CityCommandCenter.tsx`
+## What to change
 
-Per city, render two button rows:
+Both files have an identical helper that builds the full-frame background rectangle:
 
-- **PROD row** (existing behavior, label tweak):
-  - `▶ Post Daily Now`, `▶ Post Weekly Now`, `▶ Post Monthly Now`
-  - Subtle warning text: *"Posts live to connected channels."*
-- **DEV row** (new):
-  - `🛠 Dev: Test Daily`, `🛠 Dev: Test Weekly`, `🛠 Dev: Test Monthly`
-  - Subtle helper text: *"Renders end-to-end. No upload, no post_history."*
+- `supabase/functions/create-weekly-recap/index.ts` (~line 376)
+- `supabase/functions/create-monthly-recap/index.ts` (~line 466)
 
-State changes:
+Update that helper to accept the full `{ from, to }` gradient and emit Creatomate's gradient format:
 
-- `RunType` becomes `"daily" | "weekly" | "monthly"` plus a parallel `mode: "post" | "dev"`. Run state map key becomes `${cityId}:${mode}:${type}`.
-- 30-min localStorage dup guard applies per `(city, mode, type)` so a Dev run does not block a Post run.
-- On Dev success, status pill shows `👁 View Test Result` linking to `data.preview_url` (opens `.mp4`/`.png` in a new tab). On Post success, link label stays `View on YouTube`.
-- Logs:
-  - Post click → `[manual-post] {type} triggered for city={city} by user={id}`
-  - Dev click → `[dev-test] {type} triggered for city={city} (skipping upload)`
+```ts
+fill_color: [
+  { position: 0, color: grad.from },
+  { position: 1, color: grad.to },
+],
+fill_color_type: "linear-gradient",
+fill_color_angle: 135,
+```
 
-No visual redesign — reuse existing Card/Button/StatusDot, just two rows inside each city block.
+Remove the stale comment that says rectangles don't support gradient stops.
 
-## 2. Edge Functions — accept `skip_post: true`
+## Where it's used
 
-All three honor a `skip_post` flag in the JSON body. When true: run the full generation chain, **do not** publish to any platform, **do not** insert a "posted" `post_history` row, and return the rendered asset URL.
+The helper is reused for every background rectangle, so the single helper change covers all slide types:
 
-### `create-weekly-recap` and `create-monthly-recap`
+- Weekly: title card, day slides (theme rotates warm → cool → neutral), outro card
+- Monthly: title card, week slides (theme rotates), Moment of the Month slide (`momentGrad`), outro card
 
-- `runForUser(svc, userId, cityFilter, { skipPost })` gains a `skipPost` option threaded from the request body.
-- After `stitchSlideshow` succeeds (`stitched.url` is the Creatomate signed URL):
-  - If `skipPost`: log `[recap] dev-test skip_post=true preview_url={stitched.url}`, return `{ ok: true, preview_url, mode: "dev" }`. Skip `uploadLongFormToYouTube`, skip the `notifications` insert, skip `post_history`.
-  - Else: existing upload path runs unchanged.
-- Response shape gains `preview_url` and `mode` so the UI can surface the link.
+Today most call sites already pass `grad.from` from a `{ from, to }` object (`titleGrad`, `THEMES[themeKey]`, `momentGrad`, `outroGrad`), so the call sites can pass the whole object instead of just `.from`.
 
-### `process-scheduled-posts`
+## Themes (unchanged, just confirm)
 
-- Body parser accepts `skip_post` alongside the existing `scheduled_post_id`.
-- When `skip_post === true`, the function processes the row through caption → voice → render exactly as today, but:
-  - Replaces the `postToPlatform(...)` call with a no-op that records the rendered `video.data` URL.
-  - Marks the `scheduled_posts` row `status = 'dev_completed'` (new sentinel string, no schema change) instead of `'posted'`.
-  - Does NOT insert into `post_history`; does NOT insert `post_performance`/`post_analytics`.
-  - Logs `[dev-test] scheduled_post_id={id} skipping upload for {platform}`.
-- Final response includes `preview_url` derived from the render step.
-- The `scheduled_posts` row inserted by the Dev: Daily button uses the same shape as today plus `slot: "adhoc-dev"` so it is filterable in history and cannot be picked up by the regular cron worker (the worker only claims `slot in ('morning','afternoon','evening','adhoc')`).
+```ts
+warm:    { from: "#ea580c", to: "#f59e0b" }
+cool:    { from: "#1e3a8a", to: "#7e22ce" }
+neutral: { from: "#334155", to: "#1e3a8a" }
+```
 
-## 3. Logging contract
+## Logging
 
-- Each function emits a single line at entry distinguishing modes:
-  - `[manual-post] weekly triggered for city=Gainesville by user=…`
-  - `[dev-test] weekly triggered for city=Gainesville (skipping upload)`
-- Each function logs `preview_url` after a successful render in dev mode.
+Add a structured log per slide background, e.g.:
 
-## 4. Out of scope
-
-- No schema changes, no migrations, no new RLS.
-- No changes to the cron entries, the last-day-of-month guard, the post-health gate, A/B testing, or the analytics pipeline.
-- No changes to platform adapters; the skip is enforced upstream by the orchestrating function.
-- `generate-spec` is not updated in this pass (will follow only if you ask after verification).
-
-## Files touched
-
-- `src/components/CityCommandCenter.tsx` — two-row layout, mode-aware run state, preview-URL handling.
-- `supabase/functions/create-weekly-recap/index.ts` — `skip_post` branch around upload + notification.
-- `supabase/functions/create-monthly-recap/index.ts` — same `skip_post` branch.
-- `supabase/functions/process-scheduled-posts/index.ts` — `skip_post` body field, replaces publish step with preview URL capture, uses `dev_completed` sentinel and `adhoc-dev` slot.
+```
+[recap] slide 2 background gradient=cool #1e3a8a→#7e22ce
+[monthly-recap] slide 4 background gradient=neutral #334155→#1e3a8a
+```
 
 ## Verification
 
-1. **Dev: Test Weekly** for Gainesville → status reaches Done, edge logs show `[dev-test]` and `preview_url=…`, no new YouTube upload, `👁 View Test Result` opens the rendered `.mp4` with voice + music.
-2. **Post Weekly Now** for Gainesville → existing path, video lands on the YouTube channel and `View on YouTube` link is shown.
-3. **Dev: Test Daily** → `scheduled_posts` row created with `slot: 'adhoc-dev'`, transitions to `dev_completed`, no `post_history` row, preview URL returned.
-4. Confirm both Post and Dev rows respect their own 30-min dup guard independently.
+1. Deploy both functions.
+2. Trigger Dev: Test Weekly for Gainesville → confirm logs show the three gradients rotating and the `preview_url` shows warm slide 1, cool slide 2, neutral slide 3.
+3. Trigger Dev: Test Monthly for Gainesville → same gradient rotation across week slides plus themed Moment of the Month + outro.
+4. Confirm no `post_history` row is written (dev-test mode unchanged).
+
+## Out of scope
+
+- Scrim, image, and text layers (already working correctly).
+- Voice, music bed, layout rotation, Midweek Shift subtitle, outro CTA (all confirmed good).
+- The 504 IDLE_TIMEOUT from the earlier monthly run is unrelated — the backgrounded `EdgeRuntime.waitUntil` work still completes; not addressed here.
