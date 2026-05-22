@@ -845,14 +845,68 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
       shadow: "0px 2px 4px rgba(0,0,0,0.6)", enter: { type: "fade", duration: 0.4 } },
   );
 
-  // === AI VOICEOVER (optional) ===
-  // Plays from t=0.5s on its own track. We do NOT trim the audio track — its duration
-  // mirrors the real audio length so the CTA always finishes. The composition (D) is
-  // sized to leave VOICE_TAIL_PAD seconds of silent video after the voice ends.
+  // === AI VOICEOVER + BROADCAST AUDIO BED (optional) ===
+  // Three audio layers:
+  //   1. Intro chime  (t=0 → VOICE_START)              — gives it a broadcast feel
+  //   2. Background music (whole clip, ducked while voice is playing)
+  //   3. Voiceover    (starts at VOICE_START, full volume)
+  // All three are optional and independently degrade — missing music URL ⇒ no
+  // music layer; missing chime URL ⇒ no chime; missing voice ⇒ music plays at
+  // full volume the whole way through.
+  const introChimeUrl = (Deno.env.get("BROADCAST_INTRO_CHIME_URL") || "").trim();
+  const bgMusicUrl    = (Deno.env.get("BROADCAST_BG_MUSIC_URL") || "").trim();
+  const audioLen = voiceUrl
+    ? (typeof audioDurationSec === "number" && isFinite(audioDurationSec) && audioDurationSec > 0
+        ? audioDurationSec
+        : Math.max(0.1, D - VOICE_START))
+    : 0;
+  const voiceEnd = voiceUrl ? Math.min(D, VOICE_START + audioLen) : 0;
+
+  // 1) Intro chime — only when voice is playing (so it actually feels like an intro).
+  if (voiceUrl && introChimeUrl) {
+    elements.push({
+      type: "audio",
+      track: nt(),
+      time: 0,
+      duration: Math.min(0.6, VOICE_START),
+      source: introChimeUrl,
+      volume: "85%",
+    });
+  }
+
+  // 2) Background music — ducks while voice is playing.
+  if (bgMusicUrl) {
+    if (voiceUrl) {
+      // Pre-voice segment at full volume (includes chime tail).
+      if (VOICE_START > 0.05) {
+        elements.push({
+          type: "audio", track: nt(), time: 0, duration: VOICE_START,
+          source: bgMusicUrl, volume: BG_MUSIC_FULL_VOLUME,
+        });
+      }
+      // Ducked segment under the voice.
+      elements.push({
+        type: "audio", track: nt(), time: VOICE_START, duration: Math.max(0.1, voiceEnd - VOICE_START),
+        source: bgMusicUrl, volume: BG_MUSIC_DUCK_VOLUME,
+      });
+      // Tail segment back to full volume.
+      if (D - voiceEnd > 0.05) {
+        elements.push({
+          type: "audio", track: nt(), time: voiceEnd, duration: D - voiceEnd,
+          source: bgMusicUrl, volume: BG_MUSIC_FULL_VOLUME,
+        });
+      }
+    } else {
+      // No voice → music plays the entire clip at full volume.
+      elements.push({
+        type: "audio", track: nt(), time: 0, duration: D,
+        source: bgMusicUrl, volume: BG_MUSIC_FULL_VOLUME,
+      });
+    }
+  }
+
+  // 3) Voiceover — starts at VOICE_START, never trimmed (CTA must finish).
   if (voiceUrl) {
-    const audioLen = typeof audioDurationSec === "number" && isFinite(audioDurationSec) && audioDurationSec > 0
-      ? audioDurationSec
-      : Math.max(0.1, D - VOICE_START); // fallback: play to end of composition
     elements.push({
       type: "audio",
       track: nt(),
