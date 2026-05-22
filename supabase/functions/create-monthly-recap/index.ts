@@ -1005,7 +1005,7 @@ async function runForUser(svc: any, userId: string, cityFilter?: string): Promis
       await svc.from("post_history").insert({
         user_id: userId, status: "failed", platform: "youtube",
         city: posts[0].city, caption: finalTitle,
-        error_message: "No YouTube token for weekly recap",
+        error_message: "No YouTube token for monthly recap",
       });
       return { ok: false, detail: "No YouTube token" };
     }
@@ -1042,7 +1042,7 @@ async function runForUser(svc: any, userId: string, cityFilter?: string): Promis
       });
       await svc.from("notifications").insert({
         user_id: userId, type: "success",
-        title: "📺 Weekly Recap published!",
+        title: "📺 Monthly Recap published!",
         message: `${cleanTitle} is live on YouTube.`,
       });
       return { ok: true, detail: `Uploaded ${videoId}` };
@@ -1063,7 +1063,7 @@ async function runForUser(svc: any, userId: string, cityFilter?: string): Promis
     return { ok: false, detail: "Both stitch and infographic failed" };
   }
   // Save infographic to storage
-  const path = `weekly-recap/${userId}/${Date.now()}.png`;
+  const path = `monthly-recap/${userId}/${Date.now()}.png`;
   const { error: upErr } = await svc.storage.from("generated-images")
     .upload(path, img, { contentType: "image/png", upsert: true });
   if (upErr) console.error("[recap] storage upload failed:", upErr);
@@ -1074,12 +1074,12 @@ async function runForUser(svc: any, userId: string, cityFilter?: string): Promis
     user_id: userId, status: "fallback_image", platform: "youtube",
     city: posts[0].city, caption: finalTitle,
     image_url: signed?.signedUrl ?? null,
-    error_message: "Video stitch unavailable — generated weekly summary infographic instead",
+    error_message: "Video stitch unavailable — generated Month in Review infographic instead",
   });
   await svc.from("notifications").insert({
     user_id: userId, type: "warning",
-    title: "🖼️ Weekly Recap fallback ready",
-    message: "We couldn't stitch the weekly video, so we made a Weekly Summary infographic instead.",
+    title: "🖼️ Monthly Recap fallback ready",
+    message: "We couldn't stitch the monthly video, so we made a Month in Review infographic instead.",
   });
   return { ok: true, detail: "Fallback infographic generated" };
 }
@@ -1143,7 +1143,7 @@ Deno.serve(async (req) => {
         try {
           await svc.from("post_history").insert({
             user_id: c.user_id, status: "failed", platform: "youtube",
-            caption: "Weekly Recap",
+            caption: "Month in Review",
             error_message: `Background recap failed: ${msg}`,
           });
         } catch { /* ignore */ }
@@ -1152,7 +1152,7 @@ Deno.serve(async (req) => {
 
     try {
       await svc.from("system_health").upsert({
-        id: "create-weekly-recap",
+        id: "create-monthly-recap",
         last_run_at: new Date().toISOString(),
         last_status: "ok",
         last_message: `${results.filter(r => r.ok).length}/${results.length} recaps`,
