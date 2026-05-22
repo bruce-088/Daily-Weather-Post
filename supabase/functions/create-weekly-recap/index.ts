@@ -829,7 +829,8 @@ high contrast. No watermark.`;
 
 // ───────────────── per-user runner ─────────────────
 
-async function runForUser(svc: any, userId: string, cityFilter?: string): Promise<{ ok: boolean; detail: string }> {
+async function runForUser(svc: any, userId: string, cityFilter?: string, opts?: { skipPost?: boolean }): Promise<{ ok: boolean; detail: string; preview_url?: string }> {
+  const skipPost = !!opts?.skipPost;
   const posts = await getLast7Posts(svc, userId, cityFilter);
   if (posts.length < 3) {
     return { ok: false, detail: `Only ${posts.length} posts in last 7 days${cityFilter ? ` for ${cityFilter}` : ""} — skipping recap` };
@@ -846,6 +847,10 @@ async function runForUser(svc: any, userId: string, cityFilter?: string): Promis
   const stitched = await stitchSlideshow(svc, userId, posts, finalTitle, voice ?? undefined);
 
   if (stitched) {
+    if (skipPost) {
+      console.log(`[recap] dev-test skip_post=true preview_url=${stitched.url}`);
+      return { ok: true, detail: "Dev test render complete", preview_url: stitched.url };
+    }
     const token = await getYouTubeToken(svc, userId);
     if (!token) {
       await svc.from("post_history").insert({
@@ -947,16 +952,20 @@ Deno.serve(async (req) => {
   // Optional body: { city?: string, user_id?: string } for manual test runs.
   let cityFilter: string | undefined;
   let userFilter: string | undefined;
+  let skipPost = false;
   try {
     if (req.method === "POST") {
       const body = await req.json().catch(() => ({}));
       if (body && typeof body.city === "string" && body.city.trim()) cityFilter = body.city.trim();
       if (body && typeof body.user_id === "string" && body.user_id.trim()) userFilter = body.user_id.trim();
+      if (body && body.skip_post === true) skipPost = true;
     }
   } catch { /* ignore */ }
 
-  if (cityFilter || userFilter) {
-    console.log(`[manual] weekly triggered for city=${cityFilter ?? "(any)"} by user=${gate.source === "user" ? gate.userId : (userFilter ?? "cron")}`);
+  if (skipPost) {
+    console.log(`[dev-test] weekly triggered for city=${cityFilter ?? "(any)"} (skipping upload)`);
+  } else if (cityFilter || userFilter) {
+    console.log(`[manual-post] weekly triggered for city=${cityFilter ?? "(any)"} by user=${gate.source === "user" ? gate.userId : (userFilter ?? "cron")}`);
   }
 
 
@@ -980,6 +989,27 @@ Deno.serve(async (req) => {
   }
 
   const candidateList = (candidates || []).filter((c: any) => c.user_id);
+
+  // Dev-test mode: run synchronously and return the preview URL inline.
+  if (skipPost) {
+    try {
+      const target = candidateList[0];
+      if (!target) {
+        return new Response(JSON.stringify({ ok: false, error: "no candidate users" }), {
+          status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const r = await runForUser(svc, target.user_id, cityFilter, { skipPost: true });
+      return new Response(
+        JSON.stringify({ ok: r.ok, mode: "dev", preview_url: r.preview_url ?? null, detail: r.detail }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    } catch (e) {
+      return new Response(JSON.stringify({ ok: false, error: (e as Error).message }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }
 
   const work = async () => {
     const results: Array<{ user_id: string; ok: boolean; detail: string }> = [];

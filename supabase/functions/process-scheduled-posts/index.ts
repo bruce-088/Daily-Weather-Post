@@ -1587,12 +1587,17 @@ Deno.serve(async (req) => {
     // specific scheduled_post_id. We process ONLY that row and skip the
     // sweep / recovery logic — the job runner handles those concerns itself.
     let singlePostId: string | null = null;
+    let skipPost = false;
     if (req.method === "POST") {
       try {
         const body = await req.json();
         if (body && typeof body.scheduled_post_id === "string") {
           singlePostId = body.scheduled_post_id;
           console.log(`[process] single-post mode for ${singlePostId} (source=${body.source ?? "unknown"})`);
+        }
+        if (body && body.skip_post === true) {
+          skipPost = true;
+          console.log(`[dev-test] skip_post=true received for scheduled_post_id=${singlePostId ?? "(sweep)"}`);
         }
       } catch {
         // No body — legacy cron invocation, fall through to sweep mode.
@@ -2805,6 +2810,33 @@ Deno.serve(async (req) => {
           }
         }
 
+        // ── DEV-TEST SHORT-CIRCUIT ──
+        // When invoked with skip_post=true, stop after render. Mark the row
+        // dev_completed (sentinel string — not a real publish state) and skip
+        // platform upload, post_history, post_analytics, and notifications.
+        if (skipPost && video) {
+          let previewUrl: string | null = null;
+          try {
+            const { data: row } = await supabase
+              .from("scheduled_posts")
+              .select("cached_video_url")
+              .eq("id", post.id)
+              .maybeSingle();
+            previewUrl = (row as any)?.cached_video_url ?? null;
+          } catch { /* ignore */ }
+          await supabase
+            .from("scheduled_posts")
+            .update({
+              status: "dev_completed",
+              error_message: null,
+              posted_at: null,
+            })
+            .eq("id", post.id);
+          console.log(`[dev-test] scheduled_post_id=${post.id} skipping upload — preview_url=${previewUrl ?? "(none)"}`);
+          processed++;
+          continue;
+        }
+
         let publishedPostUrl: string | null = null;
         // Map of platform -> external/post id, used to seed post_analytics rows.
         const platformExternalIds: Record<string, string> = {};
@@ -3296,8 +3328,28 @@ Deno.serve(async (req) => {
       }
     }
 
+    // For dev-test single-post invocations, surface the rendered preview URL.
+    let previewUrl: string | null = null;
+    if (skipPost && singlePostId) {
+      try {
+        const { data: row } = await supabase
+          .from("scheduled_posts")
+          .select("cached_video_url, status")
+          .eq("id", singlePostId)
+          .maybeSingle();
+        previewUrl = (row as any)?.cached_video_url ?? null;
+      } catch { /* ignore */ }
+    }
+
     return new Response(
-      JSON.stringify({ success: true, message: `Processed ${processed}, failed ${failed}`, processed, failed }),
+      JSON.stringify({
+        success: true,
+        message: `Processed ${processed}, failed ${failed}`,
+        processed,
+        failed,
+        mode: skipPost ? "dev" : "post",
+        preview_url: previewUrl,
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
