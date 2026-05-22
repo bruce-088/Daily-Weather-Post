@@ -598,7 +598,7 @@ async function runForUser(svc: any, userId: string, cityFilter?: string): Promis
       const hLen = Number(head.headers.get("content-length") || "0");
       const hType = head.headers.get("content-type") || "unknown";
       console.log(`[recap] pre-upload HEAD check: status=${head.status} length=${hLen} type=${hType}`);
-      if ((hLen > 0 && hLen < 1_000_000) || (hType !== "unknown" && !/video\/mp4/i.test(hType))) {
+      if ((hLen > 0 && hLen < 100_000) || (hType !== "unknown" && !/video\/mp4/i.test(hType))) {
         console.error(`[recap] ABORT: pre-upload guard rejected file (length=${hLen} type=${hType})`);
         await svc.from("post_history").insert({
           user_id: userId, status: "failed", platform: "youtube",
