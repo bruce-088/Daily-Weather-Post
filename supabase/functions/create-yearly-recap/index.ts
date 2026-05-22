@@ -1002,17 +1002,38 @@ Data: ${lines}. Minimalist, editorial, high contrast. No watermark.`;
 
 async function runForUser(
   svc: any, userId: string, city: string, year: number, opts?: { skipPost?: boolean },
-): Promise<{ ok: boolean; detail: string; preview_url?: string; slides?: number }> {
+): Promise<{ ok: boolean; status?: string; reason?: string; detail: string; preview_url?: string; slides?: number }> {
   const skipPost = !!opts?.skipPost;
   const posts = await getYearPosts(svc, userId, city, year);
-  if (posts.length < 8) {
-    return { ok: false, detail: `Only ${posts.length} posts in ${year} for ${city} — need 8+ for a yearly recap` };
+
+  // Hard floor: need a minimum corpus to make a meaningful year-in-review.
+  if (posts.length < 10) {
+    console.log(`[yearly-recap] insufficient_data: ${posts.length} usable posts for ${city} ${year} (need 10+)`);
+    return {
+      ok: false,
+      status: "insufficient_data",
+      reason: "Not enough yearly data",
+      detail: `Only ${posts.length} usable posts in ${year} for ${city} — need 10+ for a yearly recap`,
+    };
   }
+
   const settings = await loadCinematicSettings(svc, userId);
   const data = aggregateYear(city, year, posts);
-  if (data.seasons.length < 2) {
-    return { ok: false, detail: `Only ${data.seasons.length} season(s) with data in ${year} — need at least 2` };
+
+  // Soft floor: empty seasons are already dropped in aggregateYear; we just need at
+  // least 1 season's worth of content to compose around (intro + 1 season + stats + outro).
+  // 2–3 missing seasons → render with reduced structure, no empty seasonal sections.
+  if (data.seasons.length < 1) {
+    console.log(`[yearly-recap] insufficient_data: 0 seasons with content for ${city} ${year}`);
+    return {
+      ok: false,
+      status: "insufficient_data",
+      reason: "Not enough yearly data",
+      detail: `No season had usable posts in ${year} for ${city}`,
+    };
   }
+  console.log(`[yearly-recap] composing with ${data.seasons.length}/4 seasons (${4 - data.seasons.length} missing)`);
+
 
   const script = await generateYearlyScript(data);
   const finalTitle = script.title.startsWith(`${year} Year in Review`)
