@@ -12,6 +12,7 @@ import {
   pickPresetForDaily,
   logCinematic,
   attachCinematicToPostHistory,
+  loadCinematicSettings,
   type RenderSource,
 } from "../_shared/cinematic-presets.ts";
 
@@ -45,6 +46,10 @@ Deno.serve(async (req) => {
       userId = user?.id ?? null;
     }
     if (!userId) throw new Error("Authentication required");
+
+    // Resolve cinematic settings up-front with safe defaults so downstream
+    // pickPresetForDaily / resolveScene calls always receive a defined object.
+    const settings = await loadCinematicSettings(supabase, userId);
 
     // Load and validate bundle
     const { data: bundle, error: bundleErr } = await supabase
@@ -118,8 +123,9 @@ Deno.serve(async (req) => {
             city: cityName,
             condition: weather?.condition ?? null,
             mediaUrl: (bundle as any).background_url || null,
-            preset: pickPresetForDaily({ condition: weather?.condition ?? null, city: cityName }),
+            preset: pickPresetForDaily({ condition: weather?.condition ?? null, city: cityName, settings: settings as any }),
             mode: bundle.content_type === "image" ? "image" : "image",
+            settings: settings as any,
           });
       logCinematic("publish-preview-bundle", _cinematicDecision, { city: cityName, kind: "daily" });
       const _cinPatch = attachCinematicToPostHistory(
