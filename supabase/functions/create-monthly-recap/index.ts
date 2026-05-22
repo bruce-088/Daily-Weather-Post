@@ -706,7 +706,7 @@ async function stitchSlideshow(
       source: voice!.url,
       time: 0,
       duration: totalDuration,
-      volume: 2.0,
+      volume: 2.5,
     });
   }
   if (hasMusic) {
