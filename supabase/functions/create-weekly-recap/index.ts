@@ -372,13 +372,20 @@ function buildAnimatedGradientBg(
   // built-in scale animation guarantees frame-to-frame change so Creatomate
   // emits a real MP4 (and not a 15KB JPEG snapshot of a static composition).
   return {
-    type: "shape",
-    path: "M 0 0 L 100 0 L 100 100 L 0 100 Z",
+    type: "rectangle",
     width: "100%",
     height: "100%",
     x: "50%",
     y: "50%",
-    fill_color: `linear-gradient(135deg, ${grad.from}, ${grad.to})`,
+    fill_color: grad.from, // solid fallback — guarantees a non-black base
+    gradient: {
+      type: "linear",
+      angle: 135,
+      stops: [
+        { offset: "0%", color: grad.from },
+        { offset: "100%", color: grad.to },
+      ],
+    },
     time,
     duration,
     animations: [
@@ -393,6 +400,20 @@ function buildAnimatedGradientBg(
         duration,
       },
     ],
+  };
+}
+
+// Full-frame 0.3 dark scrim used between background and text for legibility.
+function buildScrim(time: number, duration: number): any {
+  return {
+    type: "rectangle",
+    width: "100%",
+    height: "100%",
+    x: "50%",
+    y: "50%",
+    fill_color: "rgba(0,0,0,0.3)",
+    time,
+    duration,
   };
 }
 
