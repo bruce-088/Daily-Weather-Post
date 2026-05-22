@@ -12,6 +12,7 @@
 //   • Gainesville → sky       + calm      + statement (Calm / Informative)
 
 import { VISUAL_STYLES } from "./experiments.ts";
+import { isLearningEligibleRow, type CinematicSettings } from "./cinematic-presets.ts";
 
 export interface WinningRecipe {
   visual_style: string;       // gradient | sky | cinematic | minimal
