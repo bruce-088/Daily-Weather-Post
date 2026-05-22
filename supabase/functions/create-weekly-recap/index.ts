@@ -534,7 +534,7 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
       source: voice!.url,
       time: 0,
       duration: totalDuration,
-      volume: 1.0,
+      volume: 2.0,
     });
   }
   if (hasMusic) {
@@ -562,7 +562,7 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
       console.warn("[recap] continuing without any audio track; YouTube may abandon processing");
     }
   }
-  console.log(`[recap] audio mix: voice=${hasVoice ? "yes" : "no"} music=${hasMusic ? "yes" : "no"} silent_fallback=${usedSilentFallback ? "yes" : "no"}`);
+  console.log(`[recap] audio mix: voice=${hasVoice ? "yes(vol=2.0)" : "no"} music=${hasMusic ? "yes(vol=0.15)" : "no"} silent_fallback=${usedSilentFallback ? "yes" : "no"}`);
 
   // ── Safety fallback: never ship a visually empty composition ──
   const visualCountPre = elements.filter((e) => e.type !== "audio").length;
