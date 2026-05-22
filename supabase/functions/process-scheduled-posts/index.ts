@@ -1562,7 +1562,7 @@ Deno.serve(async (req) => {
   }
 
   const url = new URL(req.url);
-  if (req.method === "GET" && url.searchParams.get("health") === "1") {
+  if (url.searchParams.get("health") === "1") {
     console.log(`[process] health build=${PROCESS_SCHEDULED_POSTS_BUILD}`);
     return new Response(
       JSON.stringify({ success: true, function: "process-scheduled-posts", build: PROCESS_SCHEDULED_POSTS_BUILD }),
