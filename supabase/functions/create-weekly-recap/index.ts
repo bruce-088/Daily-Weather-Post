@@ -952,16 +952,20 @@ Deno.serve(async (req) => {
   // Optional body: { city?: string, user_id?: string } for manual test runs.
   let cityFilter: string | undefined;
   let userFilter: string | undefined;
+  let skipPost = false;
   try {
     if (req.method === "POST") {
       const body = await req.json().catch(() => ({}));
       if (body && typeof body.city === "string" && body.city.trim()) cityFilter = body.city.trim();
       if (body && typeof body.user_id === "string" && body.user_id.trim()) userFilter = body.user_id.trim();
+      if (body && body.skip_post === true) skipPost = true;
     }
   } catch { /* ignore */ }
 
-  if (cityFilter || userFilter) {
-    console.log(`[manual] weekly triggered for city=${cityFilter ?? "(any)"} by user=${gate.source === "user" ? gate.userId : (userFilter ?? "cron")}`);
+  if (skipPost) {
+    console.log(`[dev-test] weekly triggered for city=${cityFilter ?? "(any)"} (skipping upload)`);
+  } else if (cityFilter || userFilter) {
+    console.log(`[manual-post] weekly triggered for city=${cityFilter ?? "(any)"} by user=${gate.source === "user" ? gate.userId : (userFilter ?? "cron")}`);
   }
 
 
