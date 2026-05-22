@@ -6,7 +6,7 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const APP_NAME = "SkyBrief";
-const APP_VERSION = "1.4.0";
+const APP_VERSION = "1.5.1";
 const TAGLINE = "Automated weather posts for every platform.";
 
 const FEATURES: Array<[string, string, string]> = [
