@@ -1208,9 +1208,18 @@ Deno.serve(async (req) => {
     try {
       const r = await runForUser(svc, targetUserId, cityFilter, year, { skipPost: true });
       return new Response(
-        JSON.stringify({ ok: r.ok, mode: "dev", preview_url: r.preview_url ?? null, slides: r.slides ?? 0, detail: r.detail }),
+        JSON.stringify({
+          ok: r.ok,
+          mode: "dev",
+          status: r.status,
+          reason: r.reason,
+          preview_url: r.preview_url ?? null,
+          slides: r.slides ?? 0,
+          detail: r.detail,
+        }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
+
     } catch (e) {
       return new Response(
         JSON.stringify({ ok: false, error: (e as Error).message }),
