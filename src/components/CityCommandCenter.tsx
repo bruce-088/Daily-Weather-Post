@@ -134,10 +134,14 @@ export function CityCommandCenter() {
           toast.success(`✅ Daily post processing for ${city.name}`, { description: "Check post history in a moment." });
         }
       } else {
-        const fnName = type === "weekly" ? "create-weekly-recap" : "create-monthly-recap";
-        const { data, error } = await supabase.functions.invoke(fnName, {
-          body: { city: city.name, skip_post: isDev },
-        });
+        const fnName = type === "weekly"
+          ? "create-weekly-recap"
+          : type === "monthly"
+          ? "create-monthly-recap"
+          : "create-yearly-recap";
+        const fnBody: Record<string, unknown> = { city: city.name, skip_post: isDev };
+        if (type === "yearly") fnBody.year = new Date().getUTCFullYear();
+        const { data, error } = await supabase.functions.invoke(fnName, { body: fnBody });
         if (error) throw error;
         if (isDev) {
           const previewUrl = (data as any)?.preview_url ?? null;
