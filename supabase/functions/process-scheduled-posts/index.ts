@@ -2357,6 +2357,10 @@ Deno.serve(async (req) => {
           }
         }
 
+        // Sanitize regardless of generation path (covers pre-populated post.caption).
+        if (caption) caption = sanitizeCityProxies(caption, weather.city);
+
+
         // ── Location Beacon: ensure first non-empty line is "📍 City · Slot Update" ──
         if (caption) {
           try {
