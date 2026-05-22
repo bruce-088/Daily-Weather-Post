@@ -730,6 +730,16 @@ export function SettingsPanel({
                 <Button
                   type="button"
                   size="sm"
+                  variant="outline"
+                  onClick={() => toggleThemeMusic(slot.key)}
+                  className="w-full gap-1.5 h-7 text-xs"
+                >
+                  <Play size={12} />
+                  {themePlayingSlot === slot.key ? "Stop Theme Music" : "Play Theme Music"}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
                   variant={isSkippedToday ? "secondary" : "outline"}
                   onClick={() => handleSkipToday(slot.key, isSkippedToday)}
                   disabled={!slot.enabled}
