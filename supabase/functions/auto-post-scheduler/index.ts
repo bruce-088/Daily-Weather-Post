@@ -730,6 +730,18 @@ Deno.serve(async (req) => {
           ) => {
             if (!bInserted || bInserted.length === 0) return;
             for (const row of bInserted) {
+              // Same idempotency guards as the A path: never create a 2nd
+              // generate_content job for the same slot/day, even for the
+              // B-variant of an experiment.
+              const [hasJob, hasSuccess] = await Promise.all([
+                existingJobForSlot(supabase, target.user_id, target.city, row.platform, period.name),
+                recentSuccessForSlot(supabase, target.user_id, target.city, row.platform, period.name),
+              ]);
+              if (hasJob || hasSuccess) {
+                const reason = hasJob ? "job_pending" : "recent_success";
+                console.log(`[scheduler] Slot=${period.name} City=${target.city} Platform=${row.platform} Status=Skipped_Existing reason=${reason} variant=B`);
+                continue;
+              }
               const { error: bEnqErr } = await supabase.rpc("enqueue_job", {
                 p_user_id: target.user_id,
                 p_type: "generate_content",
@@ -748,8 +760,10 @@ Deno.serve(async (req) => {
               });
               if (bEnqErr) {
                 console.error(`[scheduler]   ⚠️ enqueue_job (exp:B) failed for ${row.id}:`, bEnqErr.message);
+                console.log(`[scheduler] Slot=${period.name} City=${target.city} Platform=${row.platform} Status=Skipped_Existing reason=enqueue_conflict variant=B`);
               } else {
                 console.log(`[scheduler]   🧩 enqueued generate_content job for scheduled_post ${row.id} [auto:${period.name}] [exp:B]`);
+                console.log(`[scheduler] Slot=${period.name} City=${target.city} Platform=${row.platform} Status=Triggered variant=B`);
               }
             }
           };
