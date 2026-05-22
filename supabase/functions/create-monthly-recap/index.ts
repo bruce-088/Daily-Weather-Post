@@ -994,6 +994,30 @@ async function stitchSlideshow(
         return null;
       }
       console.log(`[monthly-recap] stitched mp4 ready: url=${sd.url} bytes=${bytes}`);
+      try {
+        const sources: Record<string, number> = {};
+        let eligible = 0;
+        for (const d of cinematicDecisions) {
+          sources[d.source] = (sources[d.source] ?? 0) + 1;
+          if (d.eligibleForLearning) eligible++;
+        }
+        await svc.from("system_logs").insert({
+          user_id: userId,
+          type: "cinematic_recap_render",
+          platform: "youtube",
+          message: `monthly recap: ${cinematicDecisions.length} slides (${eligible} eligible)`,
+          context: {
+            kind: "monthly",
+            city,
+            slide_count: cinematicDecisions.length,
+            eligible_count: eligible,
+            sources,
+            decisions: cinematicDecisions,
+          },
+        });
+      } catch (e) {
+        console.warn(`[monthly-recap] cinematic system_logs insert failed:`, (e as Error)?.message);
+      }
       return { url: sd.url, data: new Uint8Array(ab), contentType, reportedDuration };
     }
     if (sd.status === "failed") {
