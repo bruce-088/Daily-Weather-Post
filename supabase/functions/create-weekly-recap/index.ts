@@ -564,6 +564,21 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
   }
   console.log(`[recap] audio mix: voice=${hasVoice ? "yes" : "no"} music=${hasMusic ? "yes" : "no"} silent_fallback=${usedSilentFallback ? "yes" : "no"}`);
 
+  // ── Safety fallback: never ship a visually empty composition ──
+  const visualCountPre = elements.filter((e) => e.type !== "audio").length;
+  if (visualCountPre === 0) {
+    console.warn("[recap] safety fallback: no visual elements, pushing solid background");
+    elements.unshift({
+      type: "rectangle",
+      width: "100%", height: "100%", x: "50%", y: "50%",
+      fill_color: "#0f172a",
+      time: 0, duration: totalDuration,
+    });
+  }
+
+  const visualCount = elements.filter((e) => e.type !== "audio").length;
+  const audioCount = elements.length - visualCount;
+  console.log(`[recap] elements count=${elements.length} visual=${visualCount} audio=${audioCount}`);
 
   // Creatomate v2 expects source fields (width/height/duration/elements) at
   // the TOP LEVEL of the request body, not nested under a `source` key.
