@@ -384,8 +384,8 @@ function buildAnimatedGradientBg(
   };
 }
 
-// Full-frame 0.3 dark scrim used between background and text for legibility.
-function buildScrim(time: number, duration: number): any {
+// Full-frame dark scrim used between background and text for legibility.
+function buildScrim(time: number, duration: number, opacity: number = 0.3): any {
   return {
     type: "shape",
     shape_type: "rectangle",
@@ -393,10 +393,29 @@ function buildScrim(time: number, duration: number): any {
     height: "100%",
     x: "50%",
     y: "50%",
-    fill_color: "rgba(0,0,0,0.3)",
+    fill_color: `rgba(0,0,0,${opacity})`,
     time,
     duration,
   };
+}
+
+// ── Storytelling variation tables ──
+const LAYOUTS = ["center", "left", "right"] as const;
+type LayoutKind = typeof LAYOUTS[number];
+const THEME_KEYS = ["warm", "cool", "neutral"] as const;
+type ThemeKey = typeof THEME_KEYS[number];
+const THEMES: Record<ThemeKey, { from: string; to: string }> = {
+  warm:    { from: "#ea580c", to: "#f59e0b" },
+  cool:    { from: "#1e3a8a", to: "#7e22ce" },
+  neutral: { from: "#334155", to: "#1e3a8a" },
+};
+// Flip to false in one place if Creatomate rejects the image pan animation.
+const SAFE_IMAGE_ANIM = true;
+
+function layoutTextProps(layout: LayoutKind): { x: string; width: string; x_alignment: string } {
+  if (layout === "left")  return { x: "30%", width: "60%", x_alignment: "0%" };
+  if (layout === "right") return { x: "70%", width: "60%", x_alignment: "100%" };
+  return { x: "50%", width: "90%", x_alignment: "50%" };
 }
 
 async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title: string, voice?: { url: string; durationSec: number }): Promise<StitchResult | null> {
