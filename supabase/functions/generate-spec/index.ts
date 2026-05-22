@@ -439,31 +439,35 @@ Deno.serve(async (req) => {
     docParts.push(CAPTION_SYSTEM);
     docParts.push("\n---\n");
 
-    docParts.push(`## 10. City-to-Channel Routing Guard\n`);
+    docParts.push(`## 10. Cinematic Preset System\n`);
+    docParts.push(CINEMATIC_PRESET_SYSTEM);
+    docParts.push("\n---\n");
+
+    docParts.push(`## 11. City-to-Channel Routing Guard\n`);
     docParts.push(ROUTING_GUARD);
     docParts.push("\n---\n");
 
-    docParts.push(`## 11. Error Handling Strategy\n`);
+    docParts.push(`## 12. Error Handling Strategy\n`);
     docParts.push(ERROR_STRATEGY);
     docParts.push("\n---\n");
 
-    docParts.push(`## 12. API Integrations`);
+    docParts.push(`## 13. API Integrations`);
     docParts.push(table(["Integration", "Used for"], INTEGRATIONS.map(([n, u]) => [n, u])));
     docParts.push("\n---\n");
 
-    docParts.push(`## 13. Known Issues / Limitations\n`);
+    docParts.push(`## 14. Known Issues / Limitations\n`);
     docParts.push(KNOWN_ISSUES);
     docParts.push("\n---\n");
 
-    docParts.push(`## 14. Recently Resolved Issues\n`);
+    docParts.push(`## 15. Recently Resolved Issues\n`);
     docParts.push(RESOLVED_ISSUES);
     docParts.push("\n---\n");
 
-    docParts.push(`## 15. Deployment\n`);
+    docParts.push(`## 16. Deployment\n`);
     docParts.push(DEPLOYMENT);
     docParts.push("\n---\n");
 
-    docParts.push(`## 16. Recent Changes Log`);
+    docParts.push(`## 17. Recent Changes Log`);
     docParts.push(`_Pulled live from post_history (last 10 events)_\n`);
     if (recentRows.length === 0) {
       docParts.push(`_No recent activity recorded._`);
