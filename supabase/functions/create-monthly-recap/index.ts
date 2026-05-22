@@ -80,6 +80,22 @@ interface PostRow {
 
 // ───────────────── helpers ─────────────────
 
+async function getTopHooks(svc: any, userId: string): Promise<string[]> {
+  try {
+    const { data } = await svc
+      .from("ai_memory")
+      .select("content")
+      .eq("user_id", userId)
+      .eq("memory_type", "hook")
+      .order("performance_score", { ascending: false })
+      .limit(5);
+    return (data || []).map((r: any) => String(r.content)).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+
 async function getLast30Posts(svc: any, userId: string, cityFilter?: string): Promise<PostRow[]> {
   const since = new Date(Date.now() - 31 * 86400 * 1000).toISOString();
   let q = svc
