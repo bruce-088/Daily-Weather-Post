@@ -384,8 +384,8 @@ function buildAnimatedGradientBg(
   };
 }
 
-// Full-frame 0.3 dark scrim used between background and text for legibility.
-function buildScrim(time: number, duration: number): any {
+// Full-frame dark scrim used between background and text for legibility.
+function buildScrim(time: number, duration: number, opacity: number = 0.3): any {
   return {
     type: "shape",
     shape_type: "rectangle",
@@ -393,10 +393,29 @@ function buildScrim(time: number, duration: number): any {
     height: "100%",
     x: "50%",
     y: "50%",
-    fill_color: "rgba(0,0,0,0.3)",
+    fill_color: `rgba(0,0,0,${opacity})`,
     time,
     duration,
   };
+}
+
+// ── Storytelling variation tables ──
+const LAYOUTS = ["center", "left", "right"] as const;
+type LayoutKind = typeof LAYOUTS[number];
+const THEME_KEYS = ["warm", "cool", "neutral"] as const;
+type ThemeKey = typeof THEME_KEYS[number];
+const THEMES: Record<ThemeKey, { from: string; to: string }> = {
+  warm:    { from: "#ea580c", to: "#f59e0b" },
+  cool:    { from: "#1e3a8a", to: "#7e22ce" },
+  neutral: { from: "#334155", to: "#1e3a8a" },
+};
+// Flip to false in one place if Creatomate rejects the image pan animation.
+const SAFE_IMAGE_ANIM = true;
+
+function layoutTextProps(layout: LayoutKind): { x: string; width: string; x_alignment: string } {
+  if (layout === "left")  return { x: "30%", width: "60%", x_alignment: "0%" };
+  if (layout === "right") return { x: "70%", width: "60%", x_alignment: "100%" };
+  return { x: "50%", width: "90%", x_alignment: "50%" };
 }
 
 async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title: string, voice?: { url: string; durationSec: number }): Promise<StitchResult | null> {
@@ -430,30 +449,47 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
     type: "text", text: title,
     x: "50%", y: "20%", width: "90%",
     font_family: "Inter", font_weight: "800",
-    font_size: "8 vh", fill_color: "#ffffff",
+    font_size: "9 vh", fill_color: "#ffffff",
     background_color: "rgba(0,0,0,0.25)", padding: 24,
     time: 0, duration: SLIDE_DUR,
+    animations: [{ type: "fade", duration: 1.2, scope: "element" }],
   });
+  console.log("[recap] title font=9vh animation=fade");
 
   // ── Day slides ── (gradient → image → scrim → text)
   slides.forEach((p, i) => {
     const start = (i + 1) * SLIDE_DUR;
-    const grad = gradientForSlide(p.created_at);
-    // 1. Animated gradient base (safety net + motion guarantee)
+    const layout: LayoutKind = LAYOUTS[i % 3];
+    const themeKey: ThemeKey = THEME_KEYS[i % 3];
+    const grad = THEMES[themeKey];
+    const isHighlight = i === 3;
+    const textPos = layoutTextProps(layout);
+
+    // 1. Themed gradient base (safety net + motion guarantee)
     elements.push(buildAnimatedGradientBg(start, SLIDE_DUR, grad));
-    // 2. Image on top of gradient (if available)
+    // 2. Image on top of gradient (if available) — subtle Ken Burns pan
     if (p.image_url) {
-      elements.push({
+      const imgEl: any = {
         type: "image", source: p.image_url,
         time: start, duration: SLIDE_DUR,
         fit: "cover",
-      });
+      };
+      if (SAFE_IMAGE_ANIM) {
+        imgEl.animations = [{
+          type: "pan",
+          direction: layout === "left" ? "right" : layout === "right" ? "left" : "up",
+          duration: SLIDE_DUR,
+          easing: "linear",
+          scope: "element",
+        }];
+      }
+      elements.push(imgEl);
       console.log(`[recap] slide ${i + 1} using image from history: ${p.image_url}`);
     } else {
-      console.log(`[recap] slide ${i + 1} using animated gradient (no image_url) palette=${grad.label}`);
+      console.log(`[recap] slide ${i + 1} using animated gradient (no image_url) theme=${themeKey}`);
     }
-    // 3. 0.3 dark scrim for legibility
-    elements.push(buildScrim(start, SLIDE_DUR));
+    // 3. Scrim for legibility (slightly darker on midweek highlight)
+    elements.push(buildScrim(start, SLIDE_DUR, isHighlight ? 0.35 : 0.3));
     // 4. Text on top
     const day = new Date(p.created_at).toLocaleDateString("en-US", { weekday: "long" });
     const temp = p.temperature != null ? `${Math.round(p.temperature)}°F` : "";
@@ -461,12 +497,27 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
     elements.push({
       type: "text",
       text: `${day}\n${temp}  ${cond}`.trim(),
-      x: "50%", y: "50%", width: "90%",
+      x: textPos.x, y: "50%", width: textPos.width,
+      x_alignment: textPos.x_alignment,
       font_family: "Inter", font_weight: "700",
-      font_size: "7 vh", fill_color: "#ffffff",
+      font_size: isHighlight ? "7.7 vh" : "7 vh",
+      fill_color: "#ffffff",
       background_color: "rgba(0,0,0,0.25)", padding: 24,
       time: start, duration: SLIDE_DUR,
     });
+    if (isHighlight) {
+      elements.push({
+        type: "text",
+        text: "Midweek Shift",
+        x: textPos.x, y: "62%", width: textPos.width,
+        x_alignment: textPos.x_alignment,
+        font_family: "Inter", font_weight: "600",
+        font_size: "3.5 vh", fill_color: "#ffffff",
+        background_color: "rgba(0,0,0,0.25)", padding: 12,
+        time: start, duration: SLIDE_DUR,
+      });
+    }
+    console.log(`[recap] slide ${i + 1} layout=${layout} theme=${themeKey}${isHighlight ? " highlight=yes" : ""}`);
   });
 
   // ── Outro card ── (gradient → scrim → text)
@@ -479,13 +530,15 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
   const outroTextIdx = elements.length;
   elements.push({
     type: "text",
-    text: `Thanks for watching!\nLike + subscribe for daily ${city} weather.`,
+    text: `Follow for your daily forecast\n${city} weather, every day.`,
     x: "50%", y: "50%", width: "90%",
     font_family: "Inter", font_weight: "800",
     font_size: "7 vh", fill_color: "#ffffff",
     background_color: "rgba(0,0,0,0.25)", padding: 24,
     time: outroStart, duration: SLIDE_DUR,
   });
+  console.log("[recap] outro cta=follow");
+
 
   const visualDuration0 = (slides.length + 2) * SLIDE_DUR; // title + slides + outro
   const voiceDur = voice ? Math.ceil(voice.durationSec + 1) : 0;
