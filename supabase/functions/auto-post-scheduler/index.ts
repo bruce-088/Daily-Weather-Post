@@ -26,6 +26,62 @@ function cityLabel(city: any): string {
   return city?.state ? String(city.name) + ", " + String(city.state) : String(city?.name || "Unknown");
 }
 
+// ── Duplicate-prevention guards ──
+// True when an active generate_content job already exists for the same
+// (user, city, platform, slot) in the last 24h.
+async function existingJobForSlot(
+  supabase: any,
+  userId: string,
+  city: string,
+  platform: string,
+  slot: string,
+): Promise<boolean> {
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from("jobs")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("city", city)
+    .eq("platform", platform)
+    .eq("type", "generate_content")
+    .in("status", ["pending", "processing", "retrying"])
+    .eq("payload->>slot", slot)
+    .gte("created_at", since)
+    .limit(1);
+  if (error) {
+    console.warn(`[scheduler] existingJobForSlot query error:`, error.message);
+    return false; // fail-open — unique index will still catch it
+  }
+  return (data?.length ?? 0) > 0;
+}
+
+// True if a successful post for this (user, city, platform, slot) landed in
+// the last 12h.
+async function recentSuccessForSlot(
+  supabase: any,
+  userId: string,
+  city: string,
+  platform: string,
+  slot: string,
+): Promise<boolean> {
+  const since = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from("post_history")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("city", city)
+    .eq("platform", platform)
+    .eq("slot", slot)
+    .in("status", ["succeeded", "success", "posted"])
+    .gte("created_at", since)
+    .limit(1);
+  if (error) {
+    console.warn(`[scheduler] recentSuccessForSlot query error:`, error.message);
+    return false;
+  }
+  return (data?.length ?? 0) > 0;
+}
+
 import { requireCronOrUser } from "../_shared/auth-helpers.ts";
 
 Deno.serve(async (req) => {
@@ -143,7 +199,37 @@ Deno.serve(async (req) => {
       if (row.user_id && !settingsByUser.has(row.user_id)) settingsByUser.set(row.user_id, row);
     }
 
-    const enabledAutomations = (automations || []).filter((a: any) => a.enabled === true);
+    const rawEnabledAutomations = (automations || []).filter((a: any) => a.enabled === true);
+
+    // ── Deduplicate automations by (user_id, city_id) ──
+    // A historical bug allowed >1 row per user/city. We now have a UNIQUE
+    // constraint, but keep this in-memory pass as a belt-and-suspenders so a
+    // duplicate state can never trigger N posts in one tick.
+    const dedupMap = new Map<string, any>();
+    const droppedByKey = new Map<string, string[]>();
+    for (const a of rawEnabledAutomations) {
+      const key = `${a.user_id}|${a.city_id}`;
+      const existing = dedupMap.get(key);
+      const aTs = new Date(a.updated_at || a.created_at || 0).getTime();
+      const eTs = existing ? new Date(existing.updated_at || existing.created_at || 0).getTime() : -1;
+      if (!existing || aTs > eTs) {
+        if (existing) {
+          const list = droppedByKey.get(key) || [];
+          list.push(existing.id);
+          droppedByKey.set(key, list);
+        }
+        dedupMap.set(key, a);
+      } else {
+        const list = droppedByKey.get(key) || [];
+        list.push(a.id);
+        droppedByKey.set(key, list);
+      }
+    }
+    for (const [key, dropped] of droppedByKey) {
+      const kept = dedupMap.get(key)?.id;
+      console.log(`[scheduler] Status=Skipped_DuplicateRow key=${key} kept=${kept} dropped=[${dropped.join(",")}]`);
+    }
+    const enabledAutomations = Array.from(dedupMap.values());
     const automationCityIds = [...new Set(enabledAutomations.map((a: any) => a.city_id).filter(Boolean))];
     const citiesById = new Map<string, any>();
     if (automationCityIds.length) {
@@ -456,6 +542,30 @@ Deno.serve(async (req) => {
           }
         }
 
+        // === IDEMPOTENCY GUARDS ===
+        // After publish_locks approves a platform, also check:
+        //  (a) any active generate_content job already exists for this slot
+        //  (b) any successful post for this slot in the last 12h
+        // Either condition → drop the platform from this tick.
+        const guardedPlatforms: string[] = [];
+        for (const platform of allowedPlatforms) {
+          const [hasJob, hasSuccess] = await Promise.all([
+            existingJobForSlot(supabase, target.user_id, target.city, platform, period.name),
+            recentSuccessForSlot(supabase, target.user_id, target.city, platform, period.name),
+          ]);
+          if (hasJob) {
+            console.log(`[scheduler] Slot=${period.name} City=${target.city} Platform=${platform} Status=Skipped_Existing reason=job_pending`);
+            continue;
+          }
+          if (hasSuccess) {
+            console.log(`[scheduler] Slot=${period.name} City=${target.city} Platform=${platform} Status=Skipped_Existing reason=recent_success`);
+            continue;
+          }
+          guardedPlatforms.push(platform);
+        }
+        allowedPlatforms.length = 0;
+        for (const p of guardedPlatforms) allowedPlatforms.push(p);
+
         // Legacy caption-based duplicate guard for rows without city_id.
         if (!target.city_id) {
           const dupSince = new Date(now.getTime() - DUPLICATE_GUARD_MINUTES * 60 * 1000).toISOString();
@@ -603,8 +713,10 @@ Deno.serve(async (req) => {
               });
               if (enqueueErr) {
                 console.error(`[scheduler]   ⚠️ enqueue_job failed for ${row.id}:`, enqueueErr.message);
+                console.log(`[scheduler] Slot=${period.name} City=${target.city} Platform=${row.platform} Status=Skipped_Existing reason=enqueue_conflict`);
               } else {
                 console.log(`[scheduler]   🧩 enqueued generate_content job for scheduled_post ${row.id} [auto:${period.name}]`);
+                console.log(`[scheduler] Slot=${period.name} City=${target.city} Platform=${row.platform} Status=Triggered`);
               }
             }
           }
@@ -618,6 +730,18 @@ Deno.serve(async (req) => {
           ) => {
             if (!bInserted || bInserted.length === 0) return;
             for (const row of bInserted) {
+              // Same idempotency guards as the A path: never create a 2nd
+              // generate_content job for the same slot/day, even for the
+              // B-variant of an experiment.
+              const [hasJob, hasSuccess] = await Promise.all([
+                existingJobForSlot(supabase, target.user_id, target.city, row.platform, period.name),
+                recentSuccessForSlot(supabase, target.user_id, target.city, row.platform, period.name),
+              ]);
+              if (hasJob || hasSuccess) {
+                const reason = hasJob ? "job_pending" : "recent_success";
+                console.log(`[scheduler] Slot=${period.name} City=${target.city} Platform=${row.platform} Status=Skipped_Existing reason=${reason} variant=B`);
+                continue;
+              }
               const { error: bEnqErr } = await supabase.rpc("enqueue_job", {
                 p_user_id: target.user_id,
                 p_type: "generate_content",
@@ -636,8 +760,10 @@ Deno.serve(async (req) => {
               });
               if (bEnqErr) {
                 console.error(`[scheduler]   ⚠️ enqueue_job (exp:B) failed for ${row.id}:`, bEnqErr.message);
+                console.log(`[scheduler] Slot=${period.name} City=${target.city} Platform=${row.platform} Status=Skipped_Existing reason=enqueue_conflict variant=B`);
               } else {
                 console.log(`[scheduler]   🧩 enqueued generate_content job for scheduled_post ${row.id} [auto:${period.name}] [exp:B]`);
+                console.log(`[scheduler] Slot=${period.name} City=${target.city} Platform=${row.platform} Status=Triggered variant=B`);
               }
             }
           };

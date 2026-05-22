@@ -239,12 +239,25 @@ export async function saveAutomation(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const { data: existing } = await supabase
+  // Fetch ALL rows for this (user, city) so we can defensively merge any
+  // historical duplicates. The DB now has UNIQUE(user_id, city_id), but
+  // legacy clients may still encounter pre-constraint state until cache
+  // refresh.
+  const { data: existingRows } = await supabase
     .from("automations")
-    .select("id")
+    .select("id, updated_at, created_at")
     .eq("user_id", user.id)
     .eq("city_id", cityId)
-    .maybeSingle();
+    .order("updated_at", { ascending: false });
+
+  const existing = existingRows?.[0] ?? null;
+
+  // If duplicates exist, delete the older ones — keeps single source of truth.
+  if (existingRows && existingRows.length > 1) {
+    const dupIds = existingRows.slice(1).map((r) => r.id);
+    console.warn(`[saveAutomation] merging ${dupIds.length} duplicate automation row(s) for city ${cityId}`);
+    await supabase.from("automations").delete().in("id", dupIds);
+  }
 
   const payload: any = {
     user_id: user.id,

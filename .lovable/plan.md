@@ -1,70 +1,98 @@
-## Root cause
+## Goal
+Stop duplicate-post storms (e.g. 11 Orlando 8AM posts) by enforcing **one `generate_content` job per {user, city, platform, slot, date}**, dedup automation rows, and harden the schema.
 
-`process-scheduled-posts/index.ts` (line ~3048) calls `pickPresetForDaily({ ..., settings })` and `resolveScene({ ..., settings })` but **no `settings` variable is defined in that scope** — the function never fetches `weather_settings` for the post's user. ReferenceError → "settings is not defined" → scheduled post fails.
+---
 
-`publish-preview-bundle/index.ts` (line ~117) calls the same helpers without a `settings` arg. It doesn't throw today (the module tolerates `undefined`), but per the request we'll wire a safe fetch for consistency.
+## 1. Scheduler idempotency — `supabase/functions/auto-post-scheduler/index.ts`
 
-`daily-weather-post/index.ts` already loads `settings` at line 1522 before the cinematic call at 1959 — that path is fine, but it currently `throw`s when the row is missing. We'll soften that to a safe-default fallback so a missing/erroring settings row never blocks a post.
+Today the scheduler relies on (a) `check_publish_lock` and (b) a unique index on `scheduled_posts(user_id, city, platform, scheduled_at)`. Both are bypassed when the cron fires twice in the same minute with a fresh `scheduled_at` timestamp, or when two duplicate automation rows produce two distinct `scheduled_at` values 5s apart. We add explicit pre-insert guards.
 
-## Fix
+**New helper** `existingJobForSlot(userId, city, platform, slot, localDate)`:
+- Queries `jobs` where `type='generate_content'`, `status in ('pending','processing','retrying')`, `city=…`, `platform=…`, `payload->>slot = slot`, and `created_at >= start_of_local_day`.
+- Returns true if any row exists.
 
-Introduce one shared helper, then call it in all three paths before any cinematic-presets function:
+**New helper** `recentSuccessForSlot(userId, city, platform, slot)`:
+- Queries `post_history` where `user_id`, `city`, `platform`, `slot` match and `status in ('succeeded','success','posted')` and `created_at >= now() - interval '12 hours'`.
 
-```ts
-// _shared/cinematic-presets.ts (add)
-export const SAFE_CINEMATIC_DEFAULTS: CinematicSettings = {
-  smart_cost_strategy: true,
-  strict_visuals_gainesville: true,
-  exclude_fallback_from_learning: true,
-  auto_cinematic_for_storms: true,
-};
+**Wire-in** (around lines 432–610, the per-platform loop):
+1. After `check_publish_lock` approves a platform, run the two new guards.
+2. If either guard hits → drop the platform from `allowedPlatforms`, emit
+   `console.log("[scheduler] Slot=%s City=%s Platform=%s Status=Skipped_Existing", slot, city, platform)`.
+3. Otherwise proceed and log `Status=Triggered` after successful enqueue.
+4. Apply the same guards inside `enqueueExperimentBJobs` so B-variant timing experiments don't multiply duplicates.
 
-export async function loadCinematicSettings(
-  supabase: any, userId: string,
-): Promise<CinematicSettings & Record<string, unknown>> {
-  try {
-    const { data, error } = await supabase
-      .from("weather_settings")
-      .select("*")
-      .eq("user_id", userId)
-      .maybeSingle();
-    if (error || !data) {
-      console.warn(`[cinematic] settings fetch fallback for ${userId}: ${error?.message ?? "no row"}`);
-      return { ...SAFE_CINEMATIC_DEFAULTS };
-    }
-    return {
-      ...SAFE_CINEMATIC_DEFAULTS,
-      ...data,
-      smart_cost_strategy: data.smart_cost_strategy ?? true,
-      strict_visuals_gainesville: data.strict_visuals_gainesville ?? true,
-      exclude_fallback_from_learning: data.exclude_fallback_from_learning ?? true,
-    };
-  } catch (e) {
-    console.warn(`[cinematic] settings fetch threw — using defaults:`, (e as Error)?.message);
-    return { ...SAFE_CINEMATIC_DEFAULTS };
-  }
-}
+---
+
+## 2. Automation row deduplication
+
+**Scheduler side** (top of `try` block, after loading automations):
+- Group `enabledAutomations` by `${user_id}|${city_id}`; keep the **most recently `updated_at`** row, log
+  `[scheduler] Status=Skipped_DuplicateRow city=… kept=<id> dropped=[…]` for the rest.
+- All downstream loops use the deduped list.
+
+**UI side** — `src/lib/citiesApi.ts` `upsertAutomation` already does check-then-update for `(user_id, city_id)`, but the bug is two rows already exist so `.maybeSingle()` throws. Change to:
+- `.select("id").eq(user_id).eq(city_id).order("updated_at", { ascending: false }).limit(1)` → take first.
+- If `>1` row was returned in an unbounded check (use `.select("id", { count: "exact" })`), delete all but the most recent before updating, and surface a toast: "Merged duplicate automation rows for this city."
+
+No changes to `SettingsPanel.tsx` directly — it goes through `citiesApi.ts`.
+
+---
+
+## 3. Database integrity (migration)
+
+```sql
+-- One automation per user per city. Pick winner (most recent) before constraint.
+WITH ranked AS (
+  SELECT id,
+         ROW_NUMBER() OVER (
+           PARTITION BY user_id, city_id
+           ORDER BY updated_at DESC, created_at DESC
+         ) AS rn
+  FROM public.automations
+)
+DELETE FROM public.automations a
+USING ranked r
+WHERE a.id = r.id AND r.rn > 1;
+
+ALTER TABLE public.automations
+  ADD CONSTRAINT automations_user_city_unique UNIQUE (user_id, city_id);
+
+-- Optional belt-and-suspenders for the jobs table (partial unique index
+-- on active generate_content jobs per slot per local UTC day):
+CREATE UNIQUE INDEX IF NOT EXISTS jobs_active_generate_content_slot_uniq
+  ON public.jobs (
+    user_id, city, platform,
+    (payload->>'slot'),
+    (date_trunc('day', created_at AT TIME ZONE 'UTC'))
+  )
+  WHERE type = 'generate_content'
+    AND status IN ('pending','processing','retrying');
 ```
 
-### `process-scheduled-posts/index.ts`
-- At the top of the per-post processing block (before the cinematic call at ~3048), add:
-  ```ts
-  const settings = await loadCinematicSettings(supabase, post.user_id);
-  ```
-- No other behavior changes (voice/caption/scheduling untouched).
+User confirms before we run.
 
-### `publish-preview-bundle/index.ts`
-- After `userId` is resolved (~line 40), add `const settings = await loadCinematicSettings(supabase, userId);`
-- Pass `settings` into both `pickPresetForDaily({ ..., settings })` and `resolveScene({ ..., settings })` at ~117.
+---
 
-### `daily-weather-post/index.ts`
-- Replace the hard `throw new Error("No weather settings found...")` at line 1530 with a warn + `settings = { ...SAFE_CINEMATIC_DEFAULTS }` fallback so cinematic calls always have a defined object. Other downstream reads (`settings.city`, `settings.caption_tone`, token columns) keep their existing `?? null` / optional chaining — verify and add `?? requestedCityName` etc. only if missing.
+## 4. Logging contract
 
-## Out of scope
-- No changes to voice, caption, scheduling, routing, or platform adapters.
-- No DB migration — missing columns are handled by inline `?? true` defaults.
+Every slot decision in the scheduler emits exactly one line:
+```
+[scheduler] Slot=morning City=Orlando Platform=youtube Status=Triggered
+[scheduler] Slot=morning City=Orlando Platform=youtube Status=Skipped_Existing reason=job_pending
+[scheduler] Slot=morning City=Orlando Platform=youtube Status=Skipped_Existing reason=recent_success
+[scheduler] Slot=morning City=Orlando Status=Skipped_DuplicateRow kept=abc dropped=[xyz]
+```
 
-## Verification
-- After edit: re-run a scheduled post via Jobs dashboard for Gainesville and Orlando.
-- Check `process-scheduled-posts` logs for `[cinematic] city=... preset=...` (no ReferenceError).
-- Confirm `publish-preview-bundle` still publishes a preview bundle end-to-end.
+---
+
+## 5. Out of scope
+- No changes to render/voice/caption/platform-adapter code.
+- No changes to `process-scheduled-posts` legacy path — guarded by `publish_locks` already.
+- No UI redesign of SettingsPanel (just dedup-on-save via `citiesApi`).
+
+---
+
+## Files touched
+- `supabase/functions/auto-post-scheduler/index.ts` (helpers + dedup + logging)
+- `src/lib/citiesApi.ts` (upsertAutomation: handle multi-row, auto-merge)
+- New migration (delete duplicates + UNIQUE constraint + partial index)
