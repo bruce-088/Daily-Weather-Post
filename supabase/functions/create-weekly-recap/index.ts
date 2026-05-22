@@ -449,6 +449,96 @@ const THEMES: Record<ThemeKey, { from: string; to: string }> = {
 // Flip to false in one place if Creatomate rejects the image pan animation.
 const SAFE_IMAGE_ANIM = true;
 
+// ── Condition → stock scene map (hotlinked CC0 Unsplash imagery) ──
+const CONDITION_SCENES: Array<{ match: RegExp; label: string; url: string }> = [
+  { match: /storm|thunder|lightning/i,       label: "storm_clouds", url: "https://images.unsplash.com/photo-1605727216801-e27ce1d0cc28?auto=format&fit=crop&w=1080&q=80" },
+  { match: /rain|drizzle|shower/i,           label: "rainy_sky",    url: "https://images.unsplash.com/photo-1519692933481-e162a57d6721?auto=format&fit=crop&w=1080&q=80" },
+  { match: /snow|sleet|blizzard|flurr/i,     label: "snowy_sky",    url: "https://images.unsplash.com/photo-1483921020237-2ff51e8e4b22?auto=format&fit=crop&w=1080&q=80" },
+  { match: /cloud|overcast|fog|mist|haze/i,  label: "cloudy_sky",   url: "https://images.unsplash.com/photo-1500740516770-92bd004b996e?auto=format&fit=crop&w=1080&q=80" },
+  { match: /clear|sunny|sun\b/i,             label: "bright_sky",   url: "https://images.unsplash.com/photo-1419833173245-f59e1b93f9ee?auto=format&fit=crop&w=1080&q=80" },
+];
+
+function pickConditionScene(cond?: string | null): { label: string; url: string } | null {
+  if (!cond) return null;
+  for (const s of CONDITION_SCENES) if (s.match.test(cond)) return { label: s.label, url: s.url };
+  return null;
+}
+
+/**
+ * Layer a background scene (image or video) BEHIND a translucent themed
+ * gradient. Returns an array of Creatomate elements in z-order. If no scene
+ * resolves OR the scene layer throws, falls back to gradient-only so the
+ * render NEVER fails.
+ */
+function buildSlideBackground(opts: {
+  time: number;
+  duration: number;
+  slideNum: number;
+  grad: { from: string; to: string; label?: string };
+  mode?: "image" | "video" | "gradient";
+  mediaUrl?: string | null;
+  condition?: string | null;
+  logPrefix?: string;
+}): any[] {
+  const { time, duration, slideNum, grad, mediaUrl, condition } = opts;
+  const mode = opts.mode ?? "image";
+  const prefix = opts.logPrefix ?? "recap";
+  let sceneEl: any = null;
+  let sceneLabel: string | null = null;
+  let sceneUrl: string | null = null;
+
+  if (mode !== "gradient") {
+    try {
+      if (mediaUrl) {
+        sceneUrl = mediaUrl;
+        sceneLabel = "history_image";
+      } else if (condition) {
+        const pick = pickConditionScene(condition);
+        if (pick) { sceneUrl = pick.url; sceneLabel = pick.label; }
+      }
+      if (sceneUrl) {
+        if (mode === "video") {
+          sceneEl = {
+            type: "video", source: sceneUrl,
+            fit: "cover", loop: true,
+            width: "100%", height: "100%", x: "50%", y: "50%",
+            time, duration,
+            animations: [{ type: "scale", from: 1.0, to: 1.05, easing: "linear", scope: "element" }],
+          };
+        } else {
+          sceneEl = {
+            type: "image", source: sceneUrl,
+            fit: "cover",
+            width: "100%", height: "100%", x: "50%", y: "50%",
+            time, duration,
+          };
+          if (SAFE_IMAGE_ANIM) {
+            sceneEl.animations = [{ type: "scale", from: 1.0, to: 1.05, easing: "linear", scope: "element" }];
+          }
+        }
+      }
+    } catch (e) {
+      console.warn(`[${prefix}] slide ${slideNum} scene failed, gradient-only:`, (e as Error)?.message);
+      sceneEl = null;
+    }
+  }
+
+  const out: any[] = [];
+  if (sceneEl) {
+    out.push(sceneEl);
+    console.log(`[${prefix}] slide ${slideNum} background=${mode} ${sceneLabel} (${sceneUrl})`);
+    // Reduced-opacity themed gradient overlay so warm/cool/neutral tint
+    // remains visible without hiding the scene.
+    const overlay = buildAnimatedGradientBg(time, duration, grad, slideNum);
+    overlay.opacity = "25%";
+    out.push(overlay);
+  } else {
+    console.log(`[${prefix}] slide ${slideNum} background=gradient ${grad.label ?? "?"} (no scene)`);
+    out.push(buildAnimatedGradientBg(time, duration, grad, slideNum));
+  }
+  return out;
+}
+
 function layoutTextProps(layout: LayoutKind): { x: string; width: string; x_alignment: string } {
   if (layout === "left")  return { x: "30%", width: "60%", x_alignment: "0%" };
   if (layout === "right") return { x: "70%", width: "60%", x_alignment: "100%" };
@@ -502,29 +592,18 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
     const isHighlight = i === 3;
     const textPos = layoutTextProps(layout);
 
-    // 1. Themed gradient base (safety net + motion guarantee)
-    elements.push(buildAnimatedGradientBg(start, SLIDE_DUR, { ...grad, label: themeKey }, i + 2));
-    // 2. Image on top of gradient (if available) — subtle Ken Burns pan
-    if (p.image_url) {
-      const imgEl: any = {
-        type: "image", source: p.image_url,
-        time: start, duration: SLIDE_DUR,
-        fit: "cover",
-      };
-      if (SAFE_IMAGE_ANIM) {
-        imgEl.animations = [{
-          type: "pan",
-          direction: layout === "left" ? "right" : layout === "right" ? "left" : "up",
-          duration: SLIDE_DUR,
-          easing: "linear",
-          scope: "element",
-        }];
-      }
-      elements.push(imgEl);
-      console.log(`[recap] slide ${i + 1} using image from history: ${p.image_url}`);
-    } else {
-      console.log(`[recap] slide ${i + 1} using animated gradient (no image_url) theme=${themeKey}`);
-    }
+    // 1. Background scene (history image or condition stock) + themed gradient overlay
+    const bgEls = buildSlideBackground({
+      time: start,
+      duration: SLIDE_DUR,
+      slideNum: i + 2,
+      grad: { ...grad, label: themeKey },
+      mode: "image",
+      mediaUrl: p.image_url,
+      condition: p.condition,
+      logPrefix: "recap",
+    });
+    elements.push(...bgEls);
     // 3. Scrim for legibility (slightly darker on midweek highlight)
     elements.push(buildScrim(start, SLIDE_DUR, isHighlight ? 0.35 : 0.3));
     // 4. Text on top
