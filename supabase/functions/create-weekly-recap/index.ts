@@ -829,7 +829,8 @@ high contrast. No watermark.`;
 
 // ───────────────── per-user runner ─────────────────
 
-async function runForUser(svc: any, userId: string, cityFilter?: string): Promise<{ ok: boolean; detail: string }> {
+async function runForUser(svc: any, userId: string, cityFilter?: string, opts?: { skipPost?: boolean }): Promise<{ ok: boolean; detail: string; preview_url?: string }> {
+  const skipPost = !!opts?.skipPost;
   const posts = await getLast7Posts(svc, userId, cityFilter);
   if (posts.length < 3) {
     return { ok: false, detail: `Only ${posts.length} posts in last 7 days${cityFilter ? ` for ${cityFilter}` : ""} — skipping recap` };
