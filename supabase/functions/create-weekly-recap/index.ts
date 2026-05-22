@@ -515,26 +515,38 @@ white bold sans-serif typography, large title "${title}", 7-day weather summary
 displayed as a tidy grid with weather icons. Data: ${lines}. Minimalist, editorial,
 high contrast. No watermark.`;
   try {
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/images/generations", {
+    // Lovable AI image generation lives on the chat completions endpoint with
+    // modalities=["image","text"], not /v1/images/generations (which 404s).
+    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: "google/gemini-2.5-flash-image",
-        prompt,
-        size: "1792x1024",
+        messages: [{ role: "user", content: prompt }],
+        modalities: ["image", "text"],
       }),
     });
     if (!res.ok) {
-      console.error("[recap] image gen failed:", res.status, await res.text());
+      const errText = await res.text();
+      console.error(`[recap] image gen failed, falling back to animated gradient: status=${res.status} ${errText.slice(0, 200)}`);
       return null;
     }
     const j = await res.json();
-    const b64 = j?.data?.[0]?.b64_json;
-    if (!b64) return null;
+    const dataUrl: string | undefined =
+      j?.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    if (!dataUrl || !dataUrl.startsWith("data:")) {
+      console.error("[recap] image gen failed, falling back to animated gradient: no image in response");
+      return null;
+    }
+    const b64 = dataUrl.split(",")[1] ?? "";
+    if (!b64) {
+      console.error("[recap] image gen failed, falling back to animated gradient: empty base64");
+      return null;
+    }
     const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
     return bin;
   } catch (e) {
-    console.error("[recap] image gen error:", (e as Error).message);
+    console.error(`[recap] image gen failed, falling back to animated gradient: ${(e as Error).message}`);
     return null;
   }
 }
