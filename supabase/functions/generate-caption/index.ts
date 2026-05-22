@@ -651,7 +651,15 @@ ${ctaBlock}${antiRepeatBlock ? `\n\n${antiRepeatBlock}` : ""}`;
     // or as hashtags. Descriptive narration (e.g. "clear skies over the bay")
     // is intentionally left alone.
     {
-      const BLACKLIST = ["Not Need", "Weather Update", "Coming Up", "But Comfortable", "Clear Skies"];
+      const BLACKLIST = [
+        "Not Need", "Weather Update", "Coming Up", "But Comfortable", "Clear Skies",
+        "Sunny", "Cloudy", "Overcast", "Rainy", "Stormy", "Foggy", "Windy", "Humid",
+        "Hot", "Cold", "Warm", "Cool", "Mild", "Breezy",
+        "Partly Cloudy", "Mostly Cloudy", "Mostly Sunny", "Partly Sunny",
+        "Scattered Showers", "Thunderstorms", "Drizzle", "Light Rain", "Heavy Rain",
+        "Snow", "Sleet", "Haze", "Mist", "Hazy", "Showers",
+        "Afternoon", "Morning", "Evening", "Tonight", "Today", "Ahead", "Update"
+      ];
       const cityNoSpaces = city.replace(/\s+/g, "");
       const blacklistHits: string[] = [];
 
