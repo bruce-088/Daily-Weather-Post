@@ -887,7 +887,7 @@ async function uploadLongFormToYouTube(
           title: safeTitle,
           description: description.slice(0, 4900),
           categoryId: "22",
-          tags: ["Weekly Recap", "Weather", "SkyBrief", "Weather Recap"],
+          tags: ["Monthly Recap", "Weather", "SkyBrief", "Month in Review"],
         },
         status: { privacyStatus: "public", selfDeclaredMadeForKids: false },
       }),
