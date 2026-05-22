@@ -24,6 +24,12 @@
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import {
+  pickPresetForRecapSlide,
+  resolveScene,
+  logCinematic,
+  type SceneDecision,
+} from "../_shared/cinematic-presets.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -565,6 +571,9 @@ function buildSlideBackground(opts: {
   mediaUrl?: string | null;
   condition?: string | null;
   logPrefix?: string;
+  city?: string | null;
+  recapSlideKind?: "title" | "day" | "week_stat" | "highlight" | "outro";
+  decisionsOut?: SceneDecision[];
 }): any[] {
   const { time, duration, slideNum, grad, mediaUrl, condition } = opts;
   const mode = opts.mode ?? "image";
@@ -620,6 +629,29 @@ function buildSlideBackground(opts: {
     console.log(`[${prefix}] slide ${slideNum} background=gradient ${grad.label ?? "?"} (no scene)`);
     out.push(buildAnimatedGradientBg(time, duration, grad, slideNum));
   }
+
+  // [cinematic] Emit unified decision log + accumulate.
+  try {
+    const preset = pickPresetForRecapSlide({
+      kind: opts.recapSlideKind ?? "week_stat",
+      condition,
+      city: opts.city,
+      slideIndex: slideNum,
+    });
+    const decision = resolveScene({
+      city: opts.city,
+      condition,
+      mediaUrl,
+      preset,
+      mode,
+      slideIndex: slideNum,
+    });
+    logCinematic(prefix, decision, { city: opts.city, kind: opts.recapSlideKind ?? "week_stat", slide: slideNum });
+    if (opts.decisionsOut) opts.decisionsOut.push(decision);
+  } catch (e) {
+    console.warn(`[${prefix}] slide ${slideNum} cinematic-log failed:`, (e as Error)?.message);
+  }
+
   return out;
 }
 
