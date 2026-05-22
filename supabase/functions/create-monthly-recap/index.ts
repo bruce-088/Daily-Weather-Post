@@ -508,110 +508,165 @@ function layoutTextProps(layout: LayoutKind): { x: string; width: string; x_alig
   return { x: "50%", width: "90%", x_alignment: "50%" };
 }
 
-async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title: string, voice?: { url: string; durationSec: number }): Promise<StitchResult | null> {
-  if (!CREATOMATE_API_KEY) {
-    console.warn("[recap] CREATOMATE_API_KEY missing — skipping stitch");
-    return null;
-  }
-  // Use up to 7 of the most recent posts. Image is optional — when missing,
-  // the slide falls back to an animated gradient background so the recap
-  // still renders a real MP4 (and clears the YouTube long-form threshold).
-  const slides = posts.slice(-7);
-  if (slides.length < 2) {
-    console.warn("[recap] Not enough posts to stitch (need 2+):", slides.length);
-    return null;
-  }
-  const imageCount = slides.filter((p) => p.image_url).length;
-  console.log(`[recap] stitch inputs: slides=${slides.length}, with_image=${imageCount}`);
+interface MonthlySlideData {
+  weekStats: WeekStat[];        // 4 entries
+  weekSummaries: string[];      // 4 entries (AI one-liners)
+  moment: { post: PostRow; kind: "hottest" | "coldest" } | null;
+  momentLine: string;
+  monthName: string;
+}
 
-  // 9s per slide ensures even a 5-slide week (5*9 + title + outro = 63s)
-  // clears the 60s YouTube Short threshold. A full 7-slide week = 81s.
-  const SLIDE_DUR = 9;
+async function stitchSlideshow(
+  svc: any,
+  userId: string,
+  posts: PostRow[],
+  title: string,
+  monthly: MonthlySlideData,
+  voice?: { url: string; durationSec: number },
+): Promise<StitchResult | null> {
+  if (!CREATOMATE_API_KEY) {
+    console.warn("[monthly-recap] CREATOMATE_API_KEY missing — skipping stitch");
+    return null;
+  }
   const city = posts[0]?.city ?? "your city";
+
+  // 7 slides total: title + 4 weeks + moment + outro
+  const CONTENT_SLIDES = 6; // 4 weeks + moment
+  const TOTAL_SLIDES = CONTENT_SLIDES + 2; // + title + outro
+
+  // Voice is the master clock. Spread visual time evenly across slides so the
+  // outro doesn't balloon when voice is long (monthly script ~350-500 words).
+  const voiceDur = voice ? Math.ceil(voice.durationSec + 1) : 0;
+  const minTotal = Math.max(180, voiceDur, TOTAL_SLIDES * 12); // 3 min floor
+  const SLIDE_DUR = Math.max(12, Math.ceil(minTotal / TOTAL_SLIDES));
+  console.log(`[monthly-recap] stitch inputs: weeks=${monthly.weekStats.length} moment=${monthly.moment ? "yes" : "no"} slide_dur=${SLIDE_DUR}s voice=${voiceDur}s`);
 
   const elements: any[] = [];
 
-  // ── Title card ── (gradient → scrim → text)
+  // ── Title card ──
   const titleGrad = gradientForSlide();
   elements.push(buildAnimatedGradientBg(0, SLIDE_DUR, titleGrad));
   elements.push(buildScrim(0, SLIDE_DUR));
   elements.push({
     type: "text", text: title,
-    x: "50%", y: "20%", width: "90%",
+    x: "50%", y: "30%", width: "90%",
     font_family: "Inter", font_weight: "800",
-    font_size: "9 vh", fill_color: "#ffffff",
+    font_size: "10 vh", fill_color: "#ffffff",
     background_color: "rgba(0,0,0,0.25)", padding: 24,
     time: 0, duration: SLIDE_DUR,
     animations: [{ type: "fade", duration: 1.2, scope: "element" }],
   });
-  console.log("[recap] title font=9vh animation=fade");
+  elements.push({
+    type: "text", text: monthly.monthName,
+    x: "50%", y: "55%", width: "70%",
+    font_family: "Inter", font_weight: "500",
+    font_size: "4 vh", fill_color: "#ffffff",
+    background_color: "rgba(0,0,0,0.25)", padding: 12,
+    time: 0, duration: SLIDE_DUR,
+  });
+  console.log("[monthly-recap] title font=10vh animation=fade");
 
-  // ── Day slides ── (gradient → image → scrim → text)
-  slides.forEach((p, i) => {
+  // ── 4 weekly overview slides ──
+  monthly.weekStats.forEach((w, i) => {
     const start = (i + 1) * SLIDE_DUR;
     const layout: LayoutKind = LAYOUTS[i % 3];
     const themeKey: ThemeKey = THEME_KEYS[i % 3];
     const grad = THEMES[themeKey];
-    const isHighlight = i === 3;
     const textPos = layoutTextProps(layout);
 
-    // 1. Themed gradient base (safety net + motion guarantee)
     elements.push(buildAnimatedGradientBg(start, SLIDE_DUR, grad));
-    // 2. Image on top of gradient (if available) — subtle Ken Burns pan
-    if (p.image_url) {
-      const imgEl: any = {
-        type: "image", source: p.image_url,
-        time: start, duration: SLIDE_DUR,
-        fit: "cover",
-      };
-      if (SAFE_IMAGE_ANIM) {
-        imgEl.animations = [{
-          type: "pan",
-          direction: layout === "left" ? "right" : layout === "right" ? "left" : "up",
-          duration: SLIDE_DUR,
-          easing: "linear",
-          scope: "element",
-        }];
-      }
-      elements.push(imgEl);
-      console.log(`[recap] slide ${i + 1} using image from history: ${p.image_url}`);
-    } else {
-      console.log(`[recap] slide ${i + 1} using animated gradient (no image_url) theme=${themeKey}`);
-    }
-    // 3. Scrim for legibility (slightly darker on midweek highlight)
-    elements.push(buildScrim(start, SLIDE_DUR, isHighlight ? 0.35 : 0.3));
-    // 4. Text on top
-    const day = new Date(p.created_at).toLocaleDateString("en-US", { weekday: "long" });
-    const temp = p.temperature != null ? `${Math.round(p.temperature)}°F` : "";
-    const cond = p.condition ?? "";
+    elements.push(buildScrim(start, SLIDE_DUR, 0.32));
+
+    const headline = `Week ${w.weekNum}`;
+    const stats = w.avgHigh != null
+      ? `${w.avgHigh}° / ${w.avgLow}°  ·  ${w.dominantCondition}`
+      : "—";
+    const summary = monthly.weekSummaries[i] ?? "";
+
     elements.push({
-      type: "text",
-      text: `${day}\n${temp}  ${cond}`.trim(),
-      x: textPos.x, y: "50%", width: textPos.width,
+      type: "text", text: headline,
+      x: textPos.x, y: "28%", width: textPos.width,
       x_alignment: textPos.x_alignment,
-      font_family: "Inter", font_weight: "700",
-      font_size: isHighlight ? "7.7 vh" : "7 vh",
-      fill_color: "#ffffff",
-      background_color: "rgba(0,0,0,0.25)", padding: 24,
+      font_family: "Inter", font_weight: "800",
+      font_size: "8 vh", fill_color: "#ffffff",
+      background_color: "rgba(0,0,0,0.25)", padding: 16,
       time: start, duration: SLIDE_DUR,
     });
-    if (isHighlight) {
+    elements.push({
+      type: "text", text: stats,
+      x: textPos.x, y: "48%", width: textPos.width,
+      x_alignment: textPos.x_alignment,
+      font_family: "Inter", font_weight: "700",
+      font_size: "5 vh", fill_color: "#ffffff",
+      background_color: "rgba(0,0,0,0.25)", padding: 12,
+      time: start, duration: SLIDE_DUR,
+    });
+    if (summary) {
       elements.push({
-        type: "text",
-        text: "Midweek Shift",
-        x: textPos.x, y: "62%", width: textPos.width,
+        type: "text", text: summary,
+        x: textPos.x, y: "68%", width: textPos.width,
         x_alignment: textPos.x_alignment,
-        font_family: "Inter", font_weight: "600",
-        font_size: "3.5 vh", fill_color: "#ffffff",
+        font_family: "Inter", font_weight: "500",
+        font_size: "3.4 vh", fill_color: "#ffffff",
         background_color: "rgba(0,0,0,0.25)", padding: 12,
         time: start, duration: SLIDE_DUR,
       });
     }
-    console.log(`[recap] slide ${i + 1} layout=${layout} theme=${themeKey}${isHighlight ? " highlight=yes" : ""}`);
+    console.log(`[monthly-recap] slide ${i + 1} week=${w.weekNum} layout=${layout} theme=${themeKey} days=${w.count}`);
   });
 
-  // ── Outro card ── (gradient → scrim → text)
-  const outroStart = (slides.length + 1) * SLIDE_DUR;
+  // ── Moment of the Month highlight slide (slide 6) ──
+  const momentStart = (monthly.weekStats.length + 1) * SLIDE_DUR;
+  const momentLayout: LayoutKind = "center";
+  const momentTheme: ThemeKey = monthly.moment?.kind === "coldest" ? "cool" : "warm";
+  const momentGrad = THEMES[momentTheme];
+  const momentTextPos = layoutTextProps(momentLayout);
+  elements.push(buildAnimatedGradientBg(momentStart, SLIDE_DUR, momentGrad));
+
+  if (monthly.moment?.post.image_url && SAFE_IMAGE_ANIM) {
+    elements.push({
+      type: "image", source: monthly.moment.post.image_url,
+      time: momentStart, duration: SLIDE_DUR,
+      fit: "cover",
+      animations: [{ type: "pan", direction: "up", duration: SLIDE_DUR, easing: "linear", scope: "element" }],
+    });
+  }
+  elements.push(buildScrim(momentStart, SLIDE_DUR, 0.4));
+
+  elements.push({
+    type: "text", text: "Moment of the Month",
+    x: momentTextPos.x, y: "22%", width: momentTextPos.width,
+    x_alignment: momentTextPos.x_alignment,
+    font_family: "Inter", font_weight: "600",
+    font_size: "3.8 vh", fill_color: "#ffffff",
+    background_color: "rgba(0,0,0,0.25)", padding: 12,
+    time: momentStart, duration: SLIDE_DUR,
+  });
+  const momentHeadline = monthly.moment
+    ? `${monthly.moment.kind === "hottest" ? "🔥 Hottest day" : "❄️ Coldest day"}\n${Math.round(monthly.moment.post.temperature as number)}°F`
+    : "A month to remember";
+  elements.push({
+    type: "text", text: momentHeadline,
+    x: momentTextPos.x, y: "45%", width: momentTextPos.width,
+    x_alignment: momentTextPos.x_alignment,
+    font_family: "Inter", font_weight: "800",
+    font_size: "7.7 vh", fill_color: "#ffffff",
+    background_color: "rgba(0,0,0,0.25)", padding: 24,
+    time: momentStart, duration: SLIDE_DUR,
+  });
+  elements.push({
+    type: "text", text: monthly.momentLine,
+    x: momentTextPos.x, y: "70%", width: momentTextPos.width,
+    x_alignment: momentTextPos.x_alignment,
+    font_family: "Inter", font_weight: "500",
+    font_size: "3.4 vh", fill_color: "#ffffff",
+    background_color: "rgba(0,0,0,0.25)", padding: 12,
+    time: momentStart, duration: SLIDE_DUR,
+  });
+  console.log(`[monthly-recap] slide 6 moment kind=${monthly.moment?.kind ?? "none"} theme=${momentTheme}`);
+
+  // ── Outro card ──
+  const outroStart = (monthly.weekStats.length + 2) * SLIDE_DUR;
   const outroGrad = gradientForSlide();
   const outroBgIdx = elements.length;
   elements.push(buildAnimatedGradientBg(outroStart, SLIDE_DUR, outroGrad));
@@ -627,20 +682,19 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
     background_color: "rgba(0,0,0,0.25)", padding: 24,
     time: outroStart, duration: SLIDE_DUR,
   });
-  console.log("[recap] outro cta=follow");
+  console.log("[monthly-recap] outro cta=follow");
 
-
-  const visualDuration0 = (slides.length + 2) * SLIDE_DUR; // title + slides + outro
-  const voiceDur = voice ? Math.ceil(voice.durationSec + 1) : 0;
-  let totalDuration = Math.max(visualDuration0, voiceDur, 65);
+  const visualDuration0 = TOTAL_SLIDES * SLIDE_DUR;
+  let totalDuration = Math.max(visualDuration0, voiceDur, 180);
   if (totalDuration > visualDuration0) {
     const pad = totalDuration - visualDuration0;
     elements[outroTextIdx].duration += pad;
     elements[outroScrimIdx].duration += pad;
     elements[outroBgIdx].duration += pad;
-    // (no animation array anymore — Creatomate didn't accept scale schema)
   }
-  console.log(`[recap] timing: visual=${visualDuration0}s voice=${voice?.durationSec ?? 0}s total=${totalDuration}s outro_extended=${totalDuration - visualDuration0}s slides=${slides.length}`);
+  console.log(`[monthly-recap] timing: visual=${visualDuration0}s voice=${voice?.durationSec ?? 0}s total=${totalDuration}s outro_extended=${totalDuration - visualDuration0}s slides=${TOTAL_SLIDES}`);
+
+
 
   // ── Audio mix ──
   const hasVoice = !!voice;
