@@ -571,6 +571,21 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
   const audioCount = elements.length - visualCount;
   console.log(`[recap] elements count=${elements.length} visual=${visualCount} audio=${audioCount}`);
 
+  // Debug: identify any element (or nested animation) missing `type`
+  elements.forEach((el, idx) => {
+    if (!el || typeof el.type !== "string" || el.type.length === 0) {
+      console.error(`[recap] BAD_ELEMENT idx=${idx} keys=${Object.keys(el ?? {}).join(",")} preview=${JSON.stringify(el).slice(0, 300)}`);
+    }
+    if (Array.isArray(el?.animations)) {
+      el.animations.forEach((a: any, ai: number) => {
+        if (!a || typeof a.type !== "string") {
+          console.error(`[recap] BAD_ANIMATION el=${idx} ai=${ai} preview=${JSON.stringify(a).slice(0, 300)}`);
+        }
+      });
+    }
+  });
+  console.log(`[recap] DEBUG full source: ${JSON.stringify({ width: 1920, height: 1080, duration: totalDuration, elements }).slice(0, 4000)}`);
+
   // Creatomate v2 expects source fields (width/height/duration/elements) at
   // the TOP LEVEL of the request body, not nested under a `source` key.
   // Nesting causes Creatomate to ignore them and emit a 5-second default
