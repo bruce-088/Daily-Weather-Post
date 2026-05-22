@@ -735,6 +735,9 @@ async function stitchSlideshow(
       mode: "image",
       condition: w.dominantCondition ?? null,
       logPrefix: "monthly-recap",
+      city,
+      recapSlideKind: "week_stat",
+      decisionsOut: cinematicDecisions,
     }));
     elements.push(buildScrim(start, SLIDE_DUR, 0.32));
 
@@ -789,6 +792,9 @@ async function stitchSlideshow(
     mediaUrl: monthly.moment?.post.image_url ?? null,
     condition: monthly.moment?.post.condition ?? null,
     logPrefix: "monthly-recap",
+    city,
+    recapSlideKind: "highlight",
+    decisionsOut: cinematicDecisions,
   }));
   elements.push(buildScrim(momentStart, SLIDE_DUR, 0.4));
 
