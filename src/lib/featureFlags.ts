@@ -41,6 +41,9 @@ const DEFAULTS: Record<FeatureFlagName, boolean> = {
   ENABLE_CONTENT_SCORE: true,
   // Auto-Winner: opt-in auto-apply toggles in Settings. Default OFF.
   ENABLE_AUTO_WINNER: false,
+  // Yearly Recap (long-form Year in Review). Admin/manual only; default OFF.
+  // Enable via localStorage.setItem("ff:ENABLE_YEARLY_RECAP","true").
+  ENABLE_YEARLY_RECAP: false,
 };
 
 function readOverride(name: FeatureFlagName): boolean | null {
