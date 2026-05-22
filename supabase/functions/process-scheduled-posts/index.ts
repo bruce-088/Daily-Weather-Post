@@ -877,7 +877,10 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
   // 2) Background music — ducks while voice is playing.
   // A short 0.4s fade-in is applied to the FIRST music segment so the bed
   // eases in instead of starting abruptly at full volume.
+  // A matching 0.4s fade-out on the LAST music segment gives a clean
+  // broadcast finish.
   const BG_MUSIC_FADE_IN = 0.4; // seconds
+  const BG_MUSIC_FADE_OUT = 0.4; // seconds
   if (bgMusicUrl) {
     if (voiceUrl) {
       // Pre-voice segment at full volume (includes chime tail).
@@ -890,16 +893,21 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
       }
       // Ducked segment under the voice. When there's no pre-voice segment
       // (VOICE_START is tiny), apply the fade-in here so we never start cold.
+      // If there is no tail segment after the voice, this is the last music
+      // segment and also gets the fade-out.
+      const hasTail = D - voiceEnd > 0.05;
       elements.push({
-        type: "audio", track: nt(), time: VOICE_START, duration: Math.max(0.1, voiceEnd - VOICE_START),
+        type: "audio", track: nt(), time: VOICE_START, duration: Math.max(1.0, voiceEnd - VOICE_START),
         source: bgMusicUrl, volume: BG_MUSIC_DUCK_VOLUME,
         ...(VOICE_START <= 0.05 ? { audio_fade_in: BG_MUSIC_FADE_IN } : {}),
+        ...(!hasTail ? { audio_fade_out: BG_MUSIC_FADE_OUT } : {}),
       });
       // Tail segment back to full volume.
-      if (D - voiceEnd > 0.05) {
+      if (hasTail) {
         elements.push({
           type: "audio", track: nt(), time: voiceEnd, duration: D - voiceEnd,
           source: bgMusicUrl, volume: BG_MUSIC_FULL_VOLUME,
+          audio_fade_out: BG_MUSIC_FADE_OUT,
         });
       }
     } else {
@@ -908,6 +916,7 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
         type: "audio", track: nt(), time: 0, duration: D,
         source: bgMusicUrl, volume: BG_MUSIC_FULL_VOLUME,
         audio_fade_in: BG_MUSIC_FADE_IN,
+        audio_fade_out: BG_MUSIC_FADE_OUT,
       });
     }
   }
