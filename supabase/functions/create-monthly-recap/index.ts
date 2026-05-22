@@ -679,7 +679,7 @@ async function stitchSlideshow(
   const outroStart = (monthly.weekStats.length + 2) * SLIDE_DUR;
   const outroGrad = gradientForSlide();
   const outroBgIdx = elements.length;
-  elements.push(buildAnimatedGradientBg(outroStart, SLIDE_DUR, outroGrad));
+  elements.push(buildAnimatedGradientBg(outroStart, SLIDE_DUR, { ...outroGrad }, monthly.weekStats.length + 3));
   const outroScrimIdx = elements.length;
   elements.push(buildScrim(outroStart, SLIDE_DUR));
   const outroTextIdx = elements.length;
