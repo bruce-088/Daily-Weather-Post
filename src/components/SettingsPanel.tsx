@@ -958,7 +958,7 @@ export function SettingsPanel({
       <JobPipelineToggle />
       <AutoWinnerSettings />
       <SystemHealthCard />
-      <DevWeeklyRecapTrigger />
+      <CityCommandCenter />
 
       {(showLocation || showConnections || showAutomation) && (
         <Button
