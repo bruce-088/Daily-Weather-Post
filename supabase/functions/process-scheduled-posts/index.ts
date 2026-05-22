@@ -2810,6 +2810,33 @@ Deno.serve(async (req) => {
           }
         }
 
+        // ── DEV-TEST SHORT-CIRCUIT ──
+        // When invoked with skip_post=true, stop after render. Mark the row
+        // dev_completed (sentinel string — not a real publish state) and skip
+        // platform upload, post_history, post_analytics, and notifications.
+        if (skipPost && video) {
+          let previewUrl: string | null = null;
+          try {
+            const { data: row } = await supabase
+              .from("scheduled_posts")
+              .select("cached_video_url")
+              .eq("id", post.id)
+              .maybeSingle();
+            previewUrl = (row as any)?.cached_video_url ?? null;
+          } catch { /* ignore */ }
+          await supabase
+            .from("scheduled_posts")
+            .update({
+              status: "dev_completed",
+              error_message: null,
+              posted_at: null,
+            })
+            .eq("id", post.id);
+          console.log(`[dev-test] scheduled_post_id=${post.id} skipping upload — preview_url=${previewUrl ?? "(none)"}`);
+          processed++;
+          continue;
+        }
+
         let publishedPostUrl: string | null = null;
         // Map of platform -> external/post id, used to seed post_analytics rows.
         const platformExternalIds: Record<string, string> = {};
