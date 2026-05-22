@@ -1519,16 +1519,24 @@ Deno.serve(async (req) => {
     if (auth.response) return auth.response;
     const userId = auth.userId;
 
-    const { data: settings, error: settingsError } = await supabase
+    const { data: settingsRow, error: settingsError } = await supabase
       .from("weather_settings")
       .select("*")
       .eq("user_id", userId)
-      .limit(1)
-      .single();
+      .maybeSingle();
 
-    if (settingsError || !settings) {
-      throw new Error("No weather settings found. Please configure your settings first.");
+    if (settingsError) {
+      console.warn(`[daily-weather-post] weather_settings fetch error for ${userId} — proceeding with safe defaults:`, settingsError.message);
     }
+    // Safe-default fallback: never throw "settings is not defined" downstream.
+    // Cinematic defaults are merged in; legacy fields stay as-is when row exists.
+    const settings: Record<string, any> = {
+      smart_cost_strategy: true,
+      strict_visuals_gainesville: true,
+      exclude_fallback_from_learning: true,
+      auto_cinematic_for_storms: true,
+      ...(settingsRow || {}),
+    };
 
     // === City context (single source of truth) ===
     // The selected city in the global header is the authoritative input.
