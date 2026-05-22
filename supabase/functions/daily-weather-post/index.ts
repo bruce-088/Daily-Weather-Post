@@ -11,6 +11,12 @@ import {
 } from "../_shared/location-guard.ts";
 import { generateVideoWithFallback } from "../_shared/video-render.ts";
 import { verifyUser } from "../_shared/auth-helpers.ts";
+import {
+  pickPresetForDaily,
+  resolveScene,
+  logCinematic,
+  attachCinematicToPostHistory,
+} from "../_shared/cinematic-presets.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
