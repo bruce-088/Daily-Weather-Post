@@ -7,6 +7,12 @@ import { expandVisualMeta, getTopVisualStyle, classifyVisualTheme, classifyColor
 import { getRecentStyles, enforceStyleRotation } from "../_shared/style-rotation.ts";
 import { selectContextualVisualStyle } from "../_shared/visual-selector.ts";
 import { getAutoWinnerOverrides, type AutoWinnerOverrides } from "../_shared/auto-winner.ts";
+import {
+  pickPresetForDaily,
+  resolveScene,
+  logCinematic,
+  attachCinematicToPostHistory,
+} from "../_shared/cinematic-presets.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
