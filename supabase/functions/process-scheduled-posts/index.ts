@@ -2633,16 +2633,28 @@ Deno.serve(async (req) => {
           console.log(`[process] post ${post.id}: VOICE: disabled (row.include_voiceover=${post.include_voiceover}, settings.enable_voiceover=${settingsEnabled})`);
         }
 
-        // === VOICE ASSET VALIDATION (pre-render gate) ===
-        // If voiceover was requested but no audio was produced, FAIL the job
-        // immediately — never render a silent video.
+        // === VOICE ASSET VALIDATION (failsafe: never block the post) ===
+        // Previously we threw here and failed the entire scheduled_post when
+        // voice was requested but missing. Product rule changed: if TTS fails
+        // we MUST still ship the video (silent / music-only) rather than skip
+        // the broadcast. We log + notify, but proceed to render.
         if (wantVoice && !voiceUrl) {
           const reason = voiceError || "Voiceover requested but audio file was not generated";
-          console.error(`[process] post ${post.id}: VOICE: CRITICAL — refusing to render silent video. reason=${reason}`);
-          trace("voice_result", { status: "failed", attempts: voiceAttemptsCount, error: reason, has_audio: false, fatal: true });
-          throw new Error(`Voiceover required but missing — ${reason}`);
+          console.warn(`[process] post ${post.id}: VOICE: failsafe — continuing without voiceover. reason=${reason}`);
+          trace("voice_result", { status: "failed_failsafe", attempts: voiceAttemptsCount, error: reason, has_audio: false, fatal: false });
+          voiceStatus = voiceStatus === "success" ? "failed" : voiceStatus || "failed";
+          try {
+            await supabase.from("system_logs").insert({
+              user_id: post.user_id,
+              type: "voiceover_failsafe",
+              message: `Voice generation failed for ${weather.city} — shipping silent video instead of blocking the schedule (${reason}).`,
+              platform: platformsToPost.join(","),
+              context: { scheduled_post_id: post.id, reason, city: weather.city },
+            });
+          } catch (_) { /* logging best-effort */ }
         }
         // Reachability HEAD check — make sure Creatomate can actually fetch the audio.
+        // If unreachable, drop the audio and continue silently (failsafe).
         if (voiceUrl) {
           try {
             const probe = await Promise.race([
@@ -2655,14 +2667,10 @@ Deno.serve(async (req) => {
             console.log(`[process] post ${post.id}: VOICE: audio_url reachable (${probe.status}) ${voiceUrl.split("?")[0]}`);
           } catch (probeErr) {
             const reason = probeErr instanceof Error ? probeErr.message : String(probeErr);
-            if (wantVoice || post.include_voiceover === true) {
-              console.error(`[process] post ${post.id}: VOICE: audio_url unreachable — failing instead of rendering silent (${reason})`);
-              trace("voice_result", { status: "failed", error: `audio unreachable: ${reason}`, has_audio: false, fatal: true });
-              throw new Error(`Voiceover audio_url unreachable — ${reason}`);
-            }
-            // Pre-attached audio that's stale: drop it and continue silently.
-            console.warn(`[process] post ${post.id}: VOICE: pre-attached audio unreachable — dropping (${reason})`);
+            console.warn(`[process] post ${post.id}: VOICE: audio_url unreachable — dropping to silent (failsafe) (${reason})`);
+            trace("voice_result", { status: "failed_failsafe", error: `audio unreachable: ${reason}`, has_audio: false, fatal: false });
             voiceUrl = null;
+            voiceAudioDurationSec = null;
             voiceStatus = "failed";
             voiceError = `audio unreachable: ${reason}`;
           }
