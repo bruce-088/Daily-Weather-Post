@@ -12,6 +12,7 @@ import {
   resolveScene,
   logCinematic,
   attachCinematicToPostHistory,
+  loadCinematicSettings,
 } from "../_shared/cinematic-presets.ts";
 
 const corsHeaders = {
