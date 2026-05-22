@@ -12,6 +12,7 @@ import {
   pickPresetForDaily,
   logCinematic,
   attachCinematicToPostHistory,
+  loadCinematicSettings,
   type RenderSource,
 } from "../_shared/cinematic-presets.ts";
 
