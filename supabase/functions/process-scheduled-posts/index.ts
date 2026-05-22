@@ -595,10 +595,17 @@ function estimateMp3DurationSeconds(byteLength: number | null | undefined): numb
  * always finishes with at least `tailPad` seconds of silent video at the end,
  * and the total is never shorter than `minDuration`.
  */
-const VOICE_START = 0.5;        // seconds — when voice element starts
+const VOICE_START = 0.5;        // seconds — when voice element starts (also where chime ends)
 const VOICE_TAIL_PAD = 1.5;     // seconds — silence held after voice ends
 const MIN_VIDEO_DURATION = 12;  // seconds — retention sweet spot floor
 const MAX_VIDEO_DURATION = 15;  // seconds — short enough to invite re-watch loops
+
+// === Broadcast audio bed (optional, env-configured) ===
+// BROADCAST_INTRO_CHIME_URL — 0.3–0.8s short chime that plays t=0 → VOICE_START
+// BROADCAST_BG_MUSIC_URL   — soft ambient bed for the whole clip. Ducked to
+//   BG_MUSIC_DUCK_VOLUME while the voice is speaking, full volume otherwise.
+const BG_MUSIC_FULL_VOLUME = "35%";   // baseline music volume (no voice)
+const BG_MUSIC_DUCK_VOLUME = "12%";   // ducked volume while voice is speaking
 
 function computeVideoDuration(audioDurationSec: number | null | undefined): number {
   const audio = typeof audioDurationSec === "number" && isFinite(audioDurationSec) && audioDurationSec > 0 ? audioDurationSec : 0;
