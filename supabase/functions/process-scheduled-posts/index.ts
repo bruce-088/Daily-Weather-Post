@@ -875,6 +875,9 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
   }
 
   // 2) Background music — ducks while voice is playing.
+  // A short 0.4s fade-in is applied to the FIRST music segment so the bed
+  // eases in instead of starting abruptly at full volume.
+  const BG_MUSIC_FADE_IN = 0.4; // seconds
   if (bgMusicUrl) {
     if (voiceUrl) {
       // Pre-voice segment at full volume (includes chime tail).
@@ -882,12 +885,15 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
         elements.push({
           type: "audio", track: nt(), time: 0, duration: VOICE_START,
           source: bgMusicUrl, volume: BG_MUSIC_FULL_VOLUME,
+          audio_fade_in: BG_MUSIC_FADE_IN,
         });
       }
-      // Ducked segment under the voice.
+      // Ducked segment under the voice. When there's no pre-voice segment
+      // (VOICE_START is tiny), apply the fade-in here so we never start cold.
       elements.push({
         type: "audio", track: nt(), time: VOICE_START, duration: Math.max(0.1, voiceEnd - VOICE_START),
         source: bgMusicUrl, volume: BG_MUSIC_DUCK_VOLUME,
+        ...(VOICE_START <= 0.05 ? { audio_fade_in: BG_MUSIC_FADE_IN } : {}),
       });
       // Tail segment back to full volume.
       if (D - voiceEnd > 0.05) {
@@ -901,6 +907,7 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
       elements.push({
         type: "audio", track: nt(), time: 0, duration: D,
         source: bgMusicUrl, volume: BG_MUSIC_FULL_VOLUME,
+        audio_fade_in: BG_MUSIC_FADE_IN,
       });
     }
   }
