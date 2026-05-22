@@ -955,6 +955,11 @@ Deno.serve(async (req) => {
     }
   } catch { /* ignore */ }
 
+  if (cityFilter || userFilter) {
+    console.log(`[manual] weekly triggered for city=${cityFilter ?? "(any)"} by user=${gate.source === "user" ? gate.userId : (userFilter ?? "cron")}`);
+  }
+
+
   // Find users with YouTube connected
   let cq = svc
     .from("weather_settings")
