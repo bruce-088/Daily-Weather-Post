@@ -847,6 +847,10 @@ async function runForUser(svc: any, userId: string, cityFilter?: string, opts?: 
   const stitched = await stitchSlideshow(svc, userId, posts, finalTitle, voice ?? undefined);
 
   if (stitched) {
+    if (skipPost) {
+      console.log(`[recap] dev-test skip_post=true preview_url=${stitched.url}`);
+      return { ok: true, detail: "Dev test render complete", preview_url: stitched.url };
+    }
     const token = await getYouTubeToken(svc, userId);
     if (!token) {
       await svc.from("post_history").insert({
