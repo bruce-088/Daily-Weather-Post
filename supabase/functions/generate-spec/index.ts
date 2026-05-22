@@ -228,6 +228,42 @@ const ROUTING_GUARD = `Prevents cross-city content contamination (e.g., Gainesvi
 - All template variables (city name, channel handle, subscribe URLs, state name) are cleared and reset for every generation cycle.
 - AI prompt explicitly scoped to the target city: "You are writing for the [CITY] channel only."`;
 
+const CINEMATIC_PRESET_SYSTEM = `### Presets
+Three cinematic presets govern visual richness for daily, weekly, and monthly outputs:
+
+| Preset | Use Case | Cost Tier |
+|---|---|---|
+| \`broadcast_lite\` | Default daily post; low cost | low |
+| \`cinematic_weather\` | Strong/dramatic conditions | medium |
+| \`event_mode\` | Severe weather keywords only | high |
+
+### Gainesville 4-Tier Fallback Chain
+When \`strict_visuals_gainesville\` is ON (default), the renderer walks this chain in order and stops at the first match:
+1. **history_image** — most recent \`post_history\` image for this city.
+2. **condition_scene** — stock imagery matched to the current weather condition.
+3. **city_safe_scene** — curated permanent public JPGs under \`brand-assets/cinematic/gainesville-*.jpg\`.
+4. **gradient_only** — last-resort themed gradient (wrapped in try/catch; render never fails).
+
+Orlando and other cities skip tier 3 (no city_safe_scene).
+
+### Visual Learning Firewall
+When \`exclude_fallback_from_learning\` is ON (default), any row whose \`published_visual_source\` is \`gradient_only\` or \`degraded_fallback\` (or whose \`visual_metadata.eligibleForLearning\` is false) is excluded from:
+- \`winning-recipes.ts\` visual winning factor queries
+- \`style-rotation.ts\` style selection
+- \`compute-winner-stats\` cinematic lift calculations
+- \`analyze-performance\` learning feedback loop
+
+This prevents the AI from learning to prefer degraded fallback visuals.
+
+### Richness Persistence
+Daily publish paths write the full \`SceneDecision\` to \`post_history.visual_metadata\` (preset, source, label, costTier, eligibleForLearning) plus \`post_history.published_visual_source\`. Weekly and monthly recaps log each slide's source via \`[cinematic]\` logs and write a summary \`system_logs\` row with \`type='cinematic_recap_render'\`.
+
+### Controls
+Three booleans on \`weather_settings\`, all default \`true\`:
+- \`smart_cost_strategy\` — enables cost-aware preset selection
+- \`strict_visuals_gainesville\` — enables the 4-tier fallback for Gainesville
+- \`exclude_fallback_from_learning\` — enables the visual learning firewall`;
+
 const ERROR_STRATEGY = `SkyBrief uses a **fail-open philosophy**: posts should publish even if non-critical steps fail.
 
 | Failure | Behavior |
