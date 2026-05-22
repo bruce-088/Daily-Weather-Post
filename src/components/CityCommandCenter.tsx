@@ -14,9 +14,10 @@ import {
 import { Loader2, MapPin, PlayCircle, ExternalLink, Wrench, Eye } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { FeatureFlags } from "@/lib/featureFlags";
 
 interface City { id: string; name: string; state: string | null; }
-type RunType = "daily" | "weekly" | "monthly";
+type RunType = "daily" | "weekly" | "monthly" | "yearly";
 type Mode = "post" | "dev";
 type Status = "idle" | "running" | "done" | "error";
 interface RunState { status: Status; message?: string; url?: string | null; mode?: Mode; }
