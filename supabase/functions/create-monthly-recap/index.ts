@@ -974,20 +974,30 @@ high contrast. No watermark.`;
 // ───────────────── per-user runner ─────────────────
 
 async function runForUser(svc: any, userId: string, cityFilter?: string): Promise<{ ok: boolean; detail: string }> {
-  const posts = await getLast7Posts(svc, userId, cityFilter);
-  if (posts.length < 3) {
-    return { ok: false, detail: `Only ${posts.length} posts in last 7 days${cityFilter ? ` for ${cityFilter}` : ""} — skipping recap` };
+  const posts = await getLast30Posts(svc, userId, cityFilter);
+  if (posts.length < 8) {
+    return { ok: false, detail: `Only ${posts.length} posts in last 30 days${cityFilter ? ` for ${cityFilter}` : ""} — skipping monthly recap (need 8+)` };
   }
   const topHooks = await getTopHooks(svc, userId);
-  const { title, script } = await generateWeeklyScript(posts, topHooks);
-  const finalTitle = title.includes("Weekly Recap") ? title : `${title} — Weekly Recap`;
-  const description = `${script}\n\n#WeeklyRecap #Weather #SkyBrief`;
+  const weekBuckets = bucketWeeks(posts);
+  const weekStats = weekBuckets.map((w, i) => summarizeWeek(i + 1, w));
+  const moment = findMomentOfMonth(posts);
+  const monthName = new Date(posts[posts.length - 1].created_at)
+    .toLocaleDateString("en-US", { month: "long", year: "numeric" });
+
+  const { title, script, weekSummaries, momentLine } = await generateMonthlyScript(posts, topHooks, weekStats, moment);
+  const finalTitle = title.startsWith("Month in Review") ? title : `Month in Review: ${posts[0].city} — ${monthName}`;
+  const description = `${script}\n\n#MonthlyRecap #Weather #SkyBrief`;
 
   // Voice narration (master clock). Skipped silently if disabled or it fails.
   const voice = await synthesizeRecapVoice(svc, userId, script);
 
   // Try video stitch
-  const stitched = await stitchSlideshow(svc, userId, posts, finalTitle, voice ?? undefined);
+  const stitched = await stitchSlideshow(
+    svc, userId, posts, finalTitle,
+    { weekStats, weekSummaries, moment, momentLine, monthName },
+    voice ?? undefined,
+  );
 
   if (stitched) {
     const token = await getYouTubeToken(svc, userId);
