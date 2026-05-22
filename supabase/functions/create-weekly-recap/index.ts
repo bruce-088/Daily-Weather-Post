@@ -544,7 +544,6 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
       time: 0,
       duration: totalDuration,
       volume: 0.15,
-      loop: true,
     });
   }
   if (!hasVoice && !hasMusic) {
