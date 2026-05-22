@@ -35,6 +35,8 @@ export const CANONICAL_TO_POOL: Record<string, PoolStyle> = {
 const ROTATION_WINDOW = 5;
 const REPETITION_THRESHOLD = 3; // > 3 → force alternate
 
+import { isLearningEligibleRow } from "./cinematic-presets.ts";
+
 /** Fetch visual_style from the last N posted entries for a user. */
 export async function getRecentStyles(
   supabase: any,
@@ -44,15 +46,18 @@ export async function getRecentStyles(
   try {
     const { data, error } = await supabase
       .from("post_history")
-      .select("visual_metadata, created_at")
+      .select("visual_metadata, published_visual_source, created_at")
       .eq("user_id", userId)
       .eq("status", "posted")
       .order("created_at", { ascending: false })
-      .limit(limit);
+      .limit(limit * 2);
     if (error) return [];
+    // Firewall: don't let fallback renders shape future rotation choices.
     return (data || [])
+      .filter((r: any) => isLearningEligibleRow(r, null))
       .map((r: any) => String(r.visual_metadata?.visual_style || "").toLowerCase())
-      .filter(Boolean);
+      .filter(Boolean)
+      .slice(0, limit);
   } catch {
     return [];
   }
