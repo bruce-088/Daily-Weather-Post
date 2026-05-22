@@ -360,23 +360,18 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
     console.warn("[recap] continuing without silent audio track; YouTube may abandon processing");
   }
 
-  // Creatomate downgrades to a JPEG snapshot when the composition is detected
-  // as static. We force the video path by setting `output_format: "mp4"` on
-  // BOTH the top-level body AND the source object, and explicitly include
-  // `frame_rate` inside source. The animated gradient backgrounds above
-  // already guarantee frame-to-frame motion, but these belt-and-suspenders
-  // settings keep Creatomate firmly on the video render path.
+  // Creatomate v2 expects source fields (width/height/duration/elements) at
+  // the TOP LEVEL of the request body, not nested under a `source` key.
+  // Nesting causes Creatomate to ignore them and emit a 5-second default
+  // composition. Matches the working daily pipeline shape.
   const body = {
     output_format: "mp4",
     frame_rate: 30,
-    source: {
-      output_format: "mp4",
-      width: 1920, height: 1080,
-      duration: totalDuration,
-      frame_rate: 30,
-      fill_color: "#0f172a",
-      elements,
-    },
+    width: 1920,
+    height: 1080,
+    duration: totalDuration,
+    fill_color: "#0f172a",
+    elements,
   };
 
   const submit = await fetch("https://api.creatomate.com/v2/renders", {
