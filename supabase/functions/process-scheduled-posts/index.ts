@@ -897,7 +897,7 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
       // segment and also gets the fade-out.
       const hasTail = D - voiceEnd > 0.05;
       elements.push({
-        type: "audio", track: nt(), time: VOICE_START, duration: Math.max(1.0, voiceEnd - VOICE_START),
+        type: "audio", track: nt(), time: VOICE_START, duration: Math.max(0.1, voiceEnd - VOICE_START),
         source: bgMusicUrl, volume: BG_MUSIC_DUCK_VOLUME,
         ...(VOICE_START <= 0.05 ? { audio_fade_in: BG_MUSIC_FADE_IN } : {}),
         ...(!hasTail ? { audio_fade_out: BG_MUSIC_FADE_OUT } : {}),
