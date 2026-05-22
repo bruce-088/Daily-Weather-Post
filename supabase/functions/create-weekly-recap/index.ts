@@ -483,27 +483,57 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
     exit_animation: { type: "fade", duration: 0.4 },
   });
 
-  let totalDuration = (slides.length + 2) * SLIDE_DUR; // title + slides + outro
-  if (totalDuration < 65) {
-    const pad = 65 - totalDuration;
+  const visualDuration0 = (slides.length + 2) * SLIDE_DUR; // title + slides + outro
+  const voiceDur = voice ? Math.ceil(voice.durationSec + 1) : 0;
+  let totalDuration = Math.max(visualDuration0, voiceDur, 65);
+  if (totalDuration > visualDuration0) {
+    const pad = totalDuration - visualDuration0;
     elements[outroTextIdx].duration += pad;
     elements[outroBgIdx].duration += pad;
     elements[outroBgIdx].animations[0].duration += pad;
-    totalDuration += pad;
   }
-  console.log(`[recap] stitch duration=${totalDuration}s slides=${slides.length}`);
-  const silentAudioUrl = await createSignedSilentAudio(svc, userId, totalDuration);
-  if (silentAudioUrl) {
+  console.log(`[recap] timing: visual=${visualDuration0}s voice=${voice?.durationSec ?? 0}s total=${totalDuration}s outro_extended=${totalDuration - visualDuration0}s slides=${slides.length}`);
+
+  // ── Audio mix ──
+  const hasVoice = !!voice;
+  const hasMusic = !!RECAP_MUSIC_URL;
+  let usedSilentFallback = false;
+  if (hasVoice) {
     elements.push({
       type: "audio",
-      source: silentAudioUrl,
+      source: voice!.url,
       time: 0,
       duration: totalDuration,
-      volume: 0.01,
+      volume: 1.0,
     });
-  } else {
-    console.warn("[recap] continuing without silent audio track; YouTube may abandon processing");
   }
+  if (hasMusic) {
+    elements.push({
+      type: "audio",
+      source: RECAP_MUSIC_URL,
+      time: 0,
+      duration: totalDuration,
+      volume: 0.15,
+      loop: true,
+    });
+  }
+  if (!hasVoice && !hasMusic) {
+    const silentAudioUrl = await createSignedSilentAudio(svc, userId, totalDuration);
+    if (silentAudioUrl) {
+      usedSilentFallback = true;
+      elements.push({
+        type: "audio",
+        source: silentAudioUrl,
+        time: 0,
+        duration: totalDuration,
+        volume: 0.01,
+      });
+    } else {
+      console.warn("[recap] continuing without any audio track; YouTube may abandon processing");
+    }
+  }
+  console.log(`[recap] audio mix: voice=${hasVoice ? "yes" : "no"} music=${hasMusic ? "yes" : "no"} silent_fallback=${usedSilentFallback ? "yes" : "no"}`);
+
 
   // Creatomate v2 expects source fields (width/height/duration/elements) at
   // the TOP LEVEL of the request body, not nested under a `source` key.
