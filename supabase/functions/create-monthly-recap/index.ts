@@ -931,8 +931,8 @@ async function generateFallbackInfographic(
     return `${day} ${t} ${p.condition ?? ""}`.trim();
   }).join(" | ");
   const prompt = `Clean modern weather infographic poster, dark navy gradient background,
-white bold sans-serif typography, large title "${title}", 7-day weather summary
-displayed as a tidy grid with weather icons. Data: ${lines}. Minimalist, editorial,
+white bold sans-serif typography, large title "${title}", monthly weather summary
+displayed as a tidy 4-week grid with weather icons. Data: ${lines}. Minimalist, editorial,
 high contrast. No watermark.`;
   try {
     // Lovable AI image generation lives on the chat completions endpoint with
