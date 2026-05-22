@@ -1587,12 +1587,17 @@ Deno.serve(async (req) => {
     // specific scheduled_post_id. We process ONLY that row and skip the
     // sweep / recovery logic — the job runner handles those concerns itself.
     let singlePostId: string | null = null;
+    let skipPost = false;
     if (req.method === "POST") {
       try {
         const body = await req.json();
         if (body && typeof body.scheduled_post_id === "string") {
           singlePostId = body.scheduled_post_id;
           console.log(`[process] single-post mode for ${singlePostId} (source=${body.source ?? "unknown"})`);
+        }
+        if (body && body.skip_post === true) {
+          skipPost = true;
+          console.log(`[dev-test] skip_post=true received for scheduled_post_id=${singlePostId ?? "(sweep)"}`);
         }
       } catch {
         // No body — legacy cron invocation, fall through to sweep mode.
