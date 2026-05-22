@@ -397,6 +397,7 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
     });
     if (!sr.ok) continue;
     const sd = await sr.json();
+    console.log(`[recap] creatomate poll ${i}: status=${sd.status} url=${sd.url ?? "?"} snapshot=${sd.snapshot_url ?? "?"} dur=${sd.duration ?? "?"} format=${sd.format ?? sd.output_format ?? "?"} err=${sd.error_message ?? ""}`);
     if (sd.status === "succeeded" && sd.url) {
       const reportedDuration: number | undefined =
         typeof sd.duration === "number" ? sd.duration : undefined;
