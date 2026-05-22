@@ -7,6 +7,13 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { postToPlatform } from "../_shared/platform-adapter.ts";
+import {
+  resolveScene,
+  pickPresetForDaily,
+  logCinematic,
+  attachCinematicToPostHistory,
+  type RenderSource,
+} from "../_shared/cinematic-presets.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -90,6 +97,42 @@ Deno.serve(async (req) => {
         else if (platform === "twitter") postUrl = `https://twitter.com/i/web/status/${externalId}`;
       }
 
+      // ── Cinematic Preset System: derive decision from the locked bundle
+      // (render_config carries cinematic intent when set). If unset, fall back
+      // to a decision recomputed from the bundle's visual_source so the
+      // firewall has a consistent eligibility flag for every published row.
+      const _renderCfg: any = (bundle as any).render_config || {};
+      const _bundleCinematic = _renderCfg.cinematic;
+      const _cinematicDecision = (_bundleCinematic && typeof _bundleCinematic === "object" && _bundleCinematic.source)
+        ? {
+            preset: _bundleCinematic.preset || "broadcast_lite",
+            source: _bundleCinematic.source as RenderSource,
+            label: _bundleCinematic.label || _bundleCinematic.source,
+            url: _bundleCinematic.url,
+            costTier: _bundleCinematic.costTier || "low",
+            eligibleForLearning: _bundleCinematic.eligibleForLearning !== false
+              && _bundleCinematic.source !== "gradient_only"
+              && _bundleCinematic.source !== "degraded_fallback",
+          }
+        : resolveScene({
+            city: cityName,
+            condition: weather?.condition ?? null,
+            mediaUrl: (bundle as any).background_url || null,
+            preset: pickPresetForDaily({ condition: weather?.condition ?? null, city: cityName }),
+            mode: bundle.content_type === "image" ? "image" : "image",
+          });
+      logCinematic("publish-preview-bundle", _cinematicDecision, { city: cityName, kind: "daily" });
+      const _cinPatch = attachCinematicToPostHistory(
+        { visual_metadata: {
+            preview_bundle_id: bundle.id,
+            published_content_hash: bundle.content_hash,
+            visual_source: bundle.visual_source,
+            content_type: bundle.content_type,
+            storage_path: bundle.storage_path,
+          } },
+        _cinematicDecision,
+      );
+
       // Persist correlation between preview bundle and posted asset
       const { data: historyRow } = await supabase.from("post_history").insert({
         user_id: userId,
@@ -103,14 +146,8 @@ Deno.serve(async (req) => {
         post_url: postUrl,
         error_message: r.success ? null : (r.error || "Publish failed"),
         preview_bundle_id: bundle.id,
-        published_visual_source: bundle.visual_source,
-        visual_metadata: {
-          preview_bundle_id: bundle.id,
-          published_content_hash: bundle.content_hash,
-          visual_source: bundle.visual_source,
-          content_type: bundle.content_type,
-          storage_path: bundle.storage_path,
-        },
+        published_visual_source: _cinPatch.published_visual_source,
+        visual_metadata: _cinPatch.visual_metadata,
       }).select("id").maybeSingle();
 
       // Phase 1 Growth Loop — seed post_performance for successful preview publishes.

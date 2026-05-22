@@ -12,6 +12,7 @@
 //   • Gainesville → sky       + calm      + statement (Calm / Informative)
 
 import { VISUAL_STYLES } from "./experiments.ts";
+import { isLearningEligibleRow, type CinematicSettings } from "./cinematic-presets.ts";
 
 export interface WinningRecipe {
   visual_style: string;       // gradient | sky | cinematic | minimal
@@ -63,17 +64,28 @@ export async function getWinningStyleForCondition(
   async function topPosts(filterCity: boolean) {
     let q = supabase
       .from("post_history")
-      .select("views_count, visual_metadata, condition, city")
+      .select("views_count, visual_metadata, condition, city, published_visual_source")
       .eq("user_id", userId)
       .eq("status", "posted")
       .gt("views_count", 0)
       .order("views_count", { ascending: false })
-      .limit(40);
+      .limit(60);
     if (cond) q = q.ilike("condition", `%${cond}%`);
     if (filterCity && city) q = q.ilike("city", city);
     const { data, error } = await q;
     if (error) return [];
-    return (data || []) as any[];
+    // Visual-learning firewall: drop gradient_only / degraded_fallback rows
+    // so they cannot win or set the "best visual_style" for a condition.
+    let settings: CinematicSettings | null = null;
+    try {
+      const { data: ws } = await supabase
+        .from("weather_settings")
+        .select("exclude_fallback_from_learning")
+        .eq("user_id", userId)
+        .maybeSingle();
+      settings = (ws as any) || null;
+    } catch { /* noop */ }
+    return ((data || []) as any[]).filter((r) => isLearningEligibleRow(r, settings)).slice(0, 40);
   }
 
   let posts: any[] = city ? await topPosts(true) : [];

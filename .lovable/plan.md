@@ -1,134 +1,161 @@
 
-# Dynamic Background Scenes for Recaps
+# Cinematic Preset System
 
-Upgrade `buildAnimatedGradientBg` in both recap functions so each slide gets a real visual scene (image, optionally video) behind a translucent themed gradient. Falls back to the current gradient-only behavior on any failure, so renders never break.
+Fixes Gainesville's plain-render drift, controls cost via image-first defaults, and stops the learning loop from rewarding gradient/fallback renders. Voice, music, captions, routing, scheduling, and platform adapters are untouched.
 
-## Scope
+## 1. Migration (additive, default-on, null-safe)
 
-Files:
-- `supabase/functions/create-weekly-recap/index.ts`
-- `supabase/functions/create-monthly-recap/index.ts`
-
-Out of scope: daily Shorts pipeline, scrim/text layers, voice, music, timing.
-
-## What changes
-
-### 1. New shared helper `buildSlideBackground(...)`
-
-Replaces direct calls to `buildAnimatedGradientBg` at slide-build sites. Signature:
-
-```ts
-buildSlideBackground({
-  time, duration, slideNum,
-  grad,                 // { from, to, label } — themed gradient (still required)
-  mode: "image" | "video" | "gradient",
-  mediaUrl?: string,    // pre-resolved (e.g. p.image_url) — takes priority
-  condition?: string,   // used to pick a stock scene when mediaUrl is missing
-})
+Add to `weather_settings`:
 ```
+smart_cost_strategy             boolean not null default true
+strict_visuals_gainesville      boolean not null default true
+exclude_fallback_from_learning  boolean not null default true
+```
+RLS unchanged. Defaults cover existing rows.
 
-Returns an **array** of Creatomate elements in z-order:
-1. Background scene (image or video) — full-frame, cover fit
-2. Themed gradient (existing helper) at reduced opacity (20–30%)
+## 2. Gainesville safe-scene assets
 
-If both the scene and the gradient fail to produce a valid layer, returns gradient-only (current behavior). Render never fails.
+Upload 2–3 curated landscape JPGs to the existing public `brand-assets` bucket at `cinematic/gainesville-*.jpg` (e.g. `oak-canopy.jpg`, `downtown-skyline.jpg`, `prairie-storm.jpg`). Referenced via permanent public URLs:
+```
+https://pewdswjhsesfondewucc.supabase.co/storage/v1/object/public/brand-assets/cinematic/gainesville-<name>.jpg
+```
+No signed/expiring URLs. If the user has not yet uploaded files, the module still ships with the constant URL list; missing files log a warning and the chain falls through to the next tier (renders never break).
 
-### 2. Background scene layer
+## 3. New shared module — `supabase/functions/_shared/cinematic-presets.ts`
 
-**Image mode**
+Single source of truth. Pure helpers, no DB writes.
+
 ```ts
-{
-  type: "image",
-  source: mediaUrl,
-  fit: "cover",
-  width: "100%", height: "100%", x: "50%", y: "50%",
-  animations: SAFE_IMAGE_ANIM
-    ? [{ type: "scale", from: 1.0, to: 1.05, easing: "linear" }]
-    : undefined,
-  time, duration,
+export type CinematicPreset = "broadcast_lite" | "cinematic_weather" | "event_mode";
+export type RenderSource =
+  | "history_image" | "condition_scene" | "city_safe_scene"
+  | "video_scene"   | "gradient_only"   | "degraded_fallback";
+export type CostTier = "low" | "medium" | "high";
+
+export interface SceneDecision {
+  preset: CinematicPreset;
+  source: RenderSource;
+  label: string;
+  url?: string;
+  costTier: CostTier;
+  eligibleForLearning: boolean; // false iff source ∈ {gradient_only, degraded_fallback}
 }
+
+pickPresetForDaily({ condition, severity, slot, city, settings }): CinematicPreset
+pickPresetForRecapSlide({ kind, condition?, city, slideIndex, settings }): CinematicPreset
+resolveScene({ city, condition, mediaUrl, preset, mode, settings }): SceneDecision
+logCinematic(prefix, decision, ctx): void
+buildVisualMetadata(decision, prevMeta?): Record<string, unknown>
+isEligibleVisualMetadata(meta): boolean   // null/unknown → true (backward-compatible)
+isEligiblePublishedSource(source): boolean
 ```
 
-**Video mode** (recaps don't use this today, but the helper supports it for future Shorts use)
-```ts
-{
-  type: "video",
-  source: mediaUrl,
-  fit: "cover",
-  loop: true,
-  width: "100%", height: "100%", x: "50%", y: "50%",
-  animations: [{ type: "scale", from: 1.0, to: 1.05, easing: "linear" }],
-  time, duration,
-}
+Internals:
+- `CONDITION_SCENES` — moved from recap files (5 stock URLs).
+- `GAINESVILLE_SAFE_SCENES` — 2–3 permanent public-bucket URLs.
+
+### Preset selection rules
+
+- **Daily** → default `broadcast_lite`; upgrade to `cinematic_weather` for stronger conditions (rain/snow/fog/thunder/wind ≥ threshold); `event_mode` only on severe keywords (storm, severe, tornado, blizzard, extreme heat). All upgrades gated by `settings.smart_cost_strategy`.
+- **Weekly** → all day slides `broadcast_lite`; standout day → `cinematic_weather`. Title/outro stay `broadcast_lite`. Never `event_mode`.
+- **Monthly** → stat slides `broadcast_lite`; Moment-of-the-Month → `cinematic_weather`; escalate to `event_mode` only if severe.
+
+### Gainesville fallback chain (explicit)
+
+When `settings.strict_visuals_gainesville === true` AND `mode !== "gradient"`, `resolveScene` walks tiers in order and stops at the first that yields a URL:
+
+| # | Tier              | Used when                                                                                | `source`              | Eligible |
+|---|-------------------|------------------------------------------------------------------------------------------|-----------------------|----------|
+| 1 | history_image     | `mediaUrl` provided & non-empty                                                          | `history_image`       | true     |
+| 2 | condition_scene   | tier 1 unavailable AND `pickConditionScene(condition)` returns a URL                     | `condition_scene`     | true     |
+| 3 | city_safe_scene   | tiers 1+2 unavailable AND ≥1 Gainesville safe scene URL is present in the module         | `city_safe_scene`     | true     |
+| 4 | gradient_only     | tiers 1+2+3 all unavailable (no media, no condition match, no Gainesville safe scene)    | `gradient_only`       | false    |
+
+Any throw → `degraded_fallback` (eligible=false), gradient still drawn. Other cities skip tier 3.
+
+### Preset → overlay treatment (CSS/image layers, no new APIs)
+
+- `broadcast_lite`: image + 25% themed gradient + subtle 1.0→1.05 scale
+- `cinematic_weather`: + soft vignette + brand-tinted overlay + slower Ken Burns
+- `event_mode`: + top/bottom scrims + stronger zoom + brand watermark pulse
+
+## 4. Wire into pipelines
+
+- `create-weekly-recap/index.ts` — replace inline `CONDITION_SCENES`/`pickConditionScene`/`buildSlideBackground` with shared module calls. Collect each slide's `SceneDecision`.
+- `create-monthly-recap/index.ts` — same swap. Moment slide passes `kind: "highlight"` + `mediaUrl` + condition.
+- `daily-weather-post/index.ts` — call `pickPresetForDaily` + `resolveScene` around existing visual-selector site; apply overlays in Creatomate source. Image-first stays default.
+
+## 5. Persist richness — all three daily publish paths
+
+Shared helper `attachCinematicToPostHistory(row, decision)` merges into insert payload:
+```
+visual_metadata: { ...prev, preset, source, label, costTier, eligibleForLearning }
+published_visual_source: decision.source
+```
+Applied at:
+- `daily-weather-post/index.ts:1949`
+- `process-scheduled-posts/index.ts:3038` — decision pulled from job payload or recomputed from stored render context
+- `publish-preview-bundle/index.ts:94` — decision pulled from `preview_bundles.render_config`
+
+Recaps insert one `system_logs` row per render: `type='cinematic_recap_render'`, `context={ kind, slides:[SceneDecision], summary:{ presetCounts, eligibleCount } }`.
+
+Backward compat: older null-metadata rows are treated as eligible.
+
+## 6. Visual learning firewall (gated by `exclude_fallback_from_learning`, default ON)
+
+Null-safe filtering in 4 reader paths:
+- `_shared/winning-recipes.ts` — add `published_visual_source` to `.select`; post-filter with `isEligibleVisualMetadata && isEligiblePublishedSource`.
+- `_shared/style-rotation.ts` — same filter.
+- `compute-winner-stats/index.ts` — exclude non-eligible rows from `cinOn`/`cinOff` lift and `best_condition`. Hook + hour aggregations unchanged.
+- `analyze-performance/index.ts` — skip excluded rows when computing the `cinematic` winning factor. Hook/tone/voiceover factors unchanged.
+
+All short-circuit when toggle = false. Caption/hook/tone learning untouched.
+
+## 7. Settings UI
+
+New "Cinematic Presets" card in `src/components/SettingsPanel.tsx` with three Switches bound to the new columns via the existing settings save/load helper. Helper text under each toggle.
+
+## 8. Logging
+
+Standardized via `logCinematic`:
+```
+[cinematic] city=Gainesville kind=daily preset=broadcast_lite source=condition_scene label=rainy_sky eligible=yes cost=low
+[cinematic] city=Gainesville kind=daily preset=broadcast_lite source=city_safe_scene label=gnv_oak_canopy eligible=yes cost=low
+[cinematic] city=Gainesville kind=daily preset=broadcast_lite source=gradient_only eligible=no cost=low fallback=yes
+[cinematic] kind=weekly slide=4 preset=cinematic_weather source=history_image eligible=yes
+[cinematic] kind=monthly slide=moment preset=cinematic_weather source=history_image eligible=yes
 ```
 
-### 3. Gradient overlay
+## 9. Spec Delta
 
-Reuse existing `buildAnimatedGradientBg` but add an `opacity` param (default `1.0`). When a scene layer is present, call it with `opacity: 0.25` so the warm/cool/neutral tint remains visible without hiding the photo. When no scene, opacity stays `1.0` (current look preserved).
+Append a Resolved Issues entry in `generate-spec/index.ts`: presets, Smart Cost Strategy, Gainesville strictness + `city_safe_scene` tier (permanent public-URL guarantee), richness fields at all three daily insert sites, `system_logs` `cinematic_recap_render`, firewall touchpoints, three new settings columns. Deploy `generate-spec`.
 
-### 4. Condition → stock scene map
+## Rollout order
 
-Add a constant `CONDITION_SCENES` (CC0 image URLs, served from an existing public bucket or curated CDN):
-
-```ts
-const CONDITION_SCENES: Array<{ match: RegExp; label: string; url: string }> = [
-  { match: /storm|thunder|lightning/i, label: "storm_clouds", url: ".../storm.jpg" },
-  { match: /rain|drizzle|shower/i,     label: "rainy_sky",    url: ".../rain.jpg"  },
-  { match: /snow|sleet|blizzard/i,     label: "snowy_sky",    url: ".../snow.jpg"  },
-  { match: /cloud|overcast|fog|mist/i, label: "cloudy_sky",   url: ".../cloudy.jpg"},
-  { match: /clear|sunny|sun\b/i,       label: "bright_sky",   url: ".../sunny.jpg" },
-];
-function pickConditionScene(cond?: string | null) { /* first match or null */ }
-```
-
-Resolution order inside `buildSlideBackground`:
-1. Explicit `mediaUrl` (e.g. `p.image_url` from history) → use it, label as `"history_image"`.
-2. Otherwise `pickConditionScene(condition)` → use stock URL.
-3. Otherwise gradient-only.
-
-URLs will be hosted in the existing public brand asset bucket (uploaded as part of this change). Five small JPEGs, ~1080×1920.
-
-### 5. Call-site updates
-
-**Weekly recap** (`create-weekly-recap/index.ts`)
-
-- Title slide: `mode: "image"`, `condition: undefined` → gradient-only fallback (no theme image needed for title).
-- Day slides (currently lines ~501–526): replace the if/else (image branch vs gradient branch) with a single `buildSlideBackground({ mode: "image", mediaUrl: p.image_url, condition: p.condition, grad: {...THEMES[themeKey], label: themeKey}, slideNum: i+2 })`. Removes duplicated image-layer code.
-- Outro slide: gradient-only (no condition signal).
-
-**Monthly recap** (`create-monthly-recap/index.ts`)
-
-- Title + outro: gradient-only.
-- Week-stat slides: pass `condition: weekStat.dominantCondition` if available; otherwise gradient-only.
-- Moment-of-the-Month slide (line ~657): pass `mediaUrl: monthly.moment?.post.image_url` plus its condition, so the existing image layer is folded into the helper instead of being appended separately.
-
-### 6. Logging
-
-Inside `buildSlideBackground`, after resolving the scene:
-```
-[recap] slide 2 background=image rainy_sky (https://.../rain.jpg)
-[recap] slide 3 background=image history_image (https://.../signed.jpg)
-[recap] slide 4 background=gradient cool (no scene)
-[monthly-recap] slide 5 background=image storm_clouds (...)
-```
-
-Same prefix conventions already used (`[recap]` / `[monthly-recap]`).
-
-### 7. Failure safety
-
-- If `mediaUrl` HEAD-check is skipped (we don't add network calls in the hot path), Creatomate handles missing assets gracefully — but to be defensive, wrap the scene-layer construction in a `try/catch`. On throw, log `[recap] slide N scene failed, gradient-only` and return just the gradient.
-- Gradient overlay always added last, so even an invalid scene URL leaves the slide with the current themed look.
-- Existing safety fallback in `buildAnimatedGradientBg` (solid `#0f172a` if `from`/`to` missing) is preserved.
+1. Migration → 3 settings columns
+2. Upload Gainesville safe-scene JPGs to `brand-assets/cinematic/` (user action; module ships with URLs regardless)
+3. Shared module `cinematic-presets.ts`
+4. Wire `daily-weather-post` + write richness at insert
+5. Wire `process-scheduled-posts` + `publish-preview-bundle` insert sites (decision via job payload / `preview_bundles.render_config`)
+6. Wire weekly + monthly recaps + `system_logs` rows
+7. Firewall filters across 4 reader paths
+8. Settings UI card
+9. Update `generate-spec` + deploy
 
 ## Verification
 
-1. Deploy both functions.
-2. Run **Dev: Test Weekly** for Gainesville. Logs should show `background=image` for slides where `p.image_url` exists and `background=image <condition_label>` (or `background=gradient`) for the rest. Preview MP4 shows photo + faint warm/cool/neutral tint.
-3. Run **Dev: Test Monthly** for Gainesville. Week slides show condition-based stock scene tinted by theme; Moment-of-the-Month uses the historical post image.
-4. Force a broken URL once (temporary edit) and confirm the render still completes with gradient-only and a `scene failed` log line.
+- Gainesville daily, history image → `history_image` eligible
+- Gainesville daily, no history, rainy → `condition_scene` eligible
+- Gainesville daily, no history, no condition match, safe scenes present → `city_safe_scene` eligible
+- Gainesville daily, no history, no condition match, no safe scenes → `gradient_only` not eligible, render completes
+- Any throw → `degraded_fallback` not eligible, render completes
+- Orlando daily, no history → `condition_scene` then `gradient_only` (skips tier 3)
+- All three publish paths write `visual_metadata.{preset,source,label,costTier,eligibleForLearning}` + `published_visual_source`
+- Weekly recap logs: mostly `broadcast_lite`, one `cinematic_weather`; monthly: stat `broadcast_lite`, Moment `cinematic_weather`
+- Synthetic `gradient_only` row excluded from `cinematic_lift_pct` after re-running `compute-winner-stats`
+- Toggle `exclude_fallback_from_learning` off → firewall stops applying
+- `curl` Gainesville safe-scene URL → 200 OK from public storage, no expiration
 
 ## Out of scope
 
-- Shorts pipeline (daily-weather-post). Helper supports `mode: "video"` for future reuse, but no Shorts call sites change here.
-- New buckets / migrations beyond uploading the 5 stock JPEGs to the existing public brand asset bucket.
-- Any change to scrim, text, voice, music, layout rotation.
+Voice, music, captions/hook/tone, routing, scheduling, platform adapters. Daily Shorts do not become video-first. No new buckets/credits/external APIs.

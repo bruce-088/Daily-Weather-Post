@@ -11,6 +11,12 @@ import {
 } from "../_shared/location-guard.ts";
 import { generateVideoWithFallback } from "../_shared/video-render.ts";
 import { verifyUser } from "../_shared/auth-helpers.ts";
+import {
+  pickPresetForDaily,
+  resolveScene,
+  logCinematic,
+  attachCinematicToPostHistory,
+} from "../_shared/cinematic-presets.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1946,6 +1952,29 @@ Deno.serve(async (req) => {
     // Derive title used for posting (re-build deterministically for metadata).
     const _titleForMeta = generateSkyBriefTitle(weather.city, weather.temperature, weather.condition, weather.rainChance, "morning");
     assertSlotTitlePrefix(_titleForMeta, "daily-weather-post:metadata");
+
+    // ── Cinematic Preset System: tag every published row with the decision so
+    // the visual-learning firewall can exclude fallback renders without
+    // retroactively punishing older posts.
+    const _cinematicDecision = resolveScene({
+      city: weather.city,
+      condition: weather.condition,
+      mediaUrl: storedImageUrl,
+      preset: pickPresetForDaily({
+        condition: weather.condition,
+        city: weather.city,
+        slot: "morning",
+        settings: settings as any,
+      }),
+      mode: visualStyle === "gradient" ? "gradient" : "image",
+      settings: settings as any,
+    });
+    logCinematic("daily-weather-post", _cinematicDecision, { city: weather.city, kind: "daily" });
+    const _cinPatch = attachCinematicToPostHistory(
+      { visual_metadata: { has_timestamp_in_title: titleHasTimestamp(_titleForMeta) } },
+      _cinematicDecision,
+    );
+
     const { data: historyRow, error: historyError } = await supabase.from("post_history").insert({
       status, platform, city: weather.city, temperature: weather.temperature,
       condition: weather.condition, image_url: storedImageUrl, error_message: errorMessage,
@@ -1959,7 +1988,8 @@ Deno.serve(async (req) => {
       cinematic_trigger: cinematicTrigger,
       voice_name: voiceUrl ? "AI" : null,
       debug_trace: persistedTrace,
-      visual_metadata: { has_timestamp_in_title: titleHasTimestamp(_titleForMeta) },
+      visual_metadata: _cinPatch.visual_metadata,
+      published_visual_source: _cinPatch.published_visual_source,
     }).select("id").single();
     if (historyError) console.error("Failed to log post history:", historyError);
 

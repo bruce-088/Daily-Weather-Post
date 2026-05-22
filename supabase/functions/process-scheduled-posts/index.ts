@@ -7,6 +7,12 @@ import { expandVisualMeta, getTopVisualStyle, classifyVisualTheme, classifyColor
 import { getRecentStyles, enforceStyleRotation } from "../_shared/style-rotation.ts";
 import { selectContextualVisualStyle } from "../_shared/visual-selector.ts";
 import { getAutoWinnerOverrides, type AutoWinnerOverrides } from "../_shared/auto-winner.ts";
+import {
+  pickPresetForDaily,
+  resolveScene,
+  logCinematic,
+  attachCinematicToPostHistory,
+} from "../_shared/cinematic-presets.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -3035,6 +3041,29 @@ Deno.serve(async (req) => {
         const healthBreakdown = { score: healthScore, tier: healthTier, items: breakdownItems };
         console.log(`[process] post ${post.id}: health_score=${healthScore} (${healthTier})`);
 
+        // ── Cinematic Preset System: persist preset/source/cost/eligible so
+        // the visual-learning firewall can exclude fallback renders. Decision
+        // is recomputed from the current render context (visualStyle drives
+        // gradient vs image mode; storedImageUrl is the history-image tier).
+        const _cinematicDecision = resolveScene({
+          city: weather.city,
+          condition: weather.condition,
+          mediaUrl: storedImageUrl,
+          preset: pickPresetForDaily({
+            condition: weather.condition,
+            city: weather.city,
+            slot: (post as any).slot || null,
+            settings: settings as any,
+          }),
+          mode: visualStyle === "gradient" ? "gradient" : "image",
+          settings: settings as any,
+        });
+        logCinematic("process-scheduled-posts", _cinematicDecision, { city: weather.city, kind: "daily" });
+        const _cinPatch = attachCinematicToPostHistory(
+          { visual_metadata: { ...(visualMeta || {}), has_timestamp_in_title: titleHasTimestamp(title) } },
+          _cinematicDecision,
+        );
+
         const { data: historyRow, error: historyErr } = await supabase.from("post_history").insert({
           status: historyStatus, platform: post.platform, city: weather.city,
           temperature: weather.temperature, condition: weather.condition,
@@ -3050,7 +3079,8 @@ Deno.serve(async (req) => {
           experiment_id: experimentCtx?.id ?? null,
           experiment_variant: experimentCtx?.variant ?? null,
           variant_id: (post as any).variant_id ?? experimentCtx?.variant ?? null,
-          visual_metadata: { ...(visualMeta || {}), has_timestamp_in_title: titleHasTimestamp(title) },
+          visual_metadata: _cinPatch.visual_metadata,
+          published_visual_source: _cinPatch.published_visual_source,
           health_score: healthScore,
           health_breakdown: healthBreakdown,
           // Persist hook + cinematic flags so the History UI shows them on

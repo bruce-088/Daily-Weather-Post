@@ -1441,6 +1441,7 @@ export type Database = {
           evening_platforms: Json
           evening_post_time: string
           evening_skip_date: string | null
+          exclude_fallback_from_learning: boolean
           id: string
           instagram_api_key: string | null
           linkedin_access_token: string | null
@@ -1454,7 +1455,9 @@ export type Database = {
           morning_skip_date: string | null
           post_time: string
           recap_youtube_channel: string | null
+          smart_cost_strategy: boolean
           state: string | null
+          strict_visuals_gainesville: boolean
           subscribe_cta_enabled: boolean
           tiktok_access_token: string | null
           tiktok_api_key: string | null
@@ -1501,6 +1504,7 @@ export type Database = {
           evening_platforms?: Json
           evening_post_time?: string
           evening_skip_date?: string | null
+          exclude_fallback_from_learning?: boolean
           id?: string
           instagram_api_key?: string | null
           linkedin_access_token?: string | null
@@ -1514,7 +1518,9 @@ export type Database = {
           morning_skip_date?: string | null
           post_time?: string
           recap_youtube_channel?: string | null
+          smart_cost_strategy?: boolean
           state?: string | null
+          strict_visuals_gainesville?: boolean
           subscribe_cta_enabled?: boolean
           tiktok_access_token?: string | null
           tiktok_api_key?: string | null
@@ -1561,6 +1567,7 @@ export type Database = {
           evening_platforms?: Json
           evening_post_time?: string
           evening_skip_date?: string | null
+          exclude_fallback_from_learning?: boolean
           id?: string
           instagram_api_key?: string | null
           linkedin_access_token?: string | null
@@ -1574,7 +1581,9 @@ export type Database = {
           morning_skip_date?: string | null
           post_time?: string
           recap_youtube_channel?: string | null
+          smart_cost_strategy?: boolean
           state?: string | null
+          strict_visuals_gainesville?: boolean
           subscribe_cta_enabled?: boolean
           tiktok_access_token?: string | null
           tiktok_api_key?: string | null
