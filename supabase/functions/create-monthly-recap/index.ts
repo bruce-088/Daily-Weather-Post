@@ -631,7 +631,7 @@ async function stitchSlideshow(
   const momentTheme: ThemeKey = monthly.moment?.kind === "coldest" ? "cool" : "warm";
   const momentGrad = THEMES[momentTheme];
   const momentTextPos = layoutTextProps(momentLayout);
-  elements.push(buildAnimatedGradientBg(momentStart, SLIDE_DUR, momentGrad));
+  elements.push(buildAnimatedGradientBg(momentStart, SLIDE_DUR, { ...momentGrad, label: momentTheme }, monthly.weekStats.length + 2));
 
   if (monthly.moment?.post.image_url && SAFE_IMAGE_ANIM) {
     elements.push({
