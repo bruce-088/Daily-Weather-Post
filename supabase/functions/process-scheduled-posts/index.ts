@@ -3046,6 +3046,9 @@ Deno.serve(async (req) => {
         // the visual-learning firewall can exclude fallback renders. Decision
         // is recomputed from the current render context (visualStyle drives
         // gradient vs image mode; storedImageUrl is the history-image tier).
+        // Resolve settings safely — never let a missing weather_settings row
+        // throw "settings is not defined" here.
+        const settings = await loadCinematicSettings(supabase, post.user_id);
         const _cinematicDecision = resolveScene({
           city: weather.city,
           condition: weather.condition,
