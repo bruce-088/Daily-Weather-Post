@@ -443,8 +443,6 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
     font_size: "8 vh", fill_color: "#ffffff",
     background_color: "rgba(0,0,0,0.25)", padding: 24,
     time: 0, duration: SLIDE_DUR,
-    enter_animation: { type: "fade", duration: 0.4 },
-    exit_animation: { type: "fade", duration: 0.4 },
   });
 
   // ── Day slides ── (gradient → image → scrim → text)
@@ -459,8 +457,6 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
         type: "image", source: p.image_url,
         time: start, duration: SLIDE_DUR,
         fit: "cover",
-        enter_animation: { type: "fade", duration: 0.4 },
-        exit_animation: { type: "fade", duration: 0.4 },
       });
       console.log(`[recap] slide ${i + 1} using image from history: ${p.image_url}`);
     } else {
@@ -480,7 +476,6 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
       font_size: "7 vh", fill_color: "#ffffff",
       background_color: "rgba(0,0,0,0.25)", padding: 24,
       time: start, duration: SLIDE_DUR,
-      enter_animation: { type: "slide", direction: "up", duration: 0.4 },
     });
   });
 
@@ -500,8 +495,6 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
     font_size: "7 vh", fill_color: "#ffffff",
     background_color: "rgba(0,0,0,0.25)", padding: 24,
     time: outroStart, duration: SLIDE_DUR,
-    enter_animation: { type: "fade", duration: 0.4 },
-    exit_animation: { type: "fade", duration: 0.4 },
   });
 
   const visualDuration0 = (slides.length + 2) * SLIDE_DUR; // title + slides + outro
