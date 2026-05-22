@@ -14,6 +14,7 @@
 // Does NOT touch render or posting pipeline.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { isLearningEligibleRow } from "../_shared/cinematic-presets.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -87,10 +88,17 @@ Deno.serve(async (req) => {
     const { data: history } = await supabase
       .from("post_history")
       .select(
-        "id, user_id, city, created_at, hook_id, hook_used, cinematic_mode, views_count, likes_count, retention_rate, condition",
+        "id, user_id, city, created_at, hook_id, hook_used, cinematic_mode, views_count, likes_count, retention_rate, condition, visual_metadata, published_visual_source",
       )
       .gte("created_at", since)
       .eq("status", "posted");
+
+    // [cinematic] Firewall: post_ids whose render was a fallback/gradient
+    // must not feed visual/cinematic winner stats.
+    const ineligiblePostIds = new Set<string>();
+    for (const h of (history || []) as any[]) {
+      if (!isLearningEligibleRow(h)) ineligiblePostIds.add(h.id);
+    }
 
     const hookIdToType = (id: string | null): string | null => {
       if (!id) return null;
@@ -171,8 +179,10 @@ Deno.serve(async (req) => {
       const hour = bestBucket(rows, (r) => r.posted_hour);
       const cond = bestBucket(rows, (r) => (r.condition ? r.condition.toLowerCase() : null));
 
-      const cinOn = rows.filter((r) => r.cinematic === true).map((r) => Number(r.score || 0));
-      const cinOff = rows.filter((r) => r.cinematic === false).map((r) => Number(r.score || 0));
+      // [cinematic] Firewall: exclude fallback/gradient renders from cinematic lift.
+      const cinEligible = rows.filter((r) => !r.post_id || !ineligiblePostIds.has(r.post_id));
+      const cinOn = cinEligible.filter((r) => r.cinematic === true).map((r) => Number(r.score || 0));
+      const cinOff = cinEligible.filter((r) => r.cinematic === false).map((r) => Number(r.score || 0));
       const cinematicLift =
         cinOn.length >= 2 && cinOff.length >= 2 && avg(cinOff) > 0
           ? Math.round(((avg(cinOn) - avg(cinOff)) / avg(cinOff)) * 100)
