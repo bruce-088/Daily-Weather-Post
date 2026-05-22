@@ -372,13 +372,20 @@ function buildAnimatedGradientBg(
   // built-in scale animation guarantees frame-to-frame change so Creatomate
   // emits a real MP4 (and not a 15KB JPEG snapshot of a static composition).
   return {
-    type: "shape",
-    path: "M 0 0 L 100 0 L 100 100 L 0 100 Z",
+    type: "rectangle",
     width: "100%",
     height: "100%",
     x: "50%",
     y: "50%",
-    fill_color: `linear-gradient(135deg, ${grad.from}, ${grad.to})`,
+    fill_color: grad.from, // solid fallback — guarantees a non-black base
+    gradient: {
+      type: "linear",
+      angle: 135,
+      stops: [
+        { offset: "0%", color: grad.from },
+        { offset: "100%", color: grad.to },
+      ],
+    },
     time,
     duration,
     animations: [
@@ -393,6 +400,20 @@ function buildAnimatedGradientBg(
         duration,
       },
     ],
+  };
+}
+
+// Full-frame 0.3 dark scrim used between background and text for legibility.
+function buildScrim(time: number, duration: number): any {
+  return {
+    type: "rectangle",
+    width: "100%",
+    height: "100%",
+    x: "50%",
+    y: "50%",
+    fill_color: "rgba(0,0,0,0.3)",
+    time,
+    duration,
   };
 }
 
@@ -419,26 +440,28 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
 
   const elements: any[] = [];
 
-  // ── Title card ──
+  // ── Title card ── (gradient → scrim → text)
   const titleGrad = gradientForSlide();
   elements.push(buildAnimatedGradientBg(0, SLIDE_DUR, titleGrad));
+  elements.push(buildScrim(0, SLIDE_DUR));
   elements.push({
     type: "text", text: title,
     x: "50%", y: "20%", width: "90%",
     font_family: "Inter", font_weight: "800",
     font_size: "8 vh", fill_color: "#ffffff",
-    background_color: "rgba(0,0,0,0.45)", padding: 24,
+    background_color: "rgba(0,0,0,0.25)", padding: 24,
     time: 0, duration: SLIDE_DUR,
     enter_animation: { type: "fade", duration: 0.4 },
     exit_animation: { type: "fade", duration: 0.4 },
   });
 
-  // ── Day slides ──
+  // ── Day slides ── (gradient → image → scrim → text)
   slides.forEach((p, i) => {
     const start = (i + 1) * SLIDE_DUR;
     const grad = gradientForSlide(p.created_at);
-    // Always-on animated gradient under the slide (safety net + motion guarantee)
+    // 1. Animated gradient base (safety net + motion guarantee)
     elements.push(buildAnimatedGradientBg(start, SLIDE_DUR, grad));
+    // 2. Image on top of gradient (if available)
     if (p.image_url) {
       elements.push({
         type: "image", source: p.image_url,
@@ -447,9 +470,13 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
         enter_animation: { type: "fade", duration: 0.4 },
         exit_animation: { type: "fade", duration: 0.4 },
       });
+      console.log(`[recap] slide ${i + 1} using image from history: ${p.image_url}`);
     } else {
       console.log(`[recap] slide ${i + 1} using animated gradient (no image_url) palette=${grad.label}`);
     }
+    // 3. 0.3 dark scrim for legibility
+    elements.push(buildScrim(start, SLIDE_DUR));
+    // 4. Text on top
     const day = new Date(p.created_at).toLocaleDateString("en-US", { weekday: "long" });
     const temp = p.temperature != null ? `${Math.round(p.temperature)}°F` : "";
     const cond = p.condition ?? "";
@@ -459,17 +486,19 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
       x: "50%", y: "50%", width: "90%",
       font_family: "Inter", font_weight: "700",
       font_size: "7 vh", fill_color: "#ffffff",
-      background_color: "rgba(0,0,0,0.55)", padding: 24,
+      background_color: "rgba(0,0,0,0.25)", padding: 24,
       time: start, duration: SLIDE_DUR,
       enter_animation: { type: "slide", direction: "up", duration: 0.4 },
     });
   });
 
-  // ── Outro card ──
+  // ── Outro card ── (gradient → scrim → text)
   const outroStart = (slides.length + 1) * SLIDE_DUR;
   const outroGrad = gradientForSlide();
   const outroBgIdx = elements.length;
   elements.push(buildAnimatedGradientBg(outroStart, SLIDE_DUR, outroGrad));
+  const outroScrimIdx = elements.length;
+  elements.push(buildScrim(outroStart, SLIDE_DUR));
   const outroTextIdx = elements.length;
   elements.push({
     type: "text",
@@ -477,7 +506,7 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
     x: "50%", y: "50%", width: "90%",
     font_family: "Inter", font_weight: "800",
     font_size: "7 vh", fill_color: "#ffffff",
-    background_color: "rgba(0,0,0,0.55)", padding: 24,
+    background_color: "rgba(0,0,0,0.25)", padding: 24,
     time: outroStart, duration: SLIDE_DUR,
     enter_animation: { type: "fade", duration: 0.4 },
     exit_animation: { type: "fade", duration: 0.4 },
@@ -489,6 +518,7 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
   if (totalDuration > visualDuration0) {
     const pad = totalDuration - visualDuration0;
     elements[outroTextIdx].duration += pad;
+    elements[outroScrimIdx].duration += pad;
     elements[outroBgIdx].duration += pad;
     elements[outroBgIdx].animations[0].duration += pad;
   }
@@ -534,6 +564,21 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
   }
   console.log(`[recap] audio mix: voice=${hasVoice ? "yes" : "no"} music=${hasMusic ? "yes" : "no"} silent_fallback=${usedSilentFallback ? "yes" : "no"}`);
 
+  // ── Safety fallback: never ship a visually empty composition ──
+  const visualCountPre = elements.filter((e) => e.type !== "audio").length;
+  if (visualCountPre === 0) {
+    console.warn("[recap] safety fallback: no visual elements, pushing solid background");
+    elements.unshift({
+      type: "rectangle",
+      width: "100%", height: "100%", x: "50%", y: "50%",
+      fill_color: "#0f172a",
+      time: 0, duration: totalDuration,
+    });
+  }
+
+  const visualCount = elements.filter((e) => e.type !== "audio").length;
+  const audioCount = elements.length - visualCount;
+  console.log(`[recap] elements count=${elements.length} visual=${visualCount} audio=${audioCount}`);
 
   // Creatomate v2 expects source fields (width/height/duration/elements) at
   // the TOP LEVEL of the request body, not nested under a `source` key.
