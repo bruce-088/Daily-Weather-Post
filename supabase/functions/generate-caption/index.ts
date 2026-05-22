@@ -711,6 +711,8 @@ ${ctaBlock}${antiRepeatBlock ? `\n\n${antiRepeatBlock}` : ""}`;
           });
         } catch {
           /* best-effort */
+        }
+      }
     }
 
     // Nuclear fallback: catch ANY non-city word in "enjoying the weather in ___"
@@ -743,8 +745,6 @@ ${ctaBlock}${antiRepeatBlock ? `\n\n${antiRepeatBlock}` : ""}`;
       if (subscribeRe.test(caption)) {
         console.warn(`[generate-caption] nuclear fallback triggered: "subscribe for ___ weather alerts" had wrong location for ${city}`);
         caption = caption.replace(subscribeRe, `$1${city}$3`);
-      }
-    }
       }
     }
     // City-handle sanitizer: replace any @SkyBrief* token that doesn't match
