@@ -455,15 +455,37 @@ function gradientForSlide(createdAt?: string): { from: string; to: string; label
 function buildAnimatedGradientBg(
   time: number,
   duration: number,
-  grad: { from: string; to: string; label?: string },
+  grad: { from?: string; to?: string; label?: string } | null | undefined,
   slideNum?: number,
 ): any {
-  // Creatomate gradient fill: pass color stops as an array with
-  // fill_color_type="linear-gradient" + an explicit angle so themed
-  // warm/cool/neutral backgrounds render instead of a flat solid color.
+  // Creatomate gradient fill: stops use `offset` (0%..100%), NOT `position`.
+  // Passing `position` triggers "Shape.fill_color[0].offset: Shouldn't be
+  // null or undefined" and the entire render fails.
+  const from = grad?.from;
+  const to = grad?.to;
+  const label = grad?.label ?? "?";
+
+  // Safety fallback: missing gradient → solid hex so render never fails.
+  if (!from || !to) {
+    console.warn(
+      `[monthly-recap] slide ${slideNum ?? "?"} missing gradient (label=${label}) — using solid fallback #0f172a`,
+    );
+    return {
+      type: "shape",
+      shape_type: "rectangle",
+      width: "100%",
+      height: "100%",
+      x: "50%",
+      y: "50%",
+      fill_color: from || to || "#0f172a",
+      time,
+      duration,
+    };
+  }
+
   if (typeof slideNum === "number") {
     console.log(
-      `[monthly-recap] slide ${slideNum} background gradient=${grad.label ?? "?"} ${grad.from}\u2192${grad.to}`,
+      `[monthly-recap] slide ${slideNum} background gradient=${label} ${from}\u2192${to}`,
     );
   }
   return {
@@ -474,9 +496,10 @@ function buildAnimatedGradientBg(
     x: "50%",
     y: "50%",
     fill_color: [
-      { position: 0, color: grad.from },
-      { position: 1, color: grad.to },
+      { offset: "0%", color: from },
+      { offset: "100%", color: to },
     ],
+    gradient: "linear",
     fill_color_type: "linear-gradient",
     fill_color_angle: 135,
     time,
