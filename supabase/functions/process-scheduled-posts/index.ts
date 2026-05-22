@@ -2342,6 +2342,15 @@ Deno.serve(async (req) => {
 
               // Final safety net
               if (caption) caption = stripUnverifiedReferences(caption, weather.city);
+              // City-proxy sanitizer (BLACKLIST + nuclear fallback + handle guard).
+              // Catches "weather in Clear Skies", foreign @SkyBrief* handles, hashtag drift.
+              if (caption) {
+                const before = caption;
+                caption = sanitizeCityProxies(caption, weather.city);
+                if (before !== caption) {
+                  console.log(`[process-scheduled-posts] city-proxy sanitized for ${weather.city} (post=${post.id})`);
+                }
+              }
             } catch (e) {
               console.error("Caption generation failed:", e);
             }
