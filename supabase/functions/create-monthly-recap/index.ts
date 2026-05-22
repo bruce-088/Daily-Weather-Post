@@ -1113,6 +1113,20 @@ Deno.serve(async (req) => {
     console.log(`[manual] monthly triggered for city=${cityFilter ?? "(any)"} by user=${gate.source === "user" ? gate.userId : (userFilter ?? "cron")}`);
   }
 
+  // Last-day-of-month guard for cron-only invocations (cron is scheduled 28-31 nightly;
+  // only the actual last day should fire). Manual user-triggered or explicit filters bypass.
+  if (gate.source === "cron" && !cityFilter && !userFilter) {
+    const now = new Date();
+    const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const isLastDay = now.getUTCMonth() !== tomorrow.getUTCMonth();
+    if (!isLastDay) {
+      console.log(`[monthly-recap] cron skipped: not last day of month (UTC date=${now.toISOString().slice(0,10)})`);
+      return new Response(JSON.stringify({ ok: true, skipped: "not-last-day" }), {
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }
+
   // Find users with YouTube connected
   let cq = svc
     .from("weather_settings")
