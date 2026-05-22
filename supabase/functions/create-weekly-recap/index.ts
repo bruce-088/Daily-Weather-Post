@@ -598,6 +598,8 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
   const city = posts[0]?.city ?? "your city";
 
   const elements: any[] = [];
+  // [cinematic] Per-recap accumulator for system_logs.
+  const cinematicDecisions: SceneDecision[] = [];
 
   // ── Title card ── (gradient → scrim → text)
   const titleGrad = gradientForSlide();
@@ -633,6 +635,9 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
       mediaUrl: p.image_url,
       condition: p.condition,
       logPrefix: "recap",
+      city,
+      recapSlideKind: isHighlight ? "highlight" : "day",
+      decisionsOut: cinematicDecisions,
     });
     elements.push(...bgEls);
     // 3. Scrim for legibility (slightly darker on midweek highlight)
