@@ -13,7 +13,10 @@ import {
   logCinematic,
   attachCinematicToPostHistory,
   loadCinematicSettings,
+  SAFE_CINEMATIC_DEFAULTS,
 } from "../_shared/cinematic-presets.ts";
+
+const PROCESS_SCHEDULED_POSTS_BUILD = "settings-guard-2026-05-22T16:50Z";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1558,6 +1561,15 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const url = new URL(req.url);
+  if (url.searchParams.get("health") === "1") {
+    console.log(`[process] health build=${PROCESS_SCHEDULED_POSTS_BUILD}`);
+    return new Response(
+      JSON.stringify({ success: true, function: "process-scheduled-posts", build: PROCESS_SCHEDULED_POSTS_BUILD }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
   const _gate = await requireCronOrUser(req);
   if (!_gate.ok) return _gate.response;
 
@@ -1566,6 +1578,7 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
+    console.log(`[process] build=${PROCESS_SCHEDULED_POSTS_BUILD}`);
 
     const openWeatherApiKey = Deno.env.get("OPENWEATHER_API_KEY");
     if (!openWeatherApiKey) {
@@ -1660,7 +1673,7 @@ Deno.serve(async (req) => {
     if (fetchError) throw new Error(`Failed to fetch scheduled posts: ${fetchError.message}`);
     if (!duePosts || duePosts.length === 0) {
       return new Response(
-        JSON.stringify({ success: true, message: "No posts due", processed: 0, missed_recovered: missedCount || 0 }),
+        JSON.stringify({ success: true, message: "No posts due", processed: 0, missed_recovered: missedCount || 0, build: PROCESS_SCHEDULED_POSTS_BUILD }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -3053,7 +3066,7 @@ Deno.serve(async (req) => {
           published_visual_source: null,
         };
         try {
-          const settings = await loadCinematicSettings(supabase, post.user_id);
+          const cinematicSettings = (await loadCinematicSettings(supabase, post.user_id)) || { ...SAFE_CINEMATIC_DEFAULTS };
           const _cinematicDecision = resolveScene({
             city: weather.city,
             condition: weather.condition,
@@ -3062,10 +3075,10 @@ Deno.serve(async (req) => {
               condition: weather.condition,
               city: weather.city,
               slot: (post as any).slot || null,
-              settings: settings as any,
+              settings: cinematicSettings as any,
             }),
             mode: visualStyle === "gradient" ? "gradient" : "image",
-            settings: settings as any,
+            settings: cinematicSettings as any,
           });
           logCinematic("process-scheduled-posts", _cinematicDecision, { city: weather.city, kind: "daily" });
           _cinPatch = attachCinematicToPostHistory(
@@ -3298,9 +3311,10 @@ Deno.serve(async (req) => {
 
         processed++;
       } catch (postError) {
-        const errMsg = postError instanceof Error ? postError.message : "Processing failed";
-        const errStack = postError instanceof Error ? (postError.stack || "").split("\n").slice(0, 6).join(" | ") : "";
-        console.error(`[process] post ${post.id} threw: ${errMsg} :: ${errStack}`);
+        const errMsg = postError instanceof Error ? postError.message : String(postError || "Processing failed");
+        const errStack = postError instanceof Error ? (postError.stack || "") : "";
+        console.error(`[process] per-post catch build=${PROCESS_SCHEDULED_POSTS_BUILD} post_id=${post.id} message=${errMsg}`);
+        console.error(`[process] per-post stack post_id=${post.id}\n${errStack || "<no stack>"}`);
 
         const currentRetryCount = (post as any).retry_count ?? 0;
         const MAX_RETRIES = 2;
@@ -3395,6 +3409,7 @@ Deno.serve(async (req) => {
         failed,
         mode: skipPost ? "dev" : "post",
         preview_url: previewUrl,
+        build: PROCESS_SCHEDULED_POSTS_BUILD,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
