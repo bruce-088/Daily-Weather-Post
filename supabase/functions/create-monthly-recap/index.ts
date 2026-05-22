@@ -695,7 +695,13 @@ async function stitchSlideshow(
     const grad = THEMES[themeKey];
     const textPos = layoutTextProps(layout);
 
-    elements.push(buildAnimatedGradientBg(start, SLIDE_DUR, { ...grad, label: themeKey }, i + 2));
+    elements.push(...buildSlideBackground({
+      time: start, duration: SLIDE_DUR, slideNum: i + 2,
+      grad: { ...grad, label: themeKey },
+      mode: "image",
+      condition: w.dominantCondition ?? null,
+      logPrefix: "monthly-recap",
+    }));
     elements.push(buildScrim(start, SLIDE_DUR, 0.32));
 
     const headline = `Week ${w.weekNum}`;
