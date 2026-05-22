@@ -356,3 +356,49 @@ export function isLearningEligibleRow(
   if (!row) return true;
   return isEligibleVisualMetadata(row.visual_metadata) && isEligiblePublishedSource(row.published_visual_source);
 }
+
+// ── Safe-default settings loader ──────────────────────────────────────────
+//
+// Every daily publish path (daily-weather-post, process-scheduled-posts,
+// publish-preview-bundle) MUST resolve a `settings` object before calling
+// pickPresetForDaily() / resolveScene(). This helper guarantees a usable
+// object even when the weather_settings row is missing, errors, or lacks
+// the newer cinematic columns — so a settings-fetch failure can never
+// short-circuit a post with "settings is not defined".
+
+export const SAFE_CINEMATIC_DEFAULTS: CinematicSettings = {
+  smart_cost_strategy: true,
+  strict_visuals_gainesville: true,
+  exclude_fallback_from_learning: true,
+  auto_cinematic_for_storms: true,
+};
+
+export async function loadCinematicSettings(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  userId: string,
+): Promise<CinematicSettings & Record<string, unknown>> {
+  try {
+    if (!userId) return { ...SAFE_CINEMATIC_DEFAULTS };
+    const { data, error } = await supabase
+      .from("weather_settings")
+      .select("*")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (error || !data) {
+      console.warn(`[cinematic] settings fetch fallback for ${userId}: ${error?.message ?? "no row"}`);
+      return { ...SAFE_CINEMATIC_DEFAULTS };
+    }
+    return {
+      ...SAFE_CINEMATIC_DEFAULTS,
+      ...data,
+      smart_cost_strategy: (data as any).smart_cost_strategy ?? true,
+      strict_visuals_gainesville: (data as any).strict_visuals_gainesville ?? true,
+      exclude_fallback_from_learning: (data as any).exclude_fallback_from_learning ?? true,
+      auto_cinematic_for_storms: (data as any).auto_cinematic_for_storms ?? true,
+    };
+  } catch (e) {
+    console.warn(`[cinematic] settings fetch threw — using defaults:`, (e as Error)?.message);
+    return { ...SAFE_CINEMATIC_DEFAULTS };
+  }
+}
