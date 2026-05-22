@@ -380,18 +380,6 @@ function buildAnimatedGradientBg(
     fill_color: grad.from, // solid fill — Creatomate rectangles don't support gradient stops natively
     time,
     duration,
-    animations: [
-      {
-        easing: "linear",
-        type: "scale",
-        scope: "element",
-        fade: false,
-        scale: { x: 1.08, y: 1.08 },
-        start_scale: { x: 1.0, y: 1.0 },
-        time: "start",
-        duration,
-      },
-    ],
   };
 }
 
