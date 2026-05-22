@@ -1,73 +1,40 @@
-# Plan: Background weekly recap render+upload via EdgeRuntime.waitUntil
+# Plan: Relax weekly recap size guard 1MB → 100KB
 
-Scoped to `supabase/functions/create-weekly-recap/index.ts` only. No schema changes, no other function changes.
-
-## Problem
-
-`runForUser` does the full Creatomate poll loop (up to ~60s+) plus the YouTube upload synchronously inside the request handler. The pg_cron caller hits Supabase's ~150s request-idle ceiling and times out before `[recap] uploaded to YouTube as videoId: …` fires, even though the render itself succeeds.
+Scoped to `supabase/functions/create-weekly-recap/index.ts`. Two literal swaps, nothing else.
 
 ## Change
 
-Rework only the `Deno.serve` handler at the bottom of the file (lines 671–735). All helper functions (`stitchSlideshow`, `uploadLongFormToYouTube`, `generateFallbackInfographic`, `runForUser`, etc.) remain untouched — their logs and `post_history` write paths (success row, failed row, fallback infographic row) are already correct.
+Replace both `1_000_000` thresholds with `100_000`:
 
-### New handler shape
+- **Line 416** — post-render validator inside `stitchSlideshow`:
+  ```ts
+  if (bytes < 100_000 || !/video\/mp4/i.test(contentType)) { … abort … }
+  ```
+- **Line 601** — pre-upload HEAD guard inside `runForUser`:
+  ```ts
+  if ((hLen > 0 && hLen < 100_000) || (hType !== "unknown" && !/video\/mp4/i.test(hType))) { … abort … }
+  ```
 
-```text
-Deno.serve(req):
-  OPTIONS → cors
-  auth gate → reject if not ok
-  parse optional { city, user_id } body
-  query candidate users (same as today)
+Keep everything else identical:
+- `content-type: video/mp4` check — unchanged
+- `reportedDuration ≥ 60s` warning log — unchanged (already separate)
+- All log strings unchanged (still emit byte count + type so we can see what passed)
+- Failure paths, fallback infographic path, post_history rows — unchanged
 
-  build a single async work() closure that:
-    - loops candidates
-    - calls runForUser(svc, user_id, cityFilter) per user
-    - catches per-user errors, pushes into results[]
-    - after loop, upserts system_health row (same payload as today)
-    - logs `[recap] background job complete: N/M recaps`
+## Why 100 KB
 
-  if EdgeRuntime?.waitUntil exists:
-      EdgeRuntime.waitUntil(work())
-  else:
-      work().catch(e => console.error('[recap] background failed:', e))
-
-  return 202 immediately with { ok: true, accepted: true, candidates: candidates.length }
-```
-
-### Key properties
-
-- **Immediate 202 response** to the cron caller — the pg_cron HTTP request closes before any Creatomate polling happens.
-- **All existing logs still fire** inside the background closure because `runForUser` is called unchanged: `[recap] render output size=…`, `[recap] render duration reported by Creatomate: …`, `[recap] pre-upload HEAD check: …`, `[recap] uploaded to YouTube as videoId: …`.
-- **Failure rows unchanged**: any throw or upload failure inside `runForUser` already writes a `failed` row to `post_history` (no-token, pre-upload guard, both-stitch-and-infographic-failed). The outer per-user try/catch still logs `[recap] user … failed:` for unexpected throws.
-- **system_health upsert** moves inside `work()` so it reflects what actually ran in the background, not what was queued.
-- **Fallback** when `EdgeRuntime` is undefined (local dev): fire-and-forget with `.catch`. Plan-of-record runtime is Supabase Edge, where `EdgeRuntime.waitUntil` is always available.
-
-### Response body
-
-Keep the response JSON small and obviously async:
-```json
-{ "ok": true, "accepted": true, "candidates": <count> }
-```
-HTTP 202. The cron caller doesn't read the body — it only needs a 2xx.
+A flat-gradient + text 81s 1080p MP4 H.264 compresses to ~280 KB — well above 100 KB but far below 1 MB. 100 KB still rejects the original failure mode (15 KB single-frame JPEG masquerading as video) with ~6× headroom.
 
 ## Verify after deploy
 
-1. Trigger one manual recap: `POST /create-weekly-recap` with service-role and `{ "user_id": "<id>" }`.
-2. Confirm:
-   - HTTP response returns within a second or two with `{ ok: true, accepted: true }`.
-   - Edge logs continue past poll 26 and show:
-     - `[recap] render output size=XXXXXX type=video/mp4` (>1MB)
-     - `[recap] render duration reported by Creatomate: Ns` (N ≥ 65)
-     - `[recap] pre-upload HEAD check: status=200 length=… type=video/mp4`
-     - `[recap] uploaded to YouTube as videoId: …`
-     - `[recap] background job complete: 1/1 recaps`
-   - Video appears in the YouTube **Videos** tab (not Shorts, not "Processing abandoned").
-   - `post_history` has a `succeeded` row with the new `external_id`.
+Re-trigger the Gainesville manual recap. Expect in logs:
+- `[recap] render output size=287849 type=video/mp4` (no ABORT this time)
+- `[recap] pre-upload HEAD check: status=200 length=~287849 type=video/mp4`
+- `[recap] uploaded to YouTube as videoId: …`
+- `[recap] background job complete: 1/1 recaps`
+- Video appears under YouTube **Videos** tab (not Shorts, not "Processing abandoned").
 
 ## Out of scope
 
-- No changes to `stitchSlideshow`, `uploadLongFormToYouTube`, `generateFallbackInfographic`, or `runForUser`.
-- No schema changes.
-- No other edge functions.
-- No frontend changes.
-- No daily Shorts pipeline changes.
+- No changes to duration warning logic, gradient builder, Creatomate payload, or fallback infographic.
+- No schema or other-function changes.
