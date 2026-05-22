@@ -72,7 +72,7 @@ export function CityCommandCenter() {
 
   const cityBusy = (cityId: string) =>
     (["post", "dev"] as Mode[]).some((m) =>
-      (["daily", "weekly", "monthly"] as RunType[]).some((t) => getRun(cityId, m, t).status === "running"),
+      (["daily", "weekly", "monthly", "yearly"] as RunType[]).some((t) => getRun(cityId, m, t).status === "running"),
     );
 
   const handleClick = (city: City, mode: Mode, type: RunType) => {
