@@ -1,26 +1,26 @@
-// Weekly Recap pipeline (ISOLATED).
+// Monthly Recap pipeline (ISOLATED).
 //
-// Goal: turn the last 7 daily successful posts into ONE long-form YouTube
-// video, posted automatically every Sunday at 18:00 UTC.
+// Goal: turn the last 30 days of successful posts into ONE long-form YouTube
+// video — 7 slides: title + 4 weekly overviews + 1 "Moment of the Month"
+// highlight + outro. Posted automatically at 23:59 UTC on the last day of
+// each month.
 //
-// Hard rules (per spec):
+// Hard rules (mirror weekly):
 //   - DO NOT modify auto-post-scheduler or process-scheduled-posts.
 //   - DO NOT share locks/queues with the daily pipeline.
 //   - If video stitch fails -> generate an infographic image as fallback.
 //
 // Triggered by:
-//   - pg_cron Sunday 18:00 UTC -> POST /functions/v1/create-weekly-recap
-//   - Manual: POST {} with Authorization: Bearer <service_role>
+//   - pg_cron 23:59 UTC on the last day of each month -> POST /functions/v1/create-monthly-recap
+//   - Manual: POST {city?, user_id?} with Authorization: Bearer <user JWT|service_role>
 //
 // Per-run flow (per user with YouTube connected):
-//   1. Fetch last 7 succeeded posts from post_history
-//   2. Pull top "best hooks" from ai_memory (Step 2 layer)
-//   3. Ask Lovable AI for a continuous weekly script (high/low + conditions)
-//   4. Build a Creatomate slideshow that stitches the 7 image_urls + voice/text
+//   1. Fetch last 30 days of succeeded posts from post_history
+//   2. Bucket into 4 weekly summaries + auto-detect "Moment of the Month"
+//   3. Ask Lovable AI for {title, script, weekSummaries[4], momentLine}
+//   4. Build a Creatomate 7-slide composition + voice (2.5) + music (0.15)
 //   5. Upload to YouTube as long-form (privacyStatus=public)
-//   6. On stitch failure: generate a "Weekly Summary" image via Lovable AI
-//      image gen, save to post_history with status='fallback_image',
-//      notify user, EXIT cleanly (no daily-pipeline interaction).
+//   6. On stitch failure: generate a "Month in Review" infographic fallback.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
