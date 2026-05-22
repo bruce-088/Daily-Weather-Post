@@ -542,6 +542,30 @@ Deno.serve(async (req) => {
           }
         }
 
+        // === IDEMPOTENCY GUARDS ===
+        // After publish_locks approves a platform, also check:
+        //  (a) any active generate_content job already exists for this slot
+        //  (b) any successful post for this slot in the last 12h
+        // Either condition → drop the platform from this tick.
+        const guardedPlatforms: string[] = [];
+        for (const platform of allowedPlatforms) {
+          const [hasJob, hasSuccess] = await Promise.all([
+            existingJobForSlot(supabase, target.user_id, target.city, platform, period.name),
+            recentSuccessForSlot(supabase, target.user_id, target.city, platform, period.name),
+          ]);
+          if (hasJob) {
+            console.log(`[scheduler] Slot=${period.name} City=${target.city} Platform=${platform} Status=Skipped_Existing reason=job_pending`);
+            continue;
+          }
+          if (hasSuccess) {
+            console.log(`[scheduler] Slot=${period.name} City=${target.city} Platform=${platform} Status=Skipped_Existing reason=recent_success`);
+            continue;
+          }
+          guardedPlatforms.push(platform);
+        }
+        allowedPlatforms.length = 0;
+        for (const p of guardedPlatforms) allowedPlatforms.push(p);
+
         // Legacy caption-based duplicate guard for rows without city_id.
         if (!target.city_id) {
           const dupSince = new Date(now.getTime() - DUPLICATE_GUARD_MINUTES * 60 * 1000).toISOString();
