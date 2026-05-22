@@ -695,6 +695,8 @@ async function stitchSlideshow(
   console.log(`[monthly-recap] stitch inputs: weeks=${monthly.weekStats.length} moment=${monthly.moment ? "yes" : "no"} slide_dur=${SLIDE_DUR}s voice=${voiceDur}s`);
 
   const elements: any[] = [];
+  // [cinematic] Per-recap accumulator for system_logs.
+  const cinematicDecisions: SceneDecision[] = [];
 
   // ── Title card ──
   const titleGrad = gradientForSlide();
