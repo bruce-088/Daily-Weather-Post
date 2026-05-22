@@ -534,7 +534,7 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
   const outroStart = (slides.length + 1) * SLIDE_DUR;
   const outroGrad = gradientForSlide();
   const outroBgIdx = elements.length;
-  elements.push(buildAnimatedGradientBg(outroStart, SLIDE_DUR, outroGrad));
+  elements.push(buildAnimatedGradientBg(outroStart, SLIDE_DUR, { ...outroGrad }, slides.length + 2));
   const outroScrimIdx = elements.length;
   elements.push(buildScrim(outroStart, SLIDE_DUR));
   const outroTextIdx = elements.length;
