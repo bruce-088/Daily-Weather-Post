@@ -43,6 +43,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PostHistoryList } from "@/components/PostHistoryList";
 import { AnalyticsPanel } from "@/components/AnalyticsPanel";
+import { SchedulerAnalytics } from "@/components/SchedulerAnalytics";
 import { SmartInsightsCard } from "@/components/SmartInsightsCard";
 import { GrowthSummaryCard } from "@/components/GrowthSummaryCard";
 import { GrowthDashboard, OutperformingPosts } from "@/components/GrowthDashboard";
@@ -1119,6 +1120,7 @@ const Index = () => {
                   </p>
                 </div>
               </div>
+              <SchedulerAnalytics />
               <SmartInsightsCard />
               <GrowthInsights />
               <AnalyticsPanel />
