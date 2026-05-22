@@ -314,16 +314,16 @@ async function createSignedSilentAudio(svc: any, userId: string, durationSeconds
   const { error: uploadError } = await svc.storage.from("generated-images")
     .upload(path, wav, { contentType: "audio/wav", upsert: true });
   if (uploadError) {
-    console.error("[recap] silent audio upload failed:", uploadError.message);
+    console.error("[monthly-recap] silent audio upload failed:", uploadError.message);
     return null;
   }
   const { data: signed, error: signedError } = await svc.storage.from("generated-images")
     .createSignedUrl(path, 60 * 60);
   if (signedError || !signed?.signedUrl) {
-    console.error("[recap] silent audio signed url failed:", signedError?.message ?? "missing signed URL");
+    console.error("[monthly-recap] silent audio signed url failed:", signedError?.message ?? "missing signed URL");
     return null;
   }
-  console.log(`[recap] silent audio ready: duration=${roundedDuration}s bytes=${wav.byteLength}`);
+  console.log(`[monthly-recap] silent audio ready: duration=${roundedDuration}s bytes=${wav.byteLength}`);
   return signed.signedUrl;
 }
 
@@ -347,17 +347,17 @@ async function synthesizeRecapVoice(
       .maybeSingle();
     settings = data;
   } catch (e) {
-    console.warn("[recap] could not load voiceover settings:", (e as Error).message);
+    console.warn("[monthly-recap] could not load voiceover settings:", (e as Error).message);
   }
 
   if (!settings || settings.enable_voiceover !== true) {
-    console.log(`[recap] voice synth skipped: enable_voiceover=${settings?.enable_voiceover ?? "n/a"}`);
+    console.log(`[monthly-recap] voice synth skipped: enable_voiceover=${settings?.enable_voiceover ?? "n/a"}`);
     return null;
   }
 
   const key = resolveElevenLabsKey();
   if (!key) {
-    console.error("[recap] voice synth failed, falling back to silent render: no ElevenLabs API key in env");
+    console.error("[monthly-recap] voice synth failed, falling back to silent render: no ElevenLabs API key in env");
     return null;
   }
 
@@ -367,7 +367,7 @@ async function synthesizeRecapVoice(
   const similarity = clampVoiceParam(settings.voiceover_similarity, 0, 1, 0.78);
   const wordCount = (script || "").trim().split(/\s+/).filter(Boolean).length;
   const estDurationSec = Math.max(10, Math.ceil(wordCount / 2.5));
-  console.log(`[recap] synthesizing 0:${estDurationSec}s voice script via ElevenLabs voice=${voiceId} source=${key.source} words=${wordCount}`);
+  console.log(`[monthly-recap] synthesizing 0:${estDurationSec}s voice script via ElevenLabs voice=${voiceId} source=${key.source} words=${wordCount}`);
 
   const url = `https://api.elevenlabs.io/v1/text-to-speech/${resolveVoiceId(voiceId)}?output_format=mp3_44100_128`;
   const body = JSON.stringify({
@@ -394,26 +394,26 @@ async function synthesizeRecapVoice(
         break;
       }
       const detail = (await res.text()).slice(0, 200);
-      console.error(`[recap] voice synth attempt ${attempt}/${MAX_ATTEMPTS} failed: status=${res.status} ${detail}`);
+      console.error(`[monthly-recap] voice synth attempt ${attempt}/${MAX_ATTEMPTS} failed: status=${res.status} ${detail}`);
       if (attempt < MAX_ATTEMPTS && res.status >= 500) {
         await new Promise((r) => setTimeout(r, 2000));
         continue;
       }
-      console.error("[recap] voice synth failed, falling back to silent render");
+      console.error("[monthly-recap] voice synth failed, falling back to silent render");
       return null;
     } catch (e) {
       clearTimeout(timer);
-      console.error(`[recap] voice synth attempt ${attempt}/${MAX_ATTEMPTS} error:`, (e as Error).message);
+      console.error(`[monthly-recap] voice synth attempt ${attempt}/${MAX_ATTEMPTS} error:`, (e as Error).message);
       if (attempt < MAX_ATTEMPTS) {
         await new Promise((r) => setTimeout(r, 2000));
         continue;
       }
-      console.error("[recap] voice synth failed, falling back to silent render");
+      console.error("[monthly-recap] voice synth failed, falling back to silent render");
       return null;
     }
   }
   if (!bytes) {
-    console.error("[recap] voice synth failed, falling back to silent render: no bytes");
+    console.error("[monthly-recap] voice synth failed, falling back to silent render: no bytes");
     return null;
   }
 
@@ -422,19 +422,19 @@ async function synthesizeRecapVoice(
     .from("generated-images")
     .upload(path, bytes, { contentType: "audio/mpeg", upsert: true });
   if (upErr) {
-    console.error("[recap] voice synth failed, falling back to silent render: upload error:", upErr.message);
+    console.error("[monthly-recap] voice synth failed, falling back to silent render: upload error:", upErr.message);
     return null;
   }
   const { data: signed, error: signedErr } = await svc.storage
     .from("generated-images")
     .createSignedUrl(path, 60 * 60);
   if (signedErr || !signed?.signedUrl) {
-    console.error("[recap] voice synth failed, falling back to silent render: signed url error:", signedErr?.message);
+    console.error("[monthly-recap] voice synth failed, falling back to silent render: signed url error:", signedErr?.message);
     return null;
   }
   // mp3 @ 128kbps ≈ 16000 bytes/sec
   const durationSec = Math.max(estDurationSec, Math.ceil(bytes.byteLength / 16000));
-  console.log(`[recap] voice asset ready: ${signed.signedUrl} bytes=${bytes.byteLength} duration=${durationSec}s`);
+  console.log(`[monthly-recap] voice asset ready: ${signed.signedUrl} bytes=${bytes.byteLength} duration=${durationSec}s`);
   return { url: signed.signedUrl, durationSec };
 }
 
@@ -730,7 +730,7 @@ async function stitchSlideshow(
         volume: 0.01,
       });
     } else {
-      console.warn("[recap] continuing without any audio track; YouTube may abandon processing");
+      console.warn("[monthly-recap] continuing without any audio track; YouTube may abandon processing");
     }
   }
   console.log(`[monthly-recap] audio mix: voice=${hasVoice ? "yes(vol=2.5)" : "no"} music=${hasMusic ? "yes(vol=0.15)" : "no"} silent_fallback=${usedSilentFallback ? "yes" : "no"}`);
@@ -738,7 +738,7 @@ async function stitchSlideshow(
   // ── Safety fallback: never ship a visually empty composition ──
   const visualCountPre = elements.filter((e) => e.type !== "audio").length;
   if (visualCountPre === 0) {
-    console.warn("[recap] safety fallback: no visual elements, pushing solid background");
+    console.warn("[monthly-recap] safety fallback: no visual elements, pushing solid background");
     elements.unshift({
       type: "shape",
       shape_type: "rectangle",
@@ -750,22 +750,22 @@ async function stitchSlideshow(
 
   const visualCount = elements.filter((e) => e.type !== "audio").length;
   const audioCount = elements.length - visualCount;
-  console.log(`[recap] elements count=${elements.length} visual=${visualCount} audio=${audioCount}`);
+  console.log(`[monthly-recap] elements count=${elements.length} visual=${visualCount} audio=${audioCount}`);
 
   // Debug: identify any element (or nested animation) missing `type`
   elements.forEach((el, idx) => {
     if (!el || typeof el.type !== "string" || el.type.length === 0) {
-      console.error(`[recap] BAD_ELEMENT idx=${idx} keys=${Object.keys(el ?? {}).join(",")} preview=${JSON.stringify(el).slice(0, 300)}`);
+      console.error(`[monthly-recap] BAD_ELEMENT idx=${idx} keys=${Object.keys(el ?? {}).join(",")} preview=${JSON.stringify(el).slice(0, 300)}`);
     }
     if (Array.isArray(el?.animations)) {
       el.animations.forEach((a: any, ai: number) => {
         if (!a || typeof a.type !== "string") {
-          console.error(`[recap] BAD_ANIMATION el=${idx} ai=${ai} preview=${JSON.stringify(a).slice(0, 300)}`);
+          console.error(`[monthly-recap] BAD_ANIMATION el=${idx} ai=${ai} preview=${JSON.stringify(a).slice(0, 300)}`);
         }
       });
     }
   });
-  console.log(`[recap] DEBUG full source: ${JSON.stringify({ width: 1920, height: 1080, duration: totalDuration, elements }).slice(0, 4000)}`);
+  console.log(`[monthly-recap] DEBUG full source: ${JSON.stringify({ width: 1920, height: 1080, duration: totalDuration, elements }).slice(0, 4000)}`);
 
   // Creatomate v2 expects source fields (width/height/duration/elements) at
   // the TOP LEVEL of the request body, not nested under a `source` key.
@@ -788,7 +788,7 @@ async function stitchSlideshow(
   });
   const submitText = await submit.text();
   if (!submit.ok) {
-    console.error("[recap] Creatomate submit failed:", submit.status, submitText.slice(0, 300));
+    console.error("[monthly-recap] Creatomate submit failed:", submit.status, submitText.slice(0, 300));
     return null;
   }
   let renders: any;
@@ -803,36 +803,36 @@ async function stitchSlideshow(
     });
     if (!sr.ok) continue;
     const sd = await sr.json();
-    console.log(`[recap] creatomate poll ${i}: status=${sd.status} url=${sd.url ?? "?"} snapshot=${sd.snapshot_url ?? "?"} dur=${sd.duration ?? "?"} format=${sd.format ?? sd.output_format ?? "?"} err=${sd.error_message ?? ""}`);
+    console.log(`[monthly-recap] creatomate poll ${i}: status=${sd.status} url=${sd.url ?? "?"} snapshot=${sd.snapshot_url ?? "?"} dur=${sd.duration ?? "?"} format=${sd.format ?? sd.output_format ?? "?"} err=${sd.error_message ?? ""}`);
     if (sd.status === "succeeded" && sd.url) {
       const reportedDuration: number | undefined =
         typeof sd.duration === "number" ? sd.duration : undefined;
-      console.log(`[recap] render duration reported by Creatomate: ${reportedDuration ?? "?"}s`);
+      console.log(`[monthly-recap] render duration reported by Creatomate: ${reportedDuration ?? "?"}s`);
       if (typeof reportedDuration === "number" && reportedDuration < 60) {
-        console.warn(`[recap] WARNING: duration under 60s, YouTube will reject`);
+        console.warn(`[monthly-recap] WARNING: duration under 60s, YouTube will reject`);
       }
       const dl = await fetch(sd.url);
       if (!dl.ok) {
-        console.error(`[recap] ABORT: render output invalid (download status=${dl.status})`);
+        console.error(`[monthly-recap] ABORT: render output invalid (download status=${dl.status})`);
         return null;
       }
       const contentType = dl.headers.get("content-type") || "unknown";
       const ab = await dl.arrayBuffer();
       const bytes = ab.byteLength;
-      console.log(`[recap] render output size=${bytes} type=${contentType}`);
+      console.log(`[monthly-recap] render output size=${bytes} type=${contentType}`);
       if (bytes < 100_000 || !/video\/mp4/i.test(contentType)) {
-        console.error(`[recap] ABORT: render output invalid (bytes=${bytes} type=${contentType})`);
+        console.error(`[monthly-recap] ABORT: render output invalid (bytes=${bytes} type=${contentType})`);
         return null;
       }
-      console.log(`[recap] stitched mp4 ready: url=${sd.url} bytes=${bytes}`);
+      console.log(`[monthly-recap] stitched mp4 ready: url=${sd.url} bytes=${bytes}`);
       return { url: sd.url, data: new Uint8Array(ab), contentType, reportedDuration };
     }
     if (sd.status === "failed") {
-      console.error("[recap] Creatomate render failed:", sd.error_message);
+      console.error("[monthly-recap] Creatomate render failed:", sd.error_message);
       return null;
     }
   }
-  console.error("[recap] Creatomate poll timeout");
+  console.error("[monthly-recap] Creatomate poll timeout");
   return null;
 }
 
@@ -895,12 +895,12 @@ async function uploadLongFormToYouTube(
   );
   if (!initRes.ok) {
     const errText = await initRes.text();
-    console.error(`[recap] YouTube upload failed: ${initRes.status} ${errText.slice(0, 500)}`);
+    console.error(`[monthly-recap] YouTube upload failed: ${initRes.status} ${errText.slice(0, 500)}`);
     return null;
   }
   const uploadUrl = initRes.headers.get("Location");
   if (!uploadUrl) {
-    console.error("[recap] YouTube upload failed: missing resumable Location header");
+    console.error("[monthly-recap] YouTube upload failed: missing resumable Location header");
     return null;
   }
   const up = await fetch(uploadUrl, {
@@ -910,11 +910,11 @@ async function uploadLongFormToYouTube(
   });
   if (!up.ok) {
     const errText = await up.text();
-    console.error(`[recap] YouTube upload failed: ${up.status} ${errText.slice(0, 500)}`);
+    console.error(`[monthly-recap] YouTube upload failed: ${up.status} ${errText.slice(0, 500)}`);
     return null;
   }
   const j = await up.json();
-  console.log(`[recap] YT response: ${JSON.stringify(j).slice(0, 500)}`);
+  console.log(`[monthly-recap] YT response: ${JSON.stringify(j).slice(0, 500)}`);
   return j?.id ?? null;
 }
 
@@ -948,25 +948,25 @@ high contrast. No watermark.`;
     });
     if (!res.ok) {
       const errText = await res.text();
-      console.error(`[recap] image gen failed, falling back to animated gradient: status=${res.status} ${errText.slice(0, 200)}`);
+      console.error(`[monthly-recap] image gen failed, falling back to animated gradient: status=${res.status} ${errText.slice(0, 200)}`);
       return null;
     }
     const j = await res.json();
     const dataUrl: string | undefined =
       j?.choices?.[0]?.message?.images?.[0]?.image_url?.url;
     if (!dataUrl || !dataUrl.startsWith("data:")) {
-      console.error("[recap] image gen failed, falling back to animated gradient: no image in response");
+      console.error("[monthly-recap] image gen failed, falling back to animated gradient: no image in response");
       return null;
     }
     const b64 = dataUrl.split(",")[1] ?? "";
     if (!b64) {
-      console.error("[recap] image gen failed, falling back to animated gradient: empty base64");
+      console.error("[monthly-recap] image gen failed, falling back to animated gradient: empty base64");
       return null;
     }
     const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
     return bin;
   } catch (e) {
-    console.error(`[recap] image gen failed, falling back to animated gradient: ${(e as Error).message}`);
+    console.error(`[monthly-recap] image gen failed, falling back to animated gradient: ${(e as Error).message}`);
     return null;
   }
 }
@@ -1017,9 +1017,9 @@ async function runForUser(svc: any, userId: string, cityFilter?: string): Promis
       const head = await fetch(stitched.url, { method: "HEAD" });
       const hLen = Number(head.headers.get("content-length") || "0");
       const hType = head.headers.get("content-type") || "unknown";
-      console.log(`[recap] pre-upload HEAD check: status=${head.status} length=${hLen} type=${hType}`);
+      console.log(`[monthly-recap] pre-upload HEAD check: status=${head.status} length=${hLen} type=${hType}`);
       if ((hLen > 0 && hLen < 100_000) || (hType !== "unknown" && !/video\/mp4/i.test(hType))) {
-        console.error(`[recap] ABORT: pre-upload guard rejected file (length=${hLen} type=${hType})`);
+        console.error(`[monthly-recap] ABORT: pre-upload guard rejected file (length=${hLen} type=${hType})`);
         await svc.from("post_history").insert({
           user_id: userId, status: "failed", platform: "youtube",
           city: posts[0].city, caption: finalTitle,
@@ -1028,12 +1028,12 @@ async function runForUser(svc: any, userId: string, cityFilter?: string): Promis
         return { ok: false, detail: "Pre-upload guard rejected file" };
       }
     } catch (e) {
-      console.warn(`[recap] pre-upload HEAD check failed (continuing): ${(e as Error).message}`);
+      console.warn(`[monthly-recap] pre-upload HEAD check failed (continuing): ${(e as Error).message}`);
     }
 
     const videoId = await uploadLongFormToYouTube(token, stitched.data, cleanTitle, cleanDesc);
     if (videoId) {
-      console.log(`[recap] uploaded to YouTube as videoId: ${videoId}`);
+      console.log(`[monthly-recap] uploaded to YouTube as videoId: ${videoId}`);
       await svc.from("post_history").insert({
         user_id: userId, status: "succeeded", platform: "youtube",
         city: posts[0].city, caption: cleanTitle,
@@ -1049,7 +1049,7 @@ async function runForUser(svc: any, userId: string, cityFilter?: string): Promis
     }
 
     // upload failed -> fall through to infographic fallback
-    console.warn("[recap] YT upload failed — falling back to infographic");
+    console.warn("[monthly-recap] YT upload failed — falling back to infographic");
   }
 
   // Fallback path (stitch failed OR upload failed)
@@ -1066,7 +1066,7 @@ async function runForUser(svc: any, userId: string, cityFilter?: string): Promis
   const path = `monthly-recap/${userId}/${Date.now()}.png`;
   const { error: upErr } = await svc.storage.from("generated-images")
     .upload(path, img, { contentType: "image/png", upsert: true });
-  if (upErr) console.error("[recap] storage upload failed:", upErr);
+  if (upErr) console.error("[monthly-recap] storage upload failed:", upErr);
   const { data: signed } = await svc.storage.from("generated-images")
     .createSignedUrl(path, 60 * 60 * 24 * 30);
 
@@ -1138,7 +1138,7 @@ Deno.serve(async (req) => {
         results.push({ user_id: c.user_id, ...r });
       } catch (e) {
         const msg = (e as Error).message;
-        console.error(`[recap] user ${c.user_id} failed:`, msg);
+        console.error(`[monthly-recap] user ${c.user_id} failed:`, msg);
         results.push({ user_id: c.user_id, ok: false, detail: msg });
         try {
           await svc.from("post_history").insert({
@@ -1159,10 +1159,10 @@ Deno.serve(async (req) => {
         updated_at: new Date().toISOString(),
       });
     } catch (e) {
-      console.error("[recap] system_health upsert failed:", (e as Error).message);
+      console.error("[monthly-recap] system_health upsert failed:", (e as Error).message);
     }
 
-    console.log(`[recap] background job complete: ${results.filter(r => r.ok).length}/${results.length} recaps`);
+    console.log(`[monthly-recap] background job complete: ${results.filter(r => r.ok).length}/${results.length} recaps`);
   };
 
   // @ts-ignore — EdgeRuntime is provided by Supabase Edge
@@ -1170,7 +1170,7 @@ Deno.serve(async (req) => {
     // @ts-ignore
     EdgeRuntime.waitUntil(work());
   } else {
-    work().catch((e) => console.error("[recap] background failed:", (e as Error).message));
+    work().catch((e) => console.error("[monthly-recap] background failed:", (e as Error).message));
   }
 
   return new Response(
