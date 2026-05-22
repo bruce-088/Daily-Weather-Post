@@ -476,7 +476,7 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
     const textPos = layoutTextProps(layout);
 
     // 1. Themed gradient base (safety net + motion guarantee)
-    elements.push(buildAnimatedGradientBg(start, SLIDE_DUR, grad));
+    elements.push(buildAnimatedGradientBg(start, SLIDE_DUR, { ...grad, label: themeKey }, i + 2));
     // 2. Image on top of gradient (if available) — subtle Ken Burns pan
     if (p.image_url) {
       const imgEl: any = {
