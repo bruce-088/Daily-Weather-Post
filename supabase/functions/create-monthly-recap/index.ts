@@ -814,6 +814,10 @@ async function stitchSlideshow(
     elements,
   };
 
+  console.log(
+    `[monthly-recap] Creatomate payload (no template_id, dynamic source): ${JSON.stringify(body)}`,
+  );
+
   const submit = await fetch("https://api.creatomate.com/v2/renders", {
     method: "POST",
     headers: { Authorization: `Bearer ${CREATOMATE_API_KEY}`, "Content-Type": "application/json" },
