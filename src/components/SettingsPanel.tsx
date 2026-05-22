@@ -798,27 +798,32 @@ export function SettingsPanel({
                 </div>
                 {settings.enableVoiceover && (
                   <div className="space-y-4">
-                    {/* Voice selector */}
+                    {/* Voice persona — curated broadcast personalities mapped to TTS voice IDs */}
                     <div className="space-y-1.5">
                       <Label htmlFor="voiceover-voice" className="text-xs text-muted-foreground">
-                        Voice
+                        Voice persona
                       </Label>
                       <Select
-                        value={settings.voiceoverVoiceId || "female"}
+                        value={settings.voiceoverVoiceId || "anchor"}
                         onValueChange={(v) => update("voiceoverVoiceId", v)}
                       >
                         <SelectTrigger id="voiceover-voice" className="h-9">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="anchor">News Anchor (Daniel — authoritative)</SelectItem>
-                          <SelectItem value="female">Sarah (warm, conversational)</SelectItem>
+                          {/* Curated personas (top) */}
+                          <SelectItem value="anchor">📺 News Professional (Daniel — authoritative)</SelectItem>
+                          <SelectItem value="female">🏘️ Casual Local (Sarah — warm &amp; conversational)</SelectItem>
+                          <SelectItem value="cheerful">☀️ Upbeat Morning (Alice — bright)</SelectItem>
+                          <SelectItem value="calm">🌙 Calm Briefing (Jessica — soothing)</SelectItem>
+                          {/* Raw voice options */}
                           <SelectItem value="male">George (confident, news-style)</SelectItem>
-                          <SelectItem value="cheerful">Cheerful Weather Girl (Alice — bright)</SelectItem>
-                          <SelectItem value="calm">Calm Briefing (Jessica — soothing)</SelectItem>
                           <SelectItem value="deep">Deep Voice (Brian — resonant)</SelectItem>
                         </SelectContent>
                       </Select>
+                      <p className="text-[10px] text-muted-foreground">
+                        Persona drives the TTS voice for every automated broadcast.
+                      </p>
                     </div>
 
                     {/* Playback speed */}
