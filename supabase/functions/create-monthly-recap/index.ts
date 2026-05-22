@@ -733,7 +733,7 @@ async function stitchSlideshow(
       console.warn("[recap] continuing without any audio track; YouTube may abandon processing");
     }
   }
-  console.log(`[recap] audio mix: voice=${hasVoice ? "yes(vol=2.0)" : "no"} music=${hasMusic ? "yes(vol=0.15)" : "no"} silent_fallback=${usedSilentFallback ? "yes" : "no"}`);
+  console.log(`[monthly-recap] audio mix: voice=${hasVoice ? "yes(vol=2.5)" : "no"} music=${hasMusic ? "yes(vol=0.15)" : "no"} silent_fallback=${usedSilentFallback ? "yes" : "no"}`);
 
   // ── Safety fallback: never ship a visually empty composition ──
   const visualCountPre = elements.filter((e) => e.type !== "audio").length;
