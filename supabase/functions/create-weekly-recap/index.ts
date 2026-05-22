@@ -34,6 +34,38 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 const CREATOMATE_API_KEY = Deno.env.get("CREATOMATE_API_KEY") || "";
+const RECAP_MUSIC_URL = (Deno.env.get("RECAP_MUSIC_URL") || "").trim();
+
+// Resolve ElevenLabs key from any of the legacy/canonical env names so a
+// future rotation under either spelling keeps the recap voice working.
+function resolveElevenLabsKey(): { value: string; source: string } | null {
+  const candidates = ["ELEVENLABS_API_KEY", "ELEVEN_LABS_API_KEY", "ELEVENLABS_KEY"];
+  for (const name of candidates) {
+    const v = Deno.env.get(name);
+    if (v && v.trim().length > 0) return { value: v.trim(), source: name };
+  }
+  return null;
+}
+
+// Shared voice map — mirrors process-scheduled-posts so user voice prefs apply.
+const ELEVENLABS_VOICES: Record<string, string> = {
+  female: "EXAVITQu4vr4xnSDxMaL",
+  male: "JBFqnCBsd6RMkjVDRZzb",
+  anchor: "onwK4e9ZLuTAKqWW03F9",
+  cheerful: "Xb7hH8MSUJpSbSDYk0k2",
+  calm: "cgSgspJ2msm6clMCkdW9",
+  deep: "nPczCjzI2devNBz1zQrb",
+};
+function resolveVoiceId(input?: string | null): string {
+  if (!input) return ELEVENLABS_VOICES.female;
+  if (ELEVENLABS_VOICES[input]) return ELEVENLABS_VOICES[input];
+  return input;
+}
+function clampVoiceParam(n: any, min: number, max: number, fallback: number): number {
+  const v = typeof n === "number" ? n : Number(n);
+  if (!isFinite(v)) return fallback;
+  return Math.min(max, Math.max(min, v));
+}
 
 interface PostRow {
   id: string;
@@ -205,6 +237,119 @@ async function createSignedSilentAudio(svc: any, userId: string, durationSeconds
   return signed.signedUrl;
 }
 
+// ───────────────── ElevenLabs voice narration ─────────────────
+//
+// Synthesize the weekly recap script via ElevenLabs and cache the mp3 in the
+// `generated-images` bucket so render retries reuse the same asset.
+// Gated by `weather_settings.enable_voiceover`. On ANY failure (no key, http,
+// timeout, upload), returns null so the recap still renders silently.
+async function synthesizeRecapVoice(
+  svc: any,
+  userId: string,
+  script: string,
+): Promise<{ url: string; durationSec: number } | null> {
+  let settings: any = null;
+  try {
+    const { data } = await svc
+      .from("weather_settings")
+      .select("enable_voiceover, voiceover_voice_id, voiceover_speed, voiceover_stability, voiceover_similarity")
+      .eq("user_id", userId)
+      .maybeSingle();
+    settings = data;
+  } catch (e) {
+    console.warn("[recap] could not load voiceover settings:", (e as Error).message);
+  }
+
+  if (!settings || settings.enable_voiceover !== true) {
+    console.log(`[recap] voice synth skipped: enable_voiceover=${settings?.enable_voiceover ?? "n/a"}`);
+    return null;
+  }
+
+  const key = resolveElevenLabsKey();
+  if (!key) {
+    console.error("[recap] voice synth failed, falling back to silent render: no ElevenLabs API key in env");
+    return null;
+  }
+
+  const voiceId = settings.voiceover_voice_id || "female";
+  const speed = clampVoiceParam(settings.voiceover_speed, 0.7, 1.2, 1.0);
+  const stability = clampVoiceParam(settings.voiceover_stability, 0, 1, 0.55);
+  const similarity = clampVoiceParam(settings.voiceover_similarity, 0, 1, 0.78);
+  const wordCount = (script || "").trim().split(/\s+/).filter(Boolean).length;
+  const estDurationSec = Math.max(10, Math.ceil(wordCount / 2.5));
+  console.log(`[recap] synthesizing 0:${estDurationSec}s voice script via ElevenLabs voice=${voiceId} source=${key.source} words=${wordCount}`);
+
+  const url = `https://api.elevenlabs.io/v1/text-to-speech/${resolveVoiceId(voiceId)}?output_format=mp3_44100_128`;
+  const body = JSON.stringify({
+    text: script,
+    model_id: "eleven_turbo_v2_5",
+    voice_settings: { stability, similarity_boost: similarity, style: 0.35, use_speaker_boost: true, speed },
+  });
+
+  let bytes: Uint8Array | null = null;
+  const MAX_ATTEMPTS = 2;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 60_000);
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "xi-api-key": key.value, "Content-Type": "application/json" },
+        body,
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      if (res.ok) {
+        bytes = new Uint8Array(await res.arrayBuffer());
+        break;
+      }
+      const detail = (await res.text()).slice(0, 200);
+      console.error(`[recap] voice synth attempt ${attempt}/${MAX_ATTEMPTS} failed: status=${res.status} ${detail}`);
+      if (attempt < MAX_ATTEMPTS && res.status >= 500) {
+        await new Promise((r) => setTimeout(r, 2000));
+        continue;
+      }
+      console.error("[recap] voice synth failed, falling back to silent render");
+      return null;
+    } catch (e) {
+      clearTimeout(timer);
+      console.error(`[recap] voice synth attempt ${attempt}/${MAX_ATTEMPTS} error:`, (e as Error).message);
+      if (attempt < MAX_ATTEMPTS) {
+        await new Promise((r) => setTimeout(r, 2000));
+        continue;
+      }
+      console.error("[recap] voice synth failed, falling back to silent render");
+      return null;
+    }
+  }
+  if (!bytes) {
+    console.error("[recap] voice synth failed, falling back to silent render: no bytes");
+    return null;
+  }
+
+  const path = `weekly-recap-audio/${userId}/${Date.now()}-voice.mp3`;
+  const { error: upErr } = await svc.storage
+    .from("generated-images")
+    .upload(path, bytes, { contentType: "audio/mpeg", upsert: true });
+  if (upErr) {
+    console.error("[recap] voice synth failed, falling back to silent render: upload error:", upErr.message);
+    return null;
+  }
+  const { data: signed, error: signedErr } = await svc.storage
+    .from("generated-images")
+    .createSignedUrl(path, 60 * 60);
+  if (signedErr || !signed?.signedUrl) {
+    console.error("[recap] voice synth failed, falling back to silent render: signed url error:", signedErr?.message);
+    return null;
+  }
+  // mp3 @ 128kbps ≈ 16000 bytes/sec
+  const durationSec = Math.max(estDurationSec, Math.ceil(bytes.byteLength / 16000));
+  console.log(`[recap] voice asset ready: ${signed.signedUrl} bytes=${bytes.byteLength} duration=${durationSec}s`);
+  return { url: signed.signedUrl, durationSec };
+}
+
+
+
 // Time-of-day → gradient stops for animated slide background.
 function gradientForSlide(createdAt?: string): { from: string; to: string; label: string } {
   if (!createdAt) return { from: "#0f172a", to: "#581c87", label: "evening" };
@@ -251,7 +396,7 @@ function buildAnimatedGradientBg(
   };
 }
 
-async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title: string): Promise<StitchResult | null> {
+async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title: string, voice?: { url: string; durationSec: number }): Promise<StitchResult | null> {
   if (!CREATOMATE_API_KEY) {
     console.warn("[recap] CREATOMATE_API_KEY missing — skipping stitch");
     return null;
@@ -338,27 +483,57 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
     exit_animation: { type: "fade", duration: 0.4 },
   });
 
-  let totalDuration = (slides.length + 2) * SLIDE_DUR; // title + slides + outro
-  if (totalDuration < 65) {
-    const pad = 65 - totalDuration;
+  const visualDuration0 = (slides.length + 2) * SLIDE_DUR; // title + slides + outro
+  const voiceDur = voice ? Math.ceil(voice.durationSec + 1) : 0;
+  let totalDuration = Math.max(visualDuration0, voiceDur, 65);
+  if (totalDuration > visualDuration0) {
+    const pad = totalDuration - visualDuration0;
     elements[outroTextIdx].duration += pad;
     elements[outroBgIdx].duration += pad;
     elements[outroBgIdx].animations[0].duration += pad;
-    totalDuration += pad;
   }
-  console.log(`[recap] stitch duration=${totalDuration}s slides=${slides.length}`);
-  const silentAudioUrl = await createSignedSilentAudio(svc, userId, totalDuration);
-  if (silentAudioUrl) {
+  console.log(`[recap] timing: visual=${visualDuration0}s voice=${voice?.durationSec ?? 0}s total=${totalDuration}s outro_extended=${totalDuration - visualDuration0}s slides=${slides.length}`);
+
+  // ── Audio mix ──
+  const hasVoice = !!voice;
+  const hasMusic = !!RECAP_MUSIC_URL;
+  let usedSilentFallback = false;
+  if (hasVoice) {
     elements.push({
       type: "audio",
-      source: silentAudioUrl,
+      source: voice!.url,
       time: 0,
       duration: totalDuration,
-      volume: 0.01,
+      volume: 1.0,
     });
-  } else {
-    console.warn("[recap] continuing without silent audio track; YouTube may abandon processing");
   }
+  if (hasMusic) {
+    elements.push({
+      type: "audio",
+      source: RECAP_MUSIC_URL,
+      time: 0,
+      duration: totalDuration,
+      volume: 0.15,
+      loop: true,
+    });
+  }
+  if (!hasVoice && !hasMusic) {
+    const silentAudioUrl = await createSignedSilentAudio(svc, userId, totalDuration);
+    if (silentAudioUrl) {
+      usedSilentFallback = true;
+      elements.push({
+        type: "audio",
+        source: silentAudioUrl,
+        time: 0,
+        duration: totalDuration,
+        volume: 0.01,
+      });
+    } else {
+      console.warn("[recap] continuing without any audio track; YouTube may abandon processing");
+    }
+  }
+  console.log(`[recap] audio mix: voice=${hasVoice ? "yes" : "no"} music=${hasMusic ? "yes" : "no"} silent_fallback=${usedSilentFallback ? "yes" : "no"}`);
+
 
   // Creatomate v2 expects source fields (width/height/duration/elements) at
   // the TOP LEVEL of the request body, not nested under a `source` key.
@@ -576,8 +751,11 @@ async function runForUser(svc: any, userId: string, cityFilter?: string): Promis
   const finalTitle = title.includes("Weekly Recap") ? title : `${title} — Weekly Recap`;
   const description = `${script}\n\n#WeeklyRecap #Weather #SkyBrief`;
 
+  // Voice narration (master clock). Skipped silently if disabled or it fails.
+  const voice = await synthesizeRecapVoice(svc, userId, script);
+
   // Try video stitch
-  const stitched = await stitchSlideshow(svc, userId, posts, finalTitle);
+  const stitched = await stitchSlideshow(svc, userId, posts, finalTitle, voice ?? undefined);
 
   if (stitched) {
     const token = await getYouTubeToken(svc, userId);
