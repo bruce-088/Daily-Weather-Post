@@ -199,7 +199,37 @@ Deno.serve(async (req) => {
       if (row.user_id && !settingsByUser.has(row.user_id)) settingsByUser.set(row.user_id, row);
     }
 
-    const enabledAutomations = (automations || []).filter((a: any) => a.enabled === true);
+    const rawEnabledAutomations = (automations || []).filter((a: any) => a.enabled === true);
+
+    // ── Deduplicate automations by (user_id, city_id) ──
+    // A historical bug allowed >1 row per user/city. We now have a UNIQUE
+    // constraint, but keep this in-memory pass as a belt-and-suspenders so a
+    // duplicate state can never trigger N posts in one tick.
+    const dedupMap = new Map<string, any>();
+    const droppedByKey = new Map<string, string[]>();
+    for (const a of rawEnabledAutomations) {
+      const key = `${a.user_id}|${a.city_id}`;
+      const existing = dedupMap.get(key);
+      const aTs = new Date(a.updated_at || a.created_at || 0).getTime();
+      const eTs = existing ? new Date(existing.updated_at || existing.created_at || 0).getTime() : -1;
+      if (!existing || aTs > eTs) {
+        if (existing) {
+          const list = droppedByKey.get(key) || [];
+          list.push(existing.id);
+          droppedByKey.set(key, list);
+        }
+        dedupMap.set(key, a);
+      } else {
+        const list = droppedByKey.get(key) || [];
+        list.push(a.id);
+        droppedByKey.set(key, list);
+      }
+    }
+    for (const [key, dropped] of droppedByKey) {
+      const kept = dedupMap.get(key)?.id;
+      console.log(`[scheduler] Status=Skipped_DuplicateRow key=${key} kept=${kept} dropped=[${dropped.join(",")}]`);
+    }
+    const enabledAutomations = Array.from(dedupMap.values());
     const automationCityIds = [...new Set(enabledAutomations.map((a: any) => a.city_id).filter(Boolean))];
     const citiesById = new Map<string, any>();
     if (automationCityIds.length) {
