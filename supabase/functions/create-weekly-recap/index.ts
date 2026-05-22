@@ -205,14 +205,60 @@ async function createSignedSilentAudio(svc: any, userId: string, durationSeconds
   return signed.signedUrl;
 }
 
+// Time-of-day → gradient stops for animated slide background.
+function gradientForSlide(createdAt?: string): { from: string; to: string; label: string } {
+  if (!createdAt) return { from: "#0f172a", to: "#581c87", label: "evening" };
+  const h = new Date(createdAt).getHours();
+  if (h < 12) return { from: "#1e3a8a", to: "#7e22ce", label: "morning" };
+  if (h < 17) return { from: "#ea580c", to: "#f59e0b", label: "afternoon" };
+  return { from: "#0f172a", to: "#581c87", label: "evening" };
+}
+
+// Full-frame animated gradient background. Slow scale (1.0 → 1.05) + gradient
+// fill guarantees frame-to-frame change so Creatomate ALWAYS emits a real
+// MP4, never a static JPEG, even when no image_url is available.
+function buildAnimatedGradientBg(
+  time: number,
+  duration: number,
+  grad: { from: string; to: string },
+): any {
+  // Creatomate-native animation syntax: `animations` array with scope=element,
+  // scale object, start_scale object, explicit time/duration. Using the
+  // built-in scale animation guarantees frame-to-frame change so Creatomate
+  // emits a real MP4 (and not a 15KB JPEG snapshot of a static composition).
+  return {
+    type: "shape",
+    path: "M 0 0 L 100 0 L 100 100 L 0 100 Z",
+    width: "100%",
+    height: "100%",
+    x: "50%",
+    y: "50%",
+    fill_color: `linear-gradient(135deg, ${grad.from}, ${grad.to})`,
+    time,
+    duration,
+    animations: [
+      {
+        easing: "linear",
+        type: "scale",
+        scope: "element",
+        fade: false,
+        scale: { x: 1.08, y: 1.08 },
+        start_scale: { x: 1.0, y: 1.0 },
+        time: "start",
+        duration,
+      },
+    ],
+  };
+}
+
 async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title: string): Promise<StitchResult | null> {
   if (!CREATOMATE_API_KEY) {
     console.warn("[recap] CREATOMATE_API_KEY missing — skipping stitch");
     return null;
   }
   // Use up to 7 of the most recent posts. Image is optional — when missing,
-  // the slide falls back to a solid gradient background so the recap still
-  // renders (and still clears the YouTube long-form threshold).
+  // the slide falls back to an animated gradient background so the recap
+  // still renders a real MP4 (and clears the YouTube long-form threshold).
   const slides = posts.slice(-7);
   if (slides.length < 2) {
     console.warn("[recap] Not enough posts to stitch (need 2+):", slides.length);
@@ -227,7 +273,10 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
   const city = posts[0]?.city ?? "your city";
 
   const elements: any[] = [];
-  // Title card
+
+  // ── Title card ──
+  const titleGrad = gradientForSlide();
+  elements.push(buildAnimatedGradientBg(0, SLIDE_DUR, titleGrad));
   elements.push({
     type: "text", text: title,
     x: "50%", y: "20%", width: "90%",
@@ -238,8 +287,13 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
     enter_animation: { type: "fade", duration: 0.4 },
     exit_animation: { type: "fade", duration: 0.4 },
   });
+
+  // ── Day slides ──
   slides.forEach((p, i) => {
     const start = (i + 1) * SLIDE_DUR;
+    const grad = gradientForSlide(p.created_at);
+    // Always-on animated gradient under the slide (safety net + motion guarantee)
+    elements.push(buildAnimatedGradientBg(start, SLIDE_DUR, grad));
     if (p.image_url) {
       elements.push({
         type: "image", source: p.image_url,
@@ -248,6 +302,8 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
         enter_animation: { type: "fade", duration: 0.4 },
         exit_animation: { type: "fade", duration: 0.4 },
       });
+    } else {
+      console.log(`[recap] slide ${i + 1} using animated gradient (no image_url) palette=${grad.label}`);
     }
     const day = new Date(p.created_at).toLocaleDateString("en-US", { weekday: "long" });
     const temp = p.temperature != null ? `${Math.round(p.temperature)}°F` : "";
@@ -264,8 +320,12 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
     });
   });
 
-  // Outro card — guarantees the long-form clears 60s even on short weeks.
+  // ── Outro card ──
   const outroStart = (slides.length + 1) * SLIDE_DUR;
+  const outroGrad = gradientForSlide();
+  const outroBgIdx = elements.length;
+  elements.push(buildAnimatedGradientBg(outroStart, SLIDE_DUR, outroGrad));
+  const outroTextIdx = elements.length;
   elements.push({
     type: "text",
     text: `Thanks for watching!\nLike + subscribe for daily ${city} weather.`,
@@ -281,7 +341,9 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
   let totalDuration = (slides.length + 2) * SLIDE_DUR; // title + slides + outro
   if (totalDuration < 65) {
     const pad = 65 - totalDuration;
-    elements[elements.length - 1].duration += pad;
+    elements[outroTextIdx].duration += pad;
+    elements[outroBgIdx].duration += pad;
+    elements[outroBgIdx].animations[0].duration += pad;
     totalDuration += pad;
   }
   console.log(`[recap] stitch duration=${totalDuration}s slides=${slides.length}`);
@@ -298,19 +360,18 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
     console.warn("[recap] continuing without silent audio track; YouTube may abandon processing");
   }
 
+  // Creatomate v2 expects source fields (width/height/duration/elements) at
+  // the TOP LEVEL of the request body, not nested under a `source` key.
+  // Nesting causes Creatomate to ignore them and emit a 5-second default
+  // composition. Matches the working daily pipeline shape.
   const body = {
     output_format: "mp4",
-    codec: "h264",
     frame_rate: 30,
-    // Drop render_scale so YouTube gets a full 1920x1080 long-form file —
-    // 0.75 produced 1440x810 which YouTube was flagging as "invalid /
-    // processing abandoned" on text-only recaps.
-    source: {
-      width: 1920, height: 1080, // long-form 16:9
-      duration: totalDuration,
-      fill_color: "#0f172a",
-      elements,
-    },
+    width: 1920,
+    height: 1080,
+    duration: totalDuration,
+    fill_color: "#0f172a",
+    elements,
   };
 
   const submit = await fetch("https://api.creatomate.com/v2/renders", {
@@ -335,6 +396,7 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
     });
     if (!sr.ok) continue;
     const sd = await sr.json();
+    console.log(`[recap] creatomate poll ${i}: status=${sd.status} url=${sd.url ?? "?"} snapshot=${sd.snapshot_url ?? "?"} dur=${sd.duration ?? "?"} format=${sd.format ?? sd.output_format ?? "?"} err=${sd.error_message ?? ""}`);
     if (sd.status === "succeeded" && sd.url) {
       const reportedDuration: number | undefined =
         typeof sd.duration === "number" ? sd.duration : undefined;
@@ -466,26 +528,38 @@ white bold sans-serif typography, large title "${title}", 7-day weather summary
 displayed as a tidy grid with weather icons. Data: ${lines}. Minimalist, editorial,
 high contrast. No watermark.`;
   try {
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/images/generations", {
+    // Lovable AI image generation lives on the chat completions endpoint with
+    // modalities=["image","text"], not /v1/images/generations (which 404s).
+    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: "google/gemini-2.5-flash-image",
-        prompt,
-        size: "1792x1024",
+        messages: [{ role: "user", content: prompt }],
+        modalities: ["image", "text"],
       }),
     });
     if (!res.ok) {
-      console.error("[recap] image gen failed:", res.status, await res.text());
+      const errText = await res.text();
+      console.error(`[recap] image gen failed, falling back to animated gradient: status=${res.status} ${errText.slice(0, 200)}`);
       return null;
     }
     const j = await res.json();
-    const b64 = j?.data?.[0]?.b64_json;
-    if (!b64) return null;
+    const dataUrl: string | undefined =
+      j?.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    if (!dataUrl || !dataUrl.startsWith("data:")) {
+      console.error("[recap] image gen failed, falling back to animated gradient: no image in response");
+      return null;
+    }
+    const b64 = dataUrl.split(",")[1] ?? "";
+    if (!b64) {
+      console.error("[recap] image gen failed, falling back to animated gradient: empty base64");
+      return null;
+    }
     const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
     return bin;
   } catch (e) {
-    console.error("[recap] image gen error:", (e as Error).message);
+    console.error(`[recap] image gen failed, falling back to animated gradient: ${(e as Error).message}`);
     return null;
   }
 }
