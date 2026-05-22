@@ -748,16 +748,14 @@ async function stitchSlideshow(
   const momentTheme: ThemeKey = monthly.moment?.kind === "coldest" ? "cool" : "warm";
   const momentGrad = THEMES[momentTheme];
   const momentTextPos = layoutTextProps(momentLayout);
-  elements.push(buildAnimatedGradientBg(momentStart, SLIDE_DUR, { ...momentGrad, label: momentTheme }, monthly.weekStats.length + 2));
-
-  if (monthly.moment?.post.image_url && SAFE_IMAGE_ANIM) {
-    elements.push({
-      type: "image", source: monthly.moment.post.image_url,
-      time: momentStart, duration: SLIDE_DUR,
-      fit: "cover",
-      animations: [{ type: "pan", direction: "up", duration: SLIDE_DUR, easing: "linear", scope: "element" }],
-    });
-  }
+  elements.push(...buildSlideBackground({
+    time: momentStart, duration: SLIDE_DUR, slideNum: monthly.weekStats.length + 2,
+    grad: { ...momentGrad, label: momentTheme },
+    mode: "image",
+    mediaUrl: monthly.moment?.post.image_url ?? null,
+    condition: monthly.moment?.post.condition ?? null,
+    logPrefix: "monthly-recap",
+  }));
   elements.push(buildScrim(momentStart, SLIDE_DUR, 0.4));
 
   elements.push({
