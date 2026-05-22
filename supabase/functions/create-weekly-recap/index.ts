@@ -396,7 +396,7 @@ function buildAnimatedGradientBg(
   };
 }
 
-async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title: string): Promise<StitchResult | null> {
+async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title: string, voice?: { url: string; durationSec: number }): Promise<StitchResult | null> {
   if (!CREATOMATE_API_KEY) {
     console.warn("[recap] CREATOMATE_API_KEY missing — skipping stitch");
     return null;
