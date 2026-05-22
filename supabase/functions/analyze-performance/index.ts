@@ -7,6 +7,7 @@
 // so this is a deterministic refresh.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { isLearningEligibleRow } from "../_shared/cinematic-presets.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -221,15 +222,18 @@ Deno.serve(async (req) => {
     // Pull captions for ai_memory top-post seeding
     const allPostIds = ((fullRows || []) as any[]).map((r) => r.post_id).filter(Boolean);
     const captionByPost = new Map<string, { caption: string | null; city: string | null }>();
+    // [cinematic] Firewall: track post_ids that are fallback/gradient renders.
+    const ineligibleCinematicPostIds = new Set<string>();
     if (allPostIds.length > 0) {
       for (let i = 0; i < allPostIds.length; i += 200) {
         const chunk = allPostIds.slice(i, i + 200);
         const { data: ph } = await supabase
           .from("post_history")
-          .select("id, caption, city")
+          .select("id, caption, city, visual_metadata, published_visual_source")
           .in("id", chunk);
         for (const p of (ph || []) as any[]) {
           captionByPost.set(p.id, { caption: p.caption, city: p.city });
+          if (!isLearningEligibleRow(p)) ineligibleCinematicPostIds.add(p.id);
         }
       }
     }
@@ -302,7 +306,9 @@ Deno.serve(async (req) => {
           const fa = factorAvg("hook_text", r.hook_text);
           if (fa !== null && avgViews > 0) checkRatio(`hook:${String(r.hook_text).slice(0, 60)}`, fa / avgViews);
         }
-        if (r.cinematic === true || r.cinematic === false) {
+        // [cinematic] Skip cinematic factor entirely for fallback/gradient renders.
+        const isEligibleCinematic = !r.post_id || !ineligibleCinematicPostIds.has(r.post_id);
+        if (isEligibleCinematic && (r.cinematic === true || r.cinematic === false)) {
           const fa = boolFactorAvg("cinematic", true);
           if (fa !== null && avgViews > 0 && r.cinematic === true) checkRatio("cinematic", fa / avgViews);
         }
