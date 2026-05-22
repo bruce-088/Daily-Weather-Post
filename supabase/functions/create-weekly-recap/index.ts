@@ -837,6 +837,31 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
         return null;
       }
       console.log(`[recap] stitched mp4 ready: url=${sd.url} bytes=${bytes}`);
+      // [cinematic] Persist per-slide render decisions for visibility & audit.
+      try {
+        const sources: Record<string, number> = {};
+        let eligible = 0;
+        for (const d of cinematicDecisions) {
+          sources[d.source] = (sources[d.source] ?? 0) + 1;
+          if (d.eligibleForLearning) eligible++;
+        }
+        await svc.from("system_logs").insert({
+          user_id: userId,
+          type: "cinematic_recap_render",
+          platform: "youtube",
+          message: `weekly recap: ${cinematicDecisions.length} slides (${eligible} eligible)`,
+          context: {
+            kind: "weekly",
+            city,
+            slide_count: cinematicDecisions.length,
+            eligible_count: eligible,
+            sources,
+            decisions: cinematicDecisions,
+          },
+        });
+      } catch (e) {
+        console.warn(`[recap] cinematic system_logs insert failed:`, (e as Error)?.message);
+      }
       return { url: sd.url, data: new Uint8Array(ab), contentType, reportedDuration };
     }
     if (sd.status === "failed") {
