@@ -708,28 +708,54 @@ Deno.serve(async (req) => {
     });
   }
 
-  const results: Array<{ user_id: string; ok: boolean; detail: string }> = [];
-  for (const c of (candidates || [])) {
-    if (!c.user_id) continue;
-    try {
-      const r = await runForUser(svc, c.user_id, cityFilter);
-      results.push({ user_id: c.user_id, ...r });
-    } catch (e) {
-      const msg = (e as Error).message;
-      console.error(`[recap] user ${c.user_id} failed:`, msg);
-      results.push({ user_id: c.user_id, ok: false, detail: msg });
+  const candidateList = (candidates || []).filter((c: any) => c.user_id);
+
+  const work = async () => {
+    const results: Array<{ user_id: string; ok: boolean; detail: string }> = [];
+    for (const c of candidateList) {
+      try {
+        const r = await runForUser(svc, c.user_id, cityFilter);
+        results.push({ user_id: c.user_id, ...r });
+      } catch (e) {
+        const msg = (e as Error).message;
+        console.error(`[recap] user ${c.user_id} failed:`, msg);
+        results.push({ user_id: c.user_id, ok: false, detail: msg });
+        try {
+          await svc.from("post_history").insert({
+            user_id: c.user_id, status: "failed", platform: "youtube",
+            caption: "Weekly Recap",
+            error_message: `Background recap failed: ${msg}`,
+          });
+        } catch { /* ignore */ }
+      }
     }
+
+    try {
+      await svc.from("system_health").upsert({
+        id: "create-weekly-recap",
+        last_run_at: new Date().toISOString(),
+        last_status: "ok",
+        last_message: `${results.filter(r => r.ok).length}/${results.length} recaps`,
+        updated_at: new Date().toISOString(),
+      });
+    } catch (e) {
+      console.error("[recap] system_health upsert failed:", (e as Error).message);
+    }
+
+    console.log(`[recap] background job complete: ${results.filter(r => r.ok).length}/${results.length} recaps`);
+  };
+
+  // @ts-ignore — EdgeRuntime is provided by Supabase Edge
+  if (typeof EdgeRuntime !== "undefined" && EdgeRuntime?.waitUntil) {
+    // @ts-ignore
+    EdgeRuntime.waitUntil(work());
+  } else {
+    work().catch((e) => console.error("[recap] background failed:", (e as Error).message));
   }
 
-  await svc.from("system_health").upsert({
-    id: "create-weekly-recap",
-    last_run_at: new Date().toISOString(),
-    last_status: "ok",
-    last_message: `${results.filter(r => r.ok).length}/${results.length} recaps`,
-    updated_at: new Date().toISOString(),
-  });
-
-  return new Response(JSON.stringify({ ok: true, results }), {
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+  return new Response(
+    JSON.stringify({ ok: true, accepted: true, candidates: candidateList.length }),
+    { status: 202, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+  );
 });
+
