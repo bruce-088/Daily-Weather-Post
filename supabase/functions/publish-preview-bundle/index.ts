@@ -7,6 +7,13 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { postToPlatform } from "../_shared/platform-adapter.ts";
+import {
+  resolveScene,
+  pickPresetForDaily,
+  logCinematic,
+  attachCinematicToPostHistory,
+  type RenderSource,
+} from "../_shared/cinematic-presets.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
