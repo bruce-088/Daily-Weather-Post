@@ -493,7 +493,7 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
     elements[outroTextIdx].duration += pad;
     elements[outroScrimIdx].duration += pad;
     elements[outroBgIdx].duration += pad;
-    elements[outroBgIdx].animations[0].duration += pad;
+    // (no animation array anymore — Creatomate didn't accept scale schema)
   }
   console.log(`[recap] timing: visual=${visualDuration0}s voice=${voice?.durationSec ?? 0}s total=${totalDuration}s outro_extended=${totalDuration - visualDuration0}s slides=${slides.length}`);
 
