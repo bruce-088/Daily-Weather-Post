@@ -3046,27 +3046,36 @@ Deno.serve(async (req) => {
         // the visual-learning firewall can exclude fallback renders. Decision
         // is recomputed from the current render context (visualStyle drives
         // gradient vs image mode; storedImageUrl is the history-image tier).
-        // Resolve settings safely — never let a missing weather_settings row
-        // throw "settings is not defined" here.
-        const settings = await loadCinematicSettings(supabase, post.user_id);
-        const _cinematicDecision = resolveScene({
-          city: weather.city,
-          condition: weather.condition,
-          mediaUrl: storedImageUrl,
-          preset: pickPresetForDaily({
-            condition: weather.condition,
+        // Wrapped in try/catch so a cinematic-preset failure can NEVER abort
+        // the publish path. Falls back to a no-op visual_metadata patch.
+        let _cinPatch: { visual_metadata: any; published_visual_source: string | null } = {
+          visual_metadata: { ...(visualMeta || {}), has_timestamp_in_title: titleHasTimestamp(title) },
+          published_visual_source: null,
+        };
+        try {
+          const settings = await loadCinematicSettings(supabase, post.user_id);
+          const _cinematicDecision = resolveScene({
             city: weather.city,
-            slot: (post as any).slot || null,
+            condition: weather.condition,
+            mediaUrl: storedImageUrl,
+            preset: pickPresetForDaily({
+              condition: weather.condition,
+              city: weather.city,
+              slot: (post as any).slot || null,
+              settings: settings as any,
+            }),
+            mode: visualStyle === "gradient" ? "gradient" : "image",
             settings: settings as any,
-          }),
-          mode: visualStyle === "gradient" ? "gradient" : "image",
-          settings: settings as any,
-        });
-        logCinematic("process-scheduled-posts", _cinematicDecision, { city: weather.city, kind: "daily" });
-        const _cinPatch = attachCinematicToPostHistory(
-          { visual_metadata: { ...(visualMeta || {}), has_timestamp_in_title: titleHasTimestamp(title) } },
-          _cinematicDecision,
-        );
+          });
+          logCinematic("process-scheduled-posts", _cinematicDecision, { city: weather.city, kind: "daily" });
+          _cinPatch = attachCinematicToPostHistory(
+            { visual_metadata: { ...(visualMeta || {}), has_timestamp_in_title: titleHasTimestamp(title) } },
+            _cinematicDecision,
+          );
+        } catch (cinErr) {
+          console.warn(`[process] cinematic preset resolution failed for ${post.id} — using safe defaults:`, cinErr instanceof Error ? cinErr.message : cinErr);
+        }
+
 
         const { data: historyRow, error: historyErr } = await supabase.from("post_history").insert({
           status: historyStatus, platform: post.platform, city: weather.city,
