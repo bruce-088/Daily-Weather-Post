@@ -592,29 +592,18 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
     const isHighlight = i === 3;
     const textPos = layoutTextProps(layout);
 
-    // 1. Themed gradient base (safety net + motion guarantee)
-    elements.push(buildAnimatedGradientBg(start, SLIDE_DUR, { ...grad, label: themeKey }, i + 2));
-    // 2. Image on top of gradient (if available) — subtle Ken Burns pan
-    if (p.image_url) {
-      const imgEl: any = {
-        type: "image", source: p.image_url,
-        time: start, duration: SLIDE_DUR,
-        fit: "cover",
-      };
-      if (SAFE_IMAGE_ANIM) {
-        imgEl.animations = [{
-          type: "pan",
-          direction: layout === "left" ? "right" : layout === "right" ? "left" : "up",
-          duration: SLIDE_DUR,
-          easing: "linear",
-          scope: "element",
-        }];
-      }
-      elements.push(imgEl);
-      console.log(`[recap] slide ${i + 1} using image from history: ${p.image_url}`);
-    } else {
-      console.log(`[recap] slide ${i + 1} using animated gradient (no image_url) theme=${themeKey}`);
-    }
+    // 1. Background scene (history image or condition stock) + themed gradient overlay
+    const bgEls = buildSlideBackground({
+      time: start,
+      duration: SLIDE_DUR,
+      slideNum: i + 2,
+      grad: { ...grad, label: themeKey },
+      mode: "image",
+      mediaUrl: p.image_url,
+      condition: p.condition,
+      logPrefix: "recap",
+    });
+    elements.push(...bgEls);
     // 3. Scrim for legibility (slightly darker on midweek highlight)
     elements.push(buildScrim(start, SLIDE_DUR, isHighlight ? 0.35 : 0.3));
     // 4. Text on top
