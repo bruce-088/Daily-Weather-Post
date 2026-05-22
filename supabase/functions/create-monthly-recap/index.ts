@@ -80,8 +80,8 @@ interface PostRow {
 
 // ───────────────── helpers ─────────────────
 
-async function getLast7Posts(svc: any, userId: string, cityFilter?: string): Promise<PostRow[]> {
-  const since = new Date(Date.now() - 8 * 86400 * 1000).toISOString();
+async function getLast30Posts(svc: any, userId: string, cityFilter?: string): Promise<PostRow[]> {
+  const since = new Date(Date.now() - 31 * 86400 * 1000).toISOString();
   let q = svc
     .from("post_history")
     .select("id, city, temperature, condition, caption, image_url, post_url, created_at")
@@ -89,59 +89,121 @@ async function getLast7Posts(svc: any, userId: string, cityFilter?: string): Pro
     .in("status", ["succeeded", "success"])
     .gte("created_at", since)
     .order("created_at", { ascending: true })
-    .limit(50);
+    .limit(300);
   if (cityFilter) q = q.ilike("city", `%${cityFilter}%`);
   const { data, error } = await q;
   if (error) throw new Error(`post_history fetch failed: ${error.message}`);
-  // Dedupe by day so multi-platform same-day posts collapse to one slide
+  // Dedupe by day so multi-platform same-day posts collapse to one entry.
   const byDay = new Map<string, PostRow>();
   for (const p of (data || []) as PostRow[]) {
     const day = p.created_at.slice(0, 10);
     if (!byDay.has(day)) byDay.set(day, p);
   }
-  return Array.from(byDay.values()).slice(-7);
+  return Array.from(byDay.values()).slice(-30);
 }
 
-async function getTopHooks(svc: any, userId: string): Promise<string[]> {
-  try {
-    const { data } = await svc
-      .from("ai_memory")
-      .select("content")
-      .eq("user_id", userId)
-      .eq("memory_type", "hook")
-      .order("performance_score", { ascending: false })
-      .limit(5);
-    return (data || []).map((r: any) => String(r.content)).filter(Boolean);
-  } catch {
-    return [];
+// Bucket 30 days into 4 weekly groups (week 1 = oldest, week 4 = most recent).
+function bucketWeeks(posts: PostRow[]): PostRow[][] {
+  const buckets: PostRow[][] = [[], [], [], []];
+  if (posts.length === 0) return buckets;
+  const first = new Date(posts[0].created_at).getTime();
+  for (const p of posts) {
+    const daysSince = Math.floor((new Date(p.created_at).getTime() - first) / 86400000);
+    const idx = Math.min(3, Math.floor(daysSince / 7));
+    buckets[idx].push(p);
   }
+  return buckets;
 }
 
-async function generateWeeklyScript(
+interface WeekStat {
+  weekNum: number;
+  avgHigh: number | null;
+  avgLow: number | null;
+  dominantCondition: string;
+  count: number;
+}
+function summarizeWeek(weekNum: number, week: PostRow[]): WeekStat {
+  if (week.length === 0) {
+    return { weekNum, avgHigh: null, avgLow: null, dominantCondition: "—", count: 0 };
+  }
+  const temps = week.map((p) => p.temperature).filter((t): t is number => t != null);
+  const avg = temps.length ? temps.reduce((s, t) => s + t, 0) / temps.length : null;
+  // Without separate high/low fields, use avg ±5 as proxy for high/low band.
+  const avgHigh = avg != null ? Math.round(avg + 5) : null;
+  const avgLow = avg != null ? Math.round(avg - 5) : null;
+  const condCounts = new Map<string, number>();
+  for (const p of week) {
+    const c = (p.condition ?? "").trim();
+    if (!c) continue;
+    condCounts.set(c, (condCounts.get(c) ?? 0) + 1);
+  }
+  let dominant = "—";
+  let max = 0;
+  for (const [c, n] of condCounts) {
+    if (n > max) { max = n; dominant = c; }
+  }
+  return { weekNum, avgHigh, avgLow, dominantCondition: dominant, count: week.length };
+}
+
+// Pick the day with the most extreme deviation from the monthly mean temp.
+function findMomentOfMonth(posts: PostRow[]): { post: PostRow; kind: "hottest" | "coldest" } | null {
+  const withTemp = posts.filter((p) => p.temperature != null);
+  if (withTemp.length === 0) return null;
+  const mean = withTemp.reduce((s, p) => s + (p.temperature as number), 0) / withTemp.length;
+  let best = withTemp[0];
+  let bestDev = 0;
+  for (const p of withTemp) {
+    const dev = Math.abs((p.temperature as number) - mean);
+    if (dev > bestDev) { bestDev = dev; best = p; }
+  }
+  return {
+    post: best,
+    kind: (best.temperature as number) >= mean ? "hottest" : "coldest",
+  };
+}
+
+interface MonthlyScript {
+  title: string;
+  script: string;
+  weekSummaries: string[]; // 4 entries, one-liner per week
+  momentLine: string;
+}
+
+async function generateMonthlyScript(
   posts: PostRow[],
   topHooks: string[],
-): Promise<{ title: string; script: string }> {
-  const summary = posts.map((p, i) => {
-    const day = new Date(p.created_at).toLocaleDateString("en-US", { weekday: "long" });
-    const t = p.temperature != null ? `${Math.round(p.temperature)}°F` : "N/A";
-    return `${i + 1}. ${day}: ${t}, ${p.condition ?? "—"}`;
-  }).join("\n");
-
+  weekStats: WeekStat[],
+  moment: { post: PostRow; kind: "hottest" | "coldest" } | null,
+): Promise<MonthlyScript> {
   const city = posts[0]?.city ?? "your city";
+  const monthName = new Date(posts[posts.length - 1].created_at)
+    .toLocaleDateString("en-US", { month: "long", year: "numeric" });
+
+  const weekBlock = weekStats.map((w) =>
+    `Week ${w.weekNum}: ${w.count} days, avg high ${w.avgHigh ?? "—"}°F / low ${w.avgLow ?? "—"}°F, mostly ${w.dominantCondition}`
+  ).join("\n");
+  const momentBlock = moment
+    ? `Moment of the Month — ${moment.kind === "hottest" ? "hottest" : "coldest"} day was ${new Date(moment.post.created_at).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })} at ${Math.round(moment.post.temperature as number)}°F (${moment.post.condition ?? "—"}).`
+    : "";
   const hookBlock = topHooks.length
-    ? `\n\nHigh-performing past openers (use a similar style if helpful):\n- ${topHooks.slice(0, 3).join("\n- ")}`
+    ? `\n\nHigh-performing past openers (style reference):\n- ${topHooks.slice(0, 3).join("\n- ")}`
     : "";
 
-  const prompt = `Write a YouTube long-form weekly weather recap script for ${city}.
-It should be conversational, energetic, ~250-350 words, and cover all 7 days
-with highs/lows and conditions. End with a brief look at next week and a
-"like + subscribe" prompt.
+  const prompt = `Write a YouTube long-form MONTHLY weather recap script for ${city} for ${monthName}.
+Conversational, energetic, ~350-500 words. Structure: intro → week 1 → week 2 → week 3 → week 4 → "Moment of the Month" highlight → outro CTA "Follow for your daily forecast".
 
-Last 7 days:
-${summary}${hookBlock}
+Data:
+${weekBlock}
+${momentBlock}${hookBlock}
 
-Return JSON ONLY: {"title":"...", "script":"..."}.
-Title must include the phrase "Weekly Recap".`;
+Return JSON ONLY:
+{
+  "title": "Month in Review: ${city} — ${monthName}",
+  "script": "full narration text",
+  "weekSummaries": ["one-line summary for week 1", "...week 2", "...week 3", "...week 4"],
+  "momentLine": "one-line summary of the Moment of the Month"
+}
+Title MUST start with "Month in Review:".`;
 
   const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
@@ -160,15 +222,27 @@ Title must include the phrase "Weekly Recap".`;
   });
   if (!res.ok) {
     const t = await res.text();
-    throw new Error(`Lovable AI script failed: ${res.status} ${t.slice(0, 200)}`);
+    throw new Error(`Lovable AI monthly script failed: ${res.status} ${t.slice(0, 200)}`);
   }
   const json = await res.json();
   const content = json?.choices?.[0]?.message?.content ?? "{}";
   let parsed: any = {};
   try { parsed = JSON.parse(content); } catch { /* ignore */ }
+  const fallbackWeek = weekStats.map((w) =>
+    `Week ${w.weekNum}: avg ${w.avgHigh ?? "—"}°/${w.avgLow ?? "—"}°, ${w.dominantCondition}`
+  );
+  const fallbackMoment = moment
+    ? `${moment.kind === "hottest" ? "Hottest" : "Coldest"} day: ${Math.round(moment.post.temperature as number)}°F`
+    : "A month of varied weather.";
   return {
-    title: parsed.title || `${city} Weekly Recap`,
-    script: parsed.script || "Here's your weekly weather recap.",
+    title: parsed.title || `Month in Review: ${city} — ${monthName}`,
+    script: parsed.script || `Here's your ${monthName} weather recap for ${city}.`,
+    weekSummaries: Array.isArray(parsed.weekSummaries) && parsed.weekSummaries.length === 4
+      ? parsed.weekSummaries.map((s: any) => String(s))
+      : fallbackWeek,
+    momentLine: typeof parsed.momentLine === "string" && parsed.momentLine
+      ? parsed.momentLine
+      : fallbackMoment,
   };
 }
 
