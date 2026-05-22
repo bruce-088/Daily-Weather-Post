@@ -3301,9 +3301,10 @@ Deno.serve(async (req) => {
 
         processed++;
       } catch (postError) {
-        const errMsg = postError instanceof Error ? postError.message : "Processing failed";
-        const errStack = postError instanceof Error ? (postError.stack || "").split("\n").slice(0, 6).join(" | ") : "";
-        console.error(`[process] post ${post.id} threw: ${errMsg} :: ${errStack}`);
+        const errMsg = postError instanceof Error ? postError.message : String(postError || "Processing failed");
+        const errStack = postError instanceof Error ? (postError.stack || "") : "";
+        console.error(`[process] per-post catch build=${PROCESS_SCHEDULED_POSTS_BUILD} post_id=${post.id} message=${errMsg}`);
+        console.error(`[process] per-post stack post_id=${post.id}\n${errStack || "<no stack>"}`);
 
         const currentRetryCount = (post as any).retry_count ?? 0;
         const MAX_RETRIES = 2;
