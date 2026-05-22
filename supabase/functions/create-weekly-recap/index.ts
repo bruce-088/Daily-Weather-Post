@@ -34,6 +34,38 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 const CREATOMATE_API_KEY = Deno.env.get("CREATOMATE_API_KEY") || "";
+const RECAP_MUSIC_URL = (Deno.env.get("RECAP_MUSIC_URL") || "").trim();
+
+// Resolve ElevenLabs key from any of the legacy/canonical env names so a
+// future rotation under either spelling keeps the recap voice working.
+function resolveElevenLabsKey(): { value: string; source: string } | null {
+  const candidates = ["ELEVENLABS_API_KEY", "ELEVEN_LABS_API_KEY", "ELEVENLABS_KEY"];
+  for (const name of candidates) {
+    const v = Deno.env.get(name);
+    if (v && v.trim().length > 0) return { value: v.trim(), source: name };
+  }
+  return null;
+}
+
+// Shared voice map — mirrors process-scheduled-posts so user voice prefs apply.
+const ELEVENLABS_VOICES: Record<string, string> = {
+  female: "EXAVITQu4vr4xnSDxMaL",
+  male: "JBFqnCBsd6RMkjVDRZzb",
+  anchor: "onwK4e9ZLuTAKqWW03F9",
+  cheerful: "Xb7hH8MSUJpSbSDYk0k2",
+  calm: "cgSgspJ2msm6clMCkdW9",
+  deep: "nPczCjzI2devNBz1zQrb",
+};
+function resolveVoiceId(input?: string | null): string {
+  if (!input) return ELEVENLABS_VOICES.female;
+  if (ELEVENLABS_VOICES[input]) return ELEVENLABS_VOICES[input];
+  return input;
+}
+function clampVoiceParam(n: any, min: number, max: number, fallback: number): number {
+  const v = typeof n === "number" ? n : Number(n);
+  if (!isFinite(v)) return fallback;
+  return Math.min(max, Math.max(min, v));
+}
 
 interface PostRow {
   id: string;
