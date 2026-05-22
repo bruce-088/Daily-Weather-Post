@@ -47,6 +47,10 @@ Deno.serve(async (req) => {
     }
     if (!userId) throw new Error("Authentication required");
 
+    // Resolve cinematic settings up-front with safe defaults so downstream
+    // pickPresetForDaily / resolveScene calls always receive a defined object.
+    const settings = await loadCinematicSettings(supabase, userId);
+
     // Load and validate bundle
     const { data: bundle, error: bundleErr } = await supabase
       .from("preview_bundles")
