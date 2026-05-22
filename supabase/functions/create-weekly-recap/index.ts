@@ -413,7 +413,7 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
       const ab = await dl.arrayBuffer();
       const bytes = ab.byteLength;
       console.log(`[recap] render output size=${bytes} type=${contentType}`);
-      if (bytes < 1_000_000 || !/video\/mp4/i.test(contentType)) {
+      if (bytes < 100_000 || !/video\/mp4/i.test(contentType)) {
         console.error(`[recap] ABORT: render output invalid (bytes=${bytes} type=${contentType})`);
         return null;
       }
