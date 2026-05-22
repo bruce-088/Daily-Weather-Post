@@ -1569,6 +1569,7 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
+    console.log(`[process] build=${PROCESS_SCHEDULED_POSTS_BUILD}`);
 
     const openWeatherApiKey = Deno.env.get("OPENWEATHER_API_KEY");
     if (!openWeatherApiKey) {
@@ -1663,7 +1664,7 @@ Deno.serve(async (req) => {
     if (fetchError) throw new Error(`Failed to fetch scheduled posts: ${fetchError.message}`);
     if (!duePosts || duePosts.length === 0) {
       return new Response(
-        JSON.stringify({ success: true, message: "No posts due", processed: 0, missed_recovered: missedCount || 0 }),
+        JSON.stringify({ success: true, message: "No posts due", processed: 0, missed_recovered: missedCount || 0, build: PROCESS_SCHEDULED_POSTS_BUILD }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
