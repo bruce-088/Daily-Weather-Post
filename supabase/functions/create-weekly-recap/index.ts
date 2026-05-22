@@ -674,6 +674,10 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
     elements,
   };
 
+  console.log(
+    `[recap] Creatomate payload (no template_id, dynamic source): ${JSON.stringify(body)}`,
+  );
+
   const submit = await fetch("https://api.creatomate.com/v2/renders", {
     method: "POST",
     headers: { Authorization: `Bearer ${CREATOMATE_API_KEY}`, "Content-Type": "application/json" },
