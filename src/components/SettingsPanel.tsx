@@ -16,6 +16,7 @@ import { PerformanceLearningToggle } from "@/components/PerformanceLearningToggl
 import { AutoWinnerSettings } from "@/components/AutoWinnerSettings";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { CollapsibleCardHeader } from "@/components/CollapsibleCardHeader";
+import { CinematicPresetSettings } from "@/components/CinematicPresetSettings";
 
 const TIMEZONE_OPTIONS = [
   { value: "America/New_York", label: "Eastern (New York)" },
@@ -765,6 +766,9 @@ export function SettingsPanel({
           </CardContent>
         </Card>
       )}
+
+      <CinematicPresetSettings />
+
 
       {voiceoverVisible && (
         <Card className="border-border/50 bg-card/80 backdrop-blur">
