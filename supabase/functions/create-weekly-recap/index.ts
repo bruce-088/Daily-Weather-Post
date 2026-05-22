@@ -372,7 +372,8 @@ function buildAnimatedGradientBg(
   // built-in scale animation guarantees frame-to-frame change so Creatomate
   // emits a real MP4 (and not a 15KB JPEG snapshot of a static composition).
   return {
-    type: "rectangle",
+    type: "shape",
+    shape_type: "rectangle",
     width: "100%",
     height: "100%",
     x: "50%",
@@ -386,7 +387,8 @@ function buildAnimatedGradientBg(
 // Full-frame 0.3 dark scrim used between background and text for legibility.
 function buildScrim(time: number, duration: number): any {
   return {
-    type: "rectangle",
+    type: "shape",
+    shape_type: "rectangle",
     width: "100%",
     height: "100%",
     x: "50%",
@@ -541,7 +543,8 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
   if (visualCountPre === 0) {
     console.warn("[recap] safety fallback: no visual elements, pushing solid background");
     elements.unshift({
-      type: "rectangle",
+      type: "shape",
+      shape_type: "rectangle",
       width: "100%", height: "100%", x: "50%", y: "50%",
       fill_color: "#0f172a",
       time: 0, duration: totalDuration,
