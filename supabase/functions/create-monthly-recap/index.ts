@@ -24,6 +24,12 @@
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import {
+  pickPresetForRecapSlide,
+  resolveScene,
+  logCinematic,
+  type SceneDecision,
+} from "../_shared/cinematic-presets.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -565,6 +571,9 @@ function buildSlideBackground(opts: {
   mediaUrl?: string | null;
   condition?: string | null;
   logPrefix?: string;
+  city?: string | null;
+  recapSlideKind?: "title" | "day" | "week_stat" | "highlight" | "outro";
+  decisionsOut?: SceneDecision[];
 }): any[] {
   const { time, duration, slideNum, grad, mediaUrl, condition } = opts;
   const mode = opts.mode ?? "image";
@@ -620,6 +629,29 @@ function buildSlideBackground(opts: {
     console.log(`[${prefix}] slide ${slideNum} background=gradient ${grad.label ?? "?"} (no scene)`);
     out.push(buildAnimatedGradientBg(time, duration, grad, slideNum));
   }
+
+  // [cinematic] Emit unified decision log + accumulate.
+  try {
+    const preset = pickPresetForRecapSlide({
+      kind: opts.recapSlideKind ?? "week_stat",
+      condition,
+      city: opts.city,
+      slideIndex: slideNum,
+    });
+    const decision = resolveScene({
+      city: opts.city,
+      condition,
+      mediaUrl,
+      preset,
+      mode,
+      slideIndex: slideNum,
+    });
+    logCinematic(prefix, decision, { city: opts.city, kind: opts.recapSlideKind ?? "week_stat", slide: slideNum });
+    if (opts.decisionsOut) opts.decisionsOut.push(decision);
+  } catch (e) {
+    console.warn(`[${prefix}] slide ${slideNum} cinematic-log failed:`, (e as Error)?.message);
+  }
+
   return out;
 }
 
@@ -663,6 +695,8 @@ async function stitchSlideshow(
   console.log(`[monthly-recap] stitch inputs: weeks=${monthly.weekStats.length} moment=${monthly.moment ? "yes" : "no"} slide_dur=${SLIDE_DUR}s voice=${voiceDur}s`);
 
   const elements: any[] = [];
+  // [cinematic] Per-recap accumulator for system_logs.
+  const cinematicDecisions: SceneDecision[] = [];
 
   // ── Title card ──
   const titleGrad = gradientForSlide();
@@ -701,6 +735,9 @@ async function stitchSlideshow(
       mode: "image",
       condition: w.dominantCondition ?? null,
       logPrefix: "monthly-recap",
+      city,
+      recapSlideKind: "week_stat",
+      decisionsOut: cinematicDecisions,
     }));
     elements.push(buildScrim(start, SLIDE_DUR, 0.32));
 
@@ -755,6 +792,9 @@ async function stitchSlideshow(
     mediaUrl: monthly.moment?.post.image_url ?? null,
     condition: monthly.moment?.post.condition ?? null,
     logPrefix: "monthly-recap",
+    city,
+    recapSlideKind: "highlight",
+    decisionsOut: cinematicDecisions,
   }));
   elements.push(buildScrim(momentStart, SLIDE_DUR, 0.4));
 
@@ -954,6 +994,30 @@ async function stitchSlideshow(
         return null;
       }
       console.log(`[monthly-recap] stitched mp4 ready: url=${sd.url} bytes=${bytes}`);
+      try {
+        const sources: Record<string, number> = {};
+        let eligible = 0;
+        for (const d of cinematicDecisions) {
+          sources[d.source] = (sources[d.source] ?? 0) + 1;
+          if (d.eligibleForLearning) eligible++;
+        }
+        await svc.from("system_logs").insert({
+          user_id: userId,
+          type: "cinematic_recap_render",
+          platform: "youtube",
+          message: `monthly recap: ${cinematicDecisions.length} slides (${eligible} eligible)`,
+          context: {
+            kind: "monthly",
+            city,
+            slide_count: cinematicDecisions.length,
+            eligible_count: eligible,
+            sources,
+            decisions: cinematicDecisions,
+          },
+        });
+      } catch (e) {
+        console.warn(`[monthly-recap] cinematic system_logs insert failed:`, (e as Error)?.message);
+      }
       return { url: sd.url, data: new Uint8Array(ab), contentType, reportedDuration };
     }
     if (sd.status === "failed") {
