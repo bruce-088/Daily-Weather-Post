@@ -13,7 +13,10 @@ import {
   logCinematic,
   attachCinematicToPostHistory,
   loadCinematicSettings,
+  SAFE_CINEMATIC_DEFAULTS,
 } from "../_shared/cinematic-presets.ts";
+
+const PROCESS_SCHEDULED_POSTS_BUILD = "settings-guard-2026-05-22T17:10Z";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
