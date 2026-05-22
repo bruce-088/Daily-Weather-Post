@@ -990,6 +990,27 @@ Deno.serve(async (req) => {
 
   const candidateList = (candidates || []).filter((c: any) => c.user_id);
 
+  // Dev-test mode: run synchronously and return the preview URL inline.
+  if (skipPost) {
+    try {
+      const target = candidateList[0];
+      if (!target) {
+        return new Response(JSON.stringify({ ok: false, error: "no candidate users" }), {
+          status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const r = await runForUser(svc, target.user_id, cityFilter, { skipPost: true });
+      return new Response(
+        JSON.stringify({ ok: r.ok, mode: "dev", preview_url: r.preview_url ?? null, detail: r.detail }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    } catch (e) {
+      return new Response(JSON.stringify({ ok: false, error: (e as Error).message }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }
+
   const work = async () => {
     const results: Array<{ user_id: string; ok: boolean; detail: string }> = [];
     for (const c of candidateList) {
