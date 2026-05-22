@@ -237,6 +237,119 @@ async function createSignedSilentAudio(svc: any, userId: string, durationSeconds
   return signed.signedUrl;
 }
 
+// ───────────────── ElevenLabs voice narration ─────────────────
+//
+// Synthesize the weekly recap script via ElevenLabs and cache the mp3 in the
+// `generated-images` bucket so render retries reuse the same asset.
+// Gated by `weather_settings.enable_voiceover`. On ANY failure (no key, http,
+// timeout, upload), returns null so the recap still renders silently.
+async function synthesizeRecapVoice(
+  svc: any,
+  userId: string,
+  script: string,
+): Promise<{ url: string; durationSec: number } | null> {
+  let settings: any = null;
+  try {
+    const { data } = await svc
+      .from("weather_settings")
+      .select("enable_voiceover, voiceover_voice_id, voiceover_speed, voiceover_stability, voiceover_similarity")
+      .eq("user_id", userId)
+      .maybeSingle();
+    settings = data;
+  } catch (e) {
+    console.warn("[recap] could not load voiceover settings:", (e as Error).message);
+  }
+
+  if (!settings || settings.enable_voiceover !== true) {
+    console.log(`[recap] voice synth skipped: enable_voiceover=${settings?.enable_voiceover ?? "n/a"}`);
+    return null;
+  }
+
+  const key = resolveElevenLabsKey();
+  if (!key) {
+    console.error("[recap] voice synth failed, falling back to silent render: no ElevenLabs API key in env");
+    return null;
+  }
+
+  const voiceId = settings.voiceover_voice_id || "female";
+  const speed = clampVoiceParam(settings.voiceover_speed, 0.7, 1.2, 1.0);
+  const stability = clampVoiceParam(settings.voiceover_stability, 0, 1, 0.55);
+  const similarity = clampVoiceParam(settings.voiceover_similarity, 0, 1, 0.78);
+  const wordCount = (script || "").trim().split(/\s+/).filter(Boolean).length;
+  const estDurationSec = Math.max(10, Math.ceil(wordCount / 2.5));
+  console.log(`[recap] synthesizing 0:${estDurationSec}s voice script via ElevenLabs voice=${voiceId} source=${key.source} words=${wordCount}`);
+
+  const url = `https://api.elevenlabs.io/v1/text-to-speech/${resolveVoiceId(voiceId)}?output_format=mp3_44100_128`;
+  const body = JSON.stringify({
+    text: script,
+    model_id: "eleven_turbo_v2_5",
+    voice_settings: { stability, similarity_boost: similarity, style: 0.35, use_speaker_boost: true, speed },
+  });
+
+  let bytes: Uint8Array | null = null;
+  const MAX_ATTEMPTS = 2;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 60_000);
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "xi-api-key": key.value, "Content-Type": "application/json" },
+        body,
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      if (res.ok) {
+        bytes = new Uint8Array(await res.arrayBuffer());
+        break;
+      }
+      const detail = (await res.text()).slice(0, 200);
+      console.error(`[recap] voice synth attempt ${attempt}/${MAX_ATTEMPTS} failed: status=${res.status} ${detail}`);
+      if (attempt < MAX_ATTEMPTS && res.status >= 500) {
+        await new Promise((r) => setTimeout(r, 2000));
+        continue;
+      }
+      console.error("[recap] voice synth failed, falling back to silent render");
+      return null;
+    } catch (e) {
+      clearTimeout(timer);
+      console.error(`[recap] voice synth attempt ${attempt}/${MAX_ATTEMPTS} error:`, (e as Error).message);
+      if (attempt < MAX_ATTEMPTS) {
+        await new Promise((r) => setTimeout(r, 2000));
+        continue;
+      }
+      console.error("[recap] voice synth failed, falling back to silent render");
+      return null;
+    }
+  }
+  if (!bytes) {
+    console.error("[recap] voice synth failed, falling back to silent render: no bytes");
+    return null;
+  }
+
+  const path = `weekly-recap-audio/${userId}/${Date.now()}-voice.mp3`;
+  const { error: upErr } = await svc.storage
+    .from("generated-images")
+    .upload(path, bytes, { contentType: "audio/mpeg", upsert: true });
+  if (upErr) {
+    console.error("[recap] voice synth failed, falling back to silent render: upload error:", upErr.message);
+    return null;
+  }
+  const { data: signed, error: signedErr } = await svc.storage
+    .from("generated-images")
+    .createSignedUrl(path, 60 * 60);
+  if (signedErr || !signed?.signedUrl) {
+    console.error("[recap] voice synth failed, falling back to silent render: signed url error:", signedErr?.message);
+    return null;
+  }
+  // mp3 @ 128kbps ≈ 16000 bytes/sec
+  const durationSec = Math.max(estDurationSec, Math.ceil(bytes.byteLength / 16000));
+  console.log(`[recap] voice asset ready: ${signed.signedUrl} bytes=${bytes.byteLength} duration=${durationSec}s`);
+  return { url: signed.signedUrl, durationSec };
+}
+
+
+
 // Time-of-day → gradient stops for animated slide background.
 function gradientForSlide(createdAt?: string): { from: string; to: string; label: string } {
   if (!createdAt) return { from: "#0f172a", to: "#581c87", label: "evening" };
