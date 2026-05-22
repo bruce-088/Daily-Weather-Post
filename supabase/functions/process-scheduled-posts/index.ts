@@ -3299,6 +3299,9 @@ Deno.serve(async (req) => {
         processed++;
       } catch (postError) {
         const errMsg = postError instanceof Error ? postError.message : "Processing failed";
+        const errStack = postError instanceof Error ? (postError.stack || "").split("\n").slice(0, 6).join(" | ") : "";
+        console.error(`[process] post ${post.id} threw: ${errMsg} :: ${errStack}`);
+
         const currentRetryCount = (post as any).retry_count ?? 0;
         const MAX_RETRIES = 2;
         const RETRY_DELAY_MS = 2 * 60 * 1000;
