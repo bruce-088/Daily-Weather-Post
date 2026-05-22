@@ -1,5 +1,8 @@
-// City Command Center — per-city manual Run Now buttons (Daily / Weekly / Monthly).
-// All three triggers go through the full production pipeline.
+// City Command Center — per-city manual Run Now buttons.
+// Two rows per city:
+//   PROD  → posts live to connected channels
+//   DEV   → runs full generation pipeline but SKIPS social upload (skip_post=true)
+// On Dev success, surfaces a "View Test Result" link to the rendered media.
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -8,17 +11,19 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Loader2, MapPin, PlayCircle, ExternalLink } from "lucide-react";
+import { Loader2, MapPin, PlayCircle, ExternalLink, Wrench, Eye } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 interface City { id: string; name: string; state: string | null; }
 type RunType = "daily" | "weekly" | "monthly";
+type Mode = "post" | "dev";
 type Status = "idle" | "running" | "done" | "error";
-interface RunState { status: Status; message?: string; url?: string | null; }
+interface RunState { status: Status; message?: string; url?: string | null; mode?: Mode; }
 
 const DUP_WINDOW_MS = 30 * 60 * 1000;
-const dupKey = (cityId: string, type: RunType) => `lastRun:${cityId}:${type}`;
+const dupKey = (cityId: string, mode: Mode, type: RunType) => `lastRun:${cityId}:${mode}:${type}`;
+const runKey = (cityId: string, mode: Mode, type: RunType) => `${cityId}:${mode}:${type}`;
 
 function StatusDot({ status }: { status: Status }) {
   const color =
@@ -41,8 +46,8 @@ function StatusDot({ status }: { status: Status }) {
 export function CityCommandCenter() {
   const [cities, setCities] = useState<City[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
-  const [runs, setRuns] = useState<Record<string, RunState>>({}); // key: `${cityId}:${type}`
-  const [pendingConfirm, setPendingConfirm] = useState<{ city: City; type: RunType; ageMin: number } | null>(null);
+  const [runs, setRuns] = useState<Record<string, RunState>>({});
+  const [pendingConfirm, setPendingConfirm] = useState<{ city: City; mode: Mode; type: RunType; ageMin: number } | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -58,32 +63,39 @@ export function CityCommandCenter() {
     })();
   }, []);
 
-  const setRun = (cityId: string, type: RunType, state: RunState) =>
-    setRuns((r) => ({ ...r, [`${cityId}:${type}`]: state }));
+  const setRun = (cityId: string, mode: Mode, type: RunType, state: RunState) =>
+    setRuns((r) => ({ ...r, [runKey(cityId, mode, type)]: state }));
 
-  const getRun = (cityId: string, type: RunType): RunState =>
-    runs[`${cityId}:${type}`] ?? { status: "idle" };
+  const getRun = (cityId: string, mode: Mode, type: RunType): RunState =>
+    runs[runKey(cityId, mode, type)] ?? { status: "idle" };
 
   const cityBusy = (cityId: string) =>
-    (["daily", "weekly", "monthly"] as RunType[]).some((t) => getRun(cityId, t).status === "running");
+    (["post", "dev"] as Mode[]).some((m) =>
+      (["daily", "weekly", "monthly"] as RunType[]).some((t) => getRun(cityId, m, t).status === "running"),
+    );
 
-  const handleClick = (city: City, type: RunType) => {
-    const last = localStorage.getItem(dupKey(city.id, type));
+  const handleClick = (city: City, mode: Mode, type: RunType) => {
+    const last = localStorage.getItem(dupKey(city.id, mode, type));
     if (last) {
       const age = Date.now() - new Date(last).getTime();
       if (age < DUP_WINDOW_MS) {
-        setPendingConfirm({ city, type, ageMin: Math.max(1, Math.round(age / 60000)) });
+        setPendingConfirm({ city, mode, type, ageMin: Math.max(1, Math.round(age / 60000)) });
         return;
       }
     }
-    void runNow(city, type);
+    void runNow(city, mode, type);
   };
 
-  const runNow = async (city: City, type: RunType) => {
+  const runNow = async (city: City, mode: Mode, type: RunType) => {
     if (!userId) return;
-    setRun(city.id, type, { status: "running" });
-    localStorage.setItem(dupKey(city.id, type), new Date().toISOString());
-    console.log(`[manual] ${type} triggered for city=${city.name} by user=${userId}`);
+    const isDev = mode === "dev";
+    setRun(city.id, mode, type, { status: "running", mode });
+    localStorage.setItem(dupKey(city.id, mode, type), new Date().toISOString());
+    if (isDev) {
+      console.log(`[dev-test] ${type} triggered for city=${city.name} (skipping upload)`);
+    } else {
+      console.log(`[manual-post] ${type} triggered for city=${city.name} by user=${userId}`);
+    }
 
     try {
       if (type === "daily") {
@@ -95,36 +107,97 @@ export function CityCommandCenter() {
             city: city.name,
             platform: "youtube",
             scheduled_at: scheduledAt,
-            slot: "adhoc",
+            slot: isDev ? "adhoc-dev" : "adhoc",
             status: "pending",
             include_voiceover: true,
           })
           .select("id")
           .single();
         if (insErr) throw insErr;
-        const { error: procErr } = await supabase.functions.invoke("process-scheduled-posts", {
-          body: { scheduled_post_id: ins!.id, source: "city_command_center" },
+        const { data: procData, error: procErr } = await supabase.functions.invoke("process-scheduled-posts", {
+          body: { scheduled_post_id: ins!.id, source: "city_command_center", skip_post: isDev },
         });
         if (procErr) throw procErr;
-        setRun(city.id, type, { status: "done", message: "Posted via daily pipeline" });
-        toast.success(`✅ Daily post processing for ${city.name}`, { description: "Check post history in a moment." });
+        const previewUrl = (procData as any)?.preview_url ?? null;
+        if (isDev) {
+          setRun(city.id, mode, type, {
+            status: "done", mode,
+            message: previewUrl ? "Render complete — no upload" : "Rendered (no preview URL)",
+            url: previewUrl,
+          });
+          toast.success(`🛠 Dev: Daily render for ${city.name}`, {
+            description: previewUrl ? "Open View Test Result to inspect." : "Pipeline finished without preview URL.",
+          });
+        } else {
+          setRun(city.id, mode, type, { status: "done", mode, message: "Posted via daily pipeline" });
+          toast.success(`✅ Daily post processing for ${city.name}`, { description: "Check post history in a moment." });
+        }
       } else {
         const fnName = type === "weekly" ? "create-weekly-recap" : "create-monthly-recap";
-        const { data, error } = await supabase.functions.invoke(fnName, { body: { city: city.name } });
+        const { data, error } = await supabase.functions.invoke(fnName, {
+          body: { city: city.name, skip_post: isDev },
+        });
         if (error) throw error;
-        setRun(city.id, type, {
-          status: "done",
-          message: `Queued (${data?.candidates ?? "?"} candidate${data?.candidates === 1 ? "" : "s"})`,
-        });
-        toast.success(`✅ ${type === "weekly" ? "Weekly" : "Monthly"} recap queued for ${city.name}`, {
-          description: "Render + voice + YouTube upload runs in background. Watch History.",
-        });
+        if (isDev) {
+          const previewUrl = (data as any)?.preview_url ?? null;
+          setRun(city.id, mode, type, {
+            status: previewUrl ? "done" : "error", mode,
+            message: previewUrl ? "Render complete — no upload" : ((data as any)?.detail ?? "No preview URL returned"),
+            url: previewUrl,
+          });
+          if (previewUrl) {
+            toast.success(`🛠 Dev: ${type === "weekly" ? "Weekly" : "Monthly"} render for ${city.name}`, {
+              description: "Open View Test Result to inspect.",
+            });
+          } else {
+            toast.error(`Dev ${type} for ${city.name} produced no preview`, { description: (data as any)?.detail ?? "" });
+          }
+        } else {
+          setRun(city.id, mode, type, {
+            status: "done", mode,
+            message: `Queued (${(data as any)?.candidates ?? "?"} candidate${(data as any)?.candidates === 1 ? "" : "s"})`,
+          });
+          toast.success(`✅ ${type === "weekly" ? "Weekly" : "Monthly"} recap queued for ${city.name}`, {
+            description: "Render + voice + YouTube upload runs in background. Watch History.",
+          });
+        }
       }
     } catch (e: any) {
       const msg = e?.message ?? String(e);
-      setRun(city.id, type, { status: "error", message: msg });
-      toast.error(`${type} failed for ${city.name}`, { description: msg });
+      setRun(city.id, mode, type, { status: "error", mode, message: msg });
+      toast.error(`${isDev ? "Dev " : ""}${type} failed for ${city.name}`, { description: msg });
     }
+  };
+
+  const renderBtn = (city: City, mode: Mode, type: RunType, label: string) => {
+    const busy = cityBusy(city.id);
+    const st = getRun(city.id, mode, type);
+    const isDev = mode === "dev";
+    const Icon = st.status === "running" ? Loader2 : isDev ? Wrench : PlayCircle;
+    return (
+      <Button
+        key={`${mode}:${type}`}
+        size="sm"
+        variant={st.status === "done" ? "secondary" : "outline"}
+        disabled={busy}
+        onClick={() => handleClick(city, mode, type)}
+        className="gap-1.5"
+      >
+        <Icon size={14} className={st.status === "running" ? "animate-spin" : ""} />
+        {st.status === "running" ? "Generating…" : label}
+      </Button>
+    );
+  };
+
+  const latestForCity = (cityId: string) => {
+    const all: Array<{ mode: Mode; type: RunType; st: RunState }> = [];
+    for (const m of ["post", "dev"] as Mode[])
+      for (const t of ["daily", "weekly", "monthly"] as RunType[])
+        all.push({ mode: m, type: t, st: getRun(cityId, m, t) });
+    return all.find((r) => r.st.status === "running")
+        ?? all.find((r) => r.st.status === "error")
+        ?? all.find((r) => r.st.status === "done")
+        ?? null;
   };
 
   return (
@@ -138,60 +211,61 @@ export function CityCommandCenter() {
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-[11px] text-muted-foreground">
-            Manually trigger the full production pipeline for any city. Daily uses{" "}
-            <code>process-scheduled-posts</code>; Weekly & Monthly produce long-form YouTube recaps.
+            <strong>Post</strong> runs publish live to connected channels.{" "}
+            <strong>Dev</strong> runs render end-to-end (image, voice, music, caption) but{" "}
+            <em>skip the social upload</em> and never write to post history — use them for safe QA.
           </p>
           {cities.length === 0 && (
             <p className="text-xs text-muted-foreground">No cities found. Add one in City Manager above.</p>
           )}
           <div className="space-y-2">
             {cities.map((c) => {
-              const busy = cityBusy(c.id);
-              const renderBtn = (type: RunType, label: string) => {
-                const st = getRun(c.id, type);
-                return (
-                  <Button
-                    key={type}
-                    size="sm"
-                    variant={st.status === "done" ? "secondary" : "outline"}
-                    disabled={busy}
-                    onClick={() => handleClick(c, type)}
-                    className="gap-1.5"
-                  >
-                    {st.status === "running" ? (
-                      <Loader2 size={14} className="animate-spin" />
-                    ) : (
-                      <PlayCircle size={14} />
-                    )}
-                    {st.status === "running" ? "Generating…" : label}
-                  </Button>
-                );
-              };
-              const lastResult = (["daily", "weekly", "monthly"] as RunType[])
-                .map((t) => ({ t, st: getRun(c.id, t) }))
-                .find((r) => r.st.status === "running" || r.st.status === "error" || r.st.status === "done");
-              const overallStatus: Status = lastResult?.st.status ?? "idle";
+              const latest = latestForCity(c.id);
+              const overallStatus: Status = latest?.st.status ?? "idle";
               return (
                 <div key={c.id} className="rounded-md border bg-card/40 p-3 space-y-2">
                   <div className="flex items-center gap-2 text-sm font-medium">
                     <MapPin size={14} className="text-primary" />
                     {c.name}{c.state ? `, ${c.state}` : ""}
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    {renderBtn("daily", "▶ Run Daily Now")}
-                    {renderBtn("weekly", "▶ Run Weekly Now")}
-                    {renderBtn("monthly", "▶ Run Monthly Now")}
+
+                  <div className="space-y-1.5">
+                    <div className="text-[10px] uppercase tracking-wide text-amber-500/80 font-semibold">
+                      Post — live to channels
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {renderBtn(c, "post", "daily",   "▶ Post Daily Now")}
+                      {renderBtn(c, "post", "weekly",  "▶ Post Weekly Now")}
+                      {renderBtn(c, "post", "monthly", "▶ Post Monthly Now")}
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between">
+
+                  <div className="space-y-1.5 pt-1 border-t border-border/40">
+                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">
+                      Dev — render only, no upload
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {renderBtn(c, "dev", "daily",   "🛠 Dev: Test Daily")}
+                      {renderBtn(c, "dev", "weekly",  "🛠 Dev: Test Weekly")}
+                      {renderBtn(c, "dev", "monthly", "🛠 Dev: Test Monthly")}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
                     <StatusDot status={overallStatus} />
-                    {lastResult?.st.message && (
-                      <span className={`text-[11px] ${lastResult.st.status === "error" ? "text-red-500" : "text-muted-foreground"}`}>
-                        {lastResult.st.status === "error" ? "❌" : lastResult.st.status === "done" ? "✅" : ""} {lastResult.st.message}
+                    {latest?.st.message && (
+                      <span className={`text-[11px] truncate max-w-[55%] ${latest.st.status === "error" ? "text-red-500" : "text-muted-foreground"}`}>
+                        {latest.st.status === "error" ? "❌" : latest.st.status === "done" ? (latest.mode === "dev" ? "🛠" : "✅") : ""} {latest.st.message}
                       </span>
                     )}
-                    {lastResult?.st.url && (
-                      <a href={lastResult.st.url} target="_blank" rel="noreferrer" className="text-[11px] text-primary inline-flex items-center gap-1">
-                        View <ExternalLink size={11} />
+                    {latest?.st.url && (
+                      <a
+                        href={latest.st.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[11px] text-primary inline-flex items-center gap-1 hover:underline"
+                      >
+                        {latest.mode === "dev" ? (<><Eye size={11} /> View Test Result</>) : (<>View <ExternalLink size={11} /></>)}
                       </a>
                     )}
                   </div>
@@ -207,8 +281,8 @@ export function CityCommandCenter() {
           <AlertDialogHeader>
             <AlertDialogTitle>⚠️ You ran this recently</AlertDialogTitle>
             <AlertDialogDescription>
-              You ran {pendingConfirm?.type} for {pendingConfirm?.city.name} about {pendingConfirm?.ageMin} minute(s) ago.
-              Run again?
+              You ran {pendingConfirm?.mode === "dev" ? "Dev " : ""}{pendingConfirm?.type} for{" "}
+              {pendingConfirm?.city.name} about {pendingConfirm?.ageMin} minute(s) ago. Run again?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -216,9 +290,9 @@ export function CityCommandCenter() {
             <AlertDialogAction
               onClick={() => {
                 if (pendingConfirm) {
-                  const { city, type } = pendingConfirm;
+                  const { city, mode, type } = pendingConfirm;
                   setPendingConfirm(null);
-                  void runNow(city, type);
+                  void runNow(city, mode, type);
                 }
               }}
             >
