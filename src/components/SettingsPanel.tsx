@@ -10,7 +10,7 @@ import { Clock, MapPin, Instagram, Video, RefreshCw, Save, CheckCircle, External
 import { Badge } from "@/components/ui/badge";
 import { setSkipToday } from "@/lib/api";
 import { SystemHealthCard } from "@/components/SystemHealthCard";
-import { DevWeeklyRecapTrigger } from "@/components/DevWeeklyRecapTrigger";
+import { CityCommandCenter } from "@/components/CityCommandCenter";
 import { JobPipelineToggle } from "@/components/JobPipelineToggle";
 import { PerformanceLearningToggle } from "@/components/PerformanceLearningToggle";
 import { AutoWinnerSettings } from "@/components/AutoWinnerSettings";
@@ -958,7 +958,7 @@ export function SettingsPanel({
       <JobPipelineToggle />
       <AutoWinnerSettings />
       <SystemHealthCard />
-      <DevWeeklyRecapTrigger />
+      <CityCommandCenter />
 
       {(showLocation || showConnections || showAutomation) && (
         <Button

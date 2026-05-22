@@ -27,5 +27,8 @@ verify_jwt = false
 [functions.create-weekly-recap]
 verify_jwt = false
 
+[functions.create-monthly-recap]
+verify_jwt = false
+
 [functions.compute-winner-stats]
 verify_jwt = false
