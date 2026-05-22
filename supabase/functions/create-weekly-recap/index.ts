@@ -377,15 +377,7 @@ function buildAnimatedGradientBg(
     height: "100%",
     x: "50%",
     y: "50%",
-    fill_color: grad.from, // solid fallback — guarantees a non-black base
-    gradient: {
-      type: "linear",
-      angle: 135,
-      stops: [
-        { offset: "0%", color: grad.from },
-        { offset: "100%", color: grad.to },
-      ],
-    },
+    fill_color: grad.from, // solid fill — Creatomate rectangles don't support gradient stops natively
     time,
     duration,
     animations: [
