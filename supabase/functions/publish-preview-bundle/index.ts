@@ -123,8 +123,9 @@ Deno.serve(async (req) => {
             city: cityName,
             condition: weather?.condition ?? null,
             mediaUrl: (bundle as any).background_url || null,
-            preset: pickPresetForDaily({ condition: weather?.condition ?? null, city: cityName }),
+            preset: pickPresetForDaily({ condition: weather?.condition ?? null, city: cityName, settings: settings as any }),
             mode: bundle.content_type === "image" ? "image" : "image",
+            settings: settings as any,
           });
       logCinematic("publish-preview-bundle", _cinematicDecision, { city: cityName, kind: "daily" });
       const _cinPatch = attachCinematicToPostHistory(
