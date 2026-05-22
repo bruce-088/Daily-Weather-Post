@@ -3056,7 +3056,7 @@ Deno.serve(async (req) => {
           published_visual_source: null,
         };
         try {
-          const settings = await loadCinematicSettings(supabase, post.user_id);
+          const cinematicSettings = (await loadCinematicSettings(supabase, post.user_id)) || { ...SAFE_CINEMATIC_DEFAULTS };
           const _cinematicDecision = resolveScene({
             city: weather.city,
             condition: weather.condition,
@@ -3065,10 +3065,10 @@ Deno.serve(async (req) => {
               condition: weather.condition,
               city: weather.city,
               slot: (post as any).slot || null,
-              settings: settings as any,
+              settings: cinematicSettings as any,
             }),
             mode: visualStyle === "gradient" ? "gradient" : "image",
-            settings: settings as any,
+            settings: cinematicSettings as any,
           });
           logCinematic("process-scheduled-posts", _cinematicDecision, { city: weather.city, kind: "daily" });
           _cinPatch = attachCinematicToPostHistory(
