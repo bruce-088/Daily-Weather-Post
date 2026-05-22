@@ -26,6 +26,62 @@ function cityLabel(city: any): string {
   return city?.state ? String(city.name) + ", " + String(city.state) : String(city?.name || "Unknown");
 }
 
+// ── Duplicate-prevention guards ──
+// True when an active generate_content job already exists for the same
+// (user, city, platform, slot) in the last 24h.
+async function existingJobForSlot(
+  supabase: any,
+  userId: string,
+  city: string,
+  platform: string,
+  slot: string,
+): Promise<boolean> {
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from("jobs")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("city", city)
+    .eq("platform", platform)
+    .eq("type", "generate_content")
+    .in("status", ["pending", "processing", "retrying"])
+    .eq("payload->>slot", slot)
+    .gte("created_at", since)
+    .limit(1);
+  if (error) {
+    console.warn(`[scheduler] existingJobForSlot query error:`, error.message);
+    return false; // fail-open — unique index will still catch it
+  }
+  return (data?.length ?? 0) > 0;
+}
+
+// True if a successful post for this (user, city, platform, slot) landed in
+// the last 12h.
+async function recentSuccessForSlot(
+  supabase: any,
+  userId: string,
+  city: string,
+  platform: string,
+  slot: string,
+): Promise<boolean> {
+  const since = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from("post_history")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("city", city)
+    .eq("platform", platform)
+    .eq("slot", slot)
+    .in("status", ["succeeded", "success", "posted"])
+    .gte("created_at", since)
+    .limit(1);
+  if (error) {
+    console.warn(`[scheduler] recentSuccessForSlot query error:`, error.message);
+    return false;
+  }
+  return (data?.length ?? 0) > 0;
+}
+
 import { requireCronOrUser } from "../_shared/auth-helpers.ts";
 
 Deno.serve(async (req) => {
