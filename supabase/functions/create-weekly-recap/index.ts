@@ -205,14 +205,47 @@ async function createSignedSilentAudio(svc: any, userId: string, durationSeconds
   return signed.signedUrl;
 }
 
+// Time-of-day → gradient stops for animated slide background.
+function gradientForSlide(createdAt?: string): { from: string; to: string; label: string } {
+  if (!createdAt) return { from: "#0f172a", to: "#581c87", label: "evening" };
+  const h = new Date(createdAt).getHours();
+  if (h < 12) return { from: "#1e3a8a", to: "#7e22ce", label: "morning" };
+  if (h < 17) return { from: "#ea580c", to: "#f59e0b", label: "afternoon" };
+  return { from: "#0f172a", to: "#581c87", label: "evening" };
+}
+
+// Full-frame animated gradient background. Slow scale (1.0 → 1.05) + gradient
+// fill guarantees frame-to-frame change so Creatomate ALWAYS emits a real
+// MP4, never a static JPEG, even when no image_url is available.
+function buildAnimatedGradientBg(
+  time: number,
+  duration: number,
+  grad: { from: string; to: string },
+): any {
+  return {
+    type: "shape",
+    path: "M 0 0 L 100 0 L 100 100 L 0 100 Z",
+    width: "100%",
+    height: "100%",
+    x: "50%",
+    y: "50%",
+    fill_color: `linear-gradient(135deg, ${grad.from}, ${grad.to})`,
+    time,
+    duration,
+    animations: [
+      { type: "scale", from: 1.0, to: 1.05, duration, easing: "linear" },
+    ],
+  };
+}
+
 async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title: string): Promise<StitchResult | null> {
   if (!CREATOMATE_API_KEY) {
     console.warn("[recap] CREATOMATE_API_KEY missing — skipping stitch");
     return null;
   }
   // Use up to 7 of the most recent posts. Image is optional — when missing,
-  // the slide falls back to a solid gradient background so the recap still
-  // renders (and still clears the YouTube long-form threshold).
+  // the slide falls back to an animated gradient background so the recap
+  // still renders a real MP4 (and clears the YouTube long-form threshold).
   const slides = posts.slice(-7);
   if (slides.length < 2) {
     console.warn("[recap] Not enough posts to stitch (need 2+):", slides.length);
@@ -227,7 +260,10 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
   const city = posts[0]?.city ?? "your city";
 
   const elements: any[] = [];
-  // Title card
+
+  // ── Title card ──
+  const titleGrad = gradientForSlide();
+  elements.push(buildAnimatedGradientBg(0, SLIDE_DUR, titleGrad));
   elements.push({
     type: "text", text: title,
     x: "50%", y: "20%", width: "90%",
@@ -238,8 +274,13 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
     enter_animation: { type: "fade", duration: 0.4 },
     exit_animation: { type: "fade", duration: 0.4 },
   });
+
+  // ── Day slides ──
   slides.forEach((p, i) => {
     const start = (i + 1) * SLIDE_DUR;
+    const grad = gradientForSlide(p.created_at);
+    // Always-on animated gradient under the slide (safety net + motion guarantee)
+    elements.push(buildAnimatedGradientBg(start, SLIDE_DUR, grad));
     if (p.image_url) {
       elements.push({
         type: "image", source: p.image_url,
@@ -248,6 +289,8 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
         enter_animation: { type: "fade", duration: 0.4 },
         exit_animation: { type: "fade", duration: 0.4 },
       });
+    } else {
+      console.log(`[recap] slide ${i + 1} using animated gradient (no image_url) palette=${grad.label}`);
     }
     const day = new Date(p.created_at).toLocaleDateString("en-US", { weekday: "long" });
     const temp = p.temperature != null ? `${Math.round(p.temperature)}°F` : "";
@@ -264,8 +307,12 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
     });
   });
 
-  // Outro card — guarantees the long-form clears 60s even on short weeks.
+  // ── Outro card ──
   const outroStart = (slides.length + 1) * SLIDE_DUR;
+  const outroGrad = gradientForSlide();
+  const outroBgIdx = elements.length;
+  elements.push(buildAnimatedGradientBg(outroStart, SLIDE_DUR, outroGrad));
+  const outroTextIdx = elements.length;
   elements.push({
     type: "text",
     text: `Thanks for watching!\nLike + subscribe for daily ${city} weather.`,
@@ -281,7 +328,9 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
   let totalDuration = (slides.length + 2) * SLIDE_DUR; // title + slides + outro
   if (totalDuration < 65) {
     const pad = 65 - totalDuration;
-    elements[elements.length - 1].duration += pad;
+    elements[outroTextIdx].duration += pad;
+    elements[outroBgIdx].duration += pad;
+    elements[outroBgIdx].animations[0].duration += pad;
     totalDuration += pad;
   }
   console.log(`[recap] stitch duration=${totalDuration}s slides=${slides.length}`);
