@@ -595,10 +595,17 @@ function estimateMp3DurationSeconds(byteLength: number | null | undefined): numb
  * always finishes with at least `tailPad` seconds of silent video at the end,
  * and the total is never shorter than `minDuration`.
  */
-const VOICE_START = 0.5;        // seconds — when voice element starts
+const VOICE_START = 0.5;        // seconds — when voice element starts (also where chime ends)
 const VOICE_TAIL_PAD = 1.5;     // seconds — silence held after voice ends
 const MIN_VIDEO_DURATION = 12;  // seconds — retention sweet spot floor
 const MAX_VIDEO_DURATION = 15;  // seconds — short enough to invite re-watch loops
+
+// === Broadcast audio bed (optional, env-configured) ===
+// BROADCAST_INTRO_CHIME_URL — 0.3–0.8s short chime that plays t=0 → VOICE_START
+// BROADCAST_BG_MUSIC_URL   — soft ambient bed for the whole clip. Ducked to
+//   BG_MUSIC_DUCK_VOLUME while the voice is speaking, full volume otherwise.
+const BG_MUSIC_FULL_VOLUME = "35%";   // baseline music volume (no voice)
+const BG_MUSIC_DUCK_VOLUME = "12%";   // ducked volume while voice is speaking
 
 function computeVideoDuration(audioDurationSec: number | null | undefined): number {
   const audio = typeof audioDurationSec === "number" && isFinite(audioDurationSec) && audioDurationSec > 0 ? audioDurationSec : 0;
@@ -838,14 +845,68 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
       shadow: "0px 2px 4px rgba(0,0,0,0.6)", enter: { type: "fade", duration: 0.4 } },
   );
 
-  // === AI VOICEOVER (optional) ===
-  // Plays from t=0.5s on its own track. We do NOT trim the audio track — its duration
-  // mirrors the real audio length so the CTA always finishes. The composition (D) is
-  // sized to leave VOICE_TAIL_PAD seconds of silent video after the voice ends.
+  // === AI VOICEOVER + BROADCAST AUDIO BED (optional) ===
+  // Three audio layers:
+  //   1. Intro chime  (t=0 → VOICE_START)              — gives it a broadcast feel
+  //   2. Background music (whole clip, ducked while voice is playing)
+  //   3. Voiceover    (starts at VOICE_START, full volume)
+  // All three are optional and independently degrade — missing music URL ⇒ no
+  // music layer; missing chime URL ⇒ no chime; missing voice ⇒ music plays at
+  // full volume the whole way through.
+  const introChimeUrl = (Deno.env.get("BROADCAST_INTRO_CHIME_URL") || "").trim();
+  const bgMusicUrl    = (Deno.env.get("BROADCAST_BG_MUSIC_URL") || "").trim();
+  const audioLen = voiceUrl
+    ? (typeof audioDurationSec === "number" && isFinite(audioDurationSec) && audioDurationSec > 0
+        ? audioDurationSec
+        : Math.max(0.1, D - VOICE_START))
+    : 0;
+  const voiceEnd = voiceUrl ? Math.min(D, VOICE_START + audioLen) : 0;
+
+  // 1) Intro chime — only when voice is playing (so it actually feels like an intro).
+  if (voiceUrl && introChimeUrl) {
+    elements.push({
+      type: "audio",
+      track: nt(),
+      time: 0,
+      duration: Math.min(0.6, VOICE_START),
+      source: introChimeUrl,
+      volume: "85%",
+    });
+  }
+
+  // 2) Background music — ducks while voice is playing.
+  if (bgMusicUrl) {
+    if (voiceUrl) {
+      // Pre-voice segment at full volume (includes chime tail).
+      if (VOICE_START > 0.05) {
+        elements.push({
+          type: "audio", track: nt(), time: 0, duration: VOICE_START,
+          source: bgMusicUrl, volume: BG_MUSIC_FULL_VOLUME,
+        });
+      }
+      // Ducked segment under the voice.
+      elements.push({
+        type: "audio", track: nt(), time: VOICE_START, duration: Math.max(0.1, voiceEnd - VOICE_START),
+        source: bgMusicUrl, volume: BG_MUSIC_DUCK_VOLUME,
+      });
+      // Tail segment back to full volume.
+      if (D - voiceEnd > 0.05) {
+        elements.push({
+          type: "audio", track: nt(), time: voiceEnd, duration: D - voiceEnd,
+          source: bgMusicUrl, volume: BG_MUSIC_FULL_VOLUME,
+        });
+      }
+    } else {
+      // No voice → music plays the entire clip at full volume.
+      elements.push({
+        type: "audio", track: nt(), time: 0, duration: D,
+        source: bgMusicUrl, volume: BG_MUSIC_FULL_VOLUME,
+      });
+    }
+  }
+
+  // 3) Voiceover — starts at VOICE_START, never trimmed (CTA must finish).
   if (voiceUrl) {
-    const audioLen = typeof audioDurationSec === "number" && isFinite(audioDurationSec) && audioDurationSec > 0
-      ? audioDurationSec
-      : Math.max(0.1, D - VOICE_START); // fallback: play to end of composition
     elements.push({
       type: "audio",
       track: nt(),
@@ -964,35 +1025,62 @@ function clampVoiceParam(n: any, min: number, max: number, fallback: number): nu
   return Math.min(max, Math.max(min, v));
 }
 
+/** Time-of-day greeting derived from slot or local hour. */
+function broadcastGreetingFor(slot?: string | null): string {
+  const s = (slot || "").toLowerCase();
+  if (s === "morning") return "Good morning";
+  if (s === "afternoon") return "Good afternoon";
+  if (s === "evening") return "Good evening";
+  const h = new Date().getUTCHours();
+  if (h < 11) return "Good morning";
+  if (h < 17) return "Good afternoon";
+  return "Good evening";
+}
+
 async function generateVoiceScript(
   weather: WeatherResponse,
   tone?: string,
   platforms?: string[],
-  ctaOpts?: { subscribeCta?: boolean; city?: string | null },
+  ctaOpts?: { subscribeCta?: boolean; city?: string | null; slot?: string | null },
 ): Promise<string> {
-  const fallback = `Good day, ${weather.city}. Expect ${weather.description.toLowerCase()} with a high near ${weather.temperature} degrees today.`;
   const ctaCity = ctaOpts?.city ?? weather.city;
   const subscribeCta = ctaOpts?.subscribeCta ?? false;
+  const slot = ctaOpts?.slot ?? null;
+  const greeting = broadcastGreetingFor(slot);
+  const feels = typeof weather.feelsLike === "number" ? Math.round(weather.feelsLike) : null;
+  const temp = Math.round(weather.temperature);
+  const cond = weather.description.toLowerCase();
+  // Broadcast-style fallback always includes greeting + city + temp + feels-like.
+  const fallback = feels != null && Math.abs(feels - temp) >= 2
+    ? `${greeting}, ${weather.city}. Right now it's ${temp} degrees, feels like ${feels}, with ${cond}. Here's your quick weather update.`
+    : `${greeting}, ${weather.city}. It's currently ${temp} degrees with ${cond}. Here's your quick weather update.`;
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) return appendVoiceCTA(fallback, { tone, platforms, subscribeCta, city: ctaCity });
   const userPrompt = [
     `City: ${weather.city}`,
+    `Slot: ${slot ?? "(unknown)"}  → opening greeting: "${greeting}, ${weather.city}"`,
     `Condition: ${weather.description}`,
-    `Current temp: ${weather.temperature}°F`,
+    `Current temp: ${temp}°F`,
+    feels != null ? `Feels like: ${feels}°F` : `Feels like: (unavailable — do not invent)`,
     `Rain chance: ${weather.rainChance}%`,
     "",
-    "Write a SPOKEN weather script. Strict rules:",
-    "- HARD CAP: 25 words MAX for the weather summary. Shorter is better.",
-    "- LEAD with the most important data first: high temp + rain chance.",
-    "- 1–2 sentences. Sound natural read aloud (no emojis, no hashtags, no special chars).",
-    "- Mention the city once, the dominant condition, and the key temperature.",
-    "- You MAY include AT MOST ONE local reference, but ONLY from the verified list below, and ONLY if it fits the weather naturally. Otherwise omit it.",
-    "- Do NOT include any subscribe / follow / notification / bell call-to-action — that is appended automatically as a separate final paragraph. End on the weather, not a CTA.",
+    "Write a BROADCAST WEATHER SCRIPT for a 10–15 second on-air read. Strict rules:",
+    `- OPEN with the greeting verbatim: "${greeting}, ${weather.city}." (or a close variant like "Checking in on ${weather.city}").`,
+    "- 2–3 short sentences, 30–45 words total. Sound like a local weather anchor — warm, conversational, never robotic.",
+    "- MUST include the current temperature in degrees.",
+    feels != null && Math.abs(feels - temp) >= 2
+      ? "- MUST mention 'feels like' followed by the feels-like temperature (the gap is noticeable)."
+      : "- You MAY skip 'feels like' if it's within 1 degree of the actual temp.",
+    "- Mention the dominant weather condition in plain words (e.g. 'clear skies', 'light rain', 'partly cloudy').",
+    "- One brief outlook phrase is welcome (e.g. 'staying mild through the evening', 'rain easing overnight').",
+    "- No emojis, no hashtags, no special characters, no abbreviations like 'F' — say 'degrees'.",
+    "- You MAY include AT MOST ONE local reference from the verified list below, only if it fits naturally. Otherwise omit.",
+    "- Do NOT include any subscribe / follow / notification / bell CTA — that is appended automatically. End on the weather, not a CTA.",
     "- Return ONLY the script text. No labels, no quotes.",
     "",
     buildVerifiedLandmarksBlock(weather.city),
   ].join("\n");
-  const systemPrompt = `You are a concise broadcast weather scriptwriter. Output spoken-style scripts only.\n\n${LOCATION_ACCURACY_RULES}`;
+  const systemPrompt = `You are a professional local broadcast weather anchor writing a 10–15 second on-air script. Warm, conversational, accurate. Output spoken-style scripts only.\n\n${LOCATION_ACCURACY_RULES}`;
   const alertMode = isWeatherAlert({
     condition: weather.description,
     temperature: weather.temperature,
@@ -2502,7 +2590,7 @@ Deno.serve(async (req) => {
             trace("voice_config", { voice_id: voiceId, speed: voiceSpeed, stability: voiceStability, similarity: voiceSimilarity });
 
             console.log(`[process] post ${post.id}: VOICE: generating script`);
-            const script = await generateVoiceScript(weather, captionTone, platformsToPost, { subscribeCta: subscribeCtaEnabled, city: weather.city });
+            const script = await generateVoiceScript(weather, captionTone, platformsToPost, { subscribeCta: subscribeCtaEnabled, city: weather.city, slot: timePeriod });
             console.log(`[process] post ${post.id}: VOICE: script="${script}"`);
 
             const ttsOpts = { speed: voiceSpeed, stability: voiceStability, similarity: voiceSimilarity };
@@ -2606,16 +2694,28 @@ Deno.serve(async (req) => {
           console.log(`[process] post ${post.id}: VOICE: disabled (row.include_voiceover=${post.include_voiceover}, settings.enable_voiceover=${settingsEnabled})`);
         }
 
-        // === VOICE ASSET VALIDATION (pre-render gate) ===
-        // If voiceover was requested but no audio was produced, FAIL the job
-        // immediately — never render a silent video.
+        // === VOICE ASSET VALIDATION (failsafe: never block the post) ===
+        // Previously we threw here and failed the entire scheduled_post when
+        // voice was requested but missing. Product rule changed: if TTS fails
+        // we MUST still ship the video (silent / music-only) rather than skip
+        // the broadcast. We log + notify, but proceed to render.
         if (wantVoice && !voiceUrl) {
           const reason = voiceError || "Voiceover requested but audio file was not generated";
-          console.error(`[process] post ${post.id}: VOICE: CRITICAL — refusing to render silent video. reason=${reason}`);
-          trace("voice_result", { status: "failed", attempts: voiceAttemptsCount, error: reason, has_audio: false, fatal: true });
-          throw new Error(`Voiceover required but missing — ${reason}`);
+          console.warn(`[process] post ${post.id}: VOICE: failsafe — continuing without voiceover. reason=${reason}`);
+          trace("voice_result", { status: "failed_failsafe", attempts: voiceAttemptsCount, error: reason, has_audio: false, fatal: false });
+          voiceStatus = voiceStatus === "success" ? "failed" : voiceStatus || "failed";
+          try {
+            await supabase.from("system_logs").insert({
+              user_id: post.user_id,
+              type: "voiceover_failsafe",
+              message: `Voice generation failed for ${weather.city} — shipping silent video instead of blocking the schedule (${reason}).`,
+              platform: platformsToPost.join(","),
+              context: { scheduled_post_id: post.id, reason, city: weather.city },
+            });
+          } catch (_) { /* logging best-effort */ }
         }
         // Reachability HEAD check — make sure Creatomate can actually fetch the audio.
+        // If unreachable, drop the audio and continue silently (failsafe).
         if (voiceUrl) {
           try {
             const probe = await Promise.race([
@@ -2628,14 +2728,10 @@ Deno.serve(async (req) => {
             console.log(`[process] post ${post.id}: VOICE: audio_url reachable (${probe.status}) ${voiceUrl.split("?")[0]}`);
           } catch (probeErr) {
             const reason = probeErr instanceof Error ? probeErr.message : String(probeErr);
-            if (wantVoice || post.include_voiceover === true) {
-              console.error(`[process] post ${post.id}: VOICE: audio_url unreachable — failing instead of rendering silent (${reason})`);
-              trace("voice_result", { status: "failed", error: `audio unreachable: ${reason}`, has_audio: false, fatal: true });
-              throw new Error(`Voiceover audio_url unreachable — ${reason}`);
-            }
-            // Pre-attached audio that's stale: drop it and continue silently.
-            console.warn(`[process] post ${post.id}: VOICE: pre-attached audio unreachable — dropping (${reason})`);
+            console.warn(`[process] post ${post.id}: VOICE: audio_url unreachable — dropping to silent (failsafe) (${reason})`);
+            trace("voice_result", { status: "failed_failsafe", error: `audio unreachable: ${reason}`, has_audio: false, fatal: false });
             voiceUrl = null;
+            voiceAudioDurationSec = null;
             voiceStatus = "failed";
             voiceError = `audio unreachable: ${reason}`;
           }
