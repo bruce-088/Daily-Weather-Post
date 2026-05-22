@@ -713,8 +713,10 @@ Deno.serve(async (req) => {
               });
               if (enqueueErr) {
                 console.error(`[scheduler]   ⚠️ enqueue_job failed for ${row.id}:`, enqueueErr.message);
+                console.log(`[scheduler] Slot=${period.name} City=${target.city} Platform=${row.platform} Status=Skipped_Existing reason=enqueue_conflict`);
               } else {
                 console.log(`[scheduler]   🧩 enqueued generate_content job for scheduled_post ${row.id} [auto:${period.name}]`);
+                console.log(`[scheduler] Slot=${period.name} City=${target.city} Platform=${row.platform} Status=Triggered`);
               }
             }
           }
