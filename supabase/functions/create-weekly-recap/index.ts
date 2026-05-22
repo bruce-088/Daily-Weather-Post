@@ -360,16 +360,20 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
     console.warn("[recap] continuing without silent audio track; YouTube may abandon processing");
   }
 
+  // Creatomate downgrades to a JPEG snapshot when the composition is detected
+  // as static. We force the video path by setting `output_format: "mp4"` on
+  // BOTH the top-level body AND the source object, and explicitly include
+  // `frame_rate` inside source. The animated gradient backgrounds above
+  // already guarantee frame-to-frame motion, but these belt-and-suspenders
+  // settings keep Creatomate firmly on the video render path.
   const body = {
     output_format: "mp4",
-    codec: "h264",
     frame_rate: 30,
-    // Drop render_scale so YouTube gets a full 1920x1080 long-form file —
-    // 0.75 produced 1440x810 which YouTube was flagging as "invalid /
-    // processing abandoned" on text-only recaps.
     source: {
-      width: 1920, height: 1080, // long-form 16:9
+      output_format: "mp4",
+      width: 1920, height: 1080,
       duration: totalDuration,
+      frame_rate: 30,
       fill_color: "#0f172a",
       elements,
     },
