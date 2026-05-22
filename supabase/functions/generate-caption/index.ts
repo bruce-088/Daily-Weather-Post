@@ -187,6 +187,8 @@ STYLE RULES:
 - Never write more than one CTA
 - Avoid repetitive phrases across days
 - The final CTA line MUST use the exact dynamic_handle provided — do not substitute or invent a different handle
+- CRITICAL: In the line "Smash the LIKE button if you're enjoying the weather in ___", the blank MUST be filled with the exact city name (e.g. "Gainesville", "Orlando"). NEVER use a weather condition, tone label, or any other word in this slot.
+- CRITICAL: In "daily ___ weather alerts" and "subscribe for ___ weather alerts", the blank MUST be the exact city name — never a weather condition or time-of-day word.
 
 TONE MODES:
 1. NICE DAY MODE - pleasant, dry, calm, or sunny. Tone: light, fresh, easy, upbeat
@@ -651,7 +653,15 @@ ${ctaBlock}${antiRepeatBlock ? `\n\n${antiRepeatBlock}` : ""}`;
     // or as hashtags. Descriptive narration (e.g. "clear skies over the bay")
     // is intentionally left alone.
     {
-      const BLACKLIST = ["Not Need", "Weather Update", "Coming Up", "But Comfortable", "Clear Skies"];
+      const BLACKLIST = [
+        "Not Need", "Weather Update", "Coming Up", "But Comfortable", "Clear Skies",
+        "Sunny", "Cloudy", "Overcast", "Rainy", "Stormy", "Foggy", "Windy", "Humid",
+        "Hot", "Cold", "Warm", "Cool", "Mild", "Breezy",
+        "Partly Cloudy", "Mostly Cloudy", "Mostly Sunny", "Partly Sunny",
+        "Scattered Showers", "Thunderstorms", "Drizzle", "Light Rain", "Heavy Rain",
+        "Snow", "Sleet", "Haze", "Mist", "Hazy", "Showers",
+        "Afternoon", "Morning", "Evening", "Tonight", "Today", "Ahead", "Update"
+      ];
       const cityNoSpaces = city.replace(/\s+/g, "");
       const blacklistHits: string[] = [];
 
@@ -704,6 +714,39 @@ ${ctaBlock}${antiRepeatBlock ? `\n\n${antiRepeatBlock}` : ""}`;
         } catch {
           /* best-effort */
         }
+      }
+    }
+
+    // Nuclear fallback: catch ANY non-city word in "enjoying the weather in ___"
+    // and "daily ___ weather alerts" CTA slots, even if not in BLACKLIST.
+    {
+      const cityEsc = city.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+      const enjoyingRe = new RegExp(
+        `(enjoying the weather in )(?!${cityEsc}\\b)([^!.\\n]+)`,
+        'gi'
+      );
+      if (enjoyingRe.test(caption)) {
+        console.warn(`[generate-caption] nuclear fallback triggered: "enjoying the weather in" had wrong location for ${city}`);
+        caption = caption.replace(enjoyingRe, `$1${city}`);
+      }
+
+      const dailyAlertsRe = new RegExp(
+        `(daily )(?!${cityEsc}\\b)([^\\n]+?)( weather alerts)`,
+        'gi'
+      );
+      if (dailyAlertsRe.test(caption)) {
+        console.warn(`[generate-caption] nuclear fallback triggered: "daily ___ weather alerts" had wrong location for ${city}`);
+        caption = caption.replace(dailyAlertsRe, `$1${city}$3`);
+      }
+
+      const subscribeRe = new RegExp(
+        `(subscribe for )(?!${cityEsc}\\b)([^\\n]+?)( weather alerts)`,
+        'gi'
+      );
+      if (subscribeRe.test(caption)) {
+        console.warn(`[generate-caption] nuclear fallback triggered: "subscribe for ___ weather alerts" had wrong location for ${city}`);
+        caption = caption.replace(subscribeRe, `$1${city}$3`);
       }
     }
     // City-handle sanitizer: replace any @SkyBrief* token that doesn't match
