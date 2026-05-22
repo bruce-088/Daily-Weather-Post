@@ -127,6 +127,30 @@ export function SettingsPanel({
   const [connectionsOpen, setConnectionsOpen] = useState(false);
   const [voiceoverOpen, setVoiceoverOpen] = useState(false);
 
+  // ---- Theme music preview (background broadcast bed) ----
+  const THEME_MUSIC_URL = "https://pewdswjhsesfondewucc.supabase.co/storage/v1/object/public/brand-assets/audio/broadcast-bg.mp3";
+  const themeAudioRef = useRef<HTMLAudioElement | null>(null);
+  const [themePlayingSlot, setThemePlayingSlot] = useState<string | null>(null);
+  const toggleThemeMusic = (slotKey: string) => {
+    if (themeAudioRef.current && themePlayingSlot === slotKey) {
+      themeAudioRef.current.pause();
+      themeAudioRef.current = null;
+      setThemePlayingSlot(null);
+      return;
+    }
+    if (themeAudioRef.current) {
+      themeAudioRef.current.pause();
+      themeAudioRef.current = null;
+    }
+    const audio = new Audio(THEME_MUSIC_URL);
+    audio.volume = 0.35;
+    audio.onended = () => setThemePlayingSlot(null);
+    audio.onerror = () => { setThemePlayingSlot(null); toast.error("Couldn't load theme music"); };
+    themeAudioRef.current = audio;
+    setThemePlayingSlot(slotKey);
+    audio.play().catch(() => { setThemePlayingSlot(null); toast.error("Playback blocked by browser"); });
+  };
+
   // ---- Voice preview state (no persistence — this just plays a sample) ----
   const [previewLoading, setPreviewLoading] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
