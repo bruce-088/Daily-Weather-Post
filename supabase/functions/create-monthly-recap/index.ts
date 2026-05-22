@@ -555,7 +555,7 @@ async function stitchSlideshow(
 
   // ── Title card ──
   const titleGrad = gradientForSlide();
-  elements.push(buildAnimatedGradientBg(0, SLIDE_DUR, titleGrad));
+  elements.push(buildAnimatedGradientBg(0, SLIDE_DUR, { ...titleGrad }, 1));
   elements.push(buildScrim(0, SLIDE_DUR));
   elements.push({
     type: "text", text: title,
