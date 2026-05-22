@@ -17,7 +17,8 @@ export type FeatureFlagName =
   | "ENABLE_CINEMATIC_MODE"
   | "ENABLE_DURABLE_PREVIEW_PIPELINE"
   | "ENABLE_CONTENT_SCORE"
-  | "ENABLE_AUTO_WINNER";
+  | "ENABLE_AUTO_WINNER"
+  | "ENABLE_YEARLY_RECAP";
 
 const DEFAULTS: Record<FeatureFlagName, boolean> = {
   // Single source of truth: manual posts + preview always run through the
@@ -40,6 +41,9 @@ const DEFAULTS: Record<FeatureFlagName, boolean> = {
   ENABLE_CONTENT_SCORE: true,
   // Auto-Winner: opt-in auto-apply toggles in Settings. Default OFF.
   ENABLE_AUTO_WINNER: false,
+  // Yearly Recap (long-form Year in Review). Admin/manual only; default OFF.
+  // Enable via localStorage.setItem("ff:ENABLE_YEARLY_RECAP","true").
+  ENABLE_YEARLY_RECAP: false,
 };
 
 function readOverride(name: FeatureFlagName): boolean | null {
@@ -83,5 +87,8 @@ export const FeatureFlags = {
   },
   get ENABLE_AUTO_WINNER() {
     return isFeatureEnabled("ENABLE_AUTO_WINNER");
+  },
+  get ENABLE_YEARLY_RECAP() {
+    return isFeatureEnabled("ENABLE_YEARLY_RECAP");
   },
 };

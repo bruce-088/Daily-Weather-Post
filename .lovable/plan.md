@@ -1,161 +1,119 @@
 
-# Cinematic Preset System
+# Yearly Recap — Long-form "Year in Review" Video
 
-Fixes Gainesville's plain-render drift, controls cost via image-first defaults, and stops the learning loop from rewarding gradient/fallback renders. Voice, music, captions, routing, scheduling, and platform adapters are untouched.
+A premium long-form (3–5 min) YouTube product summarizing a city's weather year. Reuses the existing weekly/monthly recap architecture and the shared `cinematic-presets.ts` module. Manual-trigger only; admin-gated.
 
-## 1. Migration (additive, default-on, null-safe)
+## 1. New edge function: `create-yearly-recap`
 
-Add to `weather_settings`:
-```
-smart_cost_strategy             boolean not null default true
-strict_visuals_gainesville      boolean not null default true
-exclude_fallback_from_learning  boolean not null default true
-```
-RLS unchanged. Defaults cover existing rows.
+Cloned from `create-monthly-recap` with a 12-month aggregation window. Same env handling (Lovable AI, Creatomate, ElevenLabs key resolution, optional `RECAP_MUSIC_URL` bed at 0.15), same fallback infographic on stitch failure, same CORS/auth pattern.
 
-## 2. Gainesville safe-scene assets
+**Input** (POST JSON):
+- `city: string` (required)
+- `year: number` (defaults to current year)
+- `user_id?: string` (service-role override)
+- `skip_post?: boolean` — dev mode, returns `preview_url`, no YouTube upload, no `post_history` write
+- `test_mode?: boolean` — alias accepted for parity with other recaps
 
-Upload 2–3 curated landscape JPGs to the existing public `brand-assets` bucket at `cinematic/gainesville-*.jpg` (e.g. `oak-canopy.jpg`, `downtown-skyline.jpg`, `prairie-storm.jpg`). Referenced via permanent public URLs:
-```
-https://pewdswjhsesfondewucc.supabase.co/storage/v1/object/public/brand-assets/cinematic/gainesville-<name>.jpg
-```
-No signed/expiring URLs. If the user has not yet uploaded files, the module still ships with the constant URL list; missing files log a warning and the chain falls through to the next tier (renders never break).
+**Output**: `{ status, preview_url?, slides, video_url?, detail? }`.
 
-## 3. New shared module — `supabase/functions/_shared/cinematic-presets.ts`
+**Failure-safe**: any season with no data is skipped (slide omitted) rather than failing the render. If <2 seasonal slides survive, falls back to the infographic path.
 
-Single source of truth. Pure helpers, no DB writes.
+## 2. Data aggregation (one full year)
+
+Query `post_history` (`status in ('succeeded','success')`, `user_id`, `ilike city`, `created_at` within `[Jan 1 year, Jan 1 year+1)`) joined opportunistically with `post_performance` / `post_analytics` for engagement.
+
+Compute:
+- **Seasonal buckets** — Winter (Dec prev year + Jan + Feb), Spring (Mar–May), Summer (Jun–Aug), Fall (Sep–Nov). For each bucket: best/worst day by temperature, dominant condition, top post by views.
+- **Big swings** — sort days by |Δtemp day-over-day|; keep top 1–2.
+- **The Big One** — single post with max severity score: prefer severe condition match (`storm|hurricane|tornado|blizzard|extreme heat`), tiebreak by views_24h then likes.
+- **Annual stats** — total rainy days, sunniest month (% clear), highest/lowest temp + date, total posts.
+
+All aggregation lives in a single `aggregateYear(rows)` helper. Returns a typed `YearlyData` struct that drives composition.
+
+## 3. Composition — 8-slide long-form
+
+| # | Kind          | Source                                | Cinematic kind we pass to `pickPresetForRecapSlide` |
+|---|---------------|---------------------------------------|------------------------------------------------------|
+| 1 | Intro         | "{year} Year in Review: {City}"       | `title` → `broadcast_lite`                           |
+| 2 | Winter        | best/worst + condition headline       | `day`   → `broadcast_lite` (seasonal intro line)     |
+| 3 | Spring        | "                                     | `day`   → `broadcast_lite`                           |
+| 4 | Summer        | "                                     | `day`   → `broadcast_lite`                           |
+| 5 | Fall          | "                                     | `day`   → `broadcast_lite`                           |
+| 6 | The Big One   | hero severe event                     | `highlight` → `cinematic_weather` or `event_mode`    |
+| 7 | Annual Stats  | quick-fire numbers                    | `week_stat` → `broadcast_lite`                       |
+| 8 | Outro         | "Onward to {year+1}"                  | `outro` → `broadcast_lite`                           |
+
+Seasonal slides escalate to `cinematic_weather` only when that season's hero condition matches `SEVERE_RE` AND `smart_cost_strategy !== false`. Keeps cost low by default while preserving the wow moment on slide 6.
+
+Each slide builds its background via:
 
 ```ts
-export type CinematicPreset = "broadcast_lite" | "cinematic_weather" | "event_mode";
-export type RenderSource =
-  | "history_image" | "condition_scene" | "city_safe_scene"
-  | "video_scene"   | "gradient_only"   | "degraded_fallback";
-export type CostTier = "low" | "medium" | "high";
+const preset = pickPresetForRecapSlide({ kind, condition, city, slideIndex, settings });
+const decision = resolveScene({
+  city, condition, mediaUrl: bestPost?.image_url, preset, mode: "image", slideIndex, settings,
+});
+logCinematic("yearly_recap", decision, { city, kind, slide: slideIndex });
+decisions.push(decision);
+```
 
-export interface SceneDecision {
-  preset: CinematicPreset;
-  source: RenderSource;
-  label: string;
-  url?: string;
-  costTier: CostTier;
-  eligibleForLearning: boolean; // false iff source ∈ {gradient_only, degraded_fallback}
+`mediaUrl` priority: top post `image_url` for the season/event → falls through the standard chain (history → condition_scene → city_safe_scene for Gainesville → gradient). The Gainesville strict-visual override is honored automatically because `resolveScene` reads `settings.strict_visuals_gainesville`.
+
+## 4. Audio
+
+- Reuse the recap voice helper (`resolveVoiceId`, `clampVoiceParam`) and ducked music bed (`RECAP_MUSIC_URL` at 0.15) exactly as monthly does.
+- Voice script generated via Lovable AI with a year-in-review prompt: opener, four ~10s seasonal beats, one ~20s Big-One narration, stats burst, outro. Total script length capped at ~700 chars to stay under ~3 min spoken + room for music tails.
+- Voice failure → continue with silent render (same pattern as weekly recap voice fallback).
+
+## 5. Learning firewall
+
+The firewall is already in `resolveScene` (any `gradient_only`/`degraded_fallback` decision returns `eligibleForLearning: false`). No separate code path is needed — by routing every yearly slide through `resolveScene` we get firewall behavior for free.
+
+Recap-level summary insert into `system_logs`:
+
+```ts
+{
+  type: "yearly_recap_render",
+  message: `Yearly recap rendered for ${city} ${year}`,
+  user_id,
+  context: {
+    year, city,
+    slides: decisions.map(d => ({ preset: d.preset, source: d.source, eligible: d.eligibleForLearning })),
+    eligible_count, fallback_count,
+  },
 }
-
-pickPresetForDaily({ condition, severity, slot, city, settings }): CinematicPreset
-pickPresetForRecapSlide({ kind, condition?, city, slideIndex, settings }): CinematicPreset
-resolveScene({ city, condition, mediaUrl, preset, mode, settings }): SceneDecision
-logCinematic(prefix, decision, ctx): void
-buildVisualMetadata(decision, prevMeta?): Record<string, unknown>
-isEligibleVisualMetadata(meta): boolean   // null/unknown → true (backward-compatible)
-isEligiblePublishedSource(source): boolean
 ```
 
-Internals:
-- `CONDITION_SCENES` — moved from recap files (5 stock URLs).
-- `GAINESVILLE_SAFE_SCENES` — 2–3 permanent public-bucket URLs.
+Yearly recap slides intentionally do **not** write per-slide `post_history` rows — the existing weekly/monthly recap precedent is one parent `post_history` row only when YouTube upload succeeds. We carry the same pattern and attach `visual_metadata` + `published_visual_source` on that single row using the *worst-eligible* slide (so any fallback slide demotes the parent row from learning, matching daily semantics).
 
-### Preset selection rules
+## 6. UI — admin-gated trigger in City Command Center
 
-- **Daily** → default `broadcast_lite`; upgrade to `cinematic_weather` for stronger conditions (rain/snow/fog/thunder/wind ≥ threshold); `event_mode` only on severe keywords (storm, severe, tornado, blizzard, extreme heat). All upgrades gated by `settings.smart_cost_strategy`.
-- **Weekly** → all day slides `broadcast_lite`; standout day → `cinematic_weather`. Title/outro stay `broadcast_lite`. Never `event_mode`.
-- **Monthly** → stat slides `broadcast_lite`; Moment-of-the-Month → `cinematic_weather`; escalate to `event_mode` only if severe.
+Add a third Run-Type alongside daily/weekly/monthly:
 
-### Gainesville fallback chain (explicit)
-
-When `settings.strict_visuals_gainesville === true` AND `mode !== "gradient"`, `resolveScene` walks tiers in order and stops at the first that yields a URL:
-
-| # | Tier              | Used when                                                                                | `source`              | Eligible |
-|---|-------------------|------------------------------------------------------------------------------------------|-----------------------|----------|
-| 1 | history_image     | `mediaUrl` provided & non-empty                                                          | `history_image`       | true     |
-| 2 | condition_scene   | tier 1 unavailable AND `pickConditionScene(condition)` returns a URL                     | `condition_scene`     | true     |
-| 3 | city_safe_scene   | tiers 1+2 unavailable AND ≥1 Gainesville safe scene URL is present in the module         | `city_safe_scene`     | true     |
-| 4 | gradient_only     | tiers 1+2+3 all unavailable (no media, no condition match, no Gainesville safe scene)    | `gradient_only`       | false    |
-
-Any throw → `degraded_fallback` (eligible=false), gradient still drawn. Other cities skip tier 3.
-
-### Preset → overlay treatment (CSS/image layers, no new APIs)
-
-- `broadcast_lite`: image + 25% themed gradient + subtle 1.0→1.05 scale
-- `cinematic_weather`: + soft vignette + brand-tinted overlay + slower Ken Burns
-- `event_mode`: + top/bottom scrims + stronger zoom + brand watermark pulse
-
-## 4. Wire into pipelines
-
-- `create-weekly-recap/index.ts` — replace inline `CONDITION_SCENES`/`pickConditionScene`/`buildSlideBackground` with shared module calls. Collect each slide's `SceneDecision`.
-- `create-monthly-recap/index.ts` — same swap. Moment slide passes `kind: "highlight"` + `mediaUrl` + condition.
-- `daily-weather-post/index.ts` — call `pickPresetForDaily` + `resolveScene` around existing visual-selector site; apply overlays in Creatomate source. Image-first stays default.
-
-## 5. Persist richness — all three daily publish paths
-
-Shared helper `attachCinematicToPostHistory(row, decision)` merges into insert payload:
 ```
-visual_metadata: { ...prev, preset, source, label, costTier, eligibleForLearning }
-published_visual_source: decision.source
-```
-Applied at:
-- `daily-weather-post/index.ts:1949`
-- `process-scheduled-posts/index.ts:3038` — decision pulled from job payload or recomputed from stored render context
-- `publish-preview-bundle/index.ts:94` — decision pulled from `preview_bundles.render_config`
-
-Recaps insert one `system_logs` row per render: `type='cinematic_recap_render'`, `context={ kind, slides:[SceneDecision], summary:{ presetCounts, eligibleCount } }`.
-
-Backward compat: older null-metadata rows are treated as eligible.
-
-## 6. Visual learning firewall (gated by `exclude_fallback_from_learning`, default ON)
-
-Null-safe filtering in 4 reader paths:
-- `_shared/winning-recipes.ts` — add `published_visual_source` to `.select`; post-filter with `isEligibleVisualMetadata && isEligiblePublishedSource`.
-- `_shared/style-rotation.ts` — same filter.
-- `compute-winner-stats/index.ts` — exclude non-eligible rows from `cinOn`/`cinOff` lift and `best_condition`. Hook + hour aggregations unchanged.
-- `analyze-performance/index.ts` — skip excluded rows when computing the `cinematic` winning factor. Hook/tone/voiceover factors unchanged.
-
-All short-circuit when toggle = false. Caption/hook/tone learning untouched.
-
-## 7. Settings UI
-
-New "Cinematic Presets" card in `src/components/SettingsPanel.tsx` with three Switches bound to the new columns via the existing settings save/load helper. Helper text under each toggle.
-
-## 8. Logging
-
-Standardized via `logCinematic`:
-```
-[cinematic] city=Gainesville kind=daily preset=broadcast_lite source=condition_scene label=rainy_sky eligible=yes cost=low
-[cinematic] city=Gainesville kind=daily preset=broadcast_lite source=city_safe_scene label=gnv_oak_canopy eligible=yes cost=low
-[cinematic] city=Gainesville kind=daily preset=broadcast_lite source=gradient_only eligible=no cost=low fallback=yes
-[cinematic] kind=weekly slide=4 preset=cinematic_weather source=history_image eligible=yes
-[cinematic] kind=monthly slide=moment preset=cinematic_weather source=history_image eligible=yes
+type RunType = "daily" | "weekly" | "monthly" | "yearly";
 ```
 
-## 9. Spec Delta
+- Add Post + Dev buttons (`▶ Post Yearly Now` / `🛠 Dev: Test Yearly`).
+- New row only renders when the current user is an admin. Admin check: read `is_admin` from a new `user_roles`-style helper, or — to avoid scope creep — gate behind a feature flag `ENABLE_YEARLY_RECAP` in `src/lib/featureFlags.ts` (default false, localStorage override). Pick **feature flag** because there is no existing admin role infrastructure in the repo and adding one is out of scope.
+- Button passes `{ city: c.name, year: currentYear, skip_post: isDev }`. Dev branch reuses the existing `preview_url` surface ("View Test Result").
 
-Append a Resolved Issues entry in `generate-spec/index.ts`: presets, Smart Cost Strategy, Gainesville strictness + `city_safe_scene` tier (permanent public-URL guarantee), richness fields at all three daily insert sites, `system_logs` `cinematic_recap_render`, firewall touchpoints, three new settings columns. Deploy `generate-spec`.
+## 7. Spec & version
 
-## Rollout order
+- Bump `APP_VERSION` in `generate-spec/index.ts` to `"1.6.0"`.
+- Add a `YEARLY_RECAP_SYSTEM` constant rendered as **Section 11** (push the previously-numbered Section 11 → 12, etc.). Content covers input, season buckets, 8-slide composition, cinematic preset reuse, firewall reuse, admin gating.
+- Add a `FEATURES` entry: "Yearly Recap (long-form year-in-review video, admin-only)".
 
-1. Migration → 3 settings columns
-2. Upload Gainesville safe-scene JPGs to `brand-assets/cinematic/` (user action; module ships with URLs regardless)
-3. Shared module `cinematic-presets.ts`
-4. Wire `daily-weather-post` + write richness at insert
-5. Wire `process-scheduled-posts` + `publish-preview-bundle` insert sites (decision via job payload / `preview_bundles.render_config`)
-6. Wire weekly + monthly recaps + `system_logs` rows
-7. Firewall filters across 4 reader paths
-8. Settings UI card
-9. Update `generate-spec` + deploy
+## Technical notes
 
-## Verification
+- File layout: `supabase/functions/create-yearly-recap/index.ts` only — no shared changes required beyond the new function (cinematic-presets module already exposes everything we need).
+- Logging prefix: `[yearly-recap]` for function-level, `[cinematic]` lines emitted by `logCinematic` per slide.
+- Idempotency: derive a `content_hash` from `city|year` so re-runs within the same year find an existing successful render and short-circuit (mirrors weekly behavior).
+- No new tables, no migrations.
+- No changes to `process-scheduled-posts`, `auto-post-scheduler`, daily pipeline, or platform adapters.
 
-- Gainesville daily, history image → `history_image` eligible
-- Gainesville daily, no history, rainy → `condition_scene` eligible
-- Gainesville daily, no history, no condition match, safe scenes present → `city_safe_scene` eligible
-- Gainesville daily, no history, no condition match, no safe scenes → `gradient_only` not eligible, render completes
-- Any throw → `degraded_fallback` not eligible, render completes
-- Orlando daily, no history → `condition_scene` then `gradient_only` (skips tier 3)
-- All three publish paths write `visual_metadata.{preset,source,label,costTier,eligibleForLearning}` + `published_visual_source`
-- Weekly recap logs: mostly `broadcast_lite`, one `cinematic_weather`; monthly: stat `broadcast_lite`, Moment `cinematic_weather`
-- Synthetic `gradient_only` row excluded from `cinematic_lift_pct` after re-running `compute-winner-stats`
-- Toggle `exclude_fallback_from_learning` off → firewall stops applying
-- `curl` Gainesville safe-scene URL → 200 OK from public storage, no expiration
+## Out of scope (explicit)
 
-## Out of scope
-
-Voice, music, captions/hook/tone, routing, scheduling, platform adapters. Daily Shorts do not become video-first. No new buckets/credits/external APIs.
+- No automatic scheduled cron — manual trigger only for v1.
+- No multi-year comparison.
+- No per-slide `post_history` rows.
+- No new admin role table — gated via feature flag.

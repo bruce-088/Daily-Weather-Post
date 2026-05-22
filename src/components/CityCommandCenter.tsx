@@ -14,9 +14,10 @@ import {
 import { Loader2, MapPin, PlayCircle, ExternalLink, Wrench, Eye } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { FeatureFlags } from "@/lib/featureFlags";
 
 interface City { id: string; name: string; state: string | null; }
-type RunType = "daily" | "weekly" | "monthly";
+type RunType = "daily" | "weekly" | "monthly" | "yearly";
 type Mode = "post" | "dev";
 type Status = "idle" | "running" | "done" | "error";
 interface RunState { status: Status; message?: string; url?: string | null; mode?: Mode; }
@@ -71,7 +72,7 @@ export function CityCommandCenter() {
 
   const cityBusy = (cityId: string) =>
     (["post", "dev"] as Mode[]).some((m) =>
-      (["daily", "weekly", "monthly"] as RunType[]).some((t) => getRun(cityId, m, t).status === "running"),
+      (["daily", "weekly", "monthly", "yearly"] as RunType[]).some((t) => getRun(cityId, m, t).status === "running"),
     );
 
   const handleClick = (city: City, mode: Mode, type: RunType) => {
@@ -133,10 +134,14 @@ export function CityCommandCenter() {
           toast.success(`✅ Daily post processing for ${city.name}`, { description: "Check post history in a moment." });
         }
       } else {
-        const fnName = type === "weekly" ? "create-weekly-recap" : "create-monthly-recap";
-        const { data, error } = await supabase.functions.invoke(fnName, {
-          body: { city: city.name, skip_post: isDev },
-        });
+        const fnName = type === "weekly"
+          ? "create-weekly-recap"
+          : type === "monthly"
+          ? "create-monthly-recap"
+          : "create-yearly-recap";
+        const fnBody: Record<string, unknown> = { city: city.name, skip_post: isDev };
+        if (type === "yearly") fnBody.year = new Date().getUTCFullYear();
+        const { data, error } = await supabase.functions.invoke(fnName, { body: fnBody });
         if (error) throw error;
         if (isDev) {
           const previewUrl = (data as any)?.preview_url ?? null;
