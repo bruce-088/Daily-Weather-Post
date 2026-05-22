@@ -3328,8 +3328,28 @@ Deno.serve(async (req) => {
       }
     }
 
+    // For dev-test single-post invocations, surface the rendered preview URL.
+    let previewUrl: string | null = null;
+    if (skipPost && singlePostId) {
+      try {
+        const { data: row } = await supabase
+          .from("scheduled_posts")
+          .select("cached_video_url, status")
+          .eq("id", singlePostId)
+          .maybeSingle();
+        previewUrl = (row as any)?.cached_video_url ?? null;
+      } catch { /* ignore */ }
+    }
+
     return new Response(
-      JSON.stringify({ success: true, message: `Processed ${processed}, failed ${failed}`, processed, failed }),
+      JSON.stringify({
+        success: true,
+        message: `Processed ${processed}, failed ${failed}`,
+        processed,
+        failed,
+        mode: skipPost ? "dev" : "post",
+        preview_url: previewUrl,
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
