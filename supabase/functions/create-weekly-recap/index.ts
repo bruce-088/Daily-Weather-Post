@@ -222,6 +222,10 @@ function buildAnimatedGradientBg(
   duration: number,
   grad: { from: string; to: string },
 ): any {
+  // Creatomate-native animation syntax: `animations` array with scope=element,
+  // scale object, start_scale object, explicit time/duration. Using the
+  // built-in scale animation guarantees frame-to-frame change so Creatomate
+  // emits a real MP4 (and not a 15KB JPEG snapshot of a static composition).
   return {
     type: "shape",
     path: "M 0 0 L 100 0 L 100 100 L 0 100 Z",
@@ -233,7 +237,16 @@ function buildAnimatedGradientBg(
     time,
     duration,
     animations: [
-      { type: "scale", from: 1.0, to: 1.05, duration, easing: "linear" },
+      {
+        easing: "linear",
+        type: "scale",
+        scope: "element",
+        fade: false,
+        scale: { x: 1.08, y: 1.08 },
+        start_scale: { x: 1.0, y: 1.0 },
+        time: "start",
+        duration,
+      },
     ],
   };
 }
