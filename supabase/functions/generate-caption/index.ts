@@ -711,7 +711,40 @@ ${ctaBlock}${antiRepeatBlock ? `\n\n${antiRepeatBlock}` : ""}`;
           });
         } catch {
           /* best-effort */
-        }
+    }
+
+    // Nuclear fallback: catch ANY non-city word in "enjoying the weather in ___"
+    // and "daily ___ weather alerts" CTA slots, even if not in BLACKLIST.
+    {
+      const cityEsc = city.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+      const enjoyingRe = new RegExp(
+        `(enjoying the weather in )(?!${cityEsc}\\b)([^!.\\n]+)`,
+        'gi'
+      );
+      if (enjoyingRe.test(caption)) {
+        console.warn(`[generate-caption] nuclear fallback triggered: "enjoying the weather in" had wrong location for ${city}`);
+        caption = caption.replace(enjoyingRe, `$1${city}`);
+      }
+
+      const dailyAlertsRe = new RegExp(
+        `(daily )(?!${cityEsc}\\b)([^\\n]+?)( weather alerts)`,
+        'gi'
+      );
+      if (dailyAlertsRe.test(caption)) {
+        console.warn(`[generate-caption] nuclear fallback triggered: "daily ___ weather alerts" had wrong location for ${city}`);
+        caption = caption.replace(dailyAlertsRe, `$1${city}$3`);
+      }
+
+      const subscribeRe = new RegExp(
+        `(subscribe for )(?!${cityEsc}\\b)([^\\n]+?)( weather alerts)`,
+        'gi'
+      );
+      if (subscribeRe.test(caption)) {
+        console.warn(`[generate-caption] nuclear fallback triggered: "subscribe for ___ weather alerts" had wrong location for ${city}`);
+        caption = caption.replace(subscribeRe, `$1${city}$3`);
+      }
+    }
       }
     }
     // City-handle sanitizer: replace any @SkyBrief* token that doesn't match
