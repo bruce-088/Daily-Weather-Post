@@ -751,8 +751,11 @@ async function runForUser(svc: any, userId: string, cityFilter?: string): Promis
   const finalTitle = title.includes("Weekly Recap") ? title : `${title} — Weekly Recap`;
   const description = `${script}\n\n#WeeklyRecap #Weather #SkyBrief`;
 
+  // Voice narration (master clock). Skipped silently if disabled or it fails.
+  const voice = await synthesizeRecapVoice(svc, userId, script);
+
   // Try video stitch
-  const stitched = await stitchSlideshow(svc, userId, posts, finalTitle);
+  const stitched = await stitchSlideshow(svc, userId, posts, finalTitle, voice ?? undefined);
 
   if (stitched) {
     const token = await getYouTubeToken(svc, userId);
