@@ -6,7 +6,7 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const APP_NAME = "SkyBrief";
-const APP_VERSION = "1.4.0";
+const APP_VERSION = "1.5.1";
 const TAGLINE = "Automated weather posts for every platform.";
 
 const FEATURES: Array<[string, string, string]> = [
@@ -33,6 +33,7 @@ const FEATURES: Array<[string, string, string]> = [
   ["Weekly Recap (YouTube long-form)", "✅ Working", "create-weekly-recap stitches 7 day-slides + title + outro at 9s/slide via Creatomate, layered with ElevenLabs voice (vol 2.0) + optional RECAP_MUSIC_URL music bed (vol 0.15). Per-slide visual variety: 3 layouts (center/left/right) × 3 themes (warm/cool/neutral) cycled across the week. Strips #Shorts hashtags so YouTube classifies as a regular video, not a Short."],
   ["Monthly Recap (YouTube long-form)", "✅ Working", "create-monthly-recap pulls last 30 days bucketed into 4 weekly summary slides + title + Moment of the Month highlight + outro. Voice 2.5 + music 0.15. Full Story script (~350–500 words). Renders 3–5 min long-form video. Triggered manually or via month-end cron."],
   ["City Command Center (manual Run Now)", "✅ Working", "Per-city Settings panel surface with three buttons — Daily (full pipeline via process-scheduled-posts), Weekly (create-weekly-recap), Monthly (create-monthly-recap). 30-minute localStorage duplicate guard, live status (idle → running → done → error), YouTube link on success. All actions log [manual] {type} triggered for city={city} by user={id}."],
+  ["Cinematic Preset System", "✅ Working", "Daily/weekly/monthly renders choose a visual preset (broadcast_lite / cinematic_weather / event_mode). Gainesville gets a strict 4-tier fallback (history image → condition scene → city safe scene → gradient_only) so plain renders drop from ~90% to <10%. Visual learning firewall excludes gradient_only and degraded_fallback from winning-recipes / style-rotation / compute-winner-stats / analyze-performance. Per-user toggles in Settings."],
 ];
 
 const INTEGRATIONS: Array<[string, string]> = [
@@ -226,6 +227,42 @@ const ROUTING_GUARD = `Prevents cross-city content contamination (e.g., Gainesvi
 ### Template Isolation
 - All template variables (city name, channel handle, subscribe URLs, state name) are cleared and reset for every generation cycle.
 - AI prompt explicitly scoped to the target city: "You are writing for the [CITY] channel only."`;
+
+const CINEMATIC_PRESET_SYSTEM = `### Presets
+Three cinematic presets govern visual richness for daily, weekly, and monthly outputs:
+
+| Preset | Use Case | Cost Tier |
+|---|---|---|
+| \`broadcast_lite\` | Default daily post; low cost | low |
+| \`cinematic_weather\` | Strong/dramatic conditions | medium |
+| \`event_mode\` | Severe weather keywords only | high |
+
+### Gainesville 4-Tier Fallback Chain
+When \`strict_visuals_gainesville\` is ON (default), the renderer walks this chain in order and stops at the first match:
+1. **history_image** — most recent \`post_history\` image for this city.
+2. **condition_scene** — stock imagery matched to the current weather condition.
+3. **city_safe_scene** — curated permanent public JPGs under \`brand-assets/cinematic/gainesville-*.jpg\`.
+4. **gradient_only** — last-resort themed gradient (wrapped in try/catch; render never fails).
+
+Orlando and other cities skip tier 3 (no city_safe_scene).
+
+### Visual Learning Firewall
+When \`exclude_fallback_from_learning\` is ON (default), any row whose \`published_visual_source\` is \`gradient_only\` or \`degraded_fallback\` (or whose \`visual_metadata.eligibleForLearning\` is false) is excluded from:
+- \`winning-recipes.ts\` visual winning factor queries
+- \`style-rotation.ts\` style selection
+- \`compute-winner-stats\` cinematic lift calculations
+- \`analyze-performance\` learning feedback loop
+
+This prevents the AI from learning to prefer degraded fallback visuals.
+
+### Richness Persistence
+Daily publish paths write the full \`SceneDecision\` to \`post_history.visual_metadata\` (preset, source, label, costTier, eligibleForLearning) plus \`post_history.published_visual_source\`. Weekly and monthly recaps log each slide's source via \`[cinematic]\` logs and write a summary \`system_logs\` row with \`type='cinematic_recap_render'\`.
+
+### Controls
+Three booleans on \`weather_settings\`, all default \`true\`:
+- \`smart_cost_strategy\` — enables cost-aware preset selection
+- \`strict_visuals_gainesville\` — enables the 4-tier fallback for Gainesville
+- \`exclude_fallback_from_learning\` — enables the visual learning firewall`;
 
 const ERROR_STRATEGY = `SkyBrief uses a **fail-open philosophy**: posts should publish even if non-critical steps fail.
 
@@ -438,31 +475,35 @@ Deno.serve(async (req) => {
     docParts.push(CAPTION_SYSTEM);
     docParts.push("\n---\n");
 
-    docParts.push(`## 10. City-to-Channel Routing Guard\n`);
+    docParts.push(`## 10. Cinematic Preset System\n`);
+    docParts.push(CINEMATIC_PRESET_SYSTEM);
+    docParts.push("\n---\n");
+
+    docParts.push(`## 11. City-to-Channel Routing Guard\n`);
     docParts.push(ROUTING_GUARD);
     docParts.push("\n---\n");
 
-    docParts.push(`## 11. Error Handling Strategy\n`);
+    docParts.push(`## 12. Error Handling Strategy\n`);
     docParts.push(ERROR_STRATEGY);
     docParts.push("\n---\n");
 
-    docParts.push(`## 12. API Integrations`);
+    docParts.push(`## 13. API Integrations`);
     docParts.push(table(["Integration", "Used for"], INTEGRATIONS.map(([n, u]) => [n, u])));
     docParts.push("\n---\n");
 
-    docParts.push(`## 13. Known Issues / Limitations\n`);
+    docParts.push(`## 14. Known Issues / Limitations\n`);
     docParts.push(KNOWN_ISSUES);
     docParts.push("\n---\n");
 
-    docParts.push(`## 14. Recently Resolved Issues\n`);
+    docParts.push(`## 15. Recently Resolved Issues\n`);
     docParts.push(RESOLVED_ISSUES);
     docParts.push("\n---\n");
 
-    docParts.push(`## 15. Deployment\n`);
+    docParts.push(`## 16. Deployment\n`);
     docParts.push(DEPLOYMENT);
     docParts.push("\n---\n");
 
-    docParts.push(`## 16. Recent Changes Log`);
+    docParts.push(`## 17. Recent Changes Log`);
     docParts.push(`_Pulled live from post_history (last 10 events)_\n`);
     if (recentRows.length === 0) {
       docParts.push(`_No recent activity recorded._`);
