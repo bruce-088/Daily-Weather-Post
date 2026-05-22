@@ -88,4 +88,7 @@ export const FeatureFlags = {
   get ENABLE_AUTO_WINNER() {
     return isFeatureEnabled("ENABLE_AUTO_WINNER");
   },
+  get ENABLE_YEARLY_RECAP() {
+    return isFeatureEnabled("ENABLE_YEARLY_RECAP");
+  },
 };
