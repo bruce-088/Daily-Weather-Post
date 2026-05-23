@@ -1391,23 +1391,6 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
     console.error(`[creatomate] ${mapped}`);
     setErr(mapped);
     const lower = (responseText + " " + (apiError || "")).toLowerCase();
-    // STRICT credit-exhaustion detection. ONLY a literal HTTP 402 from the
-    // Creatomate API or an explicit `no_credits` / `insufficient credit` body
-    // phrase counts. Generic billing/quota text or any other status code is
-    // treated as a normal failure (retry-then-fallback) — not a hard stop.
-    const isCreditExhausted =
-      renderRes.status === 402 ||
-      lower.includes("no_credits") ||
-      lower.includes("insufficient credit") ||
-      lower.includes("out of credit") ||
-      lower.includes("credit exhausted") ||
-      lower.includes("credits exhausted");
-    if (isCreditExhausted) {
-      return { creditExhausted: true, provider: "creatomate", message: mapped };
-    }
-    console.error(`[creatomate] ${mapped}`);
-    setErr(mapped);
-    const lower = (responseText + " " + (apiError || "")).toLowerCase();
     // Phase 2C: distinguish template-config errors (real config bug) from
     // transient failures (rate-limit, 5xx, timeout). When the upstream API
     // is explicit about template_not_found / no_template, mark the errorSink
@@ -1421,10 +1404,7 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
       if (errorSink) errorSink.templateConfigError = true;
       console.error("[creatomate] TEMPLATE_CONFIG_ERROR detected — fallback renders will NOT auto-publish to video platforms");
     }
-    // STRICT credit-exhaustion detection. ONLY a literal HTTP 402 from the
-    // Creatomate API or an explicit `no_credits` / `insufficient credit` body
-    // phrase counts. Generic billing/quota text or any other status code is
-    // treated as a normal failure (retry-then-fallback) — not a hard stop.
+    // STRICT credit-exhaustion detection.
     const isCreditExhausted =
       renderRes.status === 402 ||
       lower.includes("no_credits") ||
@@ -1437,6 +1417,22 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
     }
     return null;
   }
+
+  const renders = parsedResponse;
+  if (!renders) {
+    setErr("Failed to parse Creatomate response as JSON");
+    return null;
+  }
+
+  const renderId = Array.isArray(renders) ? renders[0]?.id : renders?.id;
+  if (!renderId) {
+    setErr(`Creatomate returned no render id (response: ${responseText.slice(0, 200)})`);
+    return null;
+  }
+
+  console.log("Creatomate render started, ID:", renderId);
+
+  // Poll budget: 18 ticks × 5s = 90s minimum before any fallback path.
   for (let i = 0; i < 18; i++) {
     await new Promise((r) => setTimeout(r, 5000));
 
