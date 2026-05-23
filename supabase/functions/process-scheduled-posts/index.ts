@@ -3033,6 +3033,59 @@ Deno.serve(async (req) => {
 
         let videoPostedAny = false;
         const platformErrors: string[] = [];
+
+        // ═══════════════════════════════════════════════════════════════
+        // PHASE 1 EMERGENCY GATE: Pre-upload content validation.
+        // Blocks publish when title/description contain known hallucinated
+        // location proxies ("Weather Update", template placeholders, etc.)
+        // or a suspicious "in <NotExpectedCity>!" pattern.
+        // Caption + voiceScript are checked for placeholders only (Option B).
+        // ═══════════════════════════════════════════════════════════════
+        try {
+          const expectedCity = (post.city || weather?.city || "").trim() || null;
+          const bundle = validatePostBundle({
+            title,
+            description: desc,
+            caption: caption || null,
+            voiceScript: null,
+            expectedCity,
+          });
+          if (!bundle.ok) {
+            const detail = bundle.failures
+              .map((f) => `${f.field}:${f.reason}${f.matched ? `(${f.matched})` : ""}`)
+              .join("; ");
+            const msg = `[validation_failed] ${detail}`;
+            console.error(`[validate] BLOCKED post_id=${post.id} city=${expectedCity ?? "?"} — ${detail}`);
+            await supabase
+              .from("scheduled_posts")
+              .update({
+                status: "validation_failed",
+                error_message: msg,
+                posted_at: null,
+              })
+              .eq("id", post.id);
+            try {
+              await supabase.from("system_logs").insert({
+                user_id: post.user_id,
+                type: "validation_blocked",
+                platform: platformsToPost.join(","),
+                message: `Validation gate blocked publish: ${detail}`,
+                context: {
+                  scheduled_post_id: post.id,
+                  city: expectedCity,
+                  failures: bundle.failures,
+                },
+              });
+            } catch (_) { /* best-effort */ }
+            processed++;
+            continue;
+          }
+        } catch (vErr) {
+          // Validator must never crash the worker — if it fails, log and
+          // fall through to publish (fail-open by design for Phase 1).
+          console.error(`[validate] validator threw — falling through:`, (vErr as Error).message);
+        }
+
         if (video) {
           // Video succeeded — post to all platforms
           for (const platformName of platformsToPost) {
