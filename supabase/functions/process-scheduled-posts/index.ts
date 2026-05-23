@@ -192,7 +192,6 @@ async function resolveScheduledCity(supabase: any, post: any): Promise<{ city: s
 }
 
 // --- SkyBrief Title Generator (Phase 5B: centralized in _shared/title-builder.ts) ---
-import { buildHookTitle, generateSkyBriefTitle, getWeatherEmoji } from "../_shared/title-builder.ts";
 
 // --- Dynamic Handle System ---
 
