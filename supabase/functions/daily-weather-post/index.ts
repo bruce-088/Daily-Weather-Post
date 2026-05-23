@@ -1097,7 +1097,7 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
   };
 }
 
-async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null, visualStyle?: string | null, errorSink?: { message?: string }): Promise<{ data: Uint8Array; mimeType: string; duration?: number } | null> {
+async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null, visualStyle?: string | null, errorSink?: { message?: string; templateConfigError?: boolean }): Promise<{ data: Uint8Array; mimeType: string; duration?: number } | null> {
   const apiKey = Deno.env.get("CREATOMATE_API_KEY");
   const setErr = (m: string) => { if (errorSink) errorSink.message = m; console.error("[creatomate] error:", m); };
   if (!apiKey) {
@@ -1116,6 +1116,20 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
   } catch (error) {
     setErr(`Creatomate source validation failed before API call: ${error instanceof Error ? error.message : String(error)}`);
     return null;
+  }
+
+  // ── Phase 2B: pre-render structural guards ──
+  if (!source || typeof source !== "object") {
+    setErr("Creatomate source is not a valid object after sanitize");
+    return null;
+  }
+  if ("template_id" in source) {
+    const tid = (source as any).template_id;
+    if (typeof tid !== "string" || tid.trim().length === 0) {
+      if (errorSink) errorSink.templateConfigError = true;
+      setErr(`Creatomate template_id invalid (got ${typeof tid}: "${String(tid).slice(0, 80)}") — treat as config error`);
+      return null;
+    }
   }
 
 
