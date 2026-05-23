@@ -15,6 +15,7 @@ import LinkedInCallback from "./pages/LinkedInCallback";
 import NotFound from "./pages/NotFound";
 import ExportSpec from "./pages/ExportSpec";
 import JobsDashboard from "./pages/JobsDashboard";
+import AdminHealth from "./pages/AdminHealth";
 
 const queryClient = new QueryClient();
 
@@ -62,6 +63,7 @@ const App = () => (
           <Route path="/linkedin/callback" element={<ProtectedRoute><LinkedInCallback /></ProtectedRoute>} />
           <Route path="/export-spec" element={<ProtectedRoute><ExportSpec /></ProtectedRoute>} />
           <Route path="/jobs" element={<ProtectedRoute><JobsDashboard /></ProtectedRoute>} />
+          <Route path="/admin/health" element={<ProtectedRoute><AdminHealth /></ProtectedRoute>} />
           <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
           <Route path="*" element={<NotFound />} />
         </Routes>
