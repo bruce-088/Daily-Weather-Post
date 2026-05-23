@@ -1977,7 +1977,22 @@ Deno.serve(async (req) => {
         for (const a of connectedAdapters) recordResult(a.name, false, msg);
       }
 
-      if (!_validationFailed) for (const adapter of connectedAdapters) {
+      // ── Phase 2C: smart fallback gate ──
+      // If Creatomate emitted a real TEMPLATE_CONFIG_ERROR AND we fell back
+      // to a non-Creatomate provider, hold the post for review for video
+      // platforms instead of publishing the generic fallback render.
+      const _videoPlatforms = new Set(["youtube", "tiktok", "instagram", "linkedin"]);
+      const _targetsVideo = connectedAdapters.some((a) => _videoPlatforms.has(a.name));
+      const _fallbackProvider = (video as any)?.provider && (video as any).provider !== "creatomate";
+      if (!_validationFailed && renderErrorSink.templateConfigError === true && _fallbackProvider && _targetsVideo) {
+        const reason = `[NEEDS_REVIEW:template_config] Creatomate template error — fallback render (${(video as any).provider}) held from video platforms. Original: ${renderErrorSink.message ?? "(no message)"}`;
+        console.error(`[publish] HOLDING daily-weather-post for review — ${reason}`);
+        errorMessage = reason;
+        status = "needs_review";
+        for (const a of connectedAdapters) recordResult(a.name, false, reason);
+      }
+
+      if (!_validationFailed && status !== "needs_review") for (const adapter of connectedAdapters) {
         console.log(`[title_debug] daily dispatch title for ${adapter.name}:`, title);
         const result = await postToPlatform(adapter.name, supabase, userId, video.data, title, desc, video.mimeType, resolvedCityId, "morning", resolvedCityName);
         if (result.success) {
