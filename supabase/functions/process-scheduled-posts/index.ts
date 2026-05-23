@@ -1379,11 +1379,16 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
     if (statusData.status === "failed" || statusData.status === "partial") {
       const detail = statusData.error_message || statusData.error || "unknown render error";
       setErr(`Creatomate ${statusData.status}: ${detail}`);
+      if (errorSink) {
+        errorSink.failure_branch = `render_${statusData.status}`;
+        errorSink.response_body = JSON.stringify(statusData).slice(0, 500);
+      }
       return null;
     }
   }
 
   setErr("Creatomate render timed out after 90 seconds");
+  if (errorSink) errorSink.failure_branch = "poll_timeout";
   return null;
 }
 
