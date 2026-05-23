@@ -1924,6 +1924,25 @@ Deno.serve(async (req) => {
       assertSlotTitlePrefix(title, "daily-weather-post:dispatch");
       const desc = caption || "Weather update for " + weather.city + ": " + weather.temperature + "\u00B0F, " + weather.description;
 
+      // PHASE 1 EMERGENCY GATE: pre-upload validation. Block publish if title
+      // or description contain hallucinated location proxies.
+      const _vb = validatePostBundle({
+        title,
+        description: desc,
+        caption: caption || null,
+        expectedCity: resolvedCityName || weather.city || null,
+      });
+      if (!_vb.ok) {
+        const detail = _vb.failures
+          .map((f) => `${f.field}:${f.reason}${f.matched ? `(${f.matched})` : ""}`)
+          .join("; ");
+        const msg = `[validation_failed] ${detail}`;
+        console.error(`[validate] BLOCKED daily-weather-post — ${detail}`);
+        errorMessage = msg;
+        for (const a of connectedAdapters) recordResult(a.name, false, msg);
+        return; // exit the publish block; outer flow records the failure
+      }
+
       for (const adapter of connectedAdapters) {
         console.log(`[title_debug] daily dispatch title for ${adapter.name}:`, title);
         const result = await postToPlatform(adapter.name, supabase, userId, video.data, title, desc, video.mimeType, resolvedCityId, "morning", resolvedCityName);
