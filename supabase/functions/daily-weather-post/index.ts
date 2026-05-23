@@ -1173,6 +1173,18 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
       ? `Creatomate endpoint/render not found (404): ${detail}`
       : `Creatomate ${renderRes.status}: ${detail}`;
     setErr(mapped);
+    // Phase 2C: detect template-config error so the publish gate can hold
+    // fallback renders from video platforms.
+    const lower = (responseText + " " + (apiError || "")).toLowerCase();
+    if (
+      lower.includes("no template") ||
+      lower.includes("template not found") ||
+      lower.includes("template_not_found") ||
+      lower.includes("invalid template")
+    ) {
+      if (errorSink) errorSink.templateConfigError = true;
+      console.error("[creatomate] TEMPLATE_CONFIG_ERROR detected — fallback renders will NOT auto-publish to video platforms");
+    }
     return null;
   }
 
