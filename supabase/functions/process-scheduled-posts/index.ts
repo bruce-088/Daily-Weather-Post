@@ -16,8 +16,9 @@ import {
   loadCinematicSettings,
   SAFE_CINEMATIC_DEFAULTS,
 } from "../_shared/cinematic-presets.ts";
+import { logEvent, EventType, nowMs } from "../_shared/structured-logger.ts";
 
-const PROCESS_SCHEDULED_POSTS_BUILD = "settings-guard-2026-05-22T16:50Z";
+const PROCESS_SCHEDULED_POSTS_BUILD = "phase3-structured-logging-2026-05-23T03:30Z";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1861,6 +1862,15 @@ Deno.serve(async (req) => {
     let skippedLocked = 0;
 
     for (const post of duePosts) {
+      const __postStartMs = nowMs();
+      logEvent(supabase, EventType.PostStart, `Begin processing scheduled post`, {
+        scheduled_post_id: post.id,
+        user_id: post.user_id,
+        city: post.city,
+        slot: (post as any).slot ?? null,
+        platform: post.platform,
+        status: post.status,
+      });
       // === ATOMIC CLAIM ===
       // Flip status pending|retrying → processing, scoped to this exact row AND
       // the status we read it at. If another worker already claimed it, the
@@ -2133,6 +2143,10 @@ Deno.serve(async (req) => {
         const CACHE_MAX_AGE_MS = 6 * 60 * 60 * 1000;
         let weather: any;
         let weatherSource: "live" | "cache" = "live";
+        const __weatherStartMs = nowMs();
+        logEvent(supabase, EventType.WeatherFetchStart, `Fetching weather for ${scopedCity.city}`, {
+          scheduled_post_id: post.id, user_id: post.user_id, city: scopedCity.city,
+        });
         try {
           weather = await fetchWeatherData(scopedCity.city, openWeatherApiKey, scopedCity.state);
           // Refresh the cache (best-effort).
@@ -2171,12 +2185,21 @@ Deno.serve(async (req) => {
               { city: scopedCity.city, cache_age_min: ageMin, fallback: "weather_cache" },
             );
           } else {
+            logEvent(supabase, EventType.WeatherFetchError, `Weather fetch failed, no usable cache`, {
+              scheduled_post_id: post.id, user_id: post.user_id, city: scopedCity.city,
+              error_message: liveMsg, duration_ms: nowMs() - __weatherStartMs,
+            });
             // No usable cache — re-throw so the row enters the normal retry/fail flow.
             throw new Error(`Weather fetch failed and no cache within 6h: ${liveMsg}`);
           }
         }
         weather.city = scopedCity.city;
         if (scopedCity.state) weather.stateOrRegion = scopedCity.state;
+        logEvent(supabase, EventType.WeatherFetchOk, `Weather ok (${weatherSource})`, {
+          scheduled_post_id: post.id, user_id: post.user_id, city: scopedCity.city,
+          source: weatherSource, temperature: weather?.temperature, condition: weather?.condition,
+          duration_ms: nowMs() - __weatherStartMs,
+        });
         trace("weather_fetched", { temperature: weather.temperature, condition: weather.condition, source: weatherSource });
 
         // ── PRE-FLIGHT VALIDATION ──
@@ -2980,7 +3003,12 @@ Deno.serve(async (req) => {
           // Try video generation once (with voiceover baked in if available)
           console.log(`RENDER START: City: ${weather.city}, VoiceEnabled: ${voiceUrl ? "True" : "False"}, VisualStyle: ${visualStyle}`);
           console.log(`[publish] post ${post.id}: AUDIO_URL → ${voiceUrl ? voiceUrl.split("?")[0] : "(none)"} duration=${voiceAudioDurationSec ?? "n/a"}s`);
-          const renderErrorSink: { message?: string } = {};
+          const renderErrorSink: { message?: string; templateConfigError?: boolean } = {};
+          const __renderStartMs = nowMs();
+          logEvent(supabase, EventType.RenderCreatomateStart, `Render start`, {
+            scheduled_post_id: post.id, user_id: post.user_id, city: weather.city,
+            visual_style: visualStyle, voice: voiceUrl ? true : false,
+          });
           const rendered = await generateVideoWithFallback({
             weather, timePeriod, voiceUrl, audioDurationSec: voiceAudioDurationSec, visualStyle,
             creatomate: () => generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec, visualStyle, renderErrorSink),
@@ -3001,6 +3029,25 @@ Deno.serve(async (req) => {
             trace("video_render_rejected", { reason: "too_small", bytes: rendered.data.byteLength, provider: rendered.provider });
           }
           trace("video_render", { success: !!video, mime: video?.mimeType, provider: video?.provider, bytes: video?.data.byteLength, duration: (video as any)?.duration });
+          // Phase 3 structured render outcome
+          if (video) {
+            const evt = video.provider === "creatomate" ? EventType.RenderCreatomateOk : EventType.RenderFallbackOk;
+            logEvent(supabase, evt, `Render ok (${video.provider})`, {
+              scheduled_post_id: post.id, user_id: post.user_id, city: weather.city,
+              provider: video.provider, bytes: video.data.byteLength,
+              duration_ms: nowMs() - __renderStartMs,
+            });
+          } else {
+            const evt = renderErrorSink.templateConfigError
+              ? EventType.RenderCreatomateConfigError
+              : EventType.RenderFallbackError;
+            logEvent(supabase, evt, `Render failed`, {
+              scheduled_post_id: post.id, user_id: post.user_id, city: weather.city,
+              error_message: renderErrorSink.message ?? null,
+              template_config_error: !!renderErrorSink.templateConfigError,
+              duration_ms: nowMs() - __renderStartMs,
+            });
+          }
           // Persist for retry credit-protection (only validated videos)
           if (video && video.data.byteLength >= MIN_VIDEO_BYTES) {
             try {
@@ -3122,9 +3169,25 @@ Deno.serve(async (req) => {
             } catch (phErr) {
               console.error(`[validate] failed to log post_history validation_failed row for ${post.id} (block still enforced):`, (phErr as Error).message);
             }
+            logEvent(supabase, EventType.ValidationBlock, `Validation blocked publish`, {
+              scheduled_post_id: post.id, user_id: post.user_id, city: expectedCity,
+              platform: platformsToPost.join(","),
+              validation_reason: bundle.failures[0]?.reason,
+              validation_field: bundle.failures[0]?.field,
+              matched: bundle.failures[0]?.matched,
+              failures: bundle.failures,
+            });
+            logEvent(supabase, EventType.PostFinalizeFailed, `Post finalize: validation_failed`, {
+              scheduled_post_id: post.id, user_id: post.user_id, city: expectedCity,
+              status: "validation_failed", duration_ms: nowMs() - __postStartMs,
+            });
             processed++;
             continue;
           }
+          logEvent(supabase, EventType.ValidationPass, `Validation passed`, {
+            scheduled_post_id: post.id, user_id: post.user_id, city: expectedCity,
+            platform: platformsToPost.join(","),
+          });
         } catch (vErr) {
           // Validator must never crash the worker — if it fails, log and
           // fall through to publish (fail-open by design for Phase 1).
@@ -3187,6 +3250,15 @@ Deno.serve(async (req) => {
           } catch (phErr) {
             console.error(`[publish] failed to log post_history needs_review for ${post.id} (hold still enforced):`, (phErr as Error).message);
           }
+          logEvent(supabase, EventType.UploadSkippedNeedsReview, `Upload skipped — fallback render held for review`, {
+            scheduled_post_id: post.id, user_id: post.user_id, city: post.city || weather?.city,
+            platform: platformsToPost.join(","), provider: video.provider,
+            error_message: renderErrorSink.message ?? null,
+          });
+          logEvent(supabase, EventType.PostFinalizeNeedsReview, `Post finalize: needs_review`, {
+            scheduled_post_id: post.id, user_id: post.user_id, city: post.city || weather?.city,
+            status: "needs_review", duration_ms: nowMs() - __postStartMs,
+          });
           processed++;
           continue;
         }
@@ -3196,6 +3268,11 @@ Deno.serve(async (req) => {
           for (const platformName of platformsToPost) {
             console.log(`[publish] Attempting to write notification for user: ${post.user_id}, platform: ${platformName}`);
             console.log(`[title_debug] dispatch title for ${platformName}:`, title);
+            const __uploadStartMs = nowMs();
+            logEvent(supabase, EventType.UploadStart, `Upload start ${platformName}`, {
+              scheduled_post_id: post.id, user_id: post.user_id, city: weather.city,
+              platform: platformName, provider: video.provider, bytes: video.data.byteLength,
+            });
             const result = await postToPlatform(platformName, supabase, post.user_id, video.data, title, desc, video.mimeType, post.city_id || null, (timePeriod as any) || null, post.city || null);
             // Hard guard: YouTube must return a real video_id. Throw so the
             // publish_post job fails loudly instead of being marked succeeded.
@@ -3204,6 +3281,11 @@ Deno.serve(async (req) => {
             }
             if (result.success && result.id) {
               videoPostedAny = true;
+              logEvent(supabase, EventType.UploadOk, `Upload ok ${platformName}`, {
+                scheduled_post_id: post.id, user_id: post.user_id, city: weather.city,
+                platform: platformName, external_id: result.id,
+                duration_ms: nowMs() - __uploadStartMs,
+              });
               const acctName = (result as any).account_name || "unknown";
               console.log(`[publish] ${platformName} OK id=${result.id} channel=${acctName} city=${(result as any).resolved_city_id ?? "shared"} post=${post.id}`);
               if (platformName === "youtube") {
@@ -3254,6 +3336,11 @@ Deno.serve(async (req) => {
               errorMessage = result.error || `${platformName} upload failed`;
               platformErrors.push(`${platformName}: ${errorMessage}`);
               console.error(`[publish] ${platformName} FAILED post=${post.id}: ${errorMessage}`);
+              logEvent(supabase, EventType.UploadError, `Upload failed ${platformName}`, {
+                scheduled_post_id: post.id, user_id: post.user_id, city: weather.city,
+                platform: platformName, error_message: errorMessage,
+                duration_ms: nowMs() - __uploadStartMs,
+              });
               // Detect expired/invalid auth (token refresh failed) on any platform.
               const errLower = (errorMessage || "").toLowerCase();
               const isAuthExpired =
@@ -3323,6 +3410,19 @@ Deno.serve(async (req) => {
         // post_history.status CHECK constraint only allows: success | failed | pending
         // Map our internal "posted" → "success" so the insert isn't silently rejected.
         const historyStatus = postStatus === "posted" ? "success" : postStatus;
+
+        // Phase 3: structured post finalize checkpoint
+        logEvent(
+          supabase,
+          postStatus === "posted" ? EventType.PostFinalizeSuccess : EventType.PostFinalizeFailed,
+          `Post finalize: ${postStatus}`,
+          {
+            scheduled_post_id: post.id, user_id: post.user_id, city: weather?.city,
+            platform: platformsToPost.join(","), status: postStatus,
+            error_message: postStatus === "failed" ? errorMessage : null,
+            duration_ms: nowMs() - __postStartMs,
+          },
+        );
 
         // Final action step in the trace
         trace("final_action", { action: postStatus === "posted" ? "POSTED" : `FAILED — ${errorMessage}`, voice_status: voiceStatus });
