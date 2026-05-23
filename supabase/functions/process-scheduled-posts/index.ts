@@ -1272,6 +1272,11 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
     }
     console.error(`[creatomate] ${mapped}`);
     setErr(mapped);
+    if (errorSink) {
+      errorSink.http_status = renderRes.status;
+      errorSink.response_body = responseText.slice(0, 500);
+      errorSink.failure_branch = "http_non_ok";
+    }
     const lower = (responseText + " " + (apiError || "")).toLowerCase();
     // Phase 2C: distinguish template-config errors (real config bug) from
     // transient failures (rate-limit, 5xx, timeout). When the upstream API
