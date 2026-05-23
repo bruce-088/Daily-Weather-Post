@@ -1141,7 +1141,7 @@ async function storeVoiceAudio(supabase: any, userId: string, audio: Uint8Array)
   return signed.signedUrl;
 }
 
-async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null, visualStyle?: string | null, errorSink?: { message?: string; templateConfigError?: boolean }): Promise<{ data: Uint8Array; mimeType: string; duration?: number } | { creditExhausted: true; provider: "creatomate"; message?: string } | null> {
+async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null, visualStyle?: string | null, errorSink?: { message?: string; templateConfigError?: boolean; http_status?: number; response_body?: string; failure_branch?: string }): Promise<{ data: Uint8Array; mimeType: string; duration?: number } | { creditExhausted: true; provider: "creatomate"; message?: string } | null> {
   const apiKey = Deno.env.get("CREATOMATE_API_KEY");
   const setErr = (m: string) => { if (errorSink) errorSink.message = m; console.error("[creatomate] error:", m); };
   if (!apiKey) {
@@ -1272,6 +1272,11 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
     }
     console.error(`[creatomate] ${mapped}`);
     setErr(mapped);
+    if (errorSink) {
+      errorSink.http_status = renderRes.status;
+      errorSink.response_body = responseText.slice(0, 500);
+      errorSink.failure_branch = "http_non_ok";
+    }
     const lower = (responseText + " " + (apiError || "")).toLowerCase();
     // Phase 2C: distinguish template-config errors (real config bug) from
     // transient failures (rate-limit, 5xx, timeout). When the upstream API
@@ -1374,11 +1379,16 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
     if (statusData.status === "failed" || statusData.status === "partial") {
       const detail = statusData.error_message || statusData.error || "unknown render error";
       setErr(`Creatomate ${statusData.status}: ${detail}`);
+      if (errorSink) {
+        errorSink.failure_branch = `render_${statusData.status}`;
+        errorSink.response_body = JSON.stringify(statusData).slice(0, 500);
+      }
       return null;
     }
   }
 
   setErr("Creatomate render timed out after 90 seconds");
+  if (errorSink) errorSink.failure_branch = "poll_timeout";
   return null;
 }
 
@@ -2893,6 +2903,17 @@ Deno.serve(async (req) => {
           const rendered = await generateVideoWithFallback({
             weather, timePeriod, voiceUrl, audioDurationSec: voiceAudioDurationSec, visualStyle,
             creatomate: () => generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec, visualStyle, renderErrorSink),
+            observability: {
+              supabase,
+              creatomateErrorSink: renderErrorSink,
+              context: {
+                scheduled_post_id: post.id,
+                user_id: post.user_id,
+                city: weather.city,
+                slot: post.slot ?? null,
+                visual_style: visualStyle,
+              },
+            },
           });
           // ── Post-render validation: reject empty/tiny/short outputs ──
           // render_video = success ONLY if bytes are real AND duration > 2s.

@@ -1612,12 +1612,23 @@ Deno.serve(async (req) => {
     // Generate video (with voice baked in if available). Composition length is sized
     // dynamically from the audio duration so the voiceover + CTA always finish in full.
     const renderStart = Date.now();
-    const renderErrorSink: { message?: string } = {};
+    const renderErrorSink: { message?: string; templateConfigError?: boolean; http_status?: number; response_body?: string; failure_branch?: string } = {};
     const video = await generateVideoWithFallback({
       weather, timePeriod, voiceUrl, audioDurationSec: voiceAudioDurationSec,
       visualStyle,
       primaryTimeoutMs: 180_000,
       creatomate: () => generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec, visualStyle, renderErrorSink),
+      observability: {
+        supabase,
+        creatomateErrorSink: renderErrorSink,
+        context: {
+          user_id: userId,
+          city: weather.city,
+          slot: timePeriod ?? null,
+          visual_style: visualStyle,
+          source: "daily-weather-post",
+        },
+      },
     });
     const renderElapsedSec = ((Date.now() - renderStart) / 1000);
 
