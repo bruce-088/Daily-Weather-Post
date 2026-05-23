@@ -2074,6 +2074,7 @@ Deno.serve(async (req) => {
               processed++;
               continue;
             }
+            }
           }
         } catch (e) {
           console.warn(`[isolate] check failed for ${post.id} (continuing):`, (e as any)?.message);
