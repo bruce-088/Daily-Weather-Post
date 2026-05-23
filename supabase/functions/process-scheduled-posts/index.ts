@@ -1862,6 +1862,15 @@ Deno.serve(async (req) => {
     let skippedLocked = 0;
 
     for (const post of duePosts) {
+      const __postStartMs = nowMs();
+      logEvent(supabase, EventType.PostStart, `Begin processing scheduled post`, {
+        scheduled_post_id: post.id,
+        user_id: post.user_id,
+        city: post.city,
+        slot: (post as any).slot ?? null,
+        platform: post.platform,
+        status: post.status,
+      });
       // === ATOMIC CLAIM ===
       // Flip status pending|retrying → processing, scoped to this exact row AND
       // the status we read it at. If another worker already claimed it, the
