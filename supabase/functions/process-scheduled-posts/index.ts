@@ -3743,6 +3743,16 @@ Deno.serve(async (req) => {
         const errStack = postError instanceof Error ? (postError.stack || "") : "";
         console.error(`[process] per-post catch build=${PROCESS_SCHEDULED_POSTS_BUILD} post_id=${post.id} message=${errMsg}`);
         console.error(`[process] per-post stack post_id=${post.id}\n${errStack || "<no stack>"}`);
+        logEvent(supabase, EventType.PipelineException, `Unhandled exception in per-post pipeline`, {
+          scheduled_post_id: post.id,
+          user_id: post.user_id,
+          city: post.city,
+          slot: (post as any).slot ?? null,
+          platform: post.platform,
+          error_message: errMsg.slice(0, 500),
+          duration_ms: nowMs() - __postStartMs,
+          status: "exception",
+        });
 
         const currentRetryCount = (post as any).retry_count ?? 0;
         const MAX_RETRIES = 2;
