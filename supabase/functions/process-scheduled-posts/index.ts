@@ -3410,6 +3410,19 @@ Deno.serve(async (req) => {
         // Map our internal "posted" → "success" so the insert isn't silently rejected.
         const historyStatus = postStatus === "posted" ? "success" : postStatus;
 
+        // Phase 3: structured post finalize checkpoint
+        logEvent(
+          supabase,
+          postStatus === "posted" ? EventType.PostFinalizeSuccess : EventType.PostFinalizeFailed,
+          `Post finalize: ${postStatus}`,
+          {
+            scheduled_post_id: post.id, user_id: post.user_id, city: weather?.city,
+            platform: platformsToPost.join(","), status: postStatus,
+            error_message: postStatus === "failed" ? errorMessage : null,
+            duration_ms: nowMs() - __postStartMs,
+          },
+        );
+
         // Final action step in the trace
         trace("final_action", { action: postStatus === "posted" ? "POSTED" : `FAILED — ${errorMessage}`, voice_status: voiceStatus });
         // Always persist hook/cinematic/voice metadata for analytics; only
