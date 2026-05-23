@@ -10,6 +10,9 @@
 //     creatomate: () => generateWeatherVideo(weather, timePeriod, voiceUrl, audioDurationSec),
 //   });
 
+import { logEvent, EventType, type LogContext } from "./structured-logger.ts";
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+
 export interface NormalizedRender {
   url: string;
   duration: number;
@@ -33,6 +36,19 @@ export type CreatomateResult =
   | CreditExhaustedError
   | null;
 
+/**
+ * Phase 6B: read-only window into the creatomate caller's error sink so the
+ * fallback wrapper can structurally log HTTP status + response body for
+ * every failure branch without owning the fetch itself.
+ */
+export interface CreatomateErrorSink {
+  message?: string;
+  templateConfigError?: boolean;
+  http_status?: number;
+  response_body?: string;
+  failure_branch?: string;
+}
+
 export interface FallbackPayload {
   weather: any;
   timePeriod?: string | null;
@@ -45,6 +61,15 @@ export interface FallbackPayload {
   primaryTimeoutMs?: number;
   // AI Visual Optimization — drives JSON2Video background pick.
   visualStyle?: string | null;
+  // Phase 6B: structured observability — caller passes a supabase client,
+  // context (post_id/city/slot/user_id/...) and the creatomate errorSink it
+  // already owns, so video-render.ts can write `system_logs` rows at every
+  // failure branch (creatomate timeout/non-ok/exception, json2video, kenburns).
+  observability?: {
+    supabase: SupabaseClient;
+    context?: LogContext;
+    creatomateErrorSink?: CreatomateErrorSink;
+  };
 }
 
 const DEFAULT_TIMEOUT_MS = 180_000;
