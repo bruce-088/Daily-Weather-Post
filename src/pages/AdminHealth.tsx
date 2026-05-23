@@ -54,6 +54,9 @@ export default function AdminHealth() {
   const [logsError, setLogsError] = useState<string | null>(null);
   const [blocked, setBlocked] = useState<ScheduledRow[]>([]);
   const [renderFails, setRenderFails] = useState<ScheduledRow[]>([]);
+  const [successRate, setSuccessRate] = useState<{ posted: number; failed: number; needs_review: number; validation_failed: number; total: number } | null>(null);
+  const [validationBlocks24h, setValidationBlocks24h] = useState<LogRow[]>([]);
+  const [renderFailures24h, setRenderFailures24h] = useState<LogRow[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
