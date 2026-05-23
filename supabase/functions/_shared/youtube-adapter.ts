@@ -554,6 +554,10 @@ const TITLE_SKIP_WORDS = new Set([
   "today", "beautiful", "feels", "you", "wet", "snowy", "drive", "crank",
   "chilly", "mild", "sun", "sunny", "tonights", "afternoon", "morning", "evening",
   "don't", "dont", "wake", "rise", "shine",
+  // Phase 1 emergency: hallucinated location proxies must never be treated as cities.
+  "weather", "update", "clear", "skies", "coming", "up", "but", "comfortable",
+  "not", "need", "ahead", "outside", "today's", "todays", "tonight's",
+  "your", "area", "alerts", "alert", "forecast", "live", "live!", "now",
 ]);
 
 function extractCityFromTitle(title: string): string {
