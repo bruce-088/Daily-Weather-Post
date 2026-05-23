@@ -380,6 +380,7 @@ function buildSkyBriefUserPrompt(weather: WeatherResponse, timePeriod?: string |
 
 // --- Platform Adapters (shared) ---
 import { postToPlatform, getConnectedAdapters } from "../_shared/platform-adapter.ts";
+import { validatePostBundle } from "../_shared/text-sanitizer.ts";
 
 // --- Creatomate Video Generation ---
 
