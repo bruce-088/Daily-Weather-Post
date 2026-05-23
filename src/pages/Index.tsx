@@ -585,6 +585,9 @@ const Index = () => {
             >
               <FileDown size={14} /> Export Spec
             </Button>
+            <Button asChild size="sm" variant="ghost" className="gap-1.5 text-xs text-muted-foreground">
+              <a href="/admin/health">Admin</a>
+            </Button>
             <Button size="sm" variant="ghost" onClick={signOut} className="gap-1.5 text-xs text-muted-foreground">
               <LogOut size={14} /> Sign Out
             </Button>
