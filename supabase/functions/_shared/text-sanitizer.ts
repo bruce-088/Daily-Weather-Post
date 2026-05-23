@@ -122,6 +122,17 @@ export function validateAndSanitize(text: string, opts: ValidateOptions): Valida
     }
   }
 
+  // 2b. Location-proxy fragments — only banned inside a location slot
+  //     (e.g. "weather in But Comfortable", "for But Comfortable today").
+  //     Phase 5E: replaces the previous overly-aggressive global block.
+  for (const phrase of BANNED_LOCATION_PROXIES) {
+    const esc = escapeRegex(phrase).replace(/\\\s+/g, "\\s+").replace(/\s+/g, "\\s+");
+    const re = new RegExp(`\\b(?:in|for|over|across|around|near)\\s+${esc}\\b`, "i");
+    if (re.test(raw)) {
+      return { ok: false, reason: "banned_location_proxy", matched: phrase };
+    }
+  }
+
   // 3. Suspicious "in <NotExpectedCity>!" — applies everywhere.
   const sus = suspiciousInPhrase(raw, opts.expectedCity ?? null);
   if (sus) {
