@@ -35,6 +35,7 @@ export interface PlatformAdapter {
     description: string,
     mimeType?: string,
     cityId?: string | null,
+    cityName?: string | null,
   ): Promise<UploadResult | null>;
 }
 
