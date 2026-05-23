@@ -2004,23 +2004,28 @@ Deno.serve(async (req) => {
       _cinematicDecision,
     );
 
-    const { data: historyRow, error: historyError } = await supabase.from("post_history").insert({
-      status, platform, city: weather.city, temperature: weather.temperature,
-      condition: weather.condition, image_url: storedImageUrl, error_message: errorMessage,
-      caption, user_id: userId,
-      post_url: youtubeVideoId ? `https://www.youtube.com/watch?v=${youtubeVideoId}` : null,
-      external_id: youtubeVideoId || null,
-      // Persist hook + cinematic + voice metadata so the History UI shows them
-      // on any device (cross-device, server-authoritative).
-      hook_used: hookUsedDerived,
-      cinematic_mode: enableCinematic,
-      cinematic_trigger: cinematicTrigger,
-      voice_name: voiceUrl ? "AI" : null,
-      debug_trace: persistedTrace,
-      visual_metadata: _cinPatch.visual_metadata,
-      published_visual_source: _cinPatch.published_visual_source,
-    }).select("id").single();
-    if (historyError) console.error("Failed to log post history:", historyError);
+    let historyRow: { id: string } | null = null;
+    try {
+      const { data: _row, error: historyError } = await supabase.from("post_history").insert({
+        status, platform, city: weather.city, temperature: weather.temperature,
+        condition: weather.condition, image_url: storedImageUrl, error_message: errorMessage,
+        caption, user_id: userId,
+        post_url: youtubeVideoId ? `https://www.youtube.com/watch?v=${youtubeVideoId}` : null,
+        external_id: youtubeVideoId || null,
+        hook_used: hookUsedDerived,
+        cinematic_mode: enableCinematic,
+        cinematic_trigger: cinematicTrigger,
+        voice_name: voiceUrl ? "AI" : null,
+        debug_trace: persistedTrace,
+        visual_metadata: _cinPatch.visual_metadata,
+        published_visual_source: _cinPatch.published_visual_source,
+      }).select("id").single();
+      if (historyError) console.error("Failed to log post history:", historyError);
+      else historyRow = _row;
+    } catch (phErr) {
+      console.error("Failed to log post history (threw):", (phErr as Error).message);
+    }
+    const historyError = historyRow ? null : new Error("post_history not written");
 
     // Seed analytics rows for each successful platform so the Analytics tab shows the post immediately.
     if (!historyError && historyRow?.id && userId) {

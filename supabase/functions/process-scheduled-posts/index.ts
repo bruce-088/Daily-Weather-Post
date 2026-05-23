@@ -3057,14 +3057,17 @@ Deno.serve(async (req) => {
               .join("; ");
             const msg = `[validation_failed] ${detail}`;
             console.error(`[validate] BLOCKED post_id=${post.id} city=${expectedCity ?? "?"} — ${detail}`);
-            await supabase
-              .from("scheduled_posts")
-              .update({
-                status: "validation_failed",
-                error_message: msg,
-                posted_at: null,
-              })
-              .eq("id", post.id);
+            try {
+              await supabase
+                .from("scheduled_posts")
+                .update({
+                  status: "validation_failed",
+                  error_message: msg,
+                })
+                .eq("id", post.id);
+            } catch (auditErr) {
+              console.error(`[validate] failed to mark scheduled_posts ${post.id} as validation_failed (block still enforced):`, (auditErr as Error).message);
+            }
             try {
               await supabase.from("system_logs").insert({
                 user_id: post.user_id,
@@ -3078,6 +3081,20 @@ Deno.serve(async (req) => {
                 },
               });
             } catch (_) { /* best-effort */ }
+            try {
+              await supabase.from("post_history").insert({
+                status: "validation_failed",
+                platform: post.platform,
+                city: expectedCity || post.city || "Unknown",
+                error_message: msg,
+                caption: caption || null,
+                user_id: post.user_id,
+                slot: (post as any).slot || null,
+                source: (post as any).source || "scheduled",
+              });
+            } catch (phErr) {
+              console.error(`[validate] failed to log post_history validation_failed row for ${post.id} (block still enforced):`, (phErr as Error).message);
+            }
             processed++;
             continue;
           }
