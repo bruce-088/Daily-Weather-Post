@@ -1308,6 +1308,23 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
     return null;
   }
 
+  // ── Phase 2B: pre-render structural guards ──
+  // Hard-fail before we waste an API call (and credits) when the render spec
+  // is malformed. A bad template_id is the #1 cause of "succeeded" renders
+  // that produce a black screen.
+  if (!source || typeof source !== "object") {
+    setErr("Creatomate source is not a valid object after sanitize");
+    return null;
+  }
+  if ("template_id" in source) {
+    const tid = (source as any).template_id;
+    if (typeof tid !== "string" || tid.trim().length === 0) {
+      if (errorSink) errorSink.templateConfigError = true;
+      setErr(`Creatomate template_id invalid (got ${typeof tid}: "${String(tid).slice(0, 80)}") — treat as config error`);
+      return null;
+    }
+  }
+
   // Medium-quality render: 0.75 scale (810x1440 from a 1080x1920 source)
   // dramatically cuts Creatomate render time so we stay inside the worker
   // window. Visually indistinguishable for vertical mobile playback.
