@@ -1564,6 +1564,12 @@ Deno.serve(async (req) => {
       auto_cinematic_for_storms: true,
       ...(settingsRow || {}),
     };
+    // ── Phase 2A: hard guard. `settings` must be a non-null object before
+    // any downstream code touches it. Belt-and-suspenders against the legacy
+    // "settings is not defined" ReferenceError that bricked render slots.
+    if (!settings || typeof settings !== "object") {
+      throw new Error("[settings_guard] settings object failed to initialize — refusing to proceed");
+    }
 
     // === City context (single source of truth) ===
     // The selected city in the global header is the authoritative input.
