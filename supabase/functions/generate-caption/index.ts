@@ -189,6 +189,7 @@ STYLE RULES:
 - The final CTA line MUST use the exact dynamic_handle provided — do not substitute or invent a different handle
 - CRITICAL: In the line "Smash the LIKE button if you're enjoying the weather in ___", the blank MUST be filled with the exact city name (e.g. "Gainesville", "Orlando"). NEVER use a weather condition, tone label, or any other word in this slot.
 - CRITICAL: In "daily ___ weather alerts" and "subscribe for ___ weather alerts", the blank MUST be the exact city name — never a weather condition or time-of-day word.
+- PHRASING PREFERENCE: Avoid the exact phrase "but comfortable" — it reads awkwardly and has triggered historical issues. Prefer "but cozy", "yet pleasant", "and comfortable", "still comfortable", or "mild and comfy".
 
 TONE MODES:
 1. NICE DAY MODE - pleasant, dry, calm, or sunny. Tone: light, fresh, easy, upbeat
