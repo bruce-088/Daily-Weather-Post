@@ -2143,6 +2143,10 @@ Deno.serve(async (req) => {
         const CACHE_MAX_AGE_MS = 6 * 60 * 60 * 1000;
         let weather: any;
         let weatherSource: "live" | "cache" = "live";
+        const __weatherStartMs = nowMs();
+        logEvent(supabase, EventType.WeatherFetchStart, `Fetching weather for ${scopedCity.city}`, {
+          scheduled_post_id: post.id, user_id: post.user_id, city: scopedCity.city,
+        });
         try {
           weather = await fetchWeatherData(scopedCity.city, openWeatherApiKey, scopedCity.state);
           // Refresh the cache (best-effort).
@@ -2181,12 +2185,21 @@ Deno.serve(async (req) => {
               { city: scopedCity.city, cache_age_min: ageMin, fallback: "weather_cache" },
             );
           } else {
+            logEvent(supabase, EventType.WeatherFetchError, `Weather fetch failed, no usable cache`, {
+              scheduled_post_id: post.id, user_id: post.user_id, city: scopedCity.city,
+              error_message: liveMsg, duration_ms: nowMs() - __weatherStartMs,
+            });
             // No usable cache — re-throw so the row enters the normal retry/fail flow.
             throw new Error(`Weather fetch failed and no cache within 6h: ${liveMsg}`);
           }
         }
         weather.city = scopedCity.city;
         if (scopedCity.state) weather.stateOrRegion = scopedCity.state;
+        logEvent(supabase, EventType.WeatherFetchOk, `Weather ok (${weatherSource})`, {
+          scheduled_post_id: post.id, user_id: post.user_id, city: scopedCity.city,
+          source: weatherSource, temperature: weather?.temperature, condition: weather?.condition,
+          duration_ms: nowMs() - __weatherStartMs,
+        });
         trace("weather_fetched", { temperature: weather.temperature, condition: weather.condition, source: weatherSource });
 
         // ── PRE-FLIGHT VALIDATION ──
