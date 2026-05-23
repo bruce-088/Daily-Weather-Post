@@ -60,7 +60,8 @@ export default function AdminHealth() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [recentRes, logsRes, blockedRes, renderRes] = await Promise.all([
+    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const [recentRes, logsRes, blockedRes, renderRes, statusRes, vBlockRes, rFailRes] = await Promise.all([
       supabase
         .from("scheduled_posts")
         .select("id, city, slot, platform, status, error_message, scheduled_at, created_at")
@@ -84,6 +85,27 @@ export default function AdminHealth() {
         .or("error_message.ilike.%creatomate%,error_message.ilike.%render%,error_message.ilike.%template%")
         .order("created_at", { ascending: false })
         .limit(10),
+      // Phase 3 monitoring: success rate (last 24h)
+      supabase
+        .from("scheduled_posts")
+        .select("status")
+        .gte("created_at", since24h),
+      // Phase 3 monitoring: structured validation blocks (last 24h)
+      supabase
+        .from("system_logs" as any)
+        .select("id, type, message, context, created_at")
+        .eq("type", "validation.block")
+        .gte("created_at", since24h)
+        .order("created_at", { ascending: false })
+        .limit(20),
+      // Phase 3 monitoring: structured render failures (last 24h)
+      supabase
+        .from("system_logs" as any)
+        .select("id, type, message, context, created_at")
+        .in("type", ["render.creatomate.config_error", "render.creatomate.transient_error", "render.fallback.error"])
+        .gte("created_at", since24h)
+        .order("created_at", { ascending: false })
+        .limit(20),
     ]);
 
     setRecent((recentRes.data as ScheduledRow[]) ?? []);
@@ -96,6 +118,21 @@ export default function AdminHealth() {
     }
     setBlocked((blockedRes.data as ScheduledRow[]) ?? []);
     setRenderFails((renderRes.data as ScheduledRow[]) ?? []);
+
+    // Aggregate status counts
+    const statusRows = (statusRes.data as { status: string | null }[] | null) ?? [];
+    const counts = { posted: 0, failed: 0, needs_review: 0, validation_failed: 0, total: statusRows.length };
+    for (const r of statusRows) {
+      const s = (r.status || "").toLowerCase();
+      if (s === "posted") counts.posted++;
+      else if (s === "failed") counts.failed++;
+      else if (s === "needs_review") counts.needs_review++;
+      else if (s === "validation_failed") counts.validation_failed++;
+    }
+    setSuccessRate(counts);
+    setValidationBlocks24h(((vBlockRes.data as unknown) as LogRow[]) ?? []);
+    setRenderFailures24h(((rFailRes.data as unknown) as LogRow[]) ?? []);
+
     setLastRefreshed(new Date());
     setLoading(false);
   }, []);
