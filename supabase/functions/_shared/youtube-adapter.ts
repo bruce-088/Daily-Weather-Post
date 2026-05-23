@@ -225,6 +225,7 @@ export class YouTubeAdapter implements PlatformAdapter {
     description: string,
     mimeType = "video/mp4",
     _cityId?: string | null,
+    cityName?: string | null,
   ): Promise<UploadResult | null> {
     const shortTitle = appendTitleHashtags(title);
 
@@ -234,7 +235,13 @@ export class YouTubeAdapter implements PlatformAdapter {
     // cache miss for any reason.
     const resolved = this._resolved.get(accessToken) || null;
 
-    const titleCity = extractCityFromTitle(title) || "your area";
+    // City resolution priority for CTA/LIKE copy:
+    //   1. Explicit cityName passed by caller (most trustworthy)
+    //   2. City extracted from the title (legacy behavior)
+    //   3. "your area" generic fallback
+    const explicitCity = (cityName || "").trim();
+    const extractedCity = extractCityFromTitle(title);
+    const titleCity = explicitCity || extractedCity || "your area";
     const cityForLike = titleCity;
 
     // Build a valid subscribe URL. Three-tier resolver — never fabricate
@@ -260,7 +267,13 @@ export class YouTubeAdapter implements PlatformAdapter {
       ? `👉 Subscribe and turn on notifications for daily ${titleCity} weather alerts: ${subscribeUrl} 🔔`
       : `👉 Subscribe and turn on notifications for daily ${titleCity} weather alerts 🔔`;
 
-    const YT_LIKE_PROMPT = `👍 Smash the LIKE button if you're enjoying the weather in ${cityForLike}!`;
+    // LIKE prompt — validated to ensure the interpolated city is real.
+    // If cityForLike is the generic fallback or contains a banned token,
+    // fall back to a generic line with no location reference.
+    const BAD_LIKE_TOKENS = /\b(weather update|clear skies|coming up|but comfortable|your area)\b/i;
+    const YT_LIKE_PROMPT = (cityForLike === "your area" || BAD_LIKE_TOKENS.test(cityForLike))
+      ? `👍 Smash the LIKE button if you're enjoying today's weather forecast!`
+      : `👍 Smash the LIKE button if you're enjoying the weather in ${cityForLike}!`;
     let baseDescription = (description || "").trimEnd();
     // Strip any previously-prepended LIKE prompt so we don't stack them.
     baseDescription = baseDescription
@@ -403,8 +416,10 @@ export class YouTubeAdapter implements PlatformAdapter {
     // does NOT expose programmatic pinning, so creators may want to manually
     // pin this from YouTube Studio. We post regardless so the prompt exists.
     try {
-      const cityForComment = extractCityFromTitle(title) || "your area";
-      const commentText = `🔔 Subscribe for daily ${cityForComment} weather! What's the weather like where you are today?`;
+      const cityForComment = explicitCity || extractCityFromTitle(title) || "your area";
+      const commentText = (cityForComment === "your area")
+        ? `🔔 Subscribe for daily weather updates! What's the weather like where you are today?`
+        : `🔔 Subscribe for daily ${cityForComment} weather! What's the weather like where you are today?`;
       const commentRes = await fetch(
         "https://www.googleapis.com/youtube/v3/commentThreads?part=snippet",
         {
@@ -554,6 +569,10 @@ const TITLE_SKIP_WORDS = new Set([
   "today", "beautiful", "feels", "you", "wet", "snowy", "drive", "crank",
   "chilly", "mild", "sun", "sunny", "tonights", "afternoon", "morning", "evening",
   "don't", "dont", "wake", "rise", "shine",
+  // Phase 1 emergency: hallucinated location proxies must never be treated as cities.
+  "weather", "update", "clear", "skies", "coming", "up", "but", "comfortable",
+  "not", "need", "ahead", "outside", "today's", "todays", "tonight's",
+  "your", "area", "alerts", "alert", "forecast", "live", "live!", "now",
 ]);
 
 function extractCityFromTitle(title: string): string {

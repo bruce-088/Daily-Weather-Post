@@ -35,6 +35,7 @@ export interface PlatformAdapter {
     description: string,
     mimeType?: string,
     cityId?: string | null,
+    cityName?: string | null,
   ): Promise<UploadResult | null>;
 }
 
@@ -106,7 +107,7 @@ export async function postToPlatform(
     assertSlotTitlePrefix(cleanTitle, `postToPlatform:${adapter.name}`);
     console.log(`[title_debug] final title sent to ${adapter.name}:`, cleanTitle);
 
-    const result = await adapter.uploadVideo(token, videoData, cleanTitle, cleanDescription, mimeType, cityId ?? null);
+    const result = await adapter.uploadVideo(token, videoData, cleanTitle, cleanDescription, mimeType, cityId ?? null, cityName ?? null);
     if (!result) {
       return { success: false, error: `${adapter.name} upload failed` };
     }
