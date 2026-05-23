@@ -2071,10 +2071,23 @@ Deno.serve(async (req) => {
                 type: "error",
               });
               await releaseLock();
-              processed++;
-              continue;
-            }
-            }
+            logEvent(supabase, EventType.ValidationBlock, `Validation blocked publish`, {
+              scheduled_post_id: post.id, user_id: post.user_id, city: expectedCity,
+              platform: platformsToPost.join(","), validation_reason: bundle.failures[0]?.reason,
+              validation_field: bundle.failures[0]?.field, matched: bundle.failures[0]?.matched,
+              failures: bundle.failures,
+            });
+            logEvent(supabase, EventType.PostFinalizeFailed, `Post finalize: validation_failed`, {
+              scheduled_post_id: post.id, user_id: post.user_id, city: expectedCity,
+              status: "validation_failed", duration_ms: nowMs() - __postStartMs,
+            });
+            processed++;
+            continue;
+          }
+          logEvent(supabase, EventType.ValidationPass, `Validation passed`, {
+            scheduled_post_id: post.id, user_id: post.user_id, city: expectedCity,
+          });
+        }
           }
         } catch (e) {
           console.warn(`[isolate] check failed for ${post.id} (continuing):`, (e as any)?.message);
