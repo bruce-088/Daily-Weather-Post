@@ -29,10 +29,22 @@ export interface ValidateResult {
 export const BANNED_FRAGMENTS_STRICT: string[] = [
   "Weather Update",
   "Coming Up",
-  "But Comfortable",
+  // "But Comfortable" intentionally moved to BANNED_LOCATION_PROXIES (Phase 5E):
+  // it caused false positives on legitimate prose like "grey but comfortable day".
+  // It is now only blocked when it appears in a location slot (e.g. "in But Comfortable").
   "Not Need",
   "Clear Skies", // only blocked in title/description, not narration
   "Heads Up",
+];
+
+/**
+ * Phrases that are ONLY banned when they appear as a hallucinated location
+ * (i.e. inside an "in|for|over|across <Phrase>" slot). They are allowed in
+ * natural prose elsewhere. Phase 5E: contextual replacement for the overly
+ * aggressive global block.
+ */
+export const BANNED_LOCATION_PROXIES: string[] = [
+  "But Comfortable",
 ];
 
 /** Escape a string for safe insertion into a RegExp source. */
