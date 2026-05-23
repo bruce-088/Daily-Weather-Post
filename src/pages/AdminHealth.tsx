@@ -162,6 +162,132 @@ export default function AdminHealth() {
       </header>
 
       <main className="container px-4 py-6 space-y-6">
+        {/* Phase 3: Pipeline Health (24h) */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Pipeline Health — Last 24h</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {!successRate ? (
+              <p className="text-sm text-muted-foreground">Loading…</p>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                <div className="rounded border border-border/40 p-3">
+                  <div className="text-xs text-muted-foreground">Total Posts</div>
+                  <div className="text-2xl font-semibold">{successRate.total}</div>
+                </div>
+                <div className="rounded border border-emerald-500/30 bg-emerald-500/5 p-3">
+                  <div className="text-xs text-muted-foreground">Posted</div>
+                  <div className="text-2xl font-semibold text-emerald-400">{successRate.posted}</div>
+                  <div className="text-[10px] text-muted-foreground">
+                    {successRate.total > 0 ? `${Math.round((successRate.posted / successRate.total) * 100)}%` : "—"} success rate
+                  </div>
+                </div>
+                <div className="rounded border border-red-500/30 bg-red-500/5 p-3">
+                  <div className="text-xs text-muted-foreground">Failed</div>
+                  <div className="text-2xl font-semibold text-red-400">{successRate.failed}</div>
+                </div>
+                <div className="rounded border border-amber-500/30 bg-amber-500/5 p-3">
+                  <div className="text-xs text-muted-foreground">Validation Blocked</div>
+                  <div className="text-2xl font-semibold text-amber-400">{successRate.validation_failed}</div>
+                </div>
+                <div className="rounded border border-amber-500/30 bg-amber-500/5 p-3">
+                  <div className="text-xs text-muted-foreground">Needs Review</div>
+                  <div className="text-2xl font-semibold text-amber-400">{successRate.needs_review}</div>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Phase 3: Structured validation blocks (24h) */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              Structured Validation Blocks (24h)
+              <Badge variant="outline" className={validationBlocks24h.length > 0 ? "bg-amber-500/15 text-amber-400 border-amber-500/30" : ""}>
+                {validationBlocks24h.length}
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="overflow-x-auto">
+            {validationBlocks24h.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No structured validation.block events in the last 24h.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>When</TableHead>
+                    <TableHead>City</TableHead>
+                    <TableHead>Slot</TableHead>
+                    <TableHead>Platform</TableHead>
+                    <TableHead>Reason</TableHead>
+                    <TableHead>Matched</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {validationBlocks24h.map((l) => (
+                    <TableRow key={l.id}>
+                      <TableCell className="text-xs">{fmt(l.created_at)}</TableCell>
+                      <TableCell className="text-xs">{(l.context as any)?.city ?? "—"}</TableCell>
+                      <TableCell className="text-xs">{(l.context as any)?.slot ?? "—"}</TableCell>
+                      <TableCell className="text-xs">{(l.context as any)?.platform ?? "—"}</TableCell>
+                      <TableCell className="text-xs text-amber-400 max-w-[280px] truncate" title={(l.context as any)?.validation_reason ?? l.message ?? ""}>
+                        {(l.context as any)?.validation_reason ?? l.message ?? "—"}
+                      </TableCell>
+                      <TableCell className="text-xs font-mono max-w-[180px] truncate" title={(l.context as any)?.matched ?? ""}>
+                        {(l.context as any)?.matched ?? "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Phase 3: Structured render failures (24h) */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              Structured Render Failures (24h)
+              <Badge variant="outline" className={renderFailures24h.length > 0 ? "bg-red-500/15 text-red-400 border-red-500/30" : ""}>
+                {renderFailures24h.length}
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="overflow-x-auto">
+            {renderFailures24h.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No structured render failure events in the last 24h.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>When</TableHead>
+                    <TableHead>Event</TableHead>
+                    <TableHead>City</TableHead>
+                    <TableHead>Provider</TableHead>
+                    <TableHead>Error</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {renderFailures24h.map((l) => (
+                    <TableRow key={l.id}>
+                      <TableCell className="text-xs">{fmt(l.created_at)}</TableCell>
+                      <TableCell className="text-xs font-medium">{l.type ?? "—"}</TableCell>
+                      <TableCell className="text-xs">{(l.context as any)?.city ?? "—"}</TableCell>
+                      <TableCell className="text-xs">{(l.context as any)?.provider ?? "—"}</TableCell>
+                      <TableCell className="text-xs text-red-400 max-w-[400px] truncate" title={(l.context as any)?.error_message ?? l.message ?? ""}>
+                        {(l.context as any)?.error_message ?? l.message ?? "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Panel 1: Recent scheduled posts */}
         <Card>
           <CardHeader>
