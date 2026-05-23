@@ -416,8 +416,10 @@ export class YouTubeAdapter implements PlatformAdapter {
     // does NOT expose programmatic pinning, so creators may want to manually
     // pin this from YouTube Studio. We post regardless so the prompt exists.
     try {
-      const cityForComment = extractCityFromTitle(title) || "your area";
-      const commentText = `🔔 Subscribe for daily ${cityForComment} weather! What's the weather like where you are today?`;
+      const cityForComment = explicitCity || extractCityFromTitle(title) || "your area";
+      const commentText = (cityForComment === "your area")
+        ? `🔔 Subscribe for daily weather updates! What's the weather like where you are today?`
+        : `🔔 Subscribe for daily ${cityForComment} weather! What's the weather like where you are today?`;
       const commentRes = await fetch(
         "https://www.googleapis.com/youtube/v3/commentThreads?part=snippet",
         {
