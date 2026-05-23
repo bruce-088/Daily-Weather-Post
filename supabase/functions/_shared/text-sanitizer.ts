@@ -35,6 +35,20 @@ export const BANNED_FRAGMENTS_STRICT: string[] = [
   "Heads Up",
 ];
 
+/** Escape a string for safe insertion into a RegExp source. */
+export function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Word-boundary-aware test: avoids matching "Clear Skies" inside
+ *  "unclear skies" or similar legitimate words. Whitespace inside the
+ *  fragment is treated as flexible (one-or-more whitespace). */
+function matchesBannedFragment(text: string, fragment: string): boolean {
+  const escaped = escapeRegex(fragment).replace(/\\\s+/g, "\\s+").replace(/\s+/g, "\\s+");
+  const re = new RegExp(`\\b${escaped}\\b`, "i");
+  return re.test(text);
+}
+
 /** Template placeholders that escaped a prompt — banned everywhere. */
 export const TEMPLATE_PLACEHOLDERS: RegExp[] = [
   /\{\s*city\s*\}/i,
@@ -87,10 +101,10 @@ export function validateAndSanitize(text: string, opts: ValidateOptions): Valida
   }
 
   // 2. Banned fragments — strict scope (title + description).
+  //    Word-boundary aware so "unclear skies" does NOT match "Clear Skies".
   if (opts.strictBannedFragments) {
-    const lower = raw.toLowerCase();
     for (const phrase of BANNED_FRAGMENTS_STRICT) {
-      if (lower.includes(phrase.toLowerCase())) {
+      if (matchesBannedFragment(raw, phrase)) {
         return { ok: false, reason: "banned_fragment", matched: phrase };
       }
     }

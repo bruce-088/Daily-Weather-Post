@@ -2,6 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildStyleAddendum, normalizeTone, appendVoiceCTA, isWeatherAlert, titleHasTimestamp, slotTimePrefix, slotDisplayLabel, slotPersonalityDirective, rotatingCTA, captionSimilarity, firstContentLine, ensureSlotTitlePrefix, inferSlotFromCityHour, assertSlotTitlePrefix } from "../_shared/caption-style.ts";
 import { validatePostBundle } from "../_shared/text-sanitizer.ts";
+import { buildHookTitle, generateSkyBriefTitle, getWeatherEmoji } from "../_shared/title-builder.ts";
 import { LOCATION_ACCURACY_RULES, validateCaptionLocation, buildVerifiedLandmarksBlock, stripUnverifiedReferences } from "../_shared/location-guard.ts";
 import { generateVideoWithFallback } from "../_shared/video-render.ts";
 import { expandVisualMeta, getTopVisualStyle, classifyVisualTheme, classifyColorProfile } from "../_shared/experiments.ts";
@@ -190,127 +191,7 @@ async function resolveScheduledCity(supabase: any, post: any): Promise<{ city: s
   return { city: post.city, state: null, cityId: null, automationId };
 }
 
-// --- SkyBrief Title Generator ---
-
-function getWeatherEmoji(condition: string): string {
-  const c = condition.toLowerCase();
-  if (c.includes("thunder") || c.includes("storm")) return "⛈";
-  if (c.includes("snow") || c.includes("sleet") || c.includes("blizzard")) return "❄️";
-  if (c.includes("rain") || c.includes("drizzle") || c.includes("shower")) return "🌧";
-  if (c.includes("fog") || c.includes("mist") || c.includes("haze")) return "🌫";
-  if (c.includes("cloud") || c.includes("overcast")) return "☁️";
-  if (c.includes("partly") || c.includes("scatter")) return "🌤";
-  return "☀️";
-}
-
-function generateSkyBriefTitle(city: string, temp: number, condition: string, rainChance?: number, slot?: string | null): string {
-  return buildHookTitle(city, temp, condition, rainChance, slot);
-}
-
-// --- Hook-based YouTube title generator ---
-// Format: [Hook] + City + Weather Detail + Emoji
-// Drives CTR via curiosity + specificity. Capped at 95 chars to stay well under
-// YouTube's 100-char limit while leaving room for variation.
-function buildHookTitle(city: string, temp: number, condition: string, rainChance?: number, slot?: string | null): string {
-  const emoji = getWeatherEmoji(condition);
-  const c = (condition || "").toLowerCase();
-  const t = Math.round(temp);
-  const hour = new Date().getHours();
-  const isMorning = hour >= 4 && hour < 11;
-  const isEvening = hour >= 17 || hour < 4;
-  const isStorm = /thunder|storm|tornado|hurricane/i.test(c);
-  const isRain = /rain|drizzle|shower/.test(c);
-  const isSnow = /snow|sleet|blizzard/.test(c);
-  const isFog = /fog|mist|haze/.test(c);
-  const isCloudy = /cloud|overcast/.test(c);
-  const isPartly = /partly|scatter/.test(c);
-  const isClear = /clear|sun/.test(c) || (!isCloudy && !isRain && !isStorm && !isSnow && !isFog && !isPartly);
-
-  const pool: string[] = [];
-
-  // Severe / rain takes priority
-  if (isStorm || (rainChance != null && rainChance >= 70)) {
-    pool.push(`Storms Rolling Into ${city} ⛈ ${t}° Today`);
-    pool.push(`Heads Up ${city} — Storms On The Way ⛈ Forecast`);
-    pool.push(`Don't Skip The Umbrella Today ☔ ${city} Weather`);
-  } else if (isRain || (rainChance != null && rainChance >= 50)) {
-    pool.push(`Grab An Umbrella ☔ ${city} Weather Today`);
-    pool.push(`Wet Day Ahead In ${city} 🌧 ${t}° Forecast`);
-    pool.push(`Rain On The Radar 🌧 ${city} Weather Update`);
-  } else if (isSnow) {
-    pool.push(`Bundle Up ${city} ❄️ ${t}° And Snowy`);
-    pool.push(`Snowy Skies Ahead ❄️ ${city} Forecast Today`);
-  } else if (isFog) {
-    pool.push(`Foggy Start In ${city} 🌫 ${t}° Today`);
-    pool.push(`Drive Slow This Morning 🌫 ${city} Forecast`);
-  }
-
-  // Temperature-driven hooks
-  if (t >= 90) {
-    pool.push(`Hot Day Ahead 🔥 ${city} Hits ${t}° Today`);
-    pool.push(`Crank The AC ${city} 🔥 ${t}° Incoming`);
-  } else if (t >= 85) {
-    pool.push(`Feels Like Summer Already In ${city} ☀️ ${t}° Today`);
-    pool.push(`Warm One Coming Up 🌞 ${city} Hits ${t}°`);
-  } else if (t >= 70 && (isClear || isPartly)) {
-    pool.push(`Beautiful Day In ${city} ${emoji} ${t}° And Comfortable`);
-    pool.push(`You Might Not Need A Jacket Today 👀 ${city} Forecast`);
-  } else if (t >= 55 && t < 70) {
-    pool.push(`Mild & Comfy In ${city} ${emoji} ${t}° Today`);
-    pool.push(`Cool Start, Nice Finish ${emoji} ${city} Weather Today`);
-  } else if (t >= 40 && t < 55) {
-    pool.push(`Chilly Morning In ${city} 🧥 ${t}° Today`);
-    pool.push(`Grab A Jacket ${city} 🧥 ${t}° Forecast`);
-  } else if (t < 40) {
-    pool.push(`Cold Front Hits ${city} 🥶 Just ${t}° Today`);
-    pool.push(`Bundle Up ${city} 🥶 ${t}° And Chilly`);
-  }
-
-  // Sky/condition-driven hooks
-  if (isCloudy && !isRain && !isStorm) {
-    pool.push(`Gray Skies But Comfortable ☁️ ${city} Weather Today`);
-    pool.push(`Cloudy Start, Warm Finish 🌤 ${city} Weather Today`);
-  }
-  if (isClear && !pool.length) {
-    pool.push(`Beautiful Clear Skies ☀️ ${city} Forecast Today`);
-  }
-  if (isPartly) {
-    pool.push(`Sun & Clouds Mix 🌤 ${city} Weather Today`);
-  }
-
-  // Time-of-day overlays
-  if (isEvening) {
-    pool.push(`Tonight's Weather Update 🌙 ${city} Forecast`);
-    pool.push(`Calm & Clear Skies Ahead 🌙 ${city} Evening Weather`);
-  } else if (isMorning) {
-    pool.push(`Good Morning ${city} ☕ ${t}° To Start The Day`);
-  }
-
-  // Fallback (should rarely hit)
-  if (!pool.length) {
-    pool.push(`${city} Weather Today ${emoji} ${t}° ${condition}`);
-  }
-
-  // Deterministic-but-rotating pick (date + hour) so titles vary across slots
-  const seed = new Date().getDate() * 24 + hour;
-  const baseTitle = pool[seed % pool.length];
-  // Slot-aware prefix: always force one of [8 AM]/[1 PM]/[6 PM]. The helper
-  // strips any stale prefix, never duplicates, and keeps total length ≤ 95.
-  try {
-    const result = ensureSlotTitlePrefix(baseTitle, slot, city);
-    assertSlotTitlePrefix(result, "process-scheduled-posts:buildHookTitle");
-    console.log("[title_debug] buildHookTitle output:", result);
-    return result;
-  } catch (err) {
-    console.warn("buildHookTitle: ensureSlotTitlePrefix failed, applying hard fallback prefix", err);
-    const prefix = `[${slotTimePrefix(slot, city)}] `;
-    const budget = Math.max(1, 95 - prefix.length);
-    const body = baseTitle.length > budget ? baseTitle.substring(0, budget - 1) + "…" : baseTitle;
-    const result = prefix + body;
-    assertSlotTitlePrefix(result, "process-scheduled-posts:buildHookTitle:fallback");
-    return result;
-  }
-}
+// --- SkyBrief Title Generator (Phase 5B: centralized in _shared/title-builder.ts) ---
 
 // --- Dynamic Handle System ---
 
