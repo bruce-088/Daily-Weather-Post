@@ -1097,7 +1097,7 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
   };
 }
 
-async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null, visualStyle?: string | null, errorSink?: { message?: string }): Promise<{ data: Uint8Array; mimeType: string; duration?: number } | null> {
+async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null, visualStyle?: string | null, errorSink?: { message?: string; templateConfigError?: boolean }): Promise<{ data: Uint8Array; mimeType: string; duration?: number } | null> {
   const apiKey = Deno.env.get("CREATOMATE_API_KEY");
   const setErr = (m: string) => { if (errorSink) errorSink.message = m; console.error("[creatomate] error:", m); };
   if (!apiKey) {
@@ -1116,6 +1116,20 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
   } catch (error) {
     setErr(`Creatomate source validation failed before API call: ${error instanceof Error ? error.message : String(error)}`);
     return null;
+  }
+
+  // ── Phase 2B: pre-render structural guards ──
+  if (!source || typeof source !== "object") {
+    setErr("Creatomate source is not a valid object after sanitize");
+    return null;
+  }
+  if ("template_id" in source) {
+    const tid = (source as any).template_id;
+    if (typeof tid !== "string" || tid.trim().length === 0) {
+      if (errorSink) errorSink.templateConfigError = true;
+      setErr(`Creatomate template_id invalid (got ${typeof tid}: "${String(tid).slice(0, 80)}") — treat as config error`);
+      return null;
+    }
   }
 
 
@@ -1159,6 +1173,18 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
       ? `Creatomate endpoint/render not found (404): ${detail}`
       : `Creatomate ${renderRes.status}: ${detail}`;
     setErr(mapped);
+    // Phase 2C: detect template-config error so the publish gate can hold
+    // fallback renders from video platforms.
+    const lower = (responseText + " " + (apiError || "")).toLowerCase();
+    if (
+      lower.includes("no template") ||
+      lower.includes("template not found") ||
+      lower.includes("template_not_found") ||
+      lower.includes("invalid template")
+    ) {
+      if (errorSink) errorSink.templateConfigError = true;
+      console.error("[creatomate] TEMPLATE_CONFIG_ERROR detected — fallback renders will NOT auto-publish to video platforms");
+    }
     return null;
   }
 
@@ -1538,6 +1564,12 @@ Deno.serve(async (req) => {
       auto_cinematic_for_storms: true,
       ...(settingsRow || {}),
     };
+    // ── Phase 2A: hard guard. `settings` must be a non-null object before
+    // any downstream code touches it. Belt-and-suspenders against the legacy
+    // "settings is not defined" ReferenceError that bricked render slots.
+    if (!settings || typeof settings !== "object") {
+      throw new Error("[settings_guard] settings object failed to initialize — refusing to proceed");
+    }
 
     // === City context (single source of truth) ===
     // The selected city in the global header is the authoritative input.
@@ -1945,7 +1977,22 @@ Deno.serve(async (req) => {
         for (const a of connectedAdapters) recordResult(a.name, false, msg);
       }
 
-      if (!_validationFailed) for (const adapter of connectedAdapters) {
+      // ── Phase 2C: smart fallback gate ──
+      // If Creatomate emitted a real TEMPLATE_CONFIG_ERROR AND we fell back
+      // to a non-Creatomate provider, hold the post for review for video
+      // platforms instead of publishing the generic fallback render.
+      const _videoPlatforms = new Set(["youtube", "tiktok", "instagram", "linkedin"]);
+      const _targetsVideo = connectedAdapters.some((a) => _videoPlatforms.has(a.name));
+      const _fallbackProvider = (video as any)?.provider && (video as any).provider !== "creatomate";
+      if (!_validationFailed && renderErrorSink.templateConfigError === true && _fallbackProvider && _targetsVideo) {
+        const reason = `[NEEDS_REVIEW:template_config] Creatomate template error — fallback render (${(video as any).provider}) held from video platforms. Original: ${renderErrorSink.message ?? "(no message)"}`;
+        console.error(`[publish] HOLDING daily-weather-post for review — ${reason}`);
+        errorMessage = reason;
+        status = "needs_review";
+        for (const a of connectedAdapters) recordResult(a.name, false, reason);
+      }
+
+      if (!_validationFailed && status !== "needs_review") for (const adapter of connectedAdapters) {
         console.log(`[title_debug] daily dispatch title for ${adapter.name}:`, title);
         const result = await postToPlatform(adapter.name, supabase, userId, video.data, title, desc, video.mimeType, resolvedCityId, "morning", resolvedCityName);
         if (result.success) {

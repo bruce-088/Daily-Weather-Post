@@ -1259,7 +1259,7 @@ async function storeVoiceAudio(supabase: any, userId: string, audio: Uint8Array)
   return signed.signedUrl;
 }
 
-async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null, visualStyle?: string | null, errorSink?: { message?: string }): Promise<{ data: Uint8Array; mimeType: string; duration?: number } | { creditExhausted: true; provider: "creatomate"; message?: string } | null> {
+async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null, visualStyle?: string | null, errorSink?: { message?: string; templateConfigError?: boolean }): Promise<{ data: Uint8Array; mimeType: string; duration?: number } | { creditExhausted: true; provider: "creatomate"; message?: string } | null> {
   const apiKey = Deno.env.get("CREATOMATE_API_KEY");
   const setErr = (m: string) => { if (errorSink) errorSink.message = m; console.error("[creatomate] error:", m); };
   if (!apiKey) {
@@ -1306,6 +1306,23 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
   } catch (error) {
     setErr(`Creatomate source validation failed before API call: ${error instanceof Error ? error.message : String(error)}`);
     return null;
+  }
+
+  // ── Phase 2B: pre-render structural guards ──
+  // Hard-fail before we waste an API call (and credits) when the render spec
+  // is malformed. A bad template_id is the #1 cause of "succeeded" renders
+  // that produce a black screen.
+  if (!source || typeof source !== "object") {
+    setErr("Creatomate source is not a valid object after sanitize");
+    return null;
+  }
+  if ("template_id" in source) {
+    const tid = (source as any).template_id;
+    if (typeof tid !== "string" || tid.trim().length === 0) {
+      if (errorSink) errorSink.templateConfigError = true;
+      setErr(`Creatomate template_id invalid (got ${typeof tid}: "${String(tid).slice(0, 80)}") — treat as config error`);
+      return null;
+    }
   }
 
   // Medium-quality render: 0.75 scale (810x1440 from a 1080x1920 source)
@@ -1374,10 +1391,20 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
     console.error(`[creatomate] ${mapped}`);
     setErr(mapped);
     const lower = (responseText + " " + (apiError || "")).toLowerCase();
-    // STRICT credit-exhaustion detection. ONLY a literal HTTP 402 from the
-    // Creatomate API or an explicit `no_credits` / `insufficient credit` body
-    // phrase counts. Generic billing/quota text or any other status code is
-    // treated as a normal failure (retry-then-fallback) — not a hard stop.
+    // Phase 2C: distinguish template-config errors (real config bug) from
+    // transient failures (rate-limit, 5xx, timeout). When the upstream API
+    // is explicit about template_not_found / no_template, mark the errorSink
+    // so the publish gate can hold YouTube uploads on the fallback render.
+    if (
+      lower.includes("no template") ||
+      lower.includes("template not found") ||
+      lower.includes("template_not_found") ||
+      lower.includes("invalid template")
+    ) {
+      if (errorSink) errorSink.templateConfigError = true;
+      console.error("[creatomate] TEMPLATE_CONFIG_ERROR detected — fallback renders will NOT auto-publish to video platforms");
+    }
+    // STRICT credit-exhaustion detection.
     const isCreditExhausted =
       renderRes.status === 402 ||
       lower.includes("no_credits") ||
@@ -3102,6 +3129,66 @@ Deno.serve(async (req) => {
           // Validator must never crash the worker — if it fails, log and
           // fall through to publish (fail-open by design for Phase 1).
           console.error(`[validate] validator threw — falling through:`, (vErr as Error).message);
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // PHASE 2C GATE: smart fallback handling.
+        // If Creatomate emitted a TEMPLATE_CONFIG_ERROR (real misconfig) AND
+        // we fell back to a non-Creatomate provider AND a video platform is
+        // targeted → hold the post for review instead of auto-publishing the
+        // generic fallback render to YouTube/TikTok/Instagram/LinkedIn.
+        // Transient Creatomate failures (rate-limit, 5xx, timeout) still
+        // publish via the fallback, because they're reliability issues, not
+        // content quality issues.
+        // ═══════════════════════════════════════════════════════════════
+        const videoPlatforms = ["youtube", "tiktok", "instagram", "linkedin"];
+        const targetsVideoPlatform = platformsToPost.some((p) => videoPlatforms.includes(p));
+        if (
+          video &&
+          renderErrorSink.templateConfigError === true &&
+          video.provider !== "creatomate" &&
+          targetsVideoPlatform
+        ) {
+          const reason = `[NEEDS_REVIEW:template_config] Creatomate template error — fallback render (${video.provider}) held from video platforms. Original: ${renderErrorSink.message ?? "(no message)"}`;
+          console.error(`[publish] HOLDING post ${post.id} for review — ${reason}`);
+          try {
+            await supabase
+              .from("scheduled_posts")
+              .update({ status: "needs_review", error_message: reason })
+              .eq("id", post.id);
+          } catch (auditErr) {
+            console.error(`[publish] failed to mark scheduled_posts ${post.id} needs_review (hold still enforced):`, (auditErr as Error).message);
+          }
+          try {
+            await supabase.from("system_logs").insert({
+              user_id: post.user_id,
+              type: "render_needs_review",
+              platform: platformsToPost.join(","),
+              message: `Creatomate template error — fallback render held from publish`,
+              context: {
+                scheduled_post_id: post.id,
+                city: post.city || weather?.city || null,
+                render_provider: video.provider,
+                creatomate_error: renderErrorSink.message ?? null,
+              },
+            });
+          } catch (_) { /* best-effort */ }
+          try {
+            await supabase.from("post_history").insert({
+              status: "needs_review",
+              platform: post.platform,
+              city: post.city || weather?.city || "Unknown",
+              error_message: reason,
+              caption: caption || null,
+              user_id: post.user_id,
+              slot: (post as any).slot || null,
+              source: (post as any).source || "scheduled",
+            });
+          } catch (phErr) {
+            console.error(`[publish] failed to log post_history needs_review for ${post.id} (hold still enforced):`, (phErr as Error).message);
+          }
+          processed++;
+          continue;
         }
 
         if (video) {
