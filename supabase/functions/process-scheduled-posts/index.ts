@@ -3003,7 +3003,12 @@ Deno.serve(async (req) => {
           // Try video generation once (with voiceover baked in if available)
           console.log(`RENDER START: City: ${weather.city}, VoiceEnabled: ${voiceUrl ? "True" : "False"}, VisualStyle: ${visualStyle}`);
           console.log(`[publish] post ${post.id}: AUDIO_URL → ${voiceUrl ? voiceUrl.split("?")[0] : "(none)"} duration=${voiceAudioDurationSec ?? "n/a"}s`);
-          const renderErrorSink: { message?: string } = {};
+          const renderErrorSink: { message?: string; templateConfigError?: boolean } = {};
+          const __renderStartMs = nowMs();
+          logEvent(supabase, EventType.RenderCreatomateStart, `Render start`, {
+            scheduled_post_id: post.id, user_id: post.user_id, city: weather.city,
+            visual_style: visualStyle, voice: voiceUrl ? true : false,
+          });
           const rendered = await generateVideoWithFallback({
             weather, timePeriod, voiceUrl, audioDurationSec: voiceAudioDurationSec, visualStyle,
             creatomate: () => generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec, visualStyle, renderErrorSink),
@@ -3024,6 +3029,25 @@ Deno.serve(async (req) => {
             trace("video_render_rejected", { reason: "too_small", bytes: rendered.data.byteLength, provider: rendered.provider });
           }
           trace("video_render", { success: !!video, mime: video?.mimeType, provider: video?.provider, bytes: video?.data.byteLength, duration: (video as any)?.duration });
+          // Phase 3 structured render outcome
+          if (video) {
+            const evt = video.provider === "creatomate" ? EventType.RenderCreatomateOk : EventType.RenderFallbackOk;
+            logEvent(supabase, evt, `Render ok (${video.provider})`, {
+              scheduled_post_id: post.id, user_id: post.user_id, city: weather.city,
+              provider: video.provider, bytes: video.data.byteLength,
+              duration_ms: nowMs() - __renderStartMs,
+            });
+          } else {
+            const evt = renderErrorSink.templateConfigError
+              ? EventType.RenderCreatomateConfigError
+              : EventType.RenderFallbackError;
+            logEvent(supabase, evt, `Render failed`, {
+              scheduled_post_id: post.id, user_id: post.user_id, city: weather.city,
+              error_message: renderErrorSink.message ?? null,
+              template_config_error: !!renderErrorSink.templateConfigError,
+              duration_ms: nowMs() - __renderStartMs,
+            });
+          }
           // Persist for retry credit-protection (only validated videos)
           if (video && video.data.byteLength >= MIN_VIDEO_BYTES) {
             try {
