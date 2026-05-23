@@ -1932,15 +1932,16 @@ Deno.serve(async (req) => {
         caption: caption || null,
         expectedCity: resolvedCityName || weather.city || null,
       });
-      if (!_vb.ok) {
+      const _validationFailed = !_vb.ok;
+      if (_validationFailed) {
         const detail = _vb.failures
           .map((f) => `${f.field}:${f.reason}${f.matched ? `(${f.matched})` : ""}`)
           .join("; ");
         const msg = `[validation_failed] ${detail}`;
         console.error(`[validate] BLOCKED daily-weather-post — ${detail}`);
         errorMessage = msg;
+        status = "validation_failed";
         for (const a of connectedAdapters) recordResult(a.name, false, msg);
-        return; // exit the publish block; outer flow records the failure
       }
 
       for (const adapter of connectedAdapters) {
