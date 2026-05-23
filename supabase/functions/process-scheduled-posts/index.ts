@@ -3335,6 +3335,11 @@ Deno.serve(async (req) => {
               errorMessage = result.error || `${platformName} upload failed`;
               platformErrors.push(`${platformName}: ${errorMessage}`);
               console.error(`[publish] ${platformName} FAILED post=${post.id}: ${errorMessage}`);
+              logEvent(supabase, EventType.UploadError, `Upload failed ${platformName}`, {
+                scheduled_post_id: post.id, user_id: post.user_id, city: weather.city,
+                platform: platformName, error_message: errorMessage,
+                duration_ms: nowMs() - __uploadStartMs,
+              });
               // Detect expired/invalid auth (token refresh failed) on any platform.
               const errLower = (errorMessage || "").toLowerCase();
               const isAuthExpired =
