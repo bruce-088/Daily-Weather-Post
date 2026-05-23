@@ -3249,6 +3249,15 @@ Deno.serve(async (req) => {
           } catch (phErr) {
             console.error(`[publish] failed to log post_history needs_review for ${post.id} (hold still enforced):`, (phErr as Error).message);
           }
+          logEvent(supabase, EventType.UploadSkippedNeedsReview, `Upload skipped — fallback render held for review`, {
+            scheduled_post_id: post.id, user_id: post.user_id, city: post.city || weather?.city,
+            platform: platformsToPost.join(","), provider: video.provider,
+            error_message: renderErrorSink.message ?? null,
+          });
+          logEvent(supabase, EventType.PostFinalizeNeedsReview, `Post finalize: needs_review`, {
+            scheduled_post_id: post.id, user_id: post.user_id, city: post.city || weather?.city,
+            status: "needs_review", duration_ms: nowMs() - __postStartMs,
+          });
           processed++;
           continue;
         }
@@ -3258,6 +3267,11 @@ Deno.serve(async (req) => {
           for (const platformName of platformsToPost) {
             console.log(`[publish] Attempting to write notification for user: ${post.user_id}, platform: ${platformName}`);
             console.log(`[title_debug] dispatch title for ${platformName}:`, title);
+            const __uploadStartMs = nowMs();
+            logEvent(supabase, EventType.UploadStart, `Upload start ${platformName}`, {
+              scheduled_post_id: post.id, user_id: post.user_id, city: weather.city,
+              platform: platformName, provider: video.provider, bytes: video.data.byteLength,
+            });
             const result = await postToPlatform(platformName, supabase, post.user_id, video.data, title, desc, video.mimeType, post.city_id || null, (timePeriod as any) || null, post.city || null);
             // Hard guard: YouTube must return a real video_id. Throw so the
             // publish_post job fails loudly instead of being marked succeeded.
@@ -3266,6 +3280,11 @@ Deno.serve(async (req) => {
             }
             if (result.success && result.id) {
               videoPostedAny = true;
+              logEvent(supabase, EventType.UploadOk, `Upload ok ${platformName}`, {
+                scheduled_post_id: post.id, user_id: post.user_id, city: weather.city,
+                platform: platformName, external_id: result.id,
+                duration_ms: nowMs() - __uploadStartMs,
+              });
               const acctName = (result as any).account_name || "unknown";
               console.log(`[publish] ${platformName} OK id=${result.id} channel=${acctName} city=${(result as any).resolved_city_id ?? "shared"} post=${post.id}`);
               if (platformName === "youtube") {
