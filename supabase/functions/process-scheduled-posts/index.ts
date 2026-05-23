@@ -2903,6 +2903,17 @@ Deno.serve(async (req) => {
           const rendered = await generateVideoWithFallback({
             weather, timePeriod, voiceUrl, audioDurationSec: voiceAudioDurationSec, visualStyle,
             creatomate: () => generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec, visualStyle, renderErrorSink),
+            observability: {
+              supabase,
+              creatomateErrorSink: renderErrorSink,
+              context: {
+                scheduled_post_id: post.id,
+                user_id: post.user_id,
+                city: weather.city,
+                slot: post.slot ?? null,
+                visual_style: visualStyle,
+              },
+            },
           });
           // ── Post-render validation: reject empty/tiny/short outputs ──
           // render_video = success ONLY if bytes are real AND duration > 2s.
