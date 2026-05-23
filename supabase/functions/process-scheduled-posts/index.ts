@@ -16,8 +16,9 @@ import {
   loadCinematicSettings,
   SAFE_CINEMATIC_DEFAULTS,
 } from "../_shared/cinematic-presets.ts";
+import { logEvent, EventType, nowMs } from "../_shared/structured-logger.ts";
 
-const PROCESS_SCHEDULED_POSTS_BUILD = "settings-guard-2026-05-22T16:50Z";
+const PROCESS_SCHEDULED_POSTS_BUILD = "phase3-structured-logging-2026-05-23T03:30Z";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
