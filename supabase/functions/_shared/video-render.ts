@@ -83,6 +83,60 @@ function isCreditError(v: unknown): v is CreditExhaustedError {
   return !!v && typeof v === "object" && (v as any).creditExhausted === true;
 }
 
+/** Phase 6B: classify creatomate failures by HTTP status / sink branch. */
+function classifyCreatomateFailure(
+  sink: CreatomateErrorSink | undefined,
+  fallbackBranch: string,
+): { eventType: typeof EventType.RenderCreatomateConfigError | typeof EventType.RenderCreatomateTransientError; reason: string } {
+  const status = sink?.http_status;
+  const branch = sink?.failure_branch ?? fallbackBranch;
+  const isConfig =
+    sink?.templateConfigError === true ||
+    status === 400 || status === 401 || status === 403 || status === 404 || status === 422;
+  return {
+    eventType: isConfig ? EventType.RenderCreatomateConfigError : EventType.RenderCreatomateTransientError,
+    reason: branch,
+  };
+}
+
+function logCreatomateFailure(
+  payload: FallbackPayload,
+  fallbackBranch: string,
+  extra: Record<string, unknown>,
+): void {
+  const obs = payload.observability;
+  if (!obs) return;
+  const sink = obs.creatomateErrorSink;
+  const { eventType, reason } = classifyCreatomateFailure(sink, fallbackBranch);
+  logEvent(obs.supabase, eventType, `Creatomate failure (${reason})`, {
+    ...(obs.context ?? {}),
+    provider: "creatomate",
+    template_id: "inline_source",
+    failure_branch: reason,
+    http_status: sink?.http_status ?? null,
+    response_body: sink?.response_body ?? null,
+    error_message: sink?.message ?? null,
+    template_config_error: !!sink?.templateConfigError,
+    ...extra,
+  });
+}
+
+function logFallbackFailure(
+  payload: FallbackPayload,
+  provider: "json2video" | "json2video_kenburns",
+  branch: string,
+  extra: Record<string, unknown>,
+): void {
+  const obs = payload.observability;
+  if (!obs) return;
+  logEvent(obs.supabase, EventType.RenderFallbackError, `${provider} failure (${branch})`, {
+    ...(obs.context ?? {}),
+    provider,
+    failure_branch: branch,
+    ...extra,
+  });
+}
+
 export async function generateVideoWithFallback(
   payload: FallbackPayload,
 ): Promise<RenderBytes | null> {
@@ -112,6 +166,7 @@ export async function generateVideoWithFallback(
         console.error(
           `[render] CREDIT_EXHAUSTED on creatomate attempt=${attempt}: ${result.message ?? "no message"} — skipping retries, escalating to fallback`,
         );
+        logCreatomateFailure(payload, "credit_exhausted", { attempt, credit_exhausted: true });
         break;
       }
 
@@ -126,18 +181,22 @@ export async function generateVideoWithFallback(
           console.error(
             `[render] REJECTED: creatomate finished in ${wallMs}ms (<${MIN_WALL_DURATION_MS}ms). Treating as failure.`,
           );
+          logCreatomateFailure(payload, "short_wall_duration", { attempt, wall_ms: wallMs });
         } else if (typeof dur === "number" && dur < MIN_VIDEO_DURATION_SEC) {
           console.error(
             `[render] REJECTED: creatomate reported_dur=${dur}s (< ${MIN_VIDEO_DURATION_SEC}s). Treating as failure.`,
           );
+          logCreatomateFailure(payload, "short_reported_duration", { attempt, reported_dur: dur });
         } else {
           console.log(`[render] Render provider: creatomate (attempt ${attempt})`);
           return { data: result.data, mimeType: result.mimeType, duration: dur, provider: "creatomate" };
         }
       } else if (!result) {
         console.error(`[render] creatomate returned null on attempt ${attempt}`);
+        logCreatomateFailure(payload, "returned_null", { attempt, wall_ms: wallMs });
       } else {
         console.error(`[render] creatomate returned empty bytes on attempt ${attempt}`);
+        logCreatomateFailure(payload, "empty_bytes", { attempt, wall_ms: wallMs });
       }
     } catch (error) {
       const wallMs = Date.now() - startedAt;
@@ -146,6 +205,12 @@ export async function generateVideoWithFallback(
         `[render] creatomate attempt=${attempt}/${MAX_ATTEMPTS} wall=${wallMs}ms ERROR:`,
         msg,
       );
+      const isTimeout = msg.startsWith("creatomate timeout");
+      logCreatomateFailure(payload, isTimeout ? "wrapper_timeout" : "exception", {
+        attempt,
+        wall_ms: wallMs,
+        thrown_message: msg.slice(0, 500),
+      });
       if (looksLikeCreditError(msg)) {
         creatomateCreditError = true;
         console.error(`[render] credit-error keyword detected — escalating to fallback`);
@@ -167,19 +232,23 @@ export async function generateVideoWithFallback(
     if (isCreditError(fallback)) {
       json2videoCreditError = true;
       console.error(`[render] CREDIT_EXHAUSTED on json2video — escalating to ken-burns fallback`);
+      logFallbackFailure(payload, "json2video", "credit_exhausted", { message: fallback.message ?? null });
     } else if (fallback && fallback.data.byteLength > 0) {
       if (typeof fallback.duration === "number" && fallback.duration < MIN_VIDEO_DURATION_SEC) {
         console.error(`[render] REJECTED: json2video duration ${fallback.duration}s < ${MIN_VIDEO_DURATION_SEC}s`);
+        logFallbackFailure(payload, "json2video", "short_duration", { reported_dur: fallback.duration });
       } else {
         console.log("[render] Render provider: json2video");
         return { ...fallback, provider: "json2video" };
       }
     } else {
       console.error("[render] JSON2Video returned empty result");
+      logFallbackFailure(payload, "json2video", "empty_result", {});
     }
   } catch (error) {
     const msg = (error as Error).message ?? "";
     console.error("[render] JSON2Video failed:", msg);
+    logFallbackFailure(payload, "json2video", "exception", { thrown_message: msg.slice(0, 500) });
     if (looksLikeCreditError(msg)) json2videoCreditError = true;
   }
 
@@ -194,20 +263,25 @@ export async function generateVideoWithFallback(
     const kb = await generateWithJSON2Video(payload, /*kenBurns*/ true);
     if (isCreditError(kb)) {
       console.error(`[render] CREDIT_EXHAUSTED on ken-burns fallback — no providers available`);
+      logFallbackFailure(payload, "json2video_kenburns", "credit_exhausted", { message: kb.message ?? null });
       return null;
     }
     if (kb && kb.data.byteLength > 0) {
       if (typeof kb.duration === "number" && kb.duration < MIN_VIDEO_DURATION_SEC) {
         console.error(`[render] REJECTED: ken-burns duration ${kb.duration}s < ${MIN_VIDEO_DURATION_SEC}s`);
+        logFallbackFailure(payload, "json2video_kenburns", "short_duration", { reported_dur: kb.duration });
         return null;
       }
       console.log("[render] Render provider: json2video_kenburns");
       return { ...kb, provider: "json2video_kenburns" };
     }
     console.error("[render] Ken-Burns fallback returned empty result");
+    logFallbackFailure(payload, "json2video_kenburns", "empty_result", {});
     return null;
   } catch (error) {
-    console.error("[render] Ken-Burns fallback failed:", (error as Error).message);
+    const msg = (error as Error).message ?? "";
+    console.error("[render] Ken-Burns fallback failed:", msg);
+    logFallbackFailure(payload, "json2video_kenburns", "exception", { thrown_message: msg.slice(0, 500) });
     return null;
   }
 }
