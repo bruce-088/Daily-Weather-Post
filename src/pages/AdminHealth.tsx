@@ -88,7 +88,7 @@ export default function AdminHealth() {
       setLogs(null);
       setLogsError(logsRes.error.message);
     } else {
-      setLogs((logsRes.data as LogRow[]) ?? []);
+      setLogs(((logsRes.data as unknown) as LogRow[]) ?? []);
       setLogsError(null);
     }
     setBlocked((blockedRes.data as ScheduledRow[]) ?? []);
