@@ -101,10 +101,10 @@ export function validateAndSanitize(text: string, opts: ValidateOptions): Valida
   }
 
   // 2. Banned fragments — strict scope (title + description).
+  //    Word-boundary aware so "unclear skies" does NOT match "Clear Skies".
   if (opts.strictBannedFragments) {
-    const lower = raw.toLowerCase();
     for (const phrase of BANNED_FRAGMENTS_STRICT) {
-      if (lower.includes(phrase.toLowerCase())) {
+      if (matchesBannedFragment(raw, phrase)) {
         return { ok: false, reason: "banned_fragment", matched: phrase };
       }
     }
