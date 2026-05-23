@@ -1865,6 +1865,24 @@ Deno.serve(async (req) => {
         errorMessage = msg;
         status = "validation_failed";
         for (const a of connectedAdapters) recordResult(a.name, false, msg);
+        // Phase 5B observability — emit structured validation_blocked log so
+        // the AdminHealth dashboard can show which field/phrase tripped it.
+        try {
+          await supabase.from("system_logs").insert({
+            user_id: userId,
+            type: "validation_blocked",
+            platform: connectedAdapters.map((a) => a.name).join(",") || null,
+            message: `Validation gate blocked publish (daily-weather-post): ${detail}`,
+            context: {
+              source: "daily-weather-post",
+              city: resolvedCityName || weather.city || null,
+              validation_reason: _vb.failures[0]?.reason,
+              validation_field: _vb.failures[0]?.field,
+              matched: _vb.failures[0]?.matched,
+              failures: _vb.failures,
+            },
+          });
+        } catch (_logErr) { /* best-effort */ }
       }
 
       // ── Phase 2C: smart fallback gate ──
