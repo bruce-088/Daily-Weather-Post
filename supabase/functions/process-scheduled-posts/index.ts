@@ -2914,11 +2914,14 @@ Deno.serve(async (req) => {
             console.warn("[render] cached video reuse failed:", (e as Error).message);
           }
         }
+        // Hoisted so downstream gates (template_config hold, error logging,
+        // fallback chain) can read it even when cached/preview-bundle video
+        // was reused and the render branch below didn't execute.
+        const renderErrorSink: { message?: string; templateConfigError?: boolean } = {};
         if (!video) {
           // Try video generation once (with voiceover baked in if available)
           console.log(`RENDER START: City: ${weather.city}, VoiceEnabled: ${voiceUrl ? "True" : "False"}, VisualStyle: ${visualStyle}`);
           console.log(`[publish] post ${post.id}: AUDIO_URL → ${voiceUrl ? voiceUrl.split("?")[0] : "(none)"} duration=${voiceAudioDurationSec ?? "n/a"}s`);
-          const renderErrorSink: { message?: string; templateConfigError?: boolean } = {};
           const __renderStartMs = nowMs();
           logEvent(supabase, EventType.RenderCreatomateStart, `Render start`, {
             scheduled_post_id: post.id, user_id: post.user_id, city: weather.city,
