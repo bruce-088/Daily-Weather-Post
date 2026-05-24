@@ -89,12 +89,16 @@ Deno.test("word-boundary validator does NOT block 'unclear skies' (false-positiv
   assertEquals(r.ok, true, `False positive: ${JSON.stringify(r.failures)}`);
 });
 
-Deno.test("validator DOES block the banned 'Clear Skies' fragment in title", () => {
+Deno.test("validator DOES block 'Clear Skies' when used as a location slot", () => {
+  // Phase 8B: "Clear Skies" moved from BANNED_FRAGMENTS_STRICT to
+  // BANNED_LOCATION_PROXIES — only blocked when it appears as a hallucinated
+  // location (e.g. "across Clear Skies"), not in natural narration.
   const r = validatePostBundle({
-    title: "[6 PM] Clear Skies overnight in Orlando",
-    description: "Tonight's outlook for Orlando.",
+    title: "[6 PM] Sunshine across Clear Skies tonight",
+    description: "Tonight's outlook across Clear Skies.",
     expectedCity: "Orlando",
   });
   assertEquals(r.ok, false);
   assertEquals(r.failures[0]?.matched, "Clear Skies");
 });
+
