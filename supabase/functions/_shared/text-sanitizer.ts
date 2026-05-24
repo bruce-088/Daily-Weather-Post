@@ -27,25 +27,28 @@ export interface ValidateResult {
 /** Phrases that should NEVER appear in a published title or description.
  *  These are observed hallucinated location-proxy fragments. */
 export const BANNED_FRAGMENTS_STRICT: string[] = [
-  "Weather Update",
-  "Coming Up",
-  // "But Comfortable" intentionally moved to BANNED_LOCATION_PROXIES (Phase 5E):
-  // it caused false positives on legitimate prose like "grey but comfortable day".
-  // It is now only blocked when it appears in a location slot (e.g. "in But Comfortable").
-  "Not Need",
-  "Clear Skies", // only blocked in title/description, not narration
-  "Heads Up",
+  // Strong hallucination signals — should NEVER appear in title or description.
+  "Weather Update", // pure proxy (4/8 production hits in 7 days)
+  "Not Need",       // garbled artifact
 ];
 
 /**
  * Phrases that are ONLY banned when they appear as a hallucinated location
  * (i.e. inside an "in|for|over|across <Phrase>" slot). They are allowed in
- * natural prose elsewhere. Phase 5E: contextual replacement for the overly
- * aggressive global block.
+ * natural prose elsewhere.
+ *
+ * Phase 5E introduced this list for "But Comfortable".
+ * Phase 8B moved "Coming Up", "Clear Skies", "Heads Up" here after production
+ * data showed false positives on legitimate weather narration like
+ * "storms coming up", "clear skies tonight", and "heads up for rain".
  */
 export const BANNED_LOCATION_PROXIES: string[] = [
   "But Comfortable",
+  "Coming Up",
+  "Clear Skies",
+  "Heads Up",
 ];
+
 
 /** Escape a string for safe insertion into a RegExp source. */
 export function escapeRegex(s: string): string {
