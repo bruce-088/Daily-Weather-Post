@@ -494,39 +494,24 @@ const BG_MUSIC_DUCK_VOLUME = "12%";   // ducked volume while voice is speaking
 // asset returns HTTP 403 permanently, which causes 100% of Creatomate renders
 // to fail. We blocklist by substring so any URL pointing to that dead file
 // is treated as "no bg music" (voice + intro chime still play).
+// NOTE: Option D (runtime HEAD-check) is queued — needs to refactor
+// buildCreatomateSource to async first.
 const KNOWN_DEAD_BG_MUSIC_SUBSTRINGS = [
   "cdn.pixabay.com/download/audio/2022/03/15/audio_5c9b7e3f5a.mp3",
 ];
 
-// Phase 7B (defense-in-depth = Option D): one-time HEAD-check per cold start.
-// Cached so we don't re-validate on every post.
-let _bgMusicResolvePromise: Promise<string> | null = null;
-async function resolveBgMusicUrl(): Promise<string> {
-  if (_bgMusicResolvePromise) return _bgMusicResolvePromise;
-  _bgMusicResolvePromise = (async () => {
-    const raw = (Deno.env.get("BROADCAST_BG_MUSIC_URL") || "").trim();
-    if (!raw) return "";
-    if (KNOWN_DEAD_BG_MUSIC_SUBSTRINGS.some((s) => raw.includes(s))) {
+let _bgMusicWarnedDead = false;
+function resolveBgMusicUrl(): string {
+  const raw = (Deno.env.get("BROADCAST_BG_MUSIC_URL") || "").trim();
+  if (!raw) return "";
+  if (KNOWN_DEAD_BG_MUSIC_SUBSTRINGS.some((s) => raw.includes(s))) {
+    if (!_bgMusicWarnedDead) {
       console.warn(`[bg-music] BROADCAST_BG_MUSIC_URL matches known-dead asset — disabling bg music layer. url=${raw}`);
-      return "";
+      _bgMusicWarnedDead = true;
     }
-    try {
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 5000);
-      const res = await fetch(raw, { method: "HEAD", signal: ctrl.signal });
-      clearTimeout(t);
-      if (!res.ok) {
-        console.warn(`[bg-music] HEAD ${res.status} on BROADCAST_BG_MUSIC_URL — disabling bg music layer. url=${raw}`);
-        return "";
-      }
-      console.log(`[bg-music] BROADCAST_BG_MUSIC_URL validated (HEAD ${res.status})`);
-      return raw;
-    } catch (e) {
-      console.warn(`[bg-music] HEAD failed on BROADCAST_BG_MUSIC_URL — disabling bg music layer. err=${(e as Error).message}`);
-      return "";
-    }
-  })();
-  return _bgMusicResolvePromise;
+    return "";
+  }
+  return raw;
 }
 
 function computeVideoDuration(audioDurationSec: number | null | undefined): number {
