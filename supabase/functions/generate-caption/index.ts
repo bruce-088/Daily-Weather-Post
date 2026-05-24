@@ -404,10 +404,15 @@ Deno.serve(async (req) => {
       const _cta = rotatingCTA(body.slot ?? period);
       const locationGuard = `CRITICAL LOCATION RULE (highest priority):
 - The ONLY valid location string anywhere in the caption is "${city}".
-- The strings "Not Need", "Weather Update", "Coming Up", "But Comfortable", "Clear Skies", or any style/tone/variation label, or any weather condition word (Rain, Clouds, Sunny, Ahead, etc.) must NEVER appear as a location.
+- The strings "Not Need", "Weather Update", "Coming Up", "But Comfortable", "Clear Skies", "Heads Up", or any style/tone/variation label, or any weather condition word (Rain, Clouds, Sunny, Ahead, etc.) must NEVER appear as a location.
 - Every time you refer to the location — in body text, CTA, hashtags, or anywhere else — you MUST use exactly "${city}".
 - "weather in [X]" and "daily [X] weather alerts" MUST always use "${city}".
+- PHRASING EXAMPLES (these are ALLOWED as natural narration, NOT as locations):
+  - Say "heads up for rain tonight" — NEVER "in Heads Up"
+  - Say "clear skies tonight" or "clear skies over ${city}" — NEVER "across Clear Skies"
+  - Say "storms coming up this evening" — NEVER "over Coming Up"
 - If you mention the broadcast slot (Morning, Afternoon, Evening), it must be purely descriptive of the timeframe and NEVER used as a replacement for the city name "${city}".`;
+
       ctaBlock = _cta
         ? `CTA ROTATION: For the final call-to-action line, use this exact CTA (or a close paraphrase): "${_cta}". Do not invent additional CTAs.\n${locationGuard}`
         : locationGuard;
