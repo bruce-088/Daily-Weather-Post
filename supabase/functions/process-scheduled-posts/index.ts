@@ -490,6 +490,30 @@ const MAX_VIDEO_DURATION = 15;  // seconds — short enough to invite re-watch l
 const BG_MUSIC_FULL_VOLUME = "35%";   // baseline music volume (no voice)
 const BG_MUSIC_DUCK_VOLUME = "12%";   // ducked volume while voice is speaking
 
+// Phase 7B: Known-dead background-music URLs. The configured Pixabay CDN
+// asset returns HTTP 403 permanently, which causes 100% of Creatomate renders
+// to fail. We blocklist by substring so any URL pointing to that dead file
+// is treated as "no bg music" (voice + intro chime still play).
+// NOTE: Option D (runtime HEAD-check) is queued — needs to refactor
+// buildCreatomateSource to async first.
+const KNOWN_DEAD_BG_MUSIC_SUBSTRINGS = [
+  "cdn.pixabay.com/download/audio/2022/03/15/audio_5c9b7e3f5a.mp3",
+];
+
+let _bgMusicWarnedDead = false;
+function resolveBgMusicUrl(): string {
+  const raw = (Deno.env.get("BROADCAST_BG_MUSIC_URL") || "").trim();
+  if (!raw) return "";
+  if (KNOWN_DEAD_BG_MUSIC_SUBSTRINGS.some((s) => raw.includes(s))) {
+    if (!_bgMusicWarnedDead) {
+      console.warn(`[bg-music] BROADCAST_BG_MUSIC_URL matches known-dead asset — disabling bg music layer. url=${raw}`);
+      _bgMusicWarnedDead = true;
+    }
+    return "";
+  }
+  return raw;
+}
+
 function computeVideoDuration(audioDurationSec: number | null | undefined): number {
   const audio = typeof audioDurationSec === "number" && isFinite(audioDurationSec) && audioDurationSec > 0 ? audioDurationSec : 0;
   const target = audio > 0 ? VOICE_START + audio + VOICE_TAIL_PAD : MIN_VIDEO_DURATION;
@@ -737,7 +761,7 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
   // music layer; missing chime URL ⇒ no chime; missing voice ⇒ music plays at
   // full volume the whole way through.
   const introChimeUrl = (Deno.env.get("BROADCAST_INTRO_CHIME_URL") || "").trim();
-  const bgMusicUrl    = (Deno.env.get("BROADCAST_BG_MUSIC_URL") || "").trim();
+  const bgMusicUrl    = resolveBgMusicUrl();
   const audioLen = voiceUrl
     ? (typeof audioDurationSec === "number" && isFinite(audioDurationSec) && audioDurationSec > 0
         ? audioDurationSec
