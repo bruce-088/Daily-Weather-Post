@@ -737,7 +737,7 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
   // music layer; missing chime URL ⇒ no chime; missing voice ⇒ music plays at
   // full volume the whole way through.
   const introChimeUrl = (Deno.env.get("BROADCAST_INTRO_CHIME_URL") || "").trim();
-  const bgMusicUrl    = (Deno.env.get("BROADCAST_BG_MUSIC_URL") || "").trim();
+  const bgMusicUrl    = await resolveBgMusicUrl();
   const audioLen = voiceUrl
     ? (typeof audioDurationSec === "number" && isFinite(audioDurationSec) && audioDurationSec > 0
         ? audioDurationSec
