@@ -15,6 +15,7 @@ export interface PerformanceInsights {
 
 export interface PerformanceMeta {
   postId?: string | null;
+  userId: string;
   city: string;
   platform: string;
   slot: "morning" | "afternoon" | "evening" | null;
