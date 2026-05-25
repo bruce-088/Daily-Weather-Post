@@ -898,6 +898,7 @@ export type Database = {
           title: string
           tone: string | null
           updated_at: string
+          user_id: string | null
           views: number
           weather_condition: string | null
         }
@@ -922,6 +923,7 @@ export type Database = {
           title: string
           tone?: string | null
           updated_at?: string
+          user_id?: string | null
           views?: number
           weather_condition?: string | null
         }
@@ -946,6 +948,7 @@ export type Database = {
           title?: string
           tone?: string | null
           updated_at?: string
+          user_id?: string | null
           views?: number
           weather_condition?: string | null
         }
