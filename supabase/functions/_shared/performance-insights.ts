@@ -38,6 +38,7 @@ export async function recordPostPerformance(
   try {
     const row = {
       post_id: meta.postId ?? null,
+      user_id: meta.userId,
       city: meta.city,
       platform: meta.platform,
       slot: meta.slot ?? null,
