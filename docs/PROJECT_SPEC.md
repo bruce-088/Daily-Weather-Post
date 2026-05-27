@@ -25,7 +25,7 @@
 - **Automated content generation** with zero manual intervention per city
 - **Engagement-optimized visual variety** targeting 45–60 views/short average
 
-### Current Performance Metrics
+### Current Performance Metrics (as of May 2026)
 
 | City | Avg Views/Short | Target |
 |---|---|---|
