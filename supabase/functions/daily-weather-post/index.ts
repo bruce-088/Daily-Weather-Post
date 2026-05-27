@@ -1961,7 +1961,7 @@ Deno.serve(async (req) => {
         slot: "morning",
         settings: settings as any,
       }),
-      mode: visualStyle === "gradient" ? "gradient" : "image",
+      visualStyleHint: visualStyle === "gradient" ? "gradient" : "image",
       settings: settings as any,
     });
     logCinematic("daily-weather-post", _cinematicDecision, { city: weather.city, kind: "daily" });

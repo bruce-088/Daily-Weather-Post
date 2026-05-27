@@ -3434,7 +3434,7 @@ Deno.serve(async (req) => {
               slot: (post as any).slot || null,
               settings: cinematicSettings as any,
             }),
-            mode: visualStyle === "gradient" ? "gradient" : "image",
+            visualStyleHint: visualStyle === "gradient" ? "gradient" : "image",
             settings: cinematicSettings as any,
           });
           logCinematic("process-scheduled-posts", _cinematicDecision, { city: weather.city, kind: "daily" });
