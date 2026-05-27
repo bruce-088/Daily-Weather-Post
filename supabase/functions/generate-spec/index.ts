@@ -326,6 +326,43 @@ const DEPLOYMENT = `- **Frontend**: React 18 + Vite + TypeScript + Tailwind (Lov
 - **Run Growth Analysis** — invokes \`analyze-growth\` edge function on demand (bypasses 6h cron). Same loading/disabled/toast behavior.
 - Both buttons sit under the existing Safe Reset / Dry Run controls in the System Health card. They do not alter cron schedules, edge function code, DB schemas, or RLS — they are pure on-demand triggers for operator/debug use.`;
 
+const BUSINESS_GOALS = `### Current Phase: Foundation & Growth
+
+| Channel | Target | Current Status |
+|---|---|---|
+| **Orlando Weather Daily** | 1,000+ subscribers | ~50–60 views/short average |
+| **Gainesville Weather Daily** | 1,000+ subscribers | ~30–35 views/short average |
+
+**Milestone:** Both channels must reach 1,000+ subscribers before expansion.
+
+### Next Phase: Multi-City Expansion
+
+| Phase | City | Launch Criteria |
+|---|---|---|
+| 3 | **Miami** | Orlando + Gainesville both ≥1,000 subscribers |
+| 4+ | Tampa, Jacksonville, Fort Lauderdale, etc. | Proven Miami playbook + sustained engagement |
+
+### Platform Vision
+
+- Build a **scalable weather media automation platform**
+- **Multi-city network** with city-agnostic architecture
+- **Automated content generation** with zero manual intervention per city
+- **Engagement-optimized visual variety** targeting 45–60 views/short average
+
+### Current Performance Metrics
+
+| City | Avg Views/Short | Target |
+|---|---|---|
+| Orlando | ~50–60 | Maintain |
+| Gainesville | ~30–35 | Close gap to 45–50 |
+
+### Success Criteria for Miami Launch
+
+- Both existing channels at 1,000+ subscribers
+- Visual selector balanced (no gradient bias)
+- 100% reliability (zero manual intervention)
+- Proven engagement metrics (45–60 views/short)`;
+
 function md(rows: string[]) {
   return rows.join("\n");
 }
@@ -342,6 +379,8 @@ Deno.serve(async (req) => {
 
   const auth = await verifyUser(req);
   if (auth.response) return auth.response;
+
+  console.log(`[generate-spec] Milestone: Business Goals & Scaling Vision section included in spec v${APP_VERSION}`);
 
   try {
     const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
@@ -506,7 +545,11 @@ Deno.serve(async (req) => {
     docParts.push(DEPLOYMENT);
     docParts.push("\n---\n");
 
-    docParts.push(`## 17. Recent Changes Log`);
+    docParts.push(`## 17. Business Goals & Scaling Vision\n`);
+    docParts.push(BUSINESS_GOALS);
+    docParts.push("\n---\n");
+
+    docParts.push(`## 18. Recent Changes Log`);
     docParts.push(`_Pulled live from post_history (last 10 events)_\n`);
     if (recentRows.length === 0) {
       docParts.push(`_No recent activity recorded._`);
