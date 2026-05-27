@@ -169,12 +169,21 @@ function nonEmpty(u?: string | null): u is string {
 /**
  * Resolve the actual visual source for a render.
  *
- * Tier order (when `mode !== "gradient"`):
+ * Tier order (ALWAYS runs — `visualStyleHint` is a HINT, not a command):
  *   1. history_image     — when `mediaUrl` is provided & non-empty
  *   2. condition_scene   — when a stock scene matches the condition
  *   3. city_safe_scene   — Gainesville only (gated by strict_visuals_gainesville),
  *                          when ≥1 safe scene URL exists
- *   4. gradient_only     — when every prior tier yielded nothing
+ *   4. gradient_only     — natural fallback when every prior tier yielded nothing
+ *
+ * `visualStyleHint: "gradient"` no longer short-circuits the chain — the
+ * upstream visual-selector frequently picks "gradient" for Clouds/overcast
+ * even though tier 2 has a perfectly good `cloudy_sky` scene. Treating the
+ * hint as a command starved the visual-learning loop and biased renders
+ * toward plain backgrounds (Phase 9A-bis finding). The hint is preserved
+ * only for diagnostic logging.
+ *
+ * `mode` is accepted as a deprecated alias of `visualStyleHint`.
  *
  * Any unexpected throw → `degraded_fallback` (eligible=false).
  * Render NEVER fails — caller always gets a usable decision.
@@ -184,25 +193,17 @@ export function resolveScene(opts: {
   condition?: string | null;
   mediaUrl?: string | null;
   preset: CinematicPreset;
+  visualStyleHint?: "image" | "video" | "gradient";
+  /** @deprecated use `visualStyleHint` — kept for backward compat with recap fns */
   mode?: "image" | "video" | "gradient";
   slideIndex?: number;
   settings?: CinematicSettings | null;
 }): SceneDecision {
   const { city, condition, mediaUrl, preset } = opts;
-  const mode = opts.mode ?? "image";
+  const visualStyleHint = opts.visualStyleHint ?? opts.mode ?? "image";
   const settings = opts.settings || {};
 
   try {
-    if (mode === "gradient") {
-      return {
-        preset,
-        source: "gradient_only",
-        label: "gradient_only",
-        costTier: costTierFor(preset, "gradient_only"),
-        eligibleForLearning: false,
-      };
-    }
-
     // Tier 1: history image
     if (nonEmpty(mediaUrl)) {
       return {
@@ -218,6 +219,9 @@ export function resolveScene(opts: {
     // Tier 2: condition scene
     const pick = pickConditionScene(condition);
     if (pick) {
+      if (visualStyleHint === "gradient") {
+        console.log(`[cinematic] hint=gradient overridden — condition_scene available (label=${pick.label})`);
+      }
       return {
         preset,
         source: "condition_scene",
@@ -245,7 +249,7 @@ export function resolveScene(opts: {
       console.warn(`[cinematic] city_safe_scene missing for ${city} — falling through to gradient_only`);
     }
 
-    // Tier 4: gradient-only
+    // Tier 4: gradient-only (natural fallback)
     return {
       preset,
       source: "gradient_only",
@@ -258,6 +262,7 @@ export function resolveScene(opts: {
     return {
       preset,
       source: "degraded_fallback",
+
       label: "degraded_fallback",
       costTier: "low",
       eligibleForLearning: false,
