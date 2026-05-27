@@ -8,6 +8,7 @@ const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const APP_NAME = "SkyBrief";
 const APP_VERSION = "1.5.1";
 const TAGLINE = "Automated weather posts for every platform.";
+// Business goals & scaling vision are documented at docs/PROJECT_SPEC.md
 
 const FEATURES: Array<[string, string, string]> = [
   ["Create – Manual weather card & video generation", "✅ Working", "Generate, preview, and post weather cards/videos on demand."],
