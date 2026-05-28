@@ -43,6 +43,20 @@ export interface TitleTemplateInputs {
  * This is `expandAllTemplates` — NOT runtime selection. Runtime selection
  * happens in `buildHookTitle` based on weather branching.
  */
+/**
+ * Phase 10C: Date-stamped hook pattern.
+ * Winning template observed at 159 views (vs 30-40 baseline).
+ * Format: "{City} Weather | {Weekday}, {Month} {Day}"
+ *   e.g. "Orlando Weather | Tuesday, May 27"
+ * City in first 3 words, weekday + specific date, pipe separator.
+ */
+export function buildDateStampedTitle(city: string, now: Date = new Date()): string {
+  const weekday = now.toLocaleDateString("en-US", { weekday: "long", timeZone: "America/New_York" });
+  const month = now.toLocaleDateString("en-US", { month: "long", timeZone: "America/New_York" });
+  const day = Number(now.toLocaleDateString("en-US", { day: "numeric", timeZone: "America/New_York" }));
+  return `${city} Weather | ${weekday}, ${month} ${day}`;
+}
+
 export function expandAllTemplates(inp: TitleTemplateInputs): string[] {
   const { city, temp: t, emoji } = inp;
   return [
