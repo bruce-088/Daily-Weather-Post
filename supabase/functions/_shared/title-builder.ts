@@ -60,6 +60,8 @@ export function buildDateStampedTitle(city: string, now: Date = new Date()): str
 export function expandAllTemplates(inp: TitleTemplateInputs): string[] {
   const { city, temp: t, emoji } = inp;
   return [
+    // Phase 10C: Date-stamped winner (159-view pattern)
+    buildDateStampedTitle(city),
     // Severe / storm
     `Storms Rolling Into ${city} ⛈ ${t}° Today`,
     `Storm Alert ${city} — Rolling In ⛈ Forecast`,                        // was: "Heads Up ${city} — Storms On The Way ⛈ Forecast"
