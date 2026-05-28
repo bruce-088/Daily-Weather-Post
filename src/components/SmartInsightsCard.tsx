@@ -282,6 +282,14 @@ export function SmartInsightsCard({ compact = false }: SmartInsightsCardProps) {
               <div className="flex items-center gap-1.5 text-muted-foreground">
                 <Cloud size={11} />
                 <span className="opacity-70">{i.samples} samples</span>
+                {i.lowConfidence && (
+                  <Badge
+                    variant="outline"
+                    className="text-[9px] py-0 px-1.5 border-amber-500/40 text-amber-500"
+                  >
+                    low confidence
+                  </Badge>
+                )}
               </div>
             </div>
           ))
