@@ -43,9 +43,25 @@ export interface TitleTemplateInputs {
  * This is `expandAllTemplates` — NOT runtime selection. Runtime selection
  * happens in `buildHookTitle` based on weather branching.
  */
+/**
+ * Phase 10C: Date-stamped hook pattern.
+ * Winning template observed at 159 views (vs 30-40 baseline).
+ * Format: "{City} Weather | {Weekday}, {Month} {Day}"
+ *   e.g. "Orlando Weather | Tuesday, May 27"
+ * City in first 3 words, weekday + specific date, pipe separator.
+ */
+export function buildDateStampedTitle(city: string, now: Date = new Date()): string {
+  const weekday = now.toLocaleDateString("en-US", { weekday: "long", timeZone: "America/New_York" });
+  const month = now.toLocaleDateString("en-US", { month: "long", timeZone: "America/New_York" });
+  const day = Number(now.toLocaleDateString("en-US", { day: "numeric", timeZone: "America/New_York" }));
+  return `${city} Weather | ${weekday}, ${month} ${day}`;
+}
+
 export function expandAllTemplates(inp: TitleTemplateInputs): string[] {
   const { city, temp: t, emoji } = inp;
   return [
+    // Phase 10C: Date-stamped winner (159-view pattern)
+    buildDateStampedTitle(city),
     // Severe / storm
     `Storms Rolling Into ${city} ⛈ ${t}° Today`,
     `Storm Alert ${city} — Rolling In ⛈ Forecast`,                        // was: "Heads Up ${city} — Storms On The Way ⛈ Forecast"
@@ -177,8 +193,11 @@ export function buildHookTitle(
     pool.push(`${city} Weather Today ${emoji} ${t}° ${condition}`);
   }
 
+  // Phase 10C: 70% weighted selection of the proven date-stamped winner pattern.
+  // Falls back to weather-variety pool 30% of the time to preserve visual variety (Phase 9B).
   const seed = new Date().getDate() * 24 + hour;
-  const baseTitle = pool[seed % pool.length];
+  const useDateStamp = (seed % 10) < 7; // ~70%
+  const baseTitle = useDateStamp ? buildDateStampedTitle(city) : pool[seed % pool.length];
   const effectiveSlot = slot || "morning";
   try {
     const result = ensureSlotTitlePrefix(baseTitle, effectiveSlot, city);
