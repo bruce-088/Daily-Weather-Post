@@ -124,7 +124,7 @@ export function SmartInsightsCard({ compact = false }: SmartInsightsCardProps) {
 
   const insights = useMemo<Insight[]>(() => {
     const out: Insight[] = [];
-    if (rows.length < 3) return out;
+    if (rows.length < LOW_CONFIDENCE_SAMPLES) return out;
 
     // 1. Condition performance
     const cond = topGroup(rows, (r) => (r.condition ? r.condition.toLowerCase() : null));
@@ -136,11 +136,12 @@ export function SmartInsightsCard({ compact = false }: SmartInsightsCardProps) {
         text: `${timeLabel(cond.key)} videos perform ${(cond.avg / Math.max(cond.overall, 1)).toFixed(1)}x better${cityTag}`,
         delta: cond.deltaPct,
         samples: cond.samples,
+        lowConfidence: cond.lowConfidence,
       });
     }
 
-    // 2. Best posting time
-    const slot = topGroup(rows, (r) => timeOfDayFromIso(r.created_at));
+    // 2. Best posting time — uses canonical slot field with UTC fallback (no browser-local time)
+    const slot = topGroup(rows, timeOfDayFromRow);
     if (slot && slot.deltaPct > 5) {
       const cityTag = activeCity.name ? ` in ${activeCity.name}` : "";
       out.push({
@@ -149,6 +150,7 @@ export function SmartInsightsCard({ compact = false }: SmartInsightsCardProps) {
         text: `Best time${cityTag} is ${timeLabel(slot.key)} (+${slot.deltaPct}% vs other slots)`,
         delta: slot.deltaPct,
         samples: slot.samples,
+        lowConfidence: slot.lowConfidence,
       });
     }
 
@@ -164,6 +166,7 @@ export function SmartInsightsCard({ compact = false }: SmartInsightsCardProps) {
         text: `${timeLabel(vis.key)} visuals outperform other styles by +${vis.deltaPct}%`,
         delta: vis.deltaPct,
         samples: vis.samples,
+        lowConfidence: vis.lowConfidence,
       });
     }
 
@@ -179,15 +182,26 @@ export function SmartInsightsCard({ compact = false }: SmartInsightsCardProps) {
         text: `${timeLabel(bright.key)} backgrounds win by +${bright.deltaPct}%`,
         delta: bright.deltaPct,
         samples: bright.samples,
+        lowConfidence: bright.lowConfidence,
       });
     }
 
-    // 4. Voiceover impact
-    const onViews = rows.filter((r) => r.voice_status === "success").map((r) => r.views_count ?? 0);
-    const offViews = rows.filter((r) => r.voice_status !== "success").map((r) => r.views_count ?? 0);
-    if (onViews.length >= 3 && offViews.length >= 3) {
+    // 4. Voiceover impact — only compare intentional silence vs successful voice.
+    // Failed/null voice_status is EXCLUDED because those are broken renders, not
+    // a real control group. Previously this conflated render failures with
+    // "silent posts" and inflated the apparent voiceover lift.
+    const isVoiceOn = (r: PostRow) => r.voice_status === "success";
+    const isVoiceIntentionallyOff = (r: PostRow) =>
+      r.voice_status === "skipped" || r.voice_status === "disabled" || r.voice_status === "off";
+    const onViews = rows.filter(isVoiceOn).map((r) => r.views_count ?? 0);
+    const offViews = rows.filter(isVoiceIntentionallyOff).map((r) => r.views_count ?? 0);
+
+    if (onViews.length >= LOW_CONFIDENCE_SAMPLES && offViews.length >= LOW_CONFIDENCE_SAMPLES) {
       const a = avg(onViews);
       const b = avg(offViews);
+      const totalSamples = onViews.length + offViews.length;
+      const lowConfidence =
+        onViews.length < HIGH_CONFIDENCE_SAMPLES || offViews.length < HIGH_CONFIDENCE_SAMPLES;
       if (b > 0 && a > b) {
         const delta = Math.round(((a - b) / b) * 100);
         if (delta > 5) {
@@ -196,7 +210,8 @@ export function SmartInsightsCard({ compact = false }: SmartInsightsCardProps) {
             emoji: "🎙️",
             text: `Voiceover increases views by +${delta}%`,
             delta,
-            samples: onViews.length + offViews.length,
+            samples: totalSamples,
+            lowConfidence,
           });
         }
       } else if (a > 0 && b > a) {
@@ -207,7 +222,8 @@ export function SmartInsightsCard({ compact = false }: SmartInsightsCardProps) {
             emoji: "🔇",
             text: `Silent videos outperform voiceover by +${delta}%`,
             delta,
-            samples: onViews.length + offViews.length,
+            samples: totalSamples,
+            lowConfidence,
           });
         }
       }
@@ -217,6 +233,7 @@ export function SmartInsightsCard({ compact = false }: SmartInsightsCardProps) {
     out.sort((a, b) => (b.delta ?? 0) - (a.delta ?? 0));
     return out;
   }, [rows, activeCity.name]);
+
 
   if (loading) return null;
 
