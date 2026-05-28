@@ -69,7 +69,8 @@ const SLOT_SYSTEM = `Slots define the three daily automation windows and drive c
 - Manual posts without a selected slot infer slot from current city-local hour
 - Prefix is always first — before emojis, text, or hashtags
 - Stale/wrong prefixes are stripped and replaced (no duplication)
-- Total title length enforced at ≤95 chars; base is truncated, prefix is never cut`;
+- Total title length enforced at ≤95 chars; base is truncated, prefix is never cut
+- **Phase 10C — Date-stamped winner template (\`buildDateStampedTitle\` in \`_shared/title-builder.ts\`)**: \`{City} Weather | {Weekday}, {Month} {Day}\` (ET-anchored). Reproduces the 159-view winning hook pattern. Selected ~70% of the time in \`buildHookTitle\` via deterministic date+hour seed; remaining ~30% rotates through the weather-variety pool to preserve Phase 9B visual variety. Validated by \`title-builder.test.ts\` against \`validatePostBundle\` for all fixture cities/temps/conditions.`;
 
 const EXECUTION_SOURCES = `Every post in SkyBrief originates from one of three sources. Each source is tagged internally to ensure isolation and prevent cross-triggering.
 
