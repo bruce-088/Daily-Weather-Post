@@ -197,7 +197,7 @@ export function buildHookTitle(
   // Falls back to weather-variety pool 30% of the time to preserve visual variety (Phase 9B).
   const seed = new Date().getDate() * 24 + hour;
   const useDateStamp = (seed % 10) < 7; // ~70%
-  const baseTitle = useDateStamp ? buildDateStampedTitle() && buildDateStampedTitle(city) : pool[seed % pool.length];
+  const baseTitle = useDateStamp ? buildDateStampedTitle(city) : pool[seed % pool.length];
   const effectiveSlot = slot || "morning";
   try {
     const result = ensureSlotTitlePrefix(baseTitle, effectiveSlot, city);
