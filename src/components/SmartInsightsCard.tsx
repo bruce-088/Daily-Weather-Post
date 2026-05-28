@@ -5,6 +5,12 @@ import { Badge } from "@/components/ui/badge";
 import { Brain, TrendingUp, Clock, Mic, Palette, Cloud } from "lucide-react";
 import { useActiveCity } from "@/hooks/useActiveCity";
 
+// Confidence thresholds for insight measurement.
+// HIGH = display normally; LOW = display with "low confidence" pill;
+// below LOW = hide entirely (treated as noise).
+const HIGH_CONFIDENCE_SAMPLES = 10;
+const LOW_CONFIDENCE_SAMPLES = 5;
+
 interface PostRow {
   city: string | null;
   condition: string | null;
@@ -12,6 +18,8 @@ interface PostRow {
   voice_status: string | null;
   visual_metadata: any;
   created_at: string;
+  last_attempt_at: string | null;
+  slot: string | null;
 }
 
 interface Insight {
@@ -20,10 +28,29 @@ interface Insight {
   text: string;
   delta?: number; // positive = good
   samples: number;
+  lowConfidence?: boolean;
 }
 
-function timeOfDayFromIso(iso: string): "morning" | "afternoon" | "evening" | "night" {
-  const h = new Date(iso).getHours();
+/**
+ * Bucket a post into a time-of-day slot.
+ *
+ * Priority order (most reliable first):
+ *   1. The canonical `slot` field set by the automation pipeline
+ *      (morning / afternoon / evening). This is the ground truth.
+ *   2. The UTC hour of `last_attempt_at` (closest proxy for actual post time).
+ *   3. The UTC hour of `created_at` (fallback only).
+ *
+ * Previously this used `new Date(iso).getHours()` which is browser-local time,
+ * mis-classifying posts depending on the viewer's timezone. Always use UTC.
+ */
+function timeOfDayFromRow(r: PostRow): "morning" | "afternoon" | "evening" | "night" | null {
+  if (r.slot) {
+    const s = r.slot.toLowerCase();
+    if (s === "morning" || s === "afternoon" || s === "evening" || s === "night") return s;
+  }
+  const iso = r.last_attempt_at || r.created_at;
+  if (!iso) return null;
+  const h = new Date(iso).getUTCHours();
   if (h < 11) return "morning";
   if (h < 16) return "afternoon";
   if (h < 20) return "evening";
@@ -42,8 +69,8 @@ function avg(xs: number[]) {
 function topGroup<T extends string>(
   rows: PostRow[],
   keyFn: (r: PostRow) => T | null,
-  minSamples = 3,
-): { key: T; avg: number; samples: number; overall: number; deltaPct: number } | null {
+  minSamples = LOW_CONFIDENCE_SAMPLES,
+): { key: T; avg: number; samples: number; overall: number; deltaPct: number; lowConfidence: boolean } | null {
   const buckets = new Map<T, number[]>();
   const all: number[] = [];
   for (const r of rows) {
@@ -63,7 +90,7 @@ function topGroup<T extends string>(
   }
   if (!best) return null;
   const deltaPct = overall > 0 ? Math.round(((best.avg - overall) / overall) * 100) : 0;
-  return { ...best, overall, deltaPct };
+  return { ...best, overall, deltaPct, lowConfidence: best.samples < HIGH_CONFIDENCE_SAMPLES };
 }
 
 interface SmartInsightsCardProps {
@@ -82,7 +109,7 @@ export function SmartInsightsCard({ compact = false }: SmartInsightsCardProps) {
     (async () => {
       let q = supabase
         .from("post_history")
-        .select("city, condition, views_count, voice_status, visual_metadata, created_at")
+        .select("city, condition, views_count, voice_status, visual_metadata, created_at, last_attempt_at, slot")
         .in("status", ["success", "posted"])
         .order("created_at", { ascending: false })
         .limit(500);
@@ -97,7 +124,7 @@ export function SmartInsightsCard({ compact = false }: SmartInsightsCardProps) {
 
   const insights = useMemo<Insight[]>(() => {
     const out: Insight[] = [];
-    if (rows.length < 3) return out;
+    if (rows.length < LOW_CONFIDENCE_SAMPLES) return out;
 
     // 1. Condition performance
     const cond = topGroup(rows, (r) => (r.condition ? r.condition.toLowerCase() : null));
@@ -109,11 +136,12 @@ export function SmartInsightsCard({ compact = false }: SmartInsightsCardProps) {
         text: `${timeLabel(cond.key)} videos perform ${(cond.avg / Math.max(cond.overall, 1)).toFixed(1)}x better${cityTag}`,
         delta: cond.deltaPct,
         samples: cond.samples,
+        lowConfidence: cond.lowConfidence,
       });
     }
 
-    // 2. Best posting time
-    const slot = topGroup(rows, (r) => timeOfDayFromIso(r.created_at));
+    // 2. Best posting time — uses canonical slot field with UTC fallback (no browser-local time)
+    const slot = topGroup(rows, timeOfDayFromRow);
     if (slot && slot.deltaPct > 5) {
       const cityTag = activeCity.name ? ` in ${activeCity.name}` : "";
       out.push({
@@ -122,6 +150,7 @@ export function SmartInsightsCard({ compact = false }: SmartInsightsCardProps) {
         text: `Best time${cityTag} is ${timeLabel(slot.key)} (+${slot.deltaPct}% vs other slots)`,
         delta: slot.deltaPct,
         samples: slot.samples,
+        lowConfidence: slot.lowConfidence,
       });
     }
 
@@ -137,6 +166,7 @@ export function SmartInsightsCard({ compact = false }: SmartInsightsCardProps) {
         text: `${timeLabel(vis.key)} visuals outperform other styles by +${vis.deltaPct}%`,
         delta: vis.deltaPct,
         samples: vis.samples,
+        lowConfidence: vis.lowConfidence,
       });
     }
 
@@ -152,15 +182,26 @@ export function SmartInsightsCard({ compact = false }: SmartInsightsCardProps) {
         text: `${timeLabel(bright.key)} backgrounds win by +${bright.deltaPct}%`,
         delta: bright.deltaPct,
         samples: bright.samples,
+        lowConfidence: bright.lowConfidence,
       });
     }
 
-    // 4. Voiceover impact
-    const onViews = rows.filter((r) => r.voice_status === "success").map((r) => r.views_count ?? 0);
-    const offViews = rows.filter((r) => r.voice_status !== "success").map((r) => r.views_count ?? 0);
-    if (onViews.length >= 3 && offViews.length >= 3) {
+    // 4. Voiceover impact — only compare intentional silence vs successful voice.
+    // Failed/null voice_status is EXCLUDED because those are broken renders, not
+    // a real control group. Previously this conflated render failures with
+    // "silent posts" and inflated the apparent voiceover lift.
+    const isVoiceOn = (r: PostRow) => r.voice_status === "success";
+    const isVoiceIntentionallyOff = (r: PostRow) =>
+      r.voice_status === "skipped" || r.voice_status === "disabled" || r.voice_status === "off";
+    const onViews = rows.filter(isVoiceOn).map((r) => r.views_count ?? 0);
+    const offViews = rows.filter(isVoiceIntentionallyOff).map((r) => r.views_count ?? 0);
+
+    if (onViews.length >= LOW_CONFIDENCE_SAMPLES && offViews.length >= LOW_CONFIDENCE_SAMPLES) {
       const a = avg(onViews);
       const b = avg(offViews);
+      const totalSamples = onViews.length + offViews.length;
+      const lowConfidence =
+        onViews.length < HIGH_CONFIDENCE_SAMPLES || offViews.length < HIGH_CONFIDENCE_SAMPLES;
       if (b > 0 && a > b) {
         const delta = Math.round(((a - b) / b) * 100);
         if (delta > 5) {
@@ -169,7 +210,8 @@ export function SmartInsightsCard({ compact = false }: SmartInsightsCardProps) {
             emoji: "🎙️",
             text: `Voiceover increases views by +${delta}%`,
             delta,
-            samples: onViews.length + offViews.length,
+            samples: totalSamples,
+            lowConfidence,
           });
         }
       } else if (a > 0 && b > a) {
@@ -180,7 +222,8 @@ export function SmartInsightsCard({ compact = false }: SmartInsightsCardProps) {
             emoji: "🔇",
             text: `Silent videos outperform voiceover by +${delta}%`,
             delta,
-            samples: onViews.length + offViews.length,
+            samples: totalSamples,
+            lowConfidence,
           });
         }
       }
@@ -190,6 +233,7 @@ export function SmartInsightsCard({ compact = false }: SmartInsightsCardProps) {
     out.sort((a, b) => (b.delta ?? 0) - (a.delta ?? 0));
     return out;
   }, [rows, activeCity.name]);
+
 
   if (loading) return null;
 
@@ -238,6 +282,14 @@ export function SmartInsightsCard({ compact = false }: SmartInsightsCardProps) {
               <div className="flex items-center gap-1.5 text-muted-foreground">
                 <Cloud size={11} />
                 <span className="opacity-70">{i.samples} samples</span>
+                {i.lowConfidence && (
+                  <Badge
+                    variant="outline"
+                    className="text-[9px] py-0 px-1.5 border-amber-500/40 text-amber-500"
+                  >
+                    low confidence
+                  </Badge>
+                )}
               </div>
             </div>
           ))
