@@ -109,7 +109,7 @@ export function SmartInsightsCard({ compact = false }: SmartInsightsCardProps) {
     (async () => {
       let q = supabase
         .from("post_history")
-        .select("city, condition, views_count, voice_status, visual_metadata, created_at")
+        .select("city, condition, views_count, voice_status, visual_metadata, created_at, last_attempt_at, slot")
         .in("status", ["success", "posted"])
         .order("created_at", { ascending: false })
         .limit(500);
