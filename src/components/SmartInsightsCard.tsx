@@ -5,6 +5,12 @@ import { Badge } from "@/components/ui/badge";
 import { Brain, TrendingUp, Clock, Mic, Palette, Cloud } from "lucide-react";
 import { useActiveCity } from "@/hooks/useActiveCity";
 
+// Confidence thresholds for insight measurement.
+// HIGH = display normally; LOW = display with "low confidence" pill;
+// below LOW = hide entirely (treated as noise).
+const HIGH_CONFIDENCE_SAMPLES = 10;
+const LOW_CONFIDENCE_SAMPLES = 5;
+
 interface PostRow {
   city: string | null;
   condition: string | null;
@@ -12,6 +18,8 @@ interface PostRow {
   voice_status: string | null;
   visual_metadata: any;
   created_at: string;
+  last_attempt_at: string | null;
+  slot: string | null;
 }
 
 interface Insight {
@@ -20,10 +28,29 @@ interface Insight {
   text: string;
   delta?: number; // positive = good
   samples: number;
+  lowConfidence?: boolean;
 }
 
-function timeOfDayFromIso(iso: string): "morning" | "afternoon" | "evening" | "night" {
-  const h = new Date(iso).getHours();
+/**
+ * Bucket a post into a time-of-day slot.
+ *
+ * Priority order (most reliable first):
+ *   1. The canonical `slot` field set by the automation pipeline
+ *      (morning / afternoon / evening). This is the ground truth.
+ *   2. The UTC hour of `last_attempt_at` (closest proxy for actual post time).
+ *   3. The UTC hour of `created_at` (fallback only).
+ *
+ * Previously this used `new Date(iso).getHours()` which is browser-local time,
+ * mis-classifying posts depending on the viewer's timezone. Always use UTC.
+ */
+function timeOfDayFromRow(r: PostRow): "morning" | "afternoon" | "evening" | "night" | null {
+  if (r.slot) {
+    const s = r.slot.toLowerCase();
+    if (s === "morning" || s === "afternoon" || s === "evening" || s === "night") return s;
+  }
+  const iso = r.last_attempt_at || r.created_at;
+  if (!iso) return null;
+  const h = new Date(iso).getUTCHours();
   if (h < 11) return "morning";
   if (h < 16) return "afternoon";
   if (h < 20) return "evening";
