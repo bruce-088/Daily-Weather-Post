@@ -69,8 +69,8 @@ function avg(xs: number[]) {
 function topGroup<T extends string>(
   rows: PostRow[],
   keyFn: (r: PostRow) => T | null,
-  minSamples = 3,
-): { key: T; avg: number; samples: number; overall: number; deltaPct: number } | null {
+  minSamples = LOW_CONFIDENCE_SAMPLES,
+): { key: T; avg: number; samples: number; overall: number; deltaPct: number; lowConfidence: boolean } | null {
   const buckets = new Map<T, number[]>();
   const all: number[] = [];
   for (const r of rows) {
@@ -90,7 +90,7 @@ function topGroup<T extends string>(
   }
   if (!best) return null;
   const deltaPct = overall > 0 ? Math.round(((best.avg - overall) / overall) * 100) : 0;
-  return { ...best, overall, deltaPct };
+  return { ...best, overall, deltaPct, lowConfidence: best.samples < HIGH_CONFIDENCE_SAMPLES };
 }
 
 interface SmartInsightsCardProps {
