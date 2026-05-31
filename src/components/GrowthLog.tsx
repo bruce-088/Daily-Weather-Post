@@ -276,7 +276,17 @@ export function GrowthLog() {
               Active experiments
             </p>
             {active.length === 0 ? (
-              <p className="text-xs text-muted-foreground italic">No live tests right now.</p>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground italic">
+                  No experiments {activeCity.name ? `in ${activeCity.name}` : "right now"}.
+                </p>
+                {otherCityActive.length > 0 && (
+                  <p className="text-[11px] text-muted-foreground/80">
+                    {otherCityActive.length} active in {Array.from(new Set(otherCityActive.map((x) => x.city).filter(Boolean))).join(", ")}
+                    {" "}— switch city to view.
+                  </p>
+                )}
+              </div>
             ) : (
               <div className="space-y-1.5">
                 {active.map((e) => {
@@ -297,6 +307,7 @@ export function GrowthLog() {
                 })}
               </div>
             )}
+
           </div>
 
           <div>
