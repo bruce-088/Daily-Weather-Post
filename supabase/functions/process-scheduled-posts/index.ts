@@ -1829,10 +1829,18 @@ Deno.serve(async (req) => {
       const isManualRun =
         ((post as any).source === "manual_slot") ||
         (typeof post.caption === "string" && /\[manual:/i.test(post.caption));
+      // Phase 11B Fix #1: A/B Challenger (variant B) is an intentional duplicate
+      // of the slot — it MUST bypass the per-slot publish lock or the resolver
+      // will never see post_id_b and every experiment auto-cancels.
+      const isExperimentB = (post as any).experiment_variant === "B";
       if (isManualRun) {
         console.warn(`[lock] ⚠ DEDUP BYPASSED for manual run post=${post.id}`);
       }
-      if ((post as any).city_id && !isManualRun) {
+      if (isExperimentB) {
+        console.warn(`[lock] ⚠ DEDUP BYPASSED for experiment B-variant post=${post.id} exp=${(post as any).experiment_id}`);
+      }
+      if ((post as any).city_id && !isManualRun && !isExperimentB) {
+
         try {
           const { data: gotLock, error: lockErr } = await supabase.rpc("acquire_publish_lock", {
             p_user: post.user_id,

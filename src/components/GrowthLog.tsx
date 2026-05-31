@@ -56,6 +56,7 @@ export function GrowthLog() {
   const [logOpen, setLogOpen] = useState(true);
   const [insights, setInsights] = useState<GrowthInsightRow[]>([]);
   const [active, setActive] = useState<ExperimentRow[]>([]);
+  const [otherCityActive, setOtherCityActive] = useState<ExperimentRow[]>([]);
   const [wins, setWins] = useState<ExperimentWinRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -70,15 +71,16 @@ export function GrowthLog() {
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(25);
-    let eQ = supabase.from("experiments")
+    // Always fetch ALL active experiments for the user, then split by active city
+    // so we can show a hint when tests are running in other cities (Phase 11B Fix #2).
+    const eQ = supabase.from("experiments")
       .select("id, city, variable_tested, variant_a_meta, variant_b_meta, status, conclude_at, created_at")
       .eq("user_id", user.id)
       .eq("status", "gathering_data")
       .order("created_at", { ascending: false })
-      .limit(10);
+      .limit(20);
     if (activeCity.name) {
       iQ = iQ.ilike("city", activeCity.name);
-      eQ = eQ.ilike("city", activeCity.name);
     }
 
     const [i, e, w, hs] = await Promise.all([
@@ -100,6 +102,7 @@ export function GrowthLog() {
         .order("avg_views", { ascending: false })
         .limit(10),
     ]);
+
 
     let insightRows = ((i.data as GrowthInsightRow[]) || []);
     if (insightRows.length === 0) {
@@ -128,11 +131,22 @@ export function GrowthLog() {
       });
     }
 
+    const allExperiments = ((e.data as ExperimentRow[]) || []);
+    const activeName = (activeCity.name || "").toLowerCase();
+    const inCity = activeName
+      ? allExperiments.filter((x) => (x.city || "").toLowerCase() === activeName)
+      : allExperiments;
+    const elsewhere = activeName
+      ? allExperiments.filter((x) => (x.city || "").toLowerCase() !== activeName)
+      : [];
+
     setInsights(insightRows);
-    setActive((e.data as any) || []);
+    setActive(inCity);
+    setOtherCityActive(elsewhere);
     setWins((w.data as any) || []);
     setLoading(false);
   };
+
 
   async function handleRefresh() {
     setRefreshing(true);
@@ -262,7 +276,17 @@ export function GrowthLog() {
               Active experiments
             </p>
             {active.length === 0 ? (
-              <p className="text-xs text-muted-foreground italic">No live tests right now.</p>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground italic">
+                  No experiments {activeCity.name ? `in ${activeCity.name}` : "right now"}.
+                </p>
+                {otherCityActive.length > 0 && (
+                  <p className="text-[11px] text-muted-foreground/80">
+                    {otherCityActive.length} active in {Array.from(new Set(otherCityActive.map((x) => x.city).filter(Boolean))).join(", ")}
+                    {" "}— switch city to view.
+                  </p>
+                )}
+              </div>
             ) : (
               <div className="space-y-1.5">
                 {active.map((e) => {
@@ -283,6 +307,7 @@ export function GrowthLog() {
                 })}
               </div>
             )}
+
           </div>
 
           <div>
