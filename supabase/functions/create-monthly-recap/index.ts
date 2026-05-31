@@ -871,7 +871,10 @@ async function stitchSlideshow(
       source: voice!.url,
       time: 0,
       duration: totalDuration,
-      volume: 2.5,
+      // Phase 12CB Fix #1: Creatomate `volume` clamps numeric values to 0–1.
+      // Use percentage-string format so the voice can be boosted above unity
+      // (was `2.5`, silently dropped → recap published with no voiceover).
+      volume: "250%",
     });
   }
   if (hasMusic) {
@@ -1033,7 +1036,7 @@ async function stitchSlideshow(
 // City-scoped token resolution lives in _shared/recap-youtube-token.ts — it
 // reuses the same YouTubeAdapter as Shorts (per-city social_accounts first,
 // then legacy weather_settings fallback).
-import { getRecapYouTubeToken, listYouTubeConnectedUserIds } from "../_shared/recap-youtube-token.ts";
+import { getRecapYouTubeToken, listYouTubeConnectedUserIds, listUserRecapCities } from "../_shared/recap-youtube-token.ts";
 
 async function uploadLongFormToYouTube(
   token: string,
@@ -1163,11 +1166,56 @@ async function runForUser(svc: any, userId: string, cityFilter?: string, opts?: 
   // Voice narration (master clock). Skipped silently if disabled or it fails.
   const voice = await synthesizeRecapVoice(svc, userId, script);
 
-  // Try video stitch
+  // Phase 12CB Fix #2: surface voice failures (see weekly recap rationale).
+  if (!voice) {
+    try {
+      const { data: ws } = await svc
+        .from("weather_settings")
+        .select("enable_voiceover")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (ws?.enable_voiceover === true) {
+        console.error(`[monthly-recap] voice synth returned null with enable_voiceover=true (user=${userId}, city=${posts[0]?.city ?? "?"})`);
+        await svc.from("notifications").insert({
+          user_id: userId, type: "warning",
+          title: "⚠️ Monthly Recap: voice disabled",
+          message: `Voiceover synthesis failed for ${posts[0]?.city ?? "your city"} — recap will render without narration.`,
+        }).catch(() => {});
+        await svc.from("system_logs").insert({
+          type: "render.voice.fallback",
+          message: "Monthly recap voice synth failed; continuing silent",
+          user_id: userId,
+          platform: "youtube",
+          context: { city: posts[0]?.city ?? null, recap: "monthly" },
+        }).catch(() => {});
+      }
+    } catch (_e) { /* logging must never break the pipeline */ }
+  } else {
+    // Phase 12CB Fix #5: voice URL pre-flight check.
+    try {
+      const head = await fetch(voice.url, { method: "HEAD" });
+      const ctype = head.headers.get("content-type") || "";
+      const len = Number(head.headers.get("content-length") || "0");
+      if (!head.ok || (ctype && !/audio\//i.test(ctype)) || (len > 0 && len < 1000)) {
+        console.error(`[monthly-recap] voice URL pre-flight failed status=${head.status} type=${ctype} len=${len} — skipping voice`);
+        await svc.from("system_logs").insert({
+          type: "render.voice.preflight_failed",
+          message: `Voice URL pre-flight failed (status=${head.status})`,
+          user_id: userId, platform: "youtube",
+          context: { city: posts[0]?.city ?? null, recap: "monthly", content_type: ctype, content_length: len },
+        }).catch(() => {});
+        (voice as any).url = "";
+      }
+    } catch (e) {
+      console.warn(`[monthly-recap] voice URL HEAD check threw, continuing optimistically: ${(e as Error).message}`);
+    }
+  }
+
+  // Try video stitch (voice with empty url falls through to silent path inside stitch)
   const stitched = await stitchSlideshow(
     svc, userId, posts, finalTitle,
     { weekStats, weekSummaries, moment, momentLine, monthName },
-    voice ?? undefined,
+    voice && voice.url ? voice : undefined,
   );
 
   if (stitched) {
@@ -1334,7 +1382,21 @@ Deno.serve(async (req) => {
     });
   }
 
-  const candidateList = userIds.map((user_id) => ({ user_id }));
+  // Phase 12CB Fix #3: per-city expansion (see weekly recap for rationale).
+  const candidateList: Array<{ user_id: string; city?: string }> = [];
+  for (const user_id of userIds) {
+    if (cityFilter) {
+      candidateList.push({ user_id, city: cityFilter });
+      continue;
+    }
+    const cities = await listUserRecapCities(svc, user_id);
+    if (cities.length === 0) {
+      candidateList.push({ user_id });
+    } else {
+      for (const city of cities) candidateList.push({ user_id, city });
+    }
+  }
+  console.log(`[monthly-recap] dispatcher expanded ${userIds.length} users → ${candidateList.length} (user, city) jobs`);
 
   // Dev-test mode: run synchronously and return the preview URL inline.
   if (skipPost) {
@@ -1345,7 +1407,7 @@ Deno.serve(async (req) => {
           status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      const r = await runForUser(svc, target.user_id, cityFilter, { skipPost: true });
+      const r = await runForUser(svc, target.user_id, target.city ?? cityFilter, { skipPost: true });
       return new Response(
         JSON.stringify({ ok: r.ok, mode: "dev", preview_url: r.preview_url ?? null, detail: r.detail }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
@@ -1361,7 +1423,7 @@ Deno.serve(async (req) => {
     const results: Array<{ user_id: string; ok: boolean; detail: string }> = [];
     for (const c of candidateList) {
       try {
-        const r = await runForUser(svc, c.user_id, cityFilter);
+        const r = await runForUser(svc, c.user_id, c.city ?? cityFilter);
         results.push({ user_id: c.user_id, ...r });
       } catch (e) {
         const msg = (e as Error).message;

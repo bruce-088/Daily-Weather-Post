@@ -714,7 +714,10 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
       source: voice!.url,
       time: 0,
       duration: totalDuration,
-      volume: 2.0,
+      // Phase 12CB Fix #1: Creatomate `volume` clamps numeric values to 0–1.
+      // Use percentage-string format so the voice can be boosted above unity
+      // (was `2.0`, silently dropped → recap published with no voiceover).
+      volume: "200%",
     });
   }
   if (hasMusic) {
@@ -877,7 +880,7 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
 // City-scoped token resolution lives in _shared/recap-youtube-token.ts — it
 // reuses the same YouTubeAdapter as Shorts (per-city social_accounts first,
 // then legacy weather_settings fallback).
-import { getRecapYouTubeToken, listYouTubeConnectedUserIds } from "../_shared/recap-youtube-token.ts";
+import { getRecapYouTubeToken, listYouTubeConnectedUserIds, listUserRecapCities } from "../_shared/recap-youtube-token.ts";
 
 async function uploadLongFormToYouTube(
   token: string,
@@ -1001,8 +1004,59 @@ async function runForUser(svc: any, userId: string, cityFilter?: string, opts?: 
   // Voice narration (master clock). Skipped silently if disabled or it fails.
   const voice = await synthesizeRecapVoice(svc, userId, script);
 
-  // Try video stitch
-  const stitched = await stitchSlideshow(svc, userId, posts, finalTitle, voice ?? undefined);
+  // Phase 12CB Fix #2: surface voice failures. If the user has voiceover
+  // enabled but synthesis returned null, we previously rendered silently with
+  // no UI signal. Now we drop a notification + system_logs row so silent
+  // failures stop slipping past.
+  if (!voice) {
+    try {
+      const { data: ws } = await svc
+        .from("weather_settings")
+        .select("enable_voiceover")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (ws?.enable_voiceover === true) {
+        console.error(`[recap] voice synth returned null with enable_voiceover=true (user=${userId}, city=${posts[0]?.city ?? "?"})`);
+        await svc.from("notifications").insert({
+          user_id: userId, type: "warning",
+          title: "⚠️ Weekly Recap: voice disabled",
+          message: `Voiceover synthesis failed for ${posts[0]?.city ?? "your city"} — recap will render without narration.`,
+        }).catch(() => {});
+        await svc.from("system_logs").insert({
+          type: "render.voice.fallback",
+          message: "Weekly recap voice synth failed; continuing silent",
+          user_id: userId,
+          platform: "youtube",
+          context: { city: posts[0]?.city ?? null, recap: "weekly" },
+        }).catch(() => {});
+      }
+    } catch (_e) { /* logging must never break the pipeline */ }
+  } else {
+    // Phase 12CB Fix #5: HEAD-check the voice asset URL before submitting it
+    // to Creatomate. A 404 / non-audio response would silently drop the
+    // voice track inside the render — we'd rather skip voice up front.
+    try {
+      const head = await fetch(voice.url, { method: "HEAD" });
+      const ctype = head.headers.get("content-type") || "";
+      const len = Number(head.headers.get("content-length") || "0");
+      if (!head.ok || (ctype && !/audio\//i.test(ctype)) || (len > 0 && len < 1000)) {
+        console.error(`[recap] voice URL pre-flight failed status=${head.status} type=${ctype} len=${len} — skipping voice`);
+        await svc.from("system_logs").insert({
+          type: "render.voice.preflight_failed",
+          message: `Voice URL pre-flight failed (status=${head.status})`,
+          user_id: userId, platform: "youtube",
+          context: { city: posts[0]?.city ?? null, recap: "weekly", content_type: ctype, content_length: len },
+        }).catch(() => {});
+        // Drop the voice track but still render the slideshow
+        (voice as any).url = "";
+      }
+    } catch (e) {
+      console.warn(`[recap] voice URL HEAD check threw, continuing optimistically: ${(e as Error).message}`);
+    }
+  }
+
+  // Try video stitch (voice with empty url falls through to silent path inside stitch)
+  const stitched = await stitchSlideshow(svc, userId, posts, finalTitle, voice && voice.url ? voice : undefined);
 
   if (stitched) {
     if (skipPost) {
@@ -1155,7 +1209,24 @@ Deno.serve(async (req) => {
     });
   }
 
-  const candidateList = userIds.map((user_id) => ({ user_id }));
+  // Phase 12CB Fix #3: expand each connected user into one job PER connected
+  // city. Previously the loop was per-user and routed by `posts[0].city`,
+  // which silently dropped every city except the one whose most-recent post
+  // happened to win the race (Gainesville lost to Orlando by 17 seconds).
+  const candidateList: Array<{ user_id: string; city?: string }> = [];
+  for (const user_id of userIds) {
+    if (cityFilter) {
+      candidateList.push({ user_id, city: cityFilter });
+      continue;
+    }
+    const cities = await listUserRecapCities(svc, user_id);
+    if (cities.length === 0) {
+      candidateList.push({ user_id });
+    } else {
+      for (const city of cities) candidateList.push({ user_id, city });
+    }
+  }
+  console.log(`[recap] dispatcher expanded ${userIds.length} users → ${candidateList.length} (user, city) jobs`);
 
   // Dev-test mode: run synchronously and return the preview URL inline.
   if (skipPost) {
@@ -1166,7 +1237,7 @@ Deno.serve(async (req) => {
           status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      const r = await runForUser(svc, target.user_id, cityFilter, { skipPost: true });
+      const r = await runForUser(svc, target.user_id, target.city ?? cityFilter, { skipPost: true });
       return new Response(
         JSON.stringify({ ok: r.ok, mode: "dev", preview_url: r.preview_url ?? null, detail: r.detail }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
@@ -1182,7 +1253,7 @@ Deno.serve(async (req) => {
     const results: Array<{ user_id: string; ok: boolean; detail: string }> = [];
     for (const c of candidateList) {
       try {
-        const r = await runForUser(svc, c.user_id, cityFilter);
+        const r = await runForUser(svc, c.user_id, c.city ?? cityFilter);
         results.push({ user_id: c.user_id, ...r });
       } catch (e) {
         const msg = (e as Error).message;

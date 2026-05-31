@@ -93,3 +93,48 @@ export async function listYouTubeConnectedUserIds(
 
   return Array.from(ids);
 }
+
+/**
+ * Phase 12CB Fix #3: List the city names a user has connected for recap
+ * generation. Prefers the multi-city `user_cities` table (joined to `cities`
+ * for the human name). Falls back to the legacy single-city
+ * `weather_settings.city` column for users who never adopted multi-city.
+ *
+ * Returns an empty array when no city info exists — callers should treat
+ * that as "process at user level" (single recap, no city filter).
+ */
+export async function listUserRecapCities(
+  svc: any,
+  userId: string,
+): Promise<string[]> {
+  const names = new Set<string>();
+
+  try {
+    const { data } = await svc
+      .from("user_cities")
+      .select("cities ( name )")
+      .eq("user_id", userId);
+    for (const row of (data || []) as any[]) {
+      const name = row?.cities?.name;
+      if (typeof name === "string" && name.trim()) names.add(name.trim());
+    }
+  } catch (e) {
+    console.warn(`[recap] listUserRecapCities user_cities lookup failed: ${(e as Error).message}`);
+  }
+
+  if (names.size === 0) {
+    try {
+      const { data } = await svc
+        .from("weather_settings")
+        .select("city")
+        .eq("user_id", userId)
+        .maybeSingle();
+      const fallback = data?.city;
+      if (typeof fallback === "string" && fallback.trim()) names.add(fallback.trim());
+    } catch (e) {
+      console.warn(`[recap] listUserRecapCities weather_settings fallback failed: ${(e as Error).message}`);
+    }
+  }
+
+  return Array.from(names);
+}

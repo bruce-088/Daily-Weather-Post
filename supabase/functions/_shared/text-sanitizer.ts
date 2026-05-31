@@ -28,7 +28,6 @@ export interface ValidateResult {
  *  These are observed hallucinated location-proxy fragments. */
 export const BANNED_FRAGMENTS_STRICT: string[] = [
   // Strong hallucination signals — should NEVER appear in title or description.
-  "Weather Update", // pure proxy (4/8 production hits in 7 days)
   "Not Need",       // garbled artifact
 ];
 
@@ -41,12 +40,16 @@ export const BANNED_FRAGMENTS_STRICT: string[] = [
  * Phase 8B moved "Coming Up", "Clear Skies", "Heads Up" here after production
  * data showed false positives on legitimate weather narration like
  * "storms coming up", "clear skies tonight", and "heads up for rain".
+ * Phase 12CB moved "Weather Update" here after it falsely blocked the
+ * Orlando afternoon Short — the phrase is legitimate narration unless it
+ * appears as a location proxy ("weather in Weather Update").
  */
 export const BANNED_LOCATION_PROXIES: string[] = [
   "But Comfortable",
   "Coming Up",
   "Clear Skies",
   "Heads Up",
+  "Weather Update",
 ];
 
 

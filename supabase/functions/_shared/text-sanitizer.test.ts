@@ -13,15 +13,28 @@ import { validatePostBundle } from "./text-sanitizer.ts";
 // Strict fragments (still globally blocked in title/description)
 // ─────────────────────────────────────────────────────────────────────────────
 
-Deno.test("STRICT: 'Weather Update' in description is BLOCKED", () => {
+Deno.test("PROXY: 'Weather Update' as location is BLOCKED", () => {
+  // Phase 12CB: "Weather Update" is now a context-aware location proxy.
+  // It is allowed in legitimate narration ("Today's Weather Update for the
+  // day ahead.") but blocked when it appears as a hallucinated location
+  // ("weather in Weather Update").
   const r = validatePostBundle({
-    title: "[8 AM] Today's weather in Orlando",
-    description: "Weather Update for the day ahead.",
+    title: "[8 AM] Today's weather in Weather Update",
+    description: "Mild day across the area.",
     expectedCity: "Orlando",
   });
   assertEquals(r.ok, false);
-  const m = r.failures.find((f) => f.reason === "banned_fragment");
+  const m = r.failures.find((f) => f.reason === "banned_location_proxy");
   assertEquals(m?.matched, "Weather Update");
+});
+
+Deno.test("PROXY: 'Weather Update' in legitimate narration is ALLOWED", () => {
+  const r = validatePostBundle({
+    title: "[8 AM] Today's weather in Orlando",
+    description: "Weather Update for the day ahead — sunny skies expected.",
+    expectedCity: "Orlando",
+  });
+  assertEquals(r.ok, true);
 });
 
 Deno.test("STRICT: 'Not Need' in title is BLOCKED", () => {
