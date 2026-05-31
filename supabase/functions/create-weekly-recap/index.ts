@@ -1009,15 +1009,27 @@ async function runForUser(svc: any, userId: string, cityFilter?: string, opts?: 
       console.log(`[recap] dev-test skip_post=true preview_url=${stitched.url}`);
       return { ok: true, detail: "Dev test render complete", preview_url: stitched.url };
     }
-    const token = await getYouTubeToken(svc, userId);
-    if (!token) {
+    const tokenRes = await getRecapYouTubeToken(svc, userId, posts[0].city);
+    if (!tokenRes.token) {
+      const errMsg = tokenRes.message || "No YouTube token for weekly recap";
+      console.error(`[recap] ${errMsg} (city=${posts[0].city}, reason=${tokenRes.reason})`);
       await svc.from("post_history").insert({
         user_id: userId, status: "failed", platform: "youtube",
         city: posts[0].city, caption: finalTitle,
-        error_message: "No YouTube token for weekly recap",
+        error_message: errMsg,
       });
-      return { ok: false, detail: "No YouTube token" };
+      await svc.from("notifications").insert({
+        user_id: userId, type: "error",
+        title: "⚠️ Weekly Recap failed",
+        message: tokenRes.reason === "AUTH_EXPIRED"
+          ? `Reconnect YouTube for ${posts[0].city} — token expired.`
+          : tokenRes.reason === "ROUTING_VIOLATION"
+          ? `Assign a YouTube channel to ${posts[0].city} in Settings.`
+          : `Couldn't post weekly recap for ${posts[0].city}: ${errMsg}`,
+      });
+      return { ok: false, detail: errMsg };
     }
+    const token = tokenRes.token;
     const cleanTitle = stripShortsHashtag(finalTitle);
     const cleanDesc = stripShortsHashtag(description);
 
