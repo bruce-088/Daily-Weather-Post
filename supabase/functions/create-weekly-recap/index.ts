@@ -1004,8 +1004,59 @@ async function runForUser(svc: any, userId: string, cityFilter?: string, opts?: 
   // Voice narration (master clock). Skipped silently if disabled or it fails.
   const voice = await synthesizeRecapVoice(svc, userId, script);
 
-  // Try video stitch
-  const stitched = await stitchSlideshow(svc, userId, posts, finalTitle, voice ?? undefined);
+  // Phase 12CB Fix #2: surface voice failures. If the user has voiceover
+  // enabled but synthesis returned null, we previously rendered silently with
+  // no UI signal. Now we drop a notification + system_logs row so silent
+  // failures stop slipping past.
+  if (!voice) {
+    try {
+      const { data: ws } = await svc
+        .from("weather_settings")
+        .select("enable_voiceover")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (ws?.enable_voiceover === true) {
+        console.error(`[recap] voice synth returned null with enable_voiceover=true (user=${userId}, city=${posts[0]?.city ?? "?"})`);
+        await svc.from("notifications").insert({
+          user_id: userId, type: "warning",
+          title: "⚠️ Weekly Recap: voice disabled",
+          message: `Voiceover synthesis failed for ${posts[0]?.city ?? "your city"} — recap will render without narration.`,
+        }).catch(() => {});
+        await svc.from("system_logs").insert({
+          type: "render.voice.fallback",
+          message: "Weekly recap voice synth failed; continuing silent",
+          user_id: userId,
+          platform: "youtube",
+          context: { city: posts[0]?.city ?? null, recap: "weekly" },
+        }).catch(() => {});
+      }
+    } catch (_e) { /* logging must never break the pipeline */ }
+  } else {
+    // Phase 12CB Fix #5: HEAD-check the voice asset URL before submitting it
+    // to Creatomate. A 404 / non-audio response would silently drop the
+    // voice track inside the render — we'd rather skip voice up front.
+    try {
+      const head = await fetch(voice.url, { method: "HEAD" });
+      const ctype = head.headers.get("content-type") || "";
+      const len = Number(head.headers.get("content-length") || "0");
+      if (!head.ok || (ctype && !/audio\//i.test(ctype)) || (len > 0 && len < 1000)) {
+        console.error(`[recap] voice URL pre-flight failed status=${head.status} type=${ctype} len=${len} — skipping voice`);
+        await svc.from("system_logs").insert({
+          type: "render.voice.preflight_failed",
+          message: `Voice URL pre-flight failed (status=${head.status})`,
+          user_id: userId, platform: "youtube",
+          context: { city: posts[0]?.city ?? null, recap: "weekly", content_type: ctype, content_length: len },
+        }).catch(() => {});
+        // Drop the voice track but still render the slideshow
+        (voice as any).url = "";
+      }
+    } catch (e) {
+      console.warn(`[recap] voice URL HEAD check threw, continuing optimistically: ${(e as Error).message}`);
+    }
+  }
+
+  // Try video stitch (voice with empty url falls through to silent path inside stitch)
+  const stitched = await stitchSlideshow(svc, userId, posts, finalTitle, voice && voice.url ? voice : undefined);
 
   if (stitched) {
     if (skipPost) {

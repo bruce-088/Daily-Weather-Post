@@ -1166,11 +1166,56 @@ async function runForUser(svc: any, userId: string, cityFilter?: string, opts?: 
   // Voice narration (master clock). Skipped silently if disabled or it fails.
   const voice = await synthesizeRecapVoice(svc, userId, script);
 
-  // Try video stitch
+  // Phase 12CB Fix #2: surface voice failures (see weekly recap rationale).
+  if (!voice) {
+    try {
+      const { data: ws } = await svc
+        .from("weather_settings")
+        .select("enable_voiceover")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (ws?.enable_voiceover === true) {
+        console.error(`[monthly-recap] voice synth returned null with enable_voiceover=true (user=${userId}, city=${posts[0]?.city ?? "?"})`);
+        await svc.from("notifications").insert({
+          user_id: userId, type: "warning",
+          title: "⚠️ Monthly Recap: voice disabled",
+          message: `Voiceover synthesis failed for ${posts[0]?.city ?? "your city"} — recap will render without narration.`,
+        }).catch(() => {});
+        await svc.from("system_logs").insert({
+          type: "render.voice.fallback",
+          message: "Monthly recap voice synth failed; continuing silent",
+          user_id: userId,
+          platform: "youtube",
+          context: { city: posts[0]?.city ?? null, recap: "monthly" },
+        }).catch(() => {});
+      }
+    } catch (_e) { /* logging must never break the pipeline */ }
+  } else {
+    // Phase 12CB Fix #5: voice URL pre-flight check.
+    try {
+      const head = await fetch(voice.url, { method: "HEAD" });
+      const ctype = head.headers.get("content-type") || "";
+      const len = Number(head.headers.get("content-length") || "0");
+      if (!head.ok || (ctype && !/audio\//i.test(ctype)) || (len > 0 && len < 1000)) {
+        console.error(`[monthly-recap] voice URL pre-flight failed status=${head.status} type=${ctype} len=${len} — skipping voice`);
+        await svc.from("system_logs").insert({
+          type: "render.voice.preflight_failed",
+          message: `Voice URL pre-flight failed (status=${head.status})`,
+          user_id: userId, platform: "youtube",
+          context: { city: posts[0]?.city ?? null, recap: "monthly", content_type: ctype, content_length: len },
+        }).catch(() => {});
+        (voice as any).url = "";
+      }
+    } catch (e) {
+      console.warn(`[monthly-recap] voice URL HEAD check threw, continuing optimistically: ${(e as Error).message}`);
+    }
+  }
+
+  // Try video stitch (voice with empty url falls through to silent path inside stitch)
   const stitched = await stitchSlideshow(
     svc, userId, posts, finalTitle,
     { weekStats, weekSummaries, moment, momentLine, monthName },
-    voice ?? undefined,
+    voice && voice.url ? voice : undefined,
   );
 
   if (stitched) {
