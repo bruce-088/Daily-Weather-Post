@@ -154,7 +154,7 @@ export async function createExperimentRow(
       variant_a_meta: args.variantA,
       variant_b_meta: args.variantB,
       status: "gathering_data",
-      conclude_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      conclude_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
       test_type: args.testType || "content",
       scheduled_time_offset_a: args.offsetA ?? null,
       scheduled_time_offset_b: args.offsetB ?? null,
