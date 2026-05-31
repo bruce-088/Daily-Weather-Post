@@ -1186,7 +1186,7 @@ Deno.serve(async (req) => {
           status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      const r = await runForUser(svc, target.user_id, cityFilter, { skipPost: true });
+      const r = await runForUser(svc, target.user_id, target.city ?? cityFilter, { skipPost: true });
       return new Response(
         JSON.stringify({ ok: r.ok, mode: "dev", preview_url: r.preview_url ?? null, detail: r.detail }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
@@ -1202,7 +1202,7 @@ Deno.serve(async (req) => {
     const results: Array<{ user_id: string; ok: boolean; detail: string }> = [];
     for (const c of candidateList) {
       try {
-        const r = await runForUser(svc, c.user_id, cityFilter);
+        const r = await runForUser(svc, c.user_id, c.city ?? cityFilter);
         results.push({ user_id: c.user_id, ...r });
       } catch (e) {
         const msg = (e as Error).message;
