@@ -1158,7 +1158,24 @@ Deno.serve(async (req) => {
     });
   }
 
-  const candidateList = userIds.map((user_id) => ({ user_id }));
+  // Phase 12CB Fix #3: expand each connected user into one job PER connected
+  // city. Previously the loop was per-user and routed by `posts[0].city`,
+  // which silently dropped every city except the one whose most-recent post
+  // happened to win the race (Gainesville lost to Orlando by 17 seconds).
+  const candidateList: Array<{ user_id: string; city?: string }> = [];
+  for (const user_id of userIds) {
+    if (cityFilter) {
+      candidateList.push({ user_id, city: cityFilter });
+      continue;
+    }
+    const cities = await listUserRecapCities(svc, user_id);
+    if (cities.length === 0) {
+      candidateList.push({ user_id });
+    } else {
+      for (const city of cities) candidateList.push({ user_id, city });
+    }
+  }
+  console.log(`[recap] dispatcher expanded ${userIds.length} users → ${candidateList.length} (user, city) jobs`);
 
   // Dev-test mode: run synchronously and return the preview URL inline.
   if (skipPost) {
