@@ -1139,26 +1139,23 @@ Deno.serve(async (req) => {
   }
 
 
-  // Find users with YouTube connected
-  let cq = svc
-    .from("weather_settings")
-    .select("user_id, youtube_refresh_token, youtube_access_token")
-    .or("youtube_refresh_token.not.is.null,youtube_access_token.not.is.null");
-  if (gate.source === "user") {
-    cq = cq.eq("user_id", gate.userId);
-  } else if (userFilter) {
-    cq = cq.eq("user_id", userFilter);
-  }
-  const { data: candidates, error } = await cq;
-
-  if (error) {
-    return new Response(JSON.stringify({ ok: false, error: error.message }), {
-
+  // Find users with YouTube connected (social_accounts ∪ legacy weather_settings)
+  let userIds: string[];
+  try {
+    if (gate.source === "user") {
+      userIds = await listYouTubeConnectedUserIds(svc, { userId: gate.userId });
+    } else if (userFilter) {
+      userIds = await listYouTubeConnectedUserIds(svc, { userId: userFilter });
+    } else {
+      userIds = await listYouTubeConnectedUserIds(svc);
+    }
+  } catch (e) {
+    return new Response(JSON.stringify({ ok: false, error: (e as Error).message }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
-  const candidateList = (candidates || []).filter((c: any) => c.user_id);
+  const candidateList = userIds.map((user_id) => ({ user_id }));
 
   // Dev-test mode: run synchronously and return the preview URL inline.
   if (skipPost) {
