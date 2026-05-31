@@ -714,7 +714,10 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
       source: voice!.url,
       time: 0,
       duration: totalDuration,
-      volume: 2.0,
+      // Phase 12CB Fix #1: Creatomate `volume` clamps numeric values to 0–1.
+      // Use percentage-string format so the voice can be boosted above unity
+      // (was `2.0`, silently dropped → recap published with no voiceover).
+      volume: "200%",
     });
   }
   if (hasMusic) {
