@@ -1030,33 +1030,10 @@ async function stitchSlideshow(
 }
 
 // ───────────────── YouTube long-form upload ─────────────────
-
-async function getYouTubeToken(svc: any, userId: string): Promise<string | null> {
-  const { data: s } = await svc.from("weather_settings")
-    .select("youtube_access_token, youtube_refresh_token, youtube_token_expires_at")
-    .eq("user_id", userId).maybeSingle();
-  if (!s?.youtube_refresh_token && !s?.youtube_access_token) return null;
-  const exp = s.youtube_token_expires_at ? new Date(s.youtube_token_expires_at).getTime() : 0;
-  if (s.youtube_access_token && exp > Date.now() + 5 * 60 * 1000) return s.youtube_access_token;
-  if (!s.youtube_refresh_token) return null;
-  const refreshRes = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: Deno.env.get("YOUTUBE_CLIENT_ID")!,
-      client_secret: Deno.env.get("YOUTUBE_CLIENT_SECRET")!,
-      refresh_token: s.youtube_refresh_token,
-      grant_type: "refresh_token",
-    }),
-  });
-  if (!refreshRes.ok) return null;
-  const r = await refreshRes.json();
-  const newExp = new Date(Date.now() + (r.expires_in ?? 3600) * 1000).toISOString();
-  await svc.from("weather_settings")
-    .update({ youtube_access_token: r.access_token, youtube_token_expires_at: newExp })
-    .eq("user_id", userId);
-  return r.access_token;
-}
+// City-scoped token resolution lives in _shared/recap-youtube-token.ts — it
+// reuses the same YouTubeAdapter as Shorts (per-city social_accounts first,
+// then legacy weather_settings fallback).
+import { getRecapYouTubeToken, listYouTubeConnectedUserIds } from "../_shared/recap-youtube-token.ts";
 
 async function uploadLongFormToYouTube(
   token: string,
@@ -1198,15 +1175,27 @@ async function runForUser(svc: any, userId: string, cityFilter?: string, opts?: 
       console.log(`[monthly-recap] dev-test skip_post=true preview_url=${stitched.url}`);
       return { ok: true, detail: "Dev test render complete", preview_url: stitched.url };
     }
-    const token = await getYouTubeToken(svc, userId);
-    if (!token) {
+    const tokenRes = await getRecapYouTubeToken(svc, userId, posts[0].city);
+    if (!tokenRes.token) {
+      const errMsg = tokenRes.message || "No YouTube token for monthly recap";
+      console.error(`[monthly-recap] ${errMsg} (city=${posts[0].city}, reason=${tokenRes.reason})`);
       await svc.from("post_history").insert({
         user_id: userId, status: "failed", platform: "youtube",
         city: posts[0].city, caption: finalTitle,
-        error_message: "No YouTube token for monthly recap",
+        error_message: errMsg,
       });
-      return { ok: false, detail: "No YouTube token" };
+      await svc.from("notifications").insert({
+        user_id: userId, type: "error",
+        title: "⚠️ Monthly Recap failed",
+        message: tokenRes.reason === "AUTH_EXPIRED"
+          ? `Reconnect YouTube for ${posts[0].city} — token expired.`
+          : tokenRes.reason === "ROUTING_VIOLATION"
+          ? `Assign a YouTube channel to ${posts[0].city} in Settings.`
+          : `Couldn't post monthly recap for ${posts[0].city}: ${errMsg}`,
+      });
+      return { ok: false, detail: errMsg };
     }
+    const token = tokenRes.token;
     const cleanTitle = stripShortsHashtag(finalTitle);
     const cleanDesc = stripShortsHashtag(description);
 
@@ -1329,26 +1318,23 @@ Deno.serve(async (req) => {
     }
   }
 
-  // Find users with YouTube connected
-  let cq = svc
-    .from("weather_settings")
-    .select("user_id, youtube_refresh_token, youtube_access_token")
-    .or("youtube_refresh_token.not.is.null,youtube_access_token.not.is.null");
-  if (gate.source === "user") {
-    cq = cq.eq("user_id", gate.userId);
-  } else if (userFilter) {
-    cq = cq.eq("user_id", userFilter);
-  }
-  const { data: candidates, error } = await cq;
-
-  if (error) {
-    return new Response(JSON.stringify({ ok: false, error: error.message }), {
-
+  // Find users with YouTube connected (social_accounts ∪ legacy weather_settings)
+  let userIds: string[];
+  try {
+    if (gate.source === "user") {
+      userIds = await listYouTubeConnectedUserIds(svc, { userId: gate.userId });
+    } else if (userFilter) {
+      userIds = await listYouTubeConnectedUserIds(svc, { userId: userFilter });
+    } else {
+      userIds = await listYouTubeConnectedUserIds(svc);
+    }
+  } catch (e) {
+    return new Response(JSON.stringify({ ok: false, error: (e as Error).message }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
-  const candidateList = (candidates || []).filter((c: any) => c.user_id);
+  const candidateList = userIds.map((user_id) => ({ user_id }));
 
   // Dev-test mode: run synchronously and return the preview URL inline.
   if (skipPost) {
