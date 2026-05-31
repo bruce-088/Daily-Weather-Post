@@ -131,11 +131,22 @@ export function GrowthLog() {
       });
     }
 
+    const allExperiments = ((e.data as ExperimentRow[]) || []);
+    const activeName = (activeCity.name || "").toLowerCase();
+    const inCity = activeName
+      ? allExperiments.filter((x) => (x.city || "").toLowerCase() === activeName)
+      : allExperiments;
+    const elsewhere = activeName
+      ? allExperiments.filter((x) => (x.city || "").toLowerCase() !== activeName)
+      : [];
+
     setInsights(insightRows);
-    setActive((e.data as any) || []);
+    setActive(inCity);
+    setOtherCityActive(elsewhere);
     setWins((w.data as any) || []);
     setLoading(false);
   };
+
 
   async function handleRefresh() {
     setRefreshing(true);
