@@ -56,6 +56,7 @@ export function GrowthLog() {
   const [logOpen, setLogOpen] = useState(true);
   const [insights, setInsights] = useState<GrowthInsightRow[]>([]);
   const [active, setActive] = useState<ExperimentRow[]>([]);
+  const [otherCityActive, setOtherCityActive] = useState<ExperimentRow[]>([]);
   const [wins, setWins] = useState<ExperimentWinRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -70,15 +71,16 @@ export function GrowthLog() {
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(25);
-    let eQ = supabase.from("experiments")
+    // Always fetch ALL active experiments for the user, then split by active city
+    // so we can show a hint when tests are running in other cities (Phase 11B Fix #2).
+    const eQ = supabase.from("experiments")
       .select("id, city, variable_tested, variant_a_meta, variant_b_meta, status, conclude_at, created_at")
       .eq("user_id", user.id)
       .eq("status", "gathering_data")
       .order("created_at", { ascending: false })
-      .limit(10);
+      .limit(20);
     if (activeCity.name) {
       iQ = iQ.ilike("city", activeCity.name);
-      eQ = eQ.ilike("city", activeCity.name);
     }
 
     const [i, e, w, hs] = await Promise.all([
@@ -100,6 +102,7 @@ export function GrowthLog() {
         .order("avg_views", { ascending: false })
         .limit(10),
     ]);
+
 
     let insightRows = ((i.data as GrowthInsightRow[]) || []);
     if (insightRows.length === 0) {
