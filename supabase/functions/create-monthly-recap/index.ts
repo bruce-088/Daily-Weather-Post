@@ -1030,33 +1030,10 @@ async function stitchSlideshow(
 }
 
 // ───────────────── YouTube long-form upload ─────────────────
-
-async function getYouTubeToken(svc: any, userId: string): Promise<string | null> {
-  const { data: s } = await svc.from("weather_settings")
-    .select("youtube_access_token, youtube_refresh_token, youtube_token_expires_at")
-    .eq("user_id", userId).maybeSingle();
-  if (!s?.youtube_refresh_token && !s?.youtube_access_token) return null;
-  const exp = s.youtube_token_expires_at ? new Date(s.youtube_token_expires_at).getTime() : 0;
-  if (s.youtube_access_token && exp > Date.now() + 5 * 60 * 1000) return s.youtube_access_token;
-  if (!s.youtube_refresh_token) return null;
-  const refreshRes = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: Deno.env.get("YOUTUBE_CLIENT_ID")!,
-      client_secret: Deno.env.get("YOUTUBE_CLIENT_SECRET")!,
-      refresh_token: s.youtube_refresh_token,
-      grant_type: "refresh_token",
-    }),
-  });
-  if (!refreshRes.ok) return null;
-  const r = await refreshRes.json();
-  const newExp = new Date(Date.now() + (r.expires_in ?? 3600) * 1000).toISOString();
-  await svc.from("weather_settings")
-    .update({ youtube_access_token: r.access_token, youtube_token_expires_at: newExp })
-    .eq("user_id", userId);
-  return r.access_token;
-}
+// City-scoped token resolution lives in _shared/recap-youtube-token.ts — it
+// reuses the same YouTubeAdapter as Shorts (per-city social_accounts first,
+// then legacy weather_settings fallback).
+import { getRecapYouTubeToken, listYouTubeConnectedUserIds } from "../_shared/recap-youtube-token.ts";
 
 async function uploadLongFormToYouTube(
   token: string,
