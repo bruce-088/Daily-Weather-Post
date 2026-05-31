@@ -880,7 +880,7 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
 // City-scoped token resolution lives in _shared/recap-youtube-token.ts — it
 // reuses the same YouTubeAdapter as Shorts (per-city social_accounts first,
 // then legacy weather_settings fallback).
-import { getRecapYouTubeToken, listYouTubeConnectedUserIds } from "../_shared/recap-youtube-token.ts";
+import { getRecapYouTubeToken, listYouTubeConnectedUserIds, listUserRecapCities } from "../_shared/recap-youtube-token.ts";
 
 async function uploadLongFormToYouTube(
   token: string,
