@@ -103,38 +103,93 @@ export async function listYouTubeConnectedUserIds(
  * Returns an empty array when no city info exists — callers should treat
  * that as "process at user level" (single recap, no city filter).
  */
+export interface RecapCityDispatchInfo {
+  cities: string[];                                  // production-ready cities (kept)
+  skipped: Array<{ city: string; reason: string }>;  // cities filtered out + why
+  source: "user_cities" | "weather_settings" | "none";
+}
+
 export async function listUserRecapCities(
   svc: any,
   userId: string,
 ): Promise<string[]> {
-  const names = new Set<string>();
+  const info = await listUserRecapCitiesDetailed(svc, userId);
+  return info.cities;
+}
+
+/**
+ * Phase 12CC-B Fix #2 + #3:
+ *  - Filters cities to ONLY those with an enabled automation row
+ *    (`automations.enabled = true`). This prevents non-production cities
+ *    (e.g. Miami before launch) from being included in recap dispatch.
+ *  - Returns structured dispatch info so the caller can audit-log which
+ *    cities were skipped and why.
+ *
+ * Fallback: when the user has no `user_cities` at all, fall back to the
+ * legacy `weather_settings.city` value (single-city users).
+ */
+export async function listUserRecapCitiesDetailed(
+  svc: any,
+  userId: string,
+): Promise<RecapCityDispatchInfo> {
+  const kept: string[] = [];
+  const skipped: Array<{ city: string; reason: string }> = [];
+  let source: RecapCityDispatchInfo["source"] = "none";
 
   try {
     const { data } = await svc
       .from("user_cities")
-      .select("cities ( name )")
+      .select("city_id, cities ( name )")
       .eq("user_id", userId);
-    for (const row of (data || []) as any[]) {
-      const name = row?.cities?.name;
-      if (typeof name === "string" && name.trim()) names.add(name.trim());
+    const rows = (data || []) as any[];
+    if (rows.length > 0) source = "user_cities";
+
+    for (const row of rows) {
+      const name = (row?.cities?.name || "").trim();
+      const cityId = row?.city_id;
+      if (!name || !cityId) continue;
+      // Check automation gate
+      let enabled = false;
+      try {
+        const { data: autoRow } = await svc
+          .from("automations")
+          .select("enabled")
+          .eq("user_id", userId)
+          .eq("city_id", cityId)
+          .maybeSingle();
+        enabled = !!autoRow?.enabled;
+      } catch {
+        enabled = false;
+      }
+      if (enabled) {
+        kept.push(name);
+      } else {
+        skipped.push({ city: name, reason: "automation_disabled_or_missing" });
+      }
     }
   } catch (e) {
     console.warn(`[recap] listUserRecapCities user_cities lookup failed: ${(e as Error).message}`);
   }
 
-  if (names.size === 0) {
+  if (source === "none") {
     try {
       const { data } = await svc
         .from("weather_settings")
         .select("city")
         .eq("user_id", userId)
         .maybeSingle();
-      const fallback = data?.city;
-      if (typeof fallback === "string" && fallback.trim()) names.add(fallback.trim());
+      const fallback = (data?.city || "").trim();
+      if (fallback) {
+        kept.push(fallback);
+        source = "weather_settings";
+      }
     } catch (e) {
       console.warn(`[recap] listUserRecapCities weather_settings fallback failed: ${(e as Error).message}`);
     }
   }
 
-  return Array.from(names);
+  // De-dup while preserving order
+  const seen = new Set<string>();
+  const cities = kept.filter((n) => (seen.has(n) ? false : (seen.add(n), true)));
+  return { cities, skipped, source };
 }
