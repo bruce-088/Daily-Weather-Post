@@ -880,7 +880,7 @@ async function stitchSlideshow(svc: any, userId: string, posts: PostRow[], title
 // City-scoped token resolution lives in _shared/recap-youtube-token.ts — it
 // reuses the same YouTubeAdapter as Shorts (per-city social_accounts first,
 // then legacy weather_settings fallback).
-import { getRecapYouTubeToken, listYouTubeConnectedUserIds, listUserRecapCities } from "../_shared/recap-youtube-token.ts";
+import { getRecapYouTubeToken, listYouTubeConnectedUserIds, listUserRecapCities, listUserRecapCitiesDetailed } from "../_shared/recap-youtube-token.ts";
 
 async function uploadLongFormToYouTube(
   token: string,
@@ -1214,19 +1214,40 @@ Deno.serve(async (req) => {
   // which silently dropped every city except the one whose most-recent post
   // happened to win the race (Gainesville lost to Orlando by 17 seconds).
   const candidateList: Array<{ user_id: string; city?: string }> = [];
+  const dispatchStartedAt = Date.now();
+  const dispatchAudit: Array<{ user_id: string; cities: string[]; skipped: Array<{ city: string; reason: string }>; source: string }> = [];
   for (const user_id of userIds) {
     if (cityFilter) {
       candidateList.push({ user_id, city: cityFilter });
+      dispatchAudit.push({ user_id, cities: [cityFilter], skipped: [], source: "city_filter" });
       continue;
     }
-    const cities = await listUserRecapCities(svc, user_id);
-    if (cities.length === 0) {
+    const info = await listUserRecapCitiesDetailed(svc, user_id);
+    dispatchAudit.push({ user_id, cities: info.cities, skipped: info.skipped, source: info.source });
+    if (info.cities.length === 0) {
       candidateList.push({ user_id });
     } else {
-      for (const city of cities) candidateList.push({ user_id, city });
+      for (const city of info.cities) candidateList.push({ user_id, city });
     }
   }
   console.log(`[recap] dispatcher expanded ${userIds.length} users → ${candidateList.length} (user, city) jobs`);
+  try {
+    await svc.from("system_logs").insert({
+      type: "recap.dispatch",
+      message: `weekly recap dispatcher expanded ${userIds.length} users → ${candidateList.length} jobs`,
+      platform: "youtube",
+      context: {
+        recap_type: "weekly",
+        user_count: userIds.length,
+        candidate_count: candidateList.length,
+        duration_ms: Date.now() - dispatchStartedAt,
+        trigger: gate.source,
+        per_user: dispatchAudit,
+      },
+    });
+  } catch (e) {
+    console.warn(`[recap] dispatch audit log failed: ${(e as Error).message}`);
+  }
 
   // Dev-test mode: run synchronously and return the preview URL inline.
   if (skipPost) {
