@@ -871,10 +871,11 @@ async function stitchSlideshow(
       source: voice!.url,
       time: 0,
       duration: totalDuration,
-      // Phase 12CB Fix #1: Creatomate `volume` clamps numeric values to 0–1.
-      // Use percentage-string format so the voice can be boosted above unity
-      // (was `2.5`, silently dropped → recap published with no voiceover).
-      volume: "250%",
+      // Phase 12CB Fix #1 + 12CC-D: Creatomate `volume` clamps numeric values
+      // to 0–1, and percentage-string max is "200%" (250% was rejected with
+      // "Expected a value between 0 and 200" → render failed, fell back to
+      // infographic with no voiceover). Match the working weekly recap value.
+      volume: "200%",
     });
   }
   if (hasMusic) {
