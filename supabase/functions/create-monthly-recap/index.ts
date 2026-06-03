@@ -1072,12 +1072,47 @@ async function stitchSlideshow(
 // then legacy weather_settings fallback).
 import { getRecapYouTubeToken, listYouTubeConnectedUserIds, listUserRecapCities, listUserRecapCitiesDetailed } from "../_shared/recap-youtube-token.ts";
 
+// Phase 12CD-B Fix #4 + #5: quota-aware error classification + streaming
+// upload body. The previous implementation passed the full Uint8Array as the
+// fetch body which forces Deno to materialize the entire video in memory at
+// the moment of the PUT, on top of the buffer we already hold. For 30-80MB
+// recap videos this doubles RAM use right before the network call — the
+// exact window where we have seen the worker get killed. Wrapping the bytes
+// in a ReadableStream lets the runtime ship them through without the second
+// allocation, and lets us advertise chunked progress in logs.
+export type YouTubeUploadOutcome =
+  | { ok: true; videoId: string }
+  | { ok: false; reason: "quota_exceeded" | "auth" | "transient" | "client_error" | "unknown"; status: number; message: string };
+
+function classifyYouTubeError(status: number, body: string): YouTubeUploadOutcome["reason"] {
+  const lower = (body || "").toLowerCase();
+  if (status === 403 && (lower.includes("quotaexceeded") || lower.includes("dailylimitexceeded") || lower.includes("quota"))) {
+    return "quota_exceeded";
+  }
+  if (status === 401 || (status === 403 && (lower.includes("unauthorized") || lower.includes("invalid_grant")))) return "auth";
+  if (status >= 500 || status === 429) return "transient";
+  if (status >= 400) return "client_error";
+  return "unknown";
+}
+
+function bytesToReadableStream(data: Uint8Array, chunkSize = 1024 * 1024): ReadableStream<Uint8Array> {
+  let offset = 0;
+  return new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (offset >= data.byteLength) { controller.close(); return; }
+      const end = Math.min(offset + chunkSize, data.byteLength);
+      controller.enqueue(data.subarray(offset, end));
+      offset = end;
+    },
+  });
+}
+
 async function uploadLongFormToYouTube(
   token: string,
   videoData: Uint8Array,
   title: string,
   description: string,
-): Promise<string | null> {
+): Promise<YouTubeUploadOutcome> {
   const safeTitle = title.length > 95 ? title.slice(0, 95) : title;
   const initRes = await fetch(
     "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
@@ -1102,28 +1137,42 @@ async function uploadLongFormToYouTube(
   );
   if (!initRes.ok) {
     const errText = await initRes.text();
-    console.error(`[monthly-recap] YouTube upload failed: ${initRes.status} ${errText.slice(0, 500)}`);
-    return null;
+    const reason = classifyYouTubeError(initRes.status, errText);
+    console.error(`[monthly-recap] YouTube init failed: status=${initRes.status} reason=${reason} ${errText.slice(0, 500)}`);
+    return { ok: false, reason, status: initRes.status, message: errText.slice(0, 500) };
   }
   const uploadUrl = initRes.headers.get("Location");
   if (!uploadUrl) {
-    console.error("[monthly-recap] YouTube upload failed: missing resumable Location header");
-    return null;
+    return { ok: false, reason: "unknown", status: 0, message: "missing resumable Location header" };
   }
+
+  console.log(`[monthly-recap] streaming upload: bytes=${videoData.byteLength}`);
   const up = await fetch(uploadUrl, {
     method: "PUT",
-    headers: { "Content-Type": "video/mp4" },
-    body: videoData,
+    headers: {
+      "Content-Type": "video/mp4",
+      "Content-Length": String(videoData.byteLength),
+    },
+    body: bytesToReadableStream(videoData),
+    // @ts-ignore — Deno-specific: required when body is a stream
+    duplex: "half",
   });
   if (!up.ok) {
     const errText = await up.text();
-    console.error(`[monthly-recap] YouTube upload failed: ${up.status} ${errText.slice(0, 500)}`);
-    return null;
+    const reason = classifyYouTubeError(up.status, errText);
+    console.error(`[monthly-recap] YouTube upload failed: status=${up.status} reason=${reason} ${errText.slice(0, 500)}`);
+    return { ok: false, reason, status: up.status, message: errText.slice(0, 500) };
   }
   const j = await up.json();
   console.log(`[monthly-recap] YT response: ${JSON.stringify(j).slice(0, 500)}`);
-  return j?.id ?? null;
+  const videoId = j?.id;
+  if (!videoId || typeof videoId !== "string") {
+    return { ok: false, reason: "unknown", status: 200, message: "no videoId in response" };
+  }
+  return { ok: true, videoId };
 }
+
+
 
 
 // ───────────────── infographic fallback ─────────────────
