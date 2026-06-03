@@ -30,6 +30,39 @@ import {
   logCinematic,
   type SceneDecision,
 } from "../_shared/cinematic-presets.ts";
+import { logEvent, EventType, nowMs } from "../_shared/structured-logger.ts";
+
+// Phase 12CD-B Fix #1: derive the recap month from the COVERAGE WINDOW (the
+// posts we are actually summarizing), not the upload timestamp. Without this,
+// a recap run at 23:59 UTC May 31 that grabs a single June 1 post tips the
+// month name to "June" while every other slide narrates May data.
+function computeRecapMonthName(posts: PostRow[]): string {
+  if (posts.length === 0) {
+    // Fallback: previous calendar month relative to now (UTC).
+    const d = new Date();
+    d.setUTCDate(1);
+    d.setUTCDate(0); // last day of previous month
+    return d.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+  }
+  // Mode of (month,year) across the post window — robust to a stray post that
+  // bleeds into the next month at the boundary.
+  const counts = new Map<string, { label: string; count: number }>();
+  for (const p of posts) {
+    const d = new Date(p.created_at);
+    const key = `${d.getUTCFullYear()}-${d.getUTCMonth()}`;
+    const label = d.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+    const cur = counts.get(key);
+    if (cur) cur.count += 1;
+    else counts.set(key, { label, count: 1 });
+  }
+  let best = "";
+  let max = -1;
+  for (const { label, count } of counts.values()) {
+    if (count > max) { max = count; best = label; }
+  }
+  return best;
+}
+
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
