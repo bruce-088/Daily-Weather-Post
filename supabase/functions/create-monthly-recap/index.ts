@@ -1190,8 +1190,8 @@ async function runForUser(svc: any, userId: string, cityFilter?: string, opts?: 
   const weekBuckets = bucketWeeks(posts);
   const weekStats = weekBuckets.map((w, i) => summarizeWeek(i + 1, w));
   const moment = findMomentOfMonth(posts);
-  const monthName = new Date(posts[posts.length - 1].created_at)
-    .toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  const monthName = computeRecapMonthName(posts);
+
 
   const { title, script, weekSummaries, momentLine } = await generateMonthlyScript(posts, topHooks, weekStats, moment);
   const finalTitle = title.startsWith("Month in Review") ? title : `Month in Review: ${posts[0].city} — ${monthName}`;
