@@ -30,6 +30,39 @@ import {
   logCinematic,
   type SceneDecision,
 } from "../_shared/cinematic-presets.ts";
+import { logEvent, EventType, nowMs } from "../_shared/structured-logger.ts";
+
+// Phase 12CD-B Fix #1: derive the recap month from the COVERAGE WINDOW (the
+// posts we are actually summarizing), not the upload timestamp. Without this,
+// a recap run at 23:59 UTC May 31 that grabs a single June 1 post tips the
+// month name to "June" while every other slide narrates May data.
+function computeRecapMonthName(posts: PostRow[]): string {
+  if (posts.length === 0) {
+    // Fallback: previous calendar month relative to now (UTC).
+    const d = new Date();
+    d.setUTCDate(1);
+    d.setUTCDate(0); // last day of previous month
+    return d.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+  }
+  // Mode of (month,year) across the post window — robust to a stray post that
+  // bleeds into the next month at the boundary.
+  const counts = new Map<string, { label: string; count: number }>();
+  for (const p of posts) {
+    const d = new Date(p.created_at);
+    const key = `${d.getUTCFullYear()}-${d.getUTCMonth()}`;
+    const label = d.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+    const cur = counts.get(key);
+    if (cur) cur.count += 1;
+    else counts.set(key, { label, count: 1 });
+  }
+  let best = "";
+  let max = -1;
+  for (const { label, count } of counts.values()) {
+    if (count > max) { max = count; best = label; }
+  }
+  return best;
+}
+
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -198,8 +231,8 @@ async function generateMonthlyScript(
   moment: { post: PostRow; kind: "hottest" | "coldest" } | null,
 ): Promise<MonthlyScript> {
   const city = posts[0]?.city ?? "your city";
-  const monthName = new Date(posts[posts.length - 1].created_at)
-    .toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  const monthName = computeRecapMonthName(posts);
+
 
   const weekBlock = weekStats.map((w) =>
     `Week ${w.weekNum}: ${w.count} days, avg high ${w.avgHigh ?? "—"}°F / low ${w.avgLow ?? "—"}°F, mostly ${w.dominantCondition}`
@@ -1039,12 +1072,47 @@ async function stitchSlideshow(
 // then legacy weather_settings fallback).
 import { getRecapYouTubeToken, listYouTubeConnectedUserIds, listUserRecapCities, listUserRecapCitiesDetailed } from "../_shared/recap-youtube-token.ts";
 
+// Phase 12CD-B Fix #4 + #5: quota-aware error classification + streaming
+// upload body. The previous implementation passed the full Uint8Array as the
+// fetch body which forces Deno to materialize the entire video in memory at
+// the moment of the PUT, on top of the buffer we already hold. For 30-80MB
+// recap videos this doubles RAM use right before the network call — the
+// exact window where we have seen the worker get killed. Wrapping the bytes
+// in a ReadableStream lets the runtime ship them through without the second
+// allocation, and lets us advertise chunked progress in logs.
+export type YouTubeUploadOutcome =
+  | { ok: true; videoId: string }
+  | { ok: false; reason: "quota_exceeded" | "auth" | "transient" | "client_error" | "unknown"; status: number; message: string };
+
+function classifyYouTubeError(status: number, body: string): YouTubeUploadOutcome["reason"] {
+  const lower = (body || "").toLowerCase();
+  if (status === 403 && (lower.includes("quotaexceeded") || lower.includes("dailylimitexceeded") || lower.includes("quota"))) {
+    return "quota_exceeded";
+  }
+  if (status === 401 || (status === 403 && (lower.includes("unauthorized") || lower.includes("invalid_grant")))) return "auth";
+  if (status >= 500 || status === 429) return "transient";
+  if (status >= 400) return "client_error";
+  return "unknown";
+}
+
+function bytesToReadableStream(data: Uint8Array, chunkSize = 1024 * 1024): ReadableStream<Uint8Array> {
+  let offset = 0;
+  return new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (offset >= data.byteLength) { controller.close(); return; }
+      const end = Math.min(offset + chunkSize, data.byteLength);
+      controller.enqueue(data.subarray(offset, end));
+      offset = end;
+    },
+  });
+}
+
 async function uploadLongFormToYouTube(
   token: string,
   videoData: Uint8Array,
   title: string,
   description: string,
-): Promise<string | null> {
+): Promise<YouTubeUploadOutcome> {
   const safeTitle = title.length > 95 ? title.slice(0, 95) : title;
   const initRes = await fetch(
     "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
@@ -1069,28 +1137,42 @@ async function uploadLongFormToYouTube(
   );
   if (!initRes.ok) {
     const errText = await initRes.text();
-    console.error(`[monthly-recap] YouTube upload failed: ${initRes.status} ${errText.slice(0, 500)}`);
-    return null;
+    const reason = classifyYouTubeError(initRes.status, errText);
+    console.error(`[monthly-recap] YouTube init failed: status=${initRes.status} reason=${reason} ${errText.slice(0, 500)}`);
+    return { ok: false, reason, status: initRes.status, message: errText.slice(0, 500) };
   }
   const uploadUrl = initRes.headers.get("Location");
   if (!uploadUrl) {
-    console.error("[monthly-recap] YouTube upload failed: missing resumable Location header");
-    return null;
+    return { ok: false, reason: "unknown", status: 0, message: "missing resumable Location header" };
   }
+
+  console.log(`[monthly-recap] streaming upload: bytes=${videoData.byteLength}`);
   const up = await fetch(uploadUrl, {
     method: "PUT",
-    headers: { "Content-Type": "video/mp4" },
-    body: videoData,
+    headers: {
+      "Content-Type": "video/mp4",
+      "Content-Length": String(videoData.byteLength),
+    },
+    body: bytesToReadableStream(videoData),
+    // @ts-ignore — Deno-specific: required when body is a stream
+    duplex: "half",
   });
   if (!up.ok) {
     const errText = await up.text();
-    console.error(`[monthly-recap] YouTube upload failed: ${up.status} ${errText.slice(0, 500)}`);
-    return null;
+    const reason = classifyYouTubeError(up.status, errText);
+    console.error(`[monthly-recap] YouTube upload failed: status=${up.status} reason=${reason} ${errText.slice(0, 500)}`);
+    return { ok: false, reason, status: up.status, message: errText.slice(0, 500) };
   }
   const j = await up.json();
   console.log(`[monthly-recap] YT response: ${JSON.stringify(j).slice(0, 500)}`);
-  return j?.id ?? null;
+  const videoId = j?.id;
+  if (!videoId || typeof videoId !== "string") {
+    return { ok: false, reason: "unknown", status: 200, message: "no videoId in response" };
+  }
+  return { ok: true, videoId };
 }
+
+
 
 
 // ───────────────── infographic fallback ─────────────────
@@ -1157,8 +1239,8 @@ async function runForUser(svc: any, userId: string, cityFilter?: string, opts?: 
   const weekBuckets = bucketWeeks(posts);
   const weekStats = weekBuckets.map((w, i) => summarizeWeek(i + 1, w));
   const moment = findMomentOfMonth(posts);
-  const monthName = new Date(posts[posts.length - 1].created_at)
-    .toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  const monthName = computeRecapMonthName(posts);
+
 
   const { title, script, weekSummaries, momentLine } = await generateMonthlyScript(posts, topHooks, weekStats, moment);
   const finalTitle = title.startsWith("Month in Review") ? title : `Month in Review: ${posts[0].city} — ${monthName}`;
@@ -1267,14 +1349,26 @@ async function runForUser(svc: any, userId: string, cityFilter?: string, opts?: 
       console.warn(`[monthly-recap] pre-upload HEAD check failed (continuing): ${(e as Error).message}`);
     }
 
-    const videoId = await uploadLongFormToYouTube(token, stitched.data, cleanTitle, cleanDesc);
-    if (videoId) {
+    const uploadStartedAt = nowMs();
+    await logEvent(svc, EventType.UploadStart, "Monthly recap YouTube upload starting", {
+      user_id: userId, platform: "youtube", city: posts[0].city,
+      bytes: stitched.data.byteLength, recap: "monthly",
+    });
+
+    const outcome = await uploadLongFormToYouTube(token, stitched.data, cleanTitle, cleanDesc);
+    if (outcome.ok) {
+      const videoId = outcome.videoId;
       console.log(`[monthly-recap] uploaded to YouTube as videoId: ${videoId}`);
       await svc.from("post_history").insert({
-        user_id: userId, status: "succeeded", platform: "youtube",
+        user_id: userId, status: "success", platform: "youtube",
         city: posts[0].city, caption: cleanTitle,
         post_url: `https://www.youtube.com/watch?v=${videoId}`,
         external_id: videoId,
+      });
+      await logEvent(svc, EventType.UploadOk, "Monthly recap published to YouTube", {
+        user_id: userId, platform: "youtube", city: posts[0].city,
+        external_id: videoId, duration_ms: nowMs() - uploadStartedAt,
+        bytes: stitched.data.byteLength, recap: "monthly",
       });
       await svc.from("notifications").insert({
         user_id: userId, type: "success",
@@ -1284,11 +1378,38 @@ async function runForUser(svc: any, userId: string, cityFilter?: string, opts?: 
       return { ok: true, detail: `Uploaded ${videoId}` };
     }
 
-    // upload failed -> fall through to infographic fallback
-    console.warn("[monthly-recap] YT upload failed — falling back to infographic");
+    // Upload failed — log with classified reason, notify, and ABORT (do NOT
+    // fall through to infographic). The infographic fallback never actually
+    // posted anywhere; preserving it just dirtied analytics with phantom
+    // "success" rows for runs that consumed Creatomate credits but never
+    // reached the channel. Phase 12CD-B treats upload failure as terminal.
+    const isQuota = outcome.reason === "quota_exceeded";
+    const errMsg = isQuota
+      ? `YouTube quota exceeded (HTTP ${outcome.status}): ${outcome.message}`
+      : `YouTube upload failed (${outcome.reason}, HTTP ${outcome.status}): ${outcome.message}`;
+    console.error(`[monthly-recap] ${errMsg}`);
+    await svc.from("post_history").insert({
+      user_id: userId, status: "failed", platform: "youtube",
+      city: posts[0].city, caption: cleanTitle,
+      error_message: errMsg,
+    });
+    await logEvent(svc, EventType.UploadError, "Monthly recap YouTube upload failed", {
+      user_id: userId, platform: "youtube", city: posts[0].city,
+      error_code: outcome.reason, status: String(outcome.status),
+      error_message: outcome.message, duration_ms: nowMs() - uploadStartedAt,
+      bytes: stitched.data.byteLength, recap: "monthly",
+    });
+    await svc.from("notifications").insert({
+      user_id: userId, type: "error",
+      title: isQuota ? "⚠️ YouTube quota exceeded" : "⚠️ Monthly Recap upload failed",
+      message: isQuota
+        ? `Quota cap hit on ${posts[0].city} channel — recap rendered (Creatomate charged) but not posted. Resets ~03:00 ET. Retry after reset or wait for Project B (Phase 12E).`
+        : `Couldn't post monthly recap for ${posts[0].city}: ${outcome.message.slice(0, 200)}`,
+    });
+    return { ok: false, detail: errMsg };
   }
 
-  // Fallback path (stitch failed OR upload failed)
+  // Fallback path (stitch failed only — upload failures no longer reach here)
   const img = await generateFallbackInfographic(finalTitle, posts);
   if (!img) {
     await svc.from("post_history").insert({
@@ -1306,19 +1427,25 @@ async function runForUser(svc: any, userId: string, cityFilter?: string, opts?: 
   const { data: signed } = await svc.storage.from("generated-images")
     .createSignedUrl(path, 60 * 60 * 24 * 30);
 
+  // Phase 12CD-B Fix #2: 'fallback_image' is NOT a valid post_history status
+  // (check constraint accepts: success/failed/pending/validation_failed/needs_review).
+  // This is a stitch failure that produced a local image but did not publish,
+  // so record it as 'failed' with a clear message and surface the image via
+  // notifications metadata instead of fabricating a success row.
   await svc.from("post_history").insert({
-    user_id: userId, status: "fallback_image", platform: "youtube",
+    user_id: userId, status: "failed", platform: "youtube",
     city: posts[0].city, caption: finalTitle,
     image_url: signed?.signedUrl ?? null,
-    error_message: "Video stitch unavailable — generated Month in Review infographic instead",
+    error_message: "Video stitch unavailable — generated Month in Review infographic instead (not posted to YouTube)",
   });
   await svc.from("notifications").insert({
     user_id: userId, type: "warning",
     title: "🖼️ Monthly Recap fallback ready",
-    message: "We couldn't stitch the monthly video, so we made a Month in Review infographic instead.",
+    message: "We couldn't stitch the monthly video, so we made a Month in Review infographic instead. It was not posted to YouTube.",
   });
-  return { ok: true, detail: "Fallback infographic generated" };
+  return { ok: false, detail: "Stitch failed — infographic generated but not posted" };
 }
+
 
 // ───────────────── HTTP entrypoint ─────────────────
 
