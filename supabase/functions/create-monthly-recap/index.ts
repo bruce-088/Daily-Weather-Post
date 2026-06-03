@@ -1349,14 +1349,26 @@ async function runForUser(svc: any, userId: string, cityFilter?: string, opts?: 
       console.warn(`[monthly-recap] pre-upload HEAD check failed (continuing): ${(e as Error).message}`);
     }
 
-    const videoId = await uploadLongFormToYouTube(token, stitched.data, cleanTitle, cleanDesc);
-    if (videoId) {
+    const uploadStartedAt = nowMs();
+    await logEvent(svc, EventType.UploadStart, "Monthly recap YouTube upload starting", {
+      user_id: userId, platform: "youtube", city: posts[0].city,
+      bytes: stitched.data.byteLength, recap: "monthly",
+    });
+
+    const outcome = await uploadLongFormToYouTube(token, stitched.data, cleanTitle, cleanDesc);
+    if (outcome.ok) {
+      const videoId = outcome.videoId;
       console.log(`[monthly-recap] uploaded to YouTube as videoId: ${videoId}`);
       await svc.from("post_history").insert({
-        user_id: userId, status: "succeeded", platform: "youtube",
+        user_id: userId, status: "success", platform: "youtube",
         city: posts[0].city, caption: cleanTitle,
         post_url: `https://www.youtube.com/watch?v=${videoId}`,
         external_id: videoId,
+      });
+      await logEvent(svc, EventType.UploadOk, "Monthly recap published to YouTube", {
+        user_id: userId, platform: "youtube", city: posts[0].city,
+        external_id: videoId, duration_ms: nowMs() - uploadStartedAt,
+        bytes: stitched.data.byteLength, recap: "monthly",
       });
       await svc.from("notifications").insert({
         user_id: userId, type: "success",
@@ -1366,11 +1378,38 @@ async function runForUser(svc: any, userId: string, cityFilter?: string, opts?: 
       return { ok: true, detail: `Uploaded ${videoId}` };
     }
 
-    // upload failed -> fall through to infographic fallback
-    console.warn("[monthly-recap] YT upload failed — falling back to infographic");
+    // Upload failed — log with classified reason, notify, and ABORT (do NOT
+    // fall through to infographic). The infographic fallback never actually
+    // posted anywhere; preserving it just dirtied analytics with phantom
+    // "success" rows for runs that consumed Creatomate credits but never
+    // reached the channel. Phase 12CD-B treats upload failure as terminal.
+    const isQuota = outcome.reason === "quota_exceeded";
+    const errMsg = isQuota
+      ? `YouTube quota exceeded (HTTP ${outcome.status}): ${outcome.message}`
+      : `YouTube upload failed (${outcome.reason}, HTTP ${outcome.status}): ${outcome.message}`;
+    console.error(`[monthly-recap] ${errMsg}`);
+    await svc.from("post_history").insert({
+      user_id: userId, status: "failed", platform: "youtube",
+      city: posts[0].city, caption: cleanTitle,
+      error_message: errMsg,
+    });
+    await logEvent(svc, EventType.UploadError, "Monthly recap YouTube upload failed", {
+      user_id: userId, platform: "youtube", city: posts[0].city,
+      error_code: outcome.reason, status: String(outcome.status),
+      error_message: outcome.message, duration_ms: nowMs() - uploadStartedAt,
+      bytes: stitched.data.byteLength, recap: "monthly",
+    });
+    await svc.from("notifications").insert({
+      user_id: userId, type: "error",
+      title: isQuota ? "⚠️ YouTube quota exceeded" : "⚠️ Monthly Recap upload failed",
+      message: isQuota
+        ? `Quota cap hit on ${posts[0].city} channel — recap rendered (Creatomate charged) but not posted. Resets ~03:00 ET. Retry after reset or wait for Project B (Phase 12E).`
+        : `Couldn't post monthly recap for ${posts[0].city}: ${outcome.message.slice(0, 200)}`,
+    });
+    return { ok: false, detail: errMsg };
   }
 
-  // Fallback path (stitch failed OR upload failed)
+  // Fallback path (stitch failed only — upload failures no longer reach here)
   const img = await generateFallbackInfographic(finalTitle, posts);
   if (!img) {
     await svc.from("post_history").insert({
@@ -1388,19 +1427,25 @@ async function runForUser(svc: any, userId: string, cityFilter?: string, opts?: 
   const { data: signed } = await svc.storage.from("generated-images")
     .createSignedUrl(path, 60 * 60 * 24 * 30);
 
+  // Phase 12CD-B Fix #2: 'fallback_image' is NOT a valid post_history status
+  // (check constraint accepts: success/failed/pending/validation_failed/needs_review).
+  // This is a stitch failure that produced a local image but did not publish,
+  // so record it as 'failed' with a clear message and surface the image via
+  // notifications metadata instead of fabricating a success row.
   await svc.from("post_history").insert({
-    user_id: userId, status: "fallback_image", platform: "youtube",
+    user_id: userId, status: "failed", platform: "youtube",
     city: posts[0].city, caption: finalTitle,
     image_url: signed?.signedUrl ?? null,
-    error_message: "Video stitch unavailable — generated Month in Review infographic instead",
+    error_message: "Video stitch unavailable — generated Month in Review infographic instead (not posted to YouTube)",
   });
   await svc.from("notifications").insert({
     user_id: userId, type: "warning",
     title: "🖼️ Monthly Recap fallback ready",
-    message: "We couldn't stitch the monthly video, so we made a Month in Review infographic instead.",
+    message: "We couldn't stitch the monthly video, so we made a Month in Review infographic instead. It was not posted to YouTube.",
   });
-  return { ok: true, detail: "Fallback infographic generated" };
+  return { ok: false, detail: "Stitch failed — infographic generated but not posted" };
 }
+
 
 // ───────────────── HTTP entrypoint ─────────────────
 
