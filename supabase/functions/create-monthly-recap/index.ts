@@ -231,8 +231,8 @@ async function generateMonthlyScript(
   moment: { post: PostRow; kind: "hottest" | "coldest" } | null,
 ): Promise<MonthlyScript> {
   const city = posts[0]?.city ?? "your city";
-  const monthName = new Date(posts[posts.length - 1].created_at)
-    .toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  const monthName = computeRecapMonthName(posts);
+
 
   const weekBlock = weekStats.map((w) =>
     `Week ${w.weekNum}: ${w.count} days, avg high ${w.avgHigh ?? "—"}°F / low ${w.avgLow ?? "—"}°F, mostly ${w.dominantCondition}`
