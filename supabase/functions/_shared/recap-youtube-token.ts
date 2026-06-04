@@ -66,30 +66,24 @@ export async function getRecapYouTubeToken(
   }
 }
 
-/** Find all user_ids that have YouTube connected via either source. */
+/** Find all user_ids that have a YouTube **recap** channel connected.
+ *  Phase 12E: recaps run on OAuth Project B exclusively, so we filter
+ *  `social_accounts.oauth_project = 'B'`. The legacy `weather_settings`
+ *  columns belong to Project A (shorts) and are NOT included. */
 export async function listYouTubeConnectedUserIds(
   svc: any,
   opts?: { userId?: string },
 ): Promise<string[]> {
   const ids = new Set<string>();
 
-  // Source 1: new social_accounts table
-  let q1 = svc
+  let q = svc
     .from("social_accounts")
     .select("user_id")
-    .eq("platform", "youtube");
-  if (opts?.userId) q1 = q1.eq("user_id", opts.userId);
-  const { data: rows1 } = await q1;
-  for (const r of rows1 || []) if (r?.user_id) ids.add(r.user_id);
-
-  // Source 2: legacy weather_settings columns
-  let q2 = svc
-    .from("weather_settings")
-    .select("user_id, youtube_refresh_token, youtube_access_token")
-    .or("youtube_refresh_token.not.is.null,youtube_access_token.not.is.null");
-  if (opts?.userId) q2 = q2.eq("user_id", opts.userId);
-  const { data: rows2 } = await q2;
-  for (const r of rows2 || []) if (r?.user_id) ids.add(r.user_id);
+    .eq("platform", "youtube")
+    .eq("oauth_project", "B");
+  if (opts?.userId) q = q.eq("user_id", opts.userId);
+  const { data: rows } = await q;
+  for (const r of rows || []) if (r?.user_id) ids.add(r.user_id);
 
   return Array.from(ids);
 }
