@@ -48,14 +48,14 @@ export async function getRecapYouTubeToken(
   const cityId = await resolveCityIdByName(svc, cityName);
   const adapter = new YouTubeAdapter();
   try {
-    const token = await adapter.getValidToken(svc, userId, cityId);
+    // Phase 12E: recaps ALWAYS use OAuth Project B (dedicated quota).
+    const token = await adapter.getValidToken(svc, userId, cityId, { contentType: "recap" });
     if (token) return { token, cityId };
-    // adapter returns null when refresh_token is missing/invalid OR no account exists
     return {
       token: null,
       cityId,
       reason: "AUTH_EXPIRED",
-      message: "[AUTH_EXPIRED:youtube] Refresh token missing or invalid — user must reconnect YouTube.",
+      message: "[AUTH_EXPIRED:youtube_recap] No Project B recap channel connected or refresh token invalid — user must connect a YouTube channel under 'Connect Recaps Channel'.",
     };
   } catch (e) {
     const msg = (e as Error)?.message || String(e);
