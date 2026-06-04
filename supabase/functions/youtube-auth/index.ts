@@ -406,7 +406,7 @@ Deno.serve(async (req) => {
       const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
       const { data: row, error: rowErr } = await supabaseAdmin
         .from("social_accounts")
-        .select("id, user_id, refresh_token, account_name, extra")
+        .select("id, user_id, refresh_token, account_name, extra, oauth_project")
         .eq("id", channelRowId)
         .eq("user_id", userId)
         .eq("platform", "youtube")
@@ -430,12 +430,22 @@ Deno.serve(async (req) => {
         );
       }
 
+      // Phase 12E: refresh with the OAuth project that minted this token.
+      const rowProject: "A" | "B" = row.oauth_project === "B" ? "B" : "A";
+      const channelCreds = credsFor(rowProject);
+      if (!channelCreds.id || !channelCreds.secret) {
+        return new Response(
+          JSON.stringify({ ok: false, status: "project_not_configured", error: `OAuth Project ${rowProject} credentials missing` }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
       const refreshRes = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
-          client_id: YOUTUBE_CLIENT_ID,
-          client_secret: YOUTUBE_CLIENT_SECRET,
+          client_id: channelCreds.id,
+          client_secret: channelCreds.secret,
           grant_type: "refresh_token",
           refresh_token: row.refresh_token,
         }),
