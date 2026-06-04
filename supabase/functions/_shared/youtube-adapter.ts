@@ -47,7 +47,7 @@ export class YouTubeAdapter implements PlatformAdapter {
   /** Refresh-context cache: token → everything we need to mint a NEW token
    *  if YouTube returns 401 mid-upload. Populated by getValidToken(),
    *  consumed by uploadVideo()'s 401 self-heal path. */
-  private _refreshCtx: Map<string, { supabase: any; userId: string; cityId: string | null }> = new Map();
+  private _refreshCtx: Map<string, { supabase: any; userId: string; cityId: string | null; contentType: YouTubeContentType }> = new Map();
 
   private _resolvedKey(userId: string, cityId?: string | null) {
     return `${userId}::${cityId ?? "shared"}`;
@@ -61,37 +61,45 @@ export class YouTubeAdapter implements PlatformAdapter {
     return hasUsableAccessToken || !!settings.youtube_refresh_token;
   }
 
-  async getValidToken(supabase: any, userId: string, cityId?: string | null): Promise<string | null> {
-    const clientId = Deno.env.get("YOUTUBE_CLIENT_ID");
-    const clientSecret = Deno.env.get("YOUTUBE_CLIENT_SECRET");
+  async getValidToken(
+    supabase: any,
+    userId: string,
+    cityId?: string | null,
+    opts?: { contentType?: YouTubeContentType },
+  ): Promise<string | null> {
+    const contentType: YouTubeContentType = opts?.contentType ?? "short";
+    const project = projectForContentType(contentType);
+    const { id: clientId, secret: clientSecret } = getYouTubeOAuthCreds(project);
 
-    // ---- Resolve which YouTube channel (social_accounts row) to use ----
-    // 1. If a cityId is given, prefer the row assigned to that city.
-    // 2. Otherwise (or if no city-specific row exists), use a row with
-    //    city_id IS NULL (shared). If multiple shared rows exist, take the
-    //    most recently updated one — preserves single-channel behavior.
-    let account: ResolvedYTAccount | null = null;
-
-    // Inventory all YouTube channels for this user so we can enforce strict
-    // city→channel routing when multiple channels are connected.
-    const { data: allChannels } = await supabase
-      .from("social_accounts")
-      .select("id, access_token, refresh_token, token_expires_at, account_name, city_id, account_external_id")
-      .eq("user_id", userId)
-      .eq("platform", "youtube");
-    const channels = allChannels || [];
-
-    if (cityId) {
-      account = channels.find((c: any) => c.city_id === cityId) || null;
+    // Hard guard: Project B is recap-only. If recap credentials aren't
+    // configured we MUST fail loudly — silently falling back to Project A
+    // would burn the daily shorts upload quota.
+    if (project === "B" && (!clientId || !clientSecret)) {
+      console.error("[youtube-adapter] Project B credentials missing (YOUTUBE_CLIENT_ID_RECAPS / YOUTUBE_CLIENT_SECRET_RECAPS)");
+      throw new Error("[OAUTH_PROJECT_B_NOT_CONFIGURED] Recap OAuth client not configured — add YOUTUBE_CLIENT_ID_RECAPS + YOUTUBE_CLIENT_SECRET_RECAPS secrets.");
     }
 
-    // STRICT routing: when a cityId is supplied and the user has ANY connected
-    // channels, we require an explicit per-city mapping. Falling back to a
-    // shared/legacy channel is exactly how Gainesville posts ended up on the
-    // Orlando channel.
+    // ---- Resolve which YouTube channel (social_accounts row) to use ----
+    // Channels are partitioned by oauth_project so a single user can have
+    // a Project A channel (shorts) and a Project B channel (recaps) for
+    // the same city without collision.
+    let account: ResolvedYTAccount | null = null;
+
+    const { data: allChannels } = await supabase
+      .from("social_accounts")
+      .select("id, access_token, refresh_token, token_expires_at, account_name, city_id, account_external_id, oauth_project")
+      .eq("user_id", userId)
+      .eq("platform", "youtube")
+      .eq("oauth_project", project);
+    const channels = (allChannels || []) as ResolvedYTAccount[];
+
+    if (cityId) {
+      account = channels.find((c) => c.city_id === cityId) || null;
+    }
+
+    // STRICT routing: when a cityId is supplied and the user has ANY
+    // channels in this project, require an explicit per-city mapping.
     if (!account && cityId && channels.length >= 1) {
-      // Name-based fallback: if a channel's account_name contains the city's
-      // name (e.g. "Orlando Weather" for Orlando), accept it without mutating DB.
       let cityName: string | null = null;
       try {
         const { data: cityRow } = await supabase
@@ -101,34 +109,35 @@ export class YouTubeAdapter implements PlatformAdapter {
           .maybeSingle();
         cityName = cityRow?.name ?? null;
       } catch (_) { /* ignore */ }
-      const nameMatch = matchAccountByCityName(channels, cityName);
+      const nameMatch = matchAccountByCityName(channels as any[], cityName);
       if (nameMatch) {
         console.log(
-          `[routing] city_id lookup failed, falling back to city name match (cityId=${cityId}, cityName=${cityName}, matched=${nameMatch.account_name})`,
+          `[routing] city_id lookup failed, falling back to city name match (project=${project}, cityId=${cityId}, cityName=${cityName}, matched=${(nameMatch as any).account_name})`,
         );
-        account = nameMatch;
+        account = nameMatch as ResolvedYTAccount;
       } else {
-        const names = channels.map((c: any) => c.account_name || "channel").join(", ");
-        console.error(`[routing] ROUTING_VIOLATION no YouTube channel for city_id=${cityId} (cityName=${cityName})`);
+        const names = channels.map((c) => c.account_name || "channel").join(", ");
+        console.error(`[routing] ROUTING_VIOLATION project=${project} no YouTube channel for city_id=${cityId} (cityName=${cityName})`);
         throw new Error(
-          `[ROUTING_VIOLATION] No YouTube channel mapped to city_id=${cityId}. Open Settings → City → Account Routing and assign one of your connected channels (${names}) to this city.`,
+          `[ROUTING_VIOLATION] No YouTube ${project === "B" ? "recap" : "shorts"} channel mapped to city_id=${cityId}. Open Settings → City → Account Routing and assign one of your connected ${project === "B" ? "recap" : "shorts"} channels (${names}) to this city.`,
         );
       }
     }
 
     if (!account) {
-      // No cityId context: legacy single-channel behavior — use shared row.
-      account = channels.find((c: any) => c.city_id == null) || channels[0] || null;
+      account = channels.find((c) => c.city_id == null) || channels[0] || null;
     }
 
     if (account) {
       console.log(
-        `[youtube-adapter] using channel "${account.account_name || account.id}" (city_id=${account.city_id ?? "shared"}) for cityId=${cityId ?? "none"}`,
+        `[youtube-adapter] project=${project} contentType=${contentType} using channel "${account.account_name || account.id}" (city_id=${account.city_id ?? "shared"}) for cityId=${cityId ?? "none"}`,
       );
     }
 
-    // Final fallback to legacy weather_settings columns (oldest single-channel install).
-    if (!account) {
+    // Legacy weather_settings fallback — ONLY for Project A (shorts).
+    // Project B (recaps) must never fall back to legacy columns; those
+    // tokens were minted by Project A and would cause a routing violation.
+    if (!account && project === "A") {
       const { data: settings } = await supabase
         .from("weather_settings")
         .select("youtube_access_token, youtube_refresh_token, youtube_token_expires_at")
@@ -140,13 +149,22 @@ export class YouTubeAdapter implements PlatformAdapter {
         access_token: settings.youtube_access_token,
         refresh_token: settings.youtube_refresh_token,
         token_expires_at: settings.youtube_token_expires_at,
+        oauth_project: "A",
       };
+    }
+
+    if (!account) {
+      if (project === "B") {
+        console.error(`[youtube-adapter] No Project B (recap) channel connected for user=${userId}`);
+        throw new Error("[AUTH_EXPIRED:youtube_recap] No Project B recap channel connected — user must connect a YouTube channel under 'Connect Recaps Channel'.");
+      }
+      return null;
     }
 
     const expiresAt = account.token_expires_at ? new Date(account.token_expires_at) : null;
     if (account.access_token && expiresAt && expiresAt.getTime() > Date.now() + 5 * 60 * 1000) {
       this._resolved.set(account.access_token, account);
-      this._refreshCtx.set(account.access_token, { supabase, userId, cityId: cityId ?? null });
+      this._refreshCtx.set(account.access_token, { supabase, userId, cityId: cityId ?? null, contentType });
       return account.access_token;
     }
 
@@ -155,7 +173,7 @@ export class YouTubeAdapter implements PlatformAdapter {
       return null;
     }
     if (!clientId || !clientSecret) {
-      console.error("[youtube-auth] YouTube client credentials not configured");
+      console.error(`[youtube-auth] YouTube Project ${project} client credentials not configured`);
       return null;
     }
 
@@ -172,19 +190,15 @@ export class YouTubeAdapter implements PlatformAdapter {
 
     const refreshData = await refreshRes.json();
     if (!refreshData.access_token) {
-      console.error("[youtube-auth] YouTube token refresh failed:", JSON.stringify(refreshData));
+      console.error(`[youtube-auth] YouTube Project ${project} token refresh failed:`, JSON.stringify(refreshData));
       const errorCode = (refreshData?.error || "").toString();
-      // Only clear refresh_token on TERMINAL errors (Google says the grant is
-      // permanently invalid). Treat anything else as transient — do NOT wipe
-      // the refresh_token, so the next attempt can succeed once Google
-      // recovers / rate-limit clears.
       if (errorCode === "invalid_grant" || errorCode === "invalid_token") {
         if (account.id) {
           await supabase
             .from("social_accounts")
             .update({ refresh_token: null, access_token: null })
             .eq("id", account.id);
-        } else {
+        } else if (project === "A") {
           await supabase
             .from("weather_settings")
             .update({ youtube_refresh_token: null })
@@ -206,8 +220,7 @@ export class YouTubeAdapter implements PlatformAdapter {
           updated_at: new Date().toISOString(),
         })
         .eq("id", account.id);
-    } else {
-      // Legacy fallback path: also keep weather_settings warm.
+    } else if (project === "A") {
       await supabase
         .from("weather_settings")
         .update({
@@ -217,10 +230,10 @@ export class YouTubeAdapter implements PlatformAdapter {
         .eq("user_id", userId);
     }
 
-    console.log("[youtube-auth] token refreshed successfully");
+    console.log(`[youtube-auth] Project ${project} token refreshed successfully`);
     const refreshedAccount = { ...account, access_token: refreshData.access_token, token_expires_at: newExpiresAt };
     this._resolved.set(refreshData.access_token, refreshedAccount);
-    this._refreshCtx.set(refreshData.access_token, { supabase, userId, cityId: cityId ?? null });
+    this._refreshCtx.set(refreshData.access_token, { supabase, userId, cityId: cityId ?? null, contentType });
     return refreshData.access_token;
   }
 
@@ -232,12 +245,11 @@ export class YouTubeAdapter implements PlatformAdapter {
       console.warn("[youtube-auth] _forceRefresh: no refresh context for token");
       return null;
     }
-    // Invalidate cached row so getValidToken treats it as expired.
     const cached = this._resolved.get(oldToken);
     if (cached) {
       this._resolved.set(oldToken, { ...cached, token_expires_at: new Date(0).toISOString() });
     }
-    const fresh = await this.getValidToken(ctx.supabase, ctx.userId, ctx.cityId);
+    const fresh = await this.getValidToken(ctx.supabase, ctx.userId, ctx.cityId, { contentType: ctx.contentType });
     if (fresh && fresh !== oldToken) {
       console.log("[youtube-auth] 401 self-heal: minted new access_token");
     }
