@@ -343,7 +343,33 @@ export function CityCommandCenter() {
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                         <div className="px-3 pb-3 space-y-2">
+                          {(() => {
+                            const t = toggles[c.id];
+                            const d = t?.daily_enabled ?? false;
+                            const w = t?.weekly_enabled ?? true;
+                            const m = t?.monthly_enabled ?? true;
+                            return (
+                              <div className="space-y-1.5 rounded-md bg-muted/30 p-2">
+                                <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-primary/80 font-semibold">
+                                  <Settings2 size={11} /> Automated posting — configure
+                                </div>
+                                <div className="grid grid-cols-3 gap-2">
+                                  {([
+                                    ["daily_enabled", "Daily", d],
+                                    ["weekly_enabled", "Weekly", w],
+                                    ["monthly_enabled", "Monthly", m],
+                                  ] as Array<[RecapKey, string, boolean]>).map(([k, label, val]) => (
+                                    <label key={k} className="flex items-center justify-between gap-2 rounded border border-border/40 bg-background/40 px-2 py-1.5 cursor-pointer">
+                                      <span className="text-[11px]">{label}</span>
+                                      <Switch checked={val} onCheckedChange={(v) => setToggle(c, k, v)} />
+                                    </label>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })()}
                           <div className="space-y-1.5">
+
                             <div className="text-[10px] uppercase tracking-wide text-amber-500/80 font-semibold">
                               Post — live to channels
                             </div>
