@@ -15,7 +15,7 @@
 // Per-run flow (per user with YouTube connected):
 //   1. Fetch last 7 succeeded posts from post_history
 //   2. Pull top "best hooks" from ai_memory (Step 2 layer)
-//   3. Ask Lovable AI for a continuous weekly script (high/low + conditions)
+//   3. Ask Lovable AI for a continuous daily script (high/low + conditions)
 //   4. Build a Creatomate slideshow that stitches the 7 image_urls + voice/text
 //   5. Upload to YouTube as long-form (privacyStatus=public)
 //   6. On stitch failure: generate a "Daily Summary" image via Lovable AI
@@ -1149,12 +1149,12 @@ async function runForUser(svc: any, userId: string, cityFilter?: string, opts?: 
     user_id: userId, status: "fallback_image", platform: "youtube",
     city: posts[0].city, caption: finalTitle,
     image_url: signed?.signedUrl ?? null,
-    error_message: "Video stitch unavailable — generated weekly summary infographic instead",
+    error_message: "Video stitch unavailable — generated daily summary infographic instead",
   });
   await svc.from("notifications").insert({
     user_id: userId, type: "warning",
     title: "🖼️ Daily Recap fallback ready",
-    message: "We couldn't stitch the weekly video, so we made a Daily Summary infographic instead.",
+    message: "We couldn't stitch the daily video, so we made a Daily Summary infographic instead.",
   });
   return { ok: true, detail: "Fallback infographic generated" };
 }
@@ -1187,9 +1187,9 @@ Deno.serve(async (req) => {
   } catch { /* ignore */ }
 
   if (skipPost) {
-    console.log(`[dev-test] weekly triggered for city=${cityFilter ?? "(any)"} (skipping upload)`);
+    console.log(`[dev-test] daily triggered for city=${cityFilter ?? "(any)"} (skipping upload)`);
   } else if (cityFilter || userFilter) {
-    console.log(`[manual-post] weekly triggered for city=${cityFilter ?? "(any)"} by user=${gate.source === "user" ? gate.userId : (userFilter ?? "cron")}`);
+    console.log(`[manual-post] daily triggered for city=${cityFilter ?? "(any)"} by user=${gate.source === "user" ? gate.userId : (userFilter ?? "cron")}`);
   }
 
 
