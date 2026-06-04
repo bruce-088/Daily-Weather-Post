@@ -191,6 +191,13 @@ export function YouTubeChannelsManager({ cities = [], onChange }: Props) {
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] ${ch.oauth_project === "B" ? "border-primary/40 text-primary bg-primary/5" : "border-muted-foreground/30 text-muted-foreground"}`}
+                    title={ch.oauth_project === "B" ? "OAuth Project B — recaps (daily/weekly/monthly/yearly)" : "OAuth Project A — shorts (8 AM / 1 PM / 6 PM)"}
+                  >
+                    {ch.oauth_project === "B" ? "Recaps · B" : "Shorts · A"}
+                  </Badge>
                   {cn ? (
                     <Badge variant="outline" className="text-[10px] border-primary/30 text-primary">
                       {cn}
