@@ -231,7 +231,7 @@ Deno.serve(async (req) => {
       }
 
       if (existingChannel) {
-        await supabaseAdmin
+        const { error: updErr } = await supabaseAdmin
           .from("social_accounts")
           .update({
             account_name: channelTitle,
@@ -241,8 +241,15 @@ Deno.serve(async (req) => {
             updated_at: new Date().toISOString(),
           })
           .eq("id", existingChannel.id);
+        if (updErr) {
+          console.error(`[youtube-auth] update failed for channel ${channelId} project ${oauthProject}:`, updErr.message);
+          return new Response(
+            JSON.stringify({ error: `Failed to update channel: ${updErr.message}` }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
       } else {
-        await supabaseAdmin.from("social_accounts").insert({
+        const { error: insErr } = await supabaseAdmin.from("social_accounts").insert({
           user_id: userId,
           platform: "youtube",
           account_external_id: channelId,
@@ -252,6 +259,13 @@ Deno.serve(async (req) => {
           token_expires_at: expiresAt,
           oauth_project: oauthProject,
         });
+        if (insErr) {
+          console.error(`[youtube-auth] insert failed for channel ${channelId} project ${oauthProject}:`, insErr.message);
+          return new Response(
+            JSON.stringify({ error: `Failed to save channel: ${insErr.message}` }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
       }
 
       // ---- Legacy weather_settings columns — Project A (shorts) ONLY ----
