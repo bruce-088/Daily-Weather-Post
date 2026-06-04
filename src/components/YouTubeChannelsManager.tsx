@@ -20,6 +20,7 @@ interface YTChannel {
   account_name: string | null;
   city_id: string | null;
   token_expires_at: string | null;
+  oauth_project: "A" | "B" | null;
   extra?: { health?: { status?: "healthy" | "expired" | "disconnected"; checked_at?: string } } | null;
 }
 
