@@ -1158,6 +1158,7 @@ export type Database = {
           created_at: string
           extra: Json
           id: string
+          oauth_project: string
           platform: string
           refresh_token: string | null
           token_expires_at: string | null
@@ -1172,6 +1173,7 @@ export type Database = {
           created_at?: string
           extra?: Json
           id?: string
+          oauth_project?: string
           platform: string
           refresh_token?: string | null
           token_expires_at?: string | null
@@ -1186,6 +1188,7 @@ export type Database = {
           created_at?: string
           extra?: Json
           id?: string
+          oauth_project?: string
           platform?: string
           refresh_token?: string | null
           token_expires_at?: string | null

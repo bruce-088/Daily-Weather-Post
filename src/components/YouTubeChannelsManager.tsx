@@ -20,6 +20,7 @@ interface YTChannel {
   account_name: string | null;
   city_id: string | null;
   token_expires_at: string | null;
+  oauth_project: "A" | "B" | null;
   extra?: { health?: { status?: "healthy" | "expired" | "disconnected"; checked_at?: string } } | null;
 }
 
@@ -48,7 +49,7 @@ export function YouTubeChannelsManager({ cities = [], onChange }: Props) {
     if (!user) { setLoading(false); return; }
     const { data, error } = await supabase
       .from("social_accounts")
-      .select("id, account_external_id, account_name, city_id, token_expires_at, extra")
+      .select("id, account_external_id, account_name, city_id, token_expires_at, oauth_project, extra")
       .eq("user_id", user.id)
       .eq("platform", "youtube")
       .order("created_at", { ascending: true });
@@ -63,11 +64,11 @@ export function YouTubeChannelsManager({ cities = [], onChange }: Props) {
 
   useEffect(() => { load(); }, []);
 
-  const handleConnect = async () => {
+  const handleConnect = async (oauthProject: "A" | "B" = "A") => {
     setConnecting(true);
     const redirectUri = `${getOAuthRedirectOrigin()}/youtube/callback`;
     const { data, error } = await supabase.functions.invoke("youtube-auth", {
-      body: { action: "get_auth_url", redirect_uri: redirectUri },
+      body: { action: "get_auth_url", redirect_uri: redirectUri, oauth_project: oauthProject },
     });
     setConnecting(false);
     if (error || data?.error) {
@@ -142,13 +143,16 @@ export function YouTubeChannelsManager({ cities = [], onChange }: Props) {
           <Button size="sm" variant="ghost" onClick={load} className="h-7 px-2 text-xs gap-1">
             <RefreshCw size={12} /> Refresh
           </Button>
-          <Button size="sm" variant="outline" onClick={handleConnect} disabled={connecting} className="h-7 px-2 text-xs gap-1">
-            <Plus size={12} /> {channels.length === 0 ? "Connect channel" : "Connect another"}
+          <Button size="sm" variant="outline" onClick={() => handleConnect("A")} disabled={connecting} className="h-7 px-2 text-xs gap-1">
+            <Plus size={12} /> Connect Shorts (A)
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => handleConnect("B")} disabled={connecting} className="h-7 px-2 text-xs gap-1 border-primary/40 text-primary">
+            <Plus size={12} /> Connect Recaps (B)
           </Button>
         </div>
       </div>
       <p className="text-xs text-muted-foreground">
-        Connect multiple Google accounts or brand channels. Assign each one to a city in <span className="text-foreground/70">City → Account Routing</span> so each city posts to its own channel.
+        <strong>Project A</strong> = Shorts (daily 8 AM / 1 PM / 6 PM uploads). <strong>Project B</strong> = Recaps (daily/weekly/monthly/yearly). Each project has its own YouTube API quota — connect each city's channel under BOTH projects so recaps don't burn shorts quota.
       </p>
 
       {loading ? (
@@ -187,6 +191,13 @@ export function YouTubeChannelsManager({ cities = [], onChange }: Props) {
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] ${ch.oauth_project === "B" ? "border-primary/40 text-primary bg-primary/5" : "border-muted-foreground/30 text-muted-foreground"}`}
+                    title={ch.oauth_project === "B" ? "OAuth Project B — recaps (daily/weekly/monthly/yearly)" : "OAuth Project A — shorts (8 AM / 1 PM / 6 PM)"}
+                  >
+                    {ch.oauth_project === "B" ? "Recaps · B" : "Shorts · A"}
+                  </Badge>
                   {cn ? (
                     <Badge variant="outline" className="text-[10px] border-primary/30 text-primary">
                       {cn}
@@ -237,7 +248,7 @@ export function YouTubeChannelsManager({ cities = [], onChange }: Props) {
             <Button
               size="sm"
               variant="outline"
-              onClick={handleConnect}
+              onClick={() => handleConnect("A")}
               disabled={connecting}
               className="w-full gap-1.5 mt-1"
             >

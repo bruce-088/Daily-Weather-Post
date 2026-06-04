@@ -56,40 +56,55 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const YOUTUBE_CLIENT_ID = Deno.env.get("YOUTUBE_CLIENT_ID")!;
-  const YOUTUBE_CLIENT_SECRET = Deno.env.get("YOUTUBE_CLIENT_SECRET")!;
+  // Phase 12E: dual OAuth — Project A (shorts) and Project B (recaps).
+  const YOUTUBE_CLIENT_ID_A = Deno.env.get("YOUTUBE_CLIENT_ID")!;
+  const YOUTUBE_CLIENT_SECRET_A = Deno.env.get("YOUTUBE_CLIENT_SECRET")!;
+  const YOUTUBE_CLIENT_ID_B = Deno.env.get("YOUTUBE_CLIENT_ID_RECAPS") || "";
+  const YOUTUBE_CLIENT_SECRET_B = Deno.env.get("YOUTUBE_CLIENT_SECRET_RECAPS") || "";
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
   const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const STATE_SECRET = SUPABASE_SERVICE_ROLE_KEY;
 
+  const credsFor = (project: "A" | "B") =>
+    project === "B"
+      ? { id: YOUTUBE_CLIENT_ID_B, secret: YOUTUBE_CLIENT_SECRET_B }
+      : { id: YOUTUBE_CLIENT_ID_A, secret: YOUTUBE_CLIENT_SECRET_A };
+
   try {
     const body = await req.json();
     const { action, code, redirect_uri, state } = body;
-    console.log("YouTube auth action:", action);
+    const requestedProject: "A" | "B" = body?.oauth_project === "B" ? "B" : "A";
+    console.log("YouTube auth action:", action, "project:", requestedProject);
 
     // get_auth_url doesn't need auth
     if (action === "get_auth_url") {
       const auth = await verifyUser(req);
       if (auth.response) return auth.response;
 
+      const creds = credsFor(requestedProject);
+      if (!creds.id || !creds.secret) {
+        return new Response(
+          JSON.stringify({ error: `OAuth Project ${requestedProject} not configured (missing client id/secret)` }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
       const statePayload = {
         nonce: crypto.randomUUID(),
         user_id: auth.userId,
         redirect_uri,
+        oauth_project: requestedProject,
         exp: Date.now() + 10 * 60 * 1000,
       };
       const csrfState = await createSignedState(statePayload, STATE_SECRET);
       const params = new URLSearchParams({
-        client_id: YOUTUBE_CLIENT_ID,
+        client_id: creds.id,
         redirect_uri: redirect_uri,
         response_type: "code",
         scope: "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly",
         // ⚠️ CONTRACT — DO NOT REMOVE THESE THREE PARAMS:
         //   access_type=offline → required for Google to issue a refresh_token
         //   prompt=consent      → guarantees a refresh_token even on re-auth
-        //                         (without it, Google returns no refresh_token
-        //                          if the user previously granted scope, and
-        //                          tokens silently expire every ~1h)
         //   include_granted_scopes=true → preserves prior scopes on re-consent
         access_type: "offline",
         prompt: "select_account consent",
@@ -101,6 +116,7 @@ Deno.serve(async (req) => {
         JSON.stringify({
           url: `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`,
           state: csrfState,
+          oauth_project: requestedProject,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -114,7 +130,7 @@ Deno.serve(async (req) => {
         );
       }
 
-      let statePayload: { user_id?: string; redirect_uri?: string; exp?: number } = {};
+      let statePayload: { user_id?: string; redirect_uri?: string; exp?: number; oauth_project?: "A" | "B" } = {};
       try {
         statePayload = await readSignedState(state, STATE_SECRET);
       } catch {
@@ -137,13 +153,21 @@ Deno.serve(async (req) => {
       }
       const userId = statePayload.user_id;
       const effectiveRedirectUri = statePayload.redirect_uri;
+      const oauthProject: "A" | "B" = statePayload.oauth_project === "B" ? "B" : "A";
+      const exchangeCreds = credsFor(oauthProject);
+      if (!exchangeCreds.id || !exchangeCreds.secret) {
+        return new Response(
+          JSON.stringify({ error: `OAuth Project ${oauthProject} not configured` }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
 
       const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
-          client_id: YOUTUBE_CLIENT_ID,
-          client_secret: YOUTUBE_CLIENT_SECRET,
+          client_id: exchangeCreds.id,
+          client_secret: exchangeCreds.secret,
           code: code,
           grant_type: "authorization_code",
           redirect_uri: effectiveRedirectUri,
@@ -188,22 +212,21 @@ Deno.serve(async (req) => {
       const refreshToken = tokenData.refresh_token || null;
 
       // ---- Multi-channel: upsert per-channel row in social_accounts ----
-      // Look up by (user_id, platform, account_external_id) so re-connecting
-      // the SAME channel updates tokens, but a NEW channel adds a new row.
+      // Phase 12E: scope by (user, platform, channelId, oauth_project) so the
+      // SAME Google channel can be re-connected separately under Project A
+      // (shorts) and Project B (recaps) without collision.
       const { data: existingChannel } = await supabaseAdmin
         .from("social_accounts")
         .select("id, refresh_token")
         .eq("user_id", userId)
         .eq("platform", "youtube")
         .eq("account_external_id", channelId)
+        .eq("oauth_project", oauthProject)
         .maybeSingle();
 
-      // Visibility: warn if Google returned no refresh_token AND we have
-      // none on file — means long-lived auth is NOT possible for this row
-      // until the user reconnects with prompt=consent honored.
       if (!refreshToken && !existingChannel?.refresh_token) {
         console.warn(
-          `[youtube-auth] exchange_code: no refresh_token returned by Google AND none stored — long-lived auth NOT established for channel ${channelId}. User must reconnect with prompt=consent.`,
+          `[youtube-auth] exchange_code: no refresh_token returned by Google AND none stored — long-lived auth NOT established for channel ${channelId} (project ${oauthProject}). User must reconnect with prompt=consent.`,
         );
       }
 
@@ -213,7 +236,6 @@ Deno.serve(async (req) => {
           .update({
             account_name: channelTitle,
             access_token: tokenData.access_token,
-            // Preserve previous refresh_token if Google didn't return one this time.
             refresh_token: refreshToken || existingChannel.refresh_token,
             token_expires_at: expiresAt,
             updated_at: new Date().toISOString(),
@@ -228,51 +250,55 @@ Deno.serve(async (req) => {
           access_token: tokenData.access_token,
           refresh_token: refreshToken,
           token_expires_at: expiresAt,
+          oauth_project: oauthProject,
         });
       }
 
-      // ---- Legacy weather_settings columns (single-channel compatibility) ----
-      // Only write here when this is the user's FIRST connected YouTube channel
-      // — otherwise we'd clobber the "primary" channel that legacy code paths
-      // (sync-platform-metrics, status flags, refresh_token endpoint) still read.
-      const { count: channelCount } = await supabaseAdmin
-        .from("social_accounts")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", userId)
-        .eq("platform", "youtube");
+      // ---- Legacy weather_settings columns — Project A (shorts) ONLY ----
+      // Project B (recaps) tokens must never write to weather_settings.youtube_*
+      // because legacy callers (sync-platform-metrics, etc.) would then
+      // accidentally hit the recap quota.
+      if (oauthProject === "A") {
+        const { count: channelCount } = await supabaseAdmin
+          .from("social_accounts")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", userId)
+          .eq("platform", "youtube")
+          .eq("oauth_project", "A");
 
-      const isFirstChannel = (channelCount || 0) <= 1;
+        const isFirstChannel = (channelCount || 0) <= 1;
 
-      const { data: existingSettings } = await supabaseAdmin
-        .from("weather_settings")
-        .select("id, youtube_refresh_token")
-        .eq("user_id", userId)
-        .maybeSingle();
+        const { data: existingSettings } = await supabaseAdmin
+          .from("weather_settings")
+          .select("id, youtube_refresh_token")
+          .eq("user_id", userId)
+          .maybeSingle();
 
-      if (isFirstChannel) {
-        if (existingSettings) {
-          await supabaseAdmin
-            .from("weather_settings")
-            .update({
+        if (isFirstChannel) {
+          if (existingSettings) {
+            await supabaseAdmin
+              .from("weather_settings")
+              .update({
+                youtube_access_token: tokenData.access_token,
+                youtube_refresh_token: refreshToken || existingSettings.youtube_refresh_token,
+                youtube_channel_id: channelId,
+                youtube_token_expires_at: expiresAt,
+              })
+              .eq("user_id", userId);
+          } else {
+            await supabaseAdmin.from("weather_settings").insert({
+              user_id: userId,
               youtube_access_token: tokenData.access_token,
-              youtube_refresh_token: refreshToken || existingSettings.youtube_refresh_token,
+              youtube_refresh_token: refreshToken,
               youtube_channel_id: channelId,
               youtube_token_expires_at: expiresAt,
-            })
-            .eq("user_id", userId);
-        } else {
-          await supabaseAdmin.from("weather_settings").insert({
-            user_id: userId,
-            youtube_access_token: tokenData.access_token,
-            youtube_refresh_token: refreshToken,
-            youtube_channel_id: channelId,
-            youtube_token_expires_at: expiresAt,
-          });
+            });
+          }
         }
       }
 
       return new Response(
-        JSON.stringify({ success: true, channel_id: channelId }),
+        JSON.stringify({ success: true, channel_id: channelId, oauth_project: oauthProject }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -296,12 +322,13 @@ Deno.serve(async (req) => {
         );
       }
 
+      // Legacy weather_settings refresh — Project A only by contract.
       const refreshRes = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
-          client_id: YOUTUBE_CLIENT_ID,
-          client_secret: YOUTUBE_CLIENT_SECRET,
+          client_id: YOUTUBE_CLIENT_ID_A,
+          client_secret: YOUTUBE_CLIENT_SECRET_A,
           grant_type: "refresh_token",
           refresh_token: settings.youtube_refresh_token,
         }),
@@ -379,7 +406,7 @@ Deno.serve(async (req) => {
       const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
       const { data: row, error: rowErr } = await supabaseAdmin
         .from("social_accounts")
-        .select("id, user_id, refresh_token, account_name, extra")
+        .select("id, user_id, refresh_token, account_name, extra, oauth_project")
         .eq("id", channelRowId)
         .eq("user_id", userId)
         .eq("platform", "youtube")
@@ -403,12 +430,22 @@ Deno.serve(async (req) => {
         );
       }
 
+      // Phase 12E: refresh with the OAuth project that minted this token.
+      const rowProject: "A" | "B" = row.oauth_project === "B" ? "B" : "A";
+      const channelCreds = credsFor(rowProject);
+      if (!channelCreds.id || !channelCreds.secret) {
+        return new Response(
+          JSON.stringify({ ok: false, status: "project_not_configured", error: `OAuth Project ${rowProject} credentials missing` }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
       const refreshRes = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
-          client_id: YOUTUBE_CLIENT_ID,
-          client_secret: YOUTUBE_CLIENT_SECRET,
+          client_id: channelCreds.id,
+          client_secret: channelCreds.secret,
           grant_type: "refresh_token",
           refresh_token: row.refresh_token,
         }),
