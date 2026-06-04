@@ -9,7 +9,33 @@ type ResolvedYTAccount = {
   account_name?: string | null;
   city_id?: string | null;
   account_external_id?: string | null;
+  oauth_project?: "A" | "B" | null;
 };
+
+export type YouTubeContentType = "short" | "recap";
+
+/** Phase 12E: route content type to OAuth Project.
+ *  Shorts → Project A (existing client). Recaps (daily/weekly/monthly/yearly)
+ *  → Project B (dedicated client) for quota isolation. */
+export function projectForContentType(t?: YouTubeContentType): "A" | "B" {
+  return t === "recap" ? "B" : "A";
+}
+
+/** Resolves the YOUTUBE_CLIENT_ID/SECRET pair to use for a given OAuth project.
+ *  Project B credentials are required when t==='recap'; absence is a hard error
+ *  (we never silently fall back to Project A — that would burn shorts quota). */
+export function getYouTubeOAuthCreds(project: "A" | "B"): { id: string | null; secret: string | null } {
+  if (project === "B") {
+    return {
+      id: Deno.env.get("YOUTUBE_CLIENT_ID_RECAPS") || null,
+      secret: Deno.env.get("YOUTUBE_CLIENT_SECRET_RECAPS") || null,
+    };
+  }
+  return {
+    id: Deno.env.get("YOUTUBE_CLIENT_ID") || null,
+    secret: Deno.env.get("YOUTUBE_CLIENT_SECRET") || null,
+  };
+}
 
 export class YouTubeAdapter implements PlatformAdapter {
   name = "youtube";
