@@ -1222,7 +1222,7 @@ Deno.serve(async (req) => {
       dispatchAudit.push({ user_id, cities: [cityFilter], skipped: [], source: "city_filter" });
       continue;
     }
-    const info = await listUserRecapCitiesDetailed(svc, user_id);
+    const info = await listUserRecapCitiesDetailed(svc, user_id, "weekly_enabled");
     dispatchAudit.push({ user_id, cities: info.cities, skipped: info.skipped, source: info.source });
     if (info.cities.length === 0) {
       candidateList.push({ user_id });
