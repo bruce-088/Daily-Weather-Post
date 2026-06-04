@@ -13,10 +13,15 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Loader2, MapPin, PlayCircle, ExternalLink, Wrench, Eye, ChevronDown } from "lucide-react";
+import { Loader2, MapPin, PlayCircle, ExternalLink, Wrench, Eye, ChevronDown, Settings2 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { FeatureFlags } from "@/lib/featureFlags";
+
+interface RecapToggles { id: string; daily_enabled: boolean; weekly_enabled: boolean; monthly_enabled: boolean; }
+type RecapKey = "daily_enabled" | "weekly_enabled" | "monthly_enabled";
 
 interface City { id: string; name: string; state: string | null; }
 type RunType = "daily" | "weekly" | "monthly" | "yearly";
