@@ -130,7 +130,7 @@ Deno.serve(async (req) => {
         );
       }
 
-      let statePayload: { user_id?: string; redirect_uri?: string; exp?: number } = {};
+      let statePayload: { user_id?: string; redirect_uri?: string; exp?: number; oauth_project?: "A" | "B" } = {};
       try {
         statePayload = await readSignedState(state, STATE_SECRET);
       } catch {
@@ -153,13 +153,21 @@ Deno.serve(async (req) => {
       }
       const userId = statePayload.user_id;
       const effectiveRedirectUri = statePayload.redirect_uri;
+      const oauthProject: "A" | "B" = statePayload.oauth_project === "B" ? "B" : "A";
+      const exchangeCreds = credsFor(oauthProject);
+      if (!exchangeCreds.id || !exchangeCreds.secret) {
+        return new Response(
+          JSON.stringify({ error: `OAuth Project ${oauthProject} not configured` }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
 
       const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
-          client_id: YOUTUBE_CLIENT_ID,
-          client_secret: YOUTUBE_CLIENT_SECRET,
+          client_id: exchangeCreds.id,
+          client_secret: exchangeCreds.secret,
           code: code,
           grant_type: "authorization_code",
           redirect_uri: effectiveRedirectUri,
@@ -204,22 +212,21 @@ Deno.serve(async (req) => {
       const refreshToken = tokenData.refresh_token || null;
 
       // ---- Multi-channel: upsert per-channel row in social_accounts ----
-      // Look up by (user_id, platform, account_external_id) so re-connecting
-      // the SAME channel updates tokens, but a NEW channel adds a new row.
+      // Phase 12E: scope by (user, platform, channelId, oauth_project) so the
+      // SAME Google channel can be re-connected separately under Project A
+      // (shorts) and Project B (recaps) without collision.
       const { data: existingChannel } = await supabaseAdmin
         .from("social_accounts")
         .select("id, refresh_token")
         .eq("user_id", userId)
         .eq("platform", "youtube")
         .eq("account_external_id", channelId)
+        .eq("oauth_project", oauthProject)
         .maybeSingle();
 
-      // Visibility: warn if Google returned no refresh_token AND we have
-      // none on file — means long-lived auth is NOT possible for this row
-      // until the user reconnects with prompt=consent honored.
       if (!refreshToken && !existingChannel?.refresh_token) {
         console.warn(
-          `[youtube-auth] exchange_code: no refresh_token returned by Google AND none stored — long-lived auth NOT established for channel ${channelId}. User must reconnect with prompt=consent.`,
+          `[youtube-auth] exchange_code: no refresh_token returned by Google AND none stored — long-lived auth NOT established for channel ${channelId} (project ${oauthProject}). User must reconnect with prompt=consent.`,
         );
       }
 
@@ -229,7 +236,6 @@ Deno.serve(async (req) => {
           .update({
             account_name: channelTitle,
             access_token: tokenData.access_token,
-            // Preserve previous refresh_token if Google didn't return one this time.
             refresh_token: refreshToken || existingChannel.refresh_token,
             token_expires_at: expiresAt,
             updated_at: new Date().toISOString(),
@@ -244,51 +250,55 @@ Deno.serve(async (req) => {
           access_token: tokenData.access_token,
           refresh_token: refreshToken,
           token_expires_at: expiresAt,
+          oauth_project: oauthProject,
         });
       }
 
-      // ---- Legacy weather_settings columns (single-channel compatibility) ----
-      // Only write here when this is the user's FIRST connected YouTube channel
-      // — otherwise we'd clobber the "primary" channel that legacy code paths
-      // (sync-platform-metrics, status flags, refresh_token endpoint) still read.
-      const { count: channelCount } = await supabaseAdmin
-        .from("social_accounts")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", userId)
-        .eq("platform", "youtube");
+      // ---- Legacy weather_settings columns — Project A (shorts) ONLY ----
+      // Project B (recaps) tokens must never write to weather_settings.youtube_*
+      // because legacy callers (sync-platform-metrics, etc.) would then
+      // accidentally hit the recap quota.
+      if (oauthProject === "A") {
+        const { count: channelCount } = await supabaseAdmin
+          .from("social_accounts")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", userId)
+          .eq("platform", "youtube")
+          .eq("oauth_project", "A");
 
-      const isFirstChannel = (channelCount || 0) <= 1;
+        const isFirstChannel = (channelCount || 0) <= 1;
 
-      const { data: existingSettings } = await supabaseAdmin
-        .from("weather_settings")
-        .select("id, youtube_refresh_token")
-        .eq("user_id", userId)
-        .maybeSingle();
+        const { data: existingSettings } = await supabaseAdmin
+          .from("weather_settings")
+          .select("id, youtube_refresh_token")
+          .eq("user_id", userId)
+          .maybeSingle();
 
-      if (isFirstChannel) {
-        if (existingSettings) {
-          await supabaseAdmin
-            .from("weather_settings")
-            .update({
+        if (isFirstChannel) {
+          if (existingSettings) {
+            await supabaseAdmin
+              .from("weather_settings")
+              .update({
+                youtube_access_token: tokenData.access_token,
+                youtube_refresh_token: refreshToken || existingSettings.youtube_refresh_token,
+                youtube_channel_id: channelId,
+                youtube_token_expires_at: expiresAt,
+              })
+              .eq("user_id", userId);
+          } else {
+            await supabaseAdmin.from("weather_settings").insert({
+              user_id: userId,
               youtube_access_token: tokenData.access_token,
-              youtube_refresh_token: refreshToken || existingSettings.youtube_refresh_token,
+              youtube_refresh_token: refreshToken,
               youtube_channel_id: channelId,
               youtube_token_expires_at: expiresAt,
-            })
-            .eq("user_id", userId);
-        } else {
-          await supabaseAdmin.from("weather_settings").insert({
-            user_id: userId,
-            youtube_access_token: tokenData.access_token,
-            youtube_refresh_token: refreshToken,
-            youtube_channel_id: channelId,
-            youtube_token_expires_at: expiresAt,
-          });
+            });
+          }
         }
       }
 
       return new Response(
-        JSON.stringify({ success: true, channel_id: channelId }),
+        JSON.stringify({ success: true, channel_id: channelId, oauth_project: oauthProject }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
