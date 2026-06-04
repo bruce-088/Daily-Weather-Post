@@ -30,5 +30,8 @@ verify_jwt = false
 [functions.create-monthly-recap]
 verify_jwt = false
 
+[functions.create-daily-recap]
+verify_jwt = false
+
 [functions.compute-winner-stats]
 verify_jwt = false

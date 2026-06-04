@@ -106,16 +106,21 @@ export interface RecapCityDispatchInfo {
 export async function listUserRecapCities(
   svc: any,
   userId: string,
+  gateColumn: "enabled" | "daily_enabled" | "weekly_enabled" | "monthly_enabled" = "enabled",
 ): Promise<string[]> {
-  const info = await listUserRecapCitiesDetailed(svc, userId);
+  const info = await listUserRecapCitiesDetailed(svc, userId, gateColumn);
   return info.cities;
 }
 
 /**
- * Phase 12CC-B Fix #2 + #3:
- *  - Filters cities to ONLY those with an enabled automation row
- *    (`automations.enabled = true`). This prevents non-production cities
- *    (e.g. Miami before launch) from being included in recap dispatch.
+ * Phase 12CC-B Fix #2 + #3 / Phase 12F:
+ *  - Filters cities to ONLY those with an enabled automation row.
+ *  - `gateColumn` selects which toggle to check:
+ *      'enabled'         (default — overall city automation)
+ *      'daily_enabled'   (Phase 12F daily recap toggle)
+ *      'weekly_enabled'  (Phase 12F weekly recap toggle)
+ *      'monthly_enabled' (Phase 12F monthly recap toggle)
+ *  - Always also requires `automations.enabled = true`.
  *  - Returns structured dispatch info so the caller can audit-log which
  *    cities were skipped and why.
  *
@@ -125,6 +130,7 @@ export async function listUserRecapCities(
 export async function listUserRecapCitiesDetailed(
   svc: any,
   userId: string,
+  gateColumn: "enabled" | "daily_enabled" | "weekly_enabled" | "monthly_enabled" = "enabled",
 ): Promise<RecapCityDispatchInfo> {
   const kept: string[] = [];
   const skipped: Array<{ city: string; reason: string }> = [];
@@ -142,23 +148,25 @@ export async function listUserRecapCitiesDetailed(
       const name = (row?.cities?.name || "").trim();
       const cityId = row?.city_id;
       if (!name || !cityId) continue;
-      // Check automation gate
       let enabled = false;
       try {
+        const selectCols = gateColumn === "enabled" ? "enabled" : `enabled, ${gateColumn}`;
         const { data: autoRow } = await svc
           .from("automations")
-          .select("enabled")
+          .select(selectCols)
           .eq("user_id", userId)
           .eq("city_id", cityId)
           .maybeSingle();
-        enabled = !!autoRow?.enabled;
+        const overall = !!(autoRow as any)?.enabled;
+        const specific = gateColumn === "enabled" ? overall : !!(autoRow as any)?.[gateColumn];
+        enabled = overall && specific;
       } catch {
         enabled = false;
       }
       if (enabled) {
         kept.push(name);
       } else {
-        skipped.push({ city: name, reason: "automation_disabled_or_missing" });
+        skipped.push({ city: name, reason: `${gateColumn}_disabled_or_missing` });
       }
     }
   } catch (e) {
@@ -182,7 +190,6 @@ export async function listUserRecapCitiesDetailed(
     }
   }
 
-  // De-dup while preserving order
   const seen = new Set<string>();
   const cities = kept.filter((n) => (seen.has(n) ? false : (seen.add(n), true)));
   return { cities, skipped, source };
