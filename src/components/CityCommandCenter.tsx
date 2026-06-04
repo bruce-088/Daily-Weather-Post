@@ -51,6 +51,23 @@ export function CityCommandCenter() {
   const [userId, setUserId] = useState<string | null>(null);
   const [runs, setRuns] = useState<Record<string, RunState>>({});
   const [pendingConfirm, setPendingConfirm] = useState<{ city: City; mode: Mode; type: RunType; ageMin: number } | null>(null);
+  const [mainOpen, setMainOpen] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    return localStorage.getItem("ccc:mainOpen") !== "false";
+  });
+  const [cityOpen, setCityOpen] = useState<Record<string, boolean>>(() => {
+    if (typeof window === "undefined") return {};
+    try { return JSON.parse(localStorage.getItem("ccc:cityOpen") || "{}"); } catch { return {}; }
+  });
+  const toggleMain = (o: boolean) => { setMainOpen(o); localStorage.setItem("ccc:mainOpen", String(o)); };
+  const toggleCity = (id: string, o: boolean) => {
+    setCityOpen((prev) => {
+      const next = { ...prev, [id]: o };
+      localStorage.setItem("ccc:cityOpen", JSON.stringify(next));
+      return next;
+    });
+  };
+  const isCityOpen = (id: string) => cityOpen[id] !== false;
 
   useEffect(() => {
     (async () => {
