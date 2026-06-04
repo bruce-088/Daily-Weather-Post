@@ -322,12 +322,13 @@ Deno.serve(async (req) => {
         );
       }
 
+      // Legacy weather_settings refresh — Project A only by contract.
       const refreshRes = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
-          client_id: YOUTUBE_CLIENT_ID,
-          client_secret: YOUTUBE_CLIENT_SECRET,
+          client_id: YOUTUBE_CLIENT_ID_A,
+          client_secret: YOUTUBE_CLIENT_SECRET_A,
           grant_type: "refresh_token",
           refresh_token: settings.youtube_refresh_token,
         }),
