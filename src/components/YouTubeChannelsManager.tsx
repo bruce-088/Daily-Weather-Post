@@ -49,7 +49,7 @@ export function YouTubeChannelsManager({ cities = [], onChange }: Props) {
     if (!user) { setLoading(false); return; }
     const { data, error } = await supabase
       .from("social_accounts")
-      .select("id, account_external_id, account_name, city_id, token_expires_at, extra")
+      .select("id, account_external_id, account_name, city_id, token_expires_at, oauth_project, extra")
       .eq("user_id", user.id)
       .eq("platform", "youtube")
       .order("created_at", { ascending: true });
