@@ -212,12 +212,33 @@ export class YouTubeAdapter implements PlatformAdapter {
     const newExpiresAt = new Date(Date.now() + refreshData.expires_in * 1000).toISOString();
 
     if (account.id) {
+      // Merge health stamp into extra without clobbering other fields
+      const { data: existing } = await supabase
+        .from("social_accounts")
+        .select("extra")
+        .eq("id", account.id)
+        .maybeSingle();
+      const prevExtra = (existing?.extra ?? {}) as Record<string, unknown>;
+      const prevHealth =
+        typeof prevExtra.health === "object" && prevExtra.health
+          ? (prevExtra.health as Record<string, unknown>)
+          : {};
+      const mergedExtra = {
+        ...prevExtra,
+        health: {
+          ...prevHealth,
+          status: "healthy",
+          refresh: "succeeded",
+          checked_at: new Date().toISOString(),
+        },
+      };
       await supabase
         .from("social_accounts")
         .update({
           access_token: refreshData.access_token,
           token_expires_at: newExpiresAt,
           updated_at: new Date().toISOString(),
+          extra: mergedExtra,
         })
         .eq("id", account.id);
     } else if (project === "A") {
