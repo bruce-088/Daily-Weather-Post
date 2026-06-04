@@ -164,14 +164,25 @@ export function YouTubeChannelsManager({ cities = [], onChange }: Props) {
       ) : (
         <div className="space-y-2">
           {channels.map((ch) => {
-            const expired = ch.token_expires_at
+            const health = ch.extra?.health?.status;
+            const checkedAt = ch.extra?.health?.checked_at
+              ? new Date(ch.extra.health.checked_at).getTime()
+              : 0;
+            const recentHealthy = checkedAt > Date.now() - 7 * 60 * 60 * 1000;
+            const tokenExpired = ch.token_expires_at
               ? new Date(ch.token_expires_at).getTime() < Date.now()
               : false;
             const cn = cityName(ch.city_id);
-            const health = ch.extra?.health?.status;
-            const showExpiredBadge = expired || health === "expired";
+            // Authoritative source: most recent health ping. Only fall back to
+            // token_expires_at when we have no recent healthy ping to trust.
             const showDisconnectedBadge = health === "disconnected";
-            const showHealthyBadge = !showExpiredBadge && !showDisconnectedBadge && health === "healthy";
+            const showHealthyBadge =
+              !showDisconnectedBadge &&
+              (health === "healthy" || (recentHealthy && !tokenExpired));
+            const showExpiredBadge =
+              !showHealthyBadge &&
+              !showDisconnectedBadge &&
+              (health === "expired" || (tokenExpired && !recentHealthy));
             return (
               <div
                 key={ch.id}
