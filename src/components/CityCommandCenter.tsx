@@ -74,6 +74,8 @@ export function CityCommandCenter() {
   };
   const isCityOpen = (id: string) => cityOpen[id] !== false;
 
+  const [toggles, setToggles] = useState<Record<string, RecapToggles>>({});
+
   useEffect(() => {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -85,8 +87,64 @@ export function CityCommandCenter() {
         .eq("user_id", user.id);
       const list = (data || []).map((r: any) => r.city).filter(Boolean) as City[];
       setCities(list);
+
+      const { data: autos } = await supabase
+        .from("automations")
+        .select("id, city_id, daily_enabled, weekly_enabled, monthly_enabled")
+        .eq("user_id", user.id);
+      const map: Record<string, RecapToggles> = {};
+      (autos || []).forEach((a: any) => {
+        map[a.city_id] = {
+          id: a.id,
+          daily_enabled: !!a.daily_enabled,
+          weekly_enabled: !!a.weekly_enabled,
+          monthly_enabled: !!a.monthly_enabled,
+        };
+      });
+      setToggles(map);
     })();
   }, []);
+
+  const setToggle = async (city: City, key: RecapKey, value: boolean) => {
+    const existing = toggles[city.id];
+    setToggles((p) => ({
+      ...p,
+      [city.id]: {
+        id: existing?.id ?? "",
+        daily_enabled: existing?.daily_enabled ?? false,
+        weekly_enabled: existing?.weekly_enabled ?? true,
+        monthly_enabled: existing?.monthly_enabled ?? true,
+        [key]: value,
+      },
+    }));
+    try {
+      if (existing?.id) {
+        const { error } = await supabase.from("automations").update({ [key]: value }).eq("id", existing.id);
+        if (error) throw error;
+      } else {
+        if (!userId) return;
+        const { data, error } = await supabase
+          .from("automations")
+          .insert({ user_id: userId, city_id: city.id, [key]: value } as any)
+          .select("id, daily_enabled, weekly_enabled, monthly_enabled")
+          .single();
+        if (error) throw error;
+        setToggles((p) => ({
+          ...p,
+          [city.id]: {
+            id: data!.id,
+            daily_enabled: !!data!.daily_enabled,
+            weekly_enabled: !!data!.weekly_enabled,
+            monthly_enabled: !!data!.monthly_enabled,
+          },
+        }));
+      }
+      toast.success(`${key.replace("_enabled", "")} recaps ${value ? "enabled" : "disabled"} for ${city.name}`);
+    } catch (e: any) {
+      toast.error("Failed to update toggle", { description: e?.message ?? String(e) });
+      setToggles((p) => ({ ...p, [city.id]: { ...(p[city.id] as RecapToggles), [key]: !value } }));
+    }
+  };
 
   const setRun = (cityId: string, mode: Mode, type: RunType, state: RunState) =>
     setRuns((r) => ({ ...r, [runKey(cityId, mode, type)]: state }));
