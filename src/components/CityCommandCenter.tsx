@@ -6,12 +6,14 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
+import { CollapsibleCardHeader } from "@/components/CollapsibleCardHeader";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Loader2, MapPin, PlayCircle, ExternalLink, Wrench, Eye } from "lucide-react";
+import { Loader2, MapPin, PlayCircle, ExternalLink, Wrench, Eye, ChevronDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { FeatureFlags } from "@/lib/featureFlags";
