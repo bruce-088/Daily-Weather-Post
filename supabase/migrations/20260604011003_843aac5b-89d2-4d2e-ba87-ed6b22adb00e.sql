@@ -1,0 +1,2 @@
+ALTER TABLE public.social_accounts DROP CONSTRAINT IF EXISTS social_accounts_user_id_platform_account_external_id_key;
+ALTER TABLE public.social_accounts ADD CONSTRAINT social_accounts_user_platform_external_project_key UNIQUE (user_id, platform, account_external_id, oauth_project);
