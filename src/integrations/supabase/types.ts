@@ -62,10 +62,12 @@ export type Database = {
           afternoon_time: string
           city_id: string
           created_at: string
+          daily_enabled: boolean
           enabled: boolean
           evening_platforms: Json
           evening_time: string
           id: string
+          monthly_enabled: boolean
           morning_platforms: Json
           morning_time: string
           platform_account_map: Json
@@ -74,16 +76,19 @@ export type Database = {
           updated_at: string
           user_id: string
           voice_settings: Json
+          weekly_enabled: boolean
         }
         Insert: {
           afternoon_platforms?: Json
           afternoon_time?: string
           city_id: string
           created_at?: string
+          daily_enabled?: boolean
           enabled?: boolean
           evening_platforms?: Json
           evening_time?: string
           id?: string
+          monthly_enabled?: boolean
           morning_platforms?: Json
           morning_time?: string
           platform_account_map?: Json
@@ -92,16 +97,19 @@ export type Database = {
           updated_at?: string
           user_id: string
           voice_settings?: Json
+          weekly_enabled?: boolean
         }
         Update: {
           afternoon_platforms?: Json
           afternoon_time?: string
           city_id?: string
           created_at?: string
+          daily_enabled?: boolean
           enabled?: boolean
           evening_platforms?: Json
           evening_time?: string
           id?: string
+          monthly_enabled?: boolean
           morning_platforms?: Json
           morning_time?: string
           platform_account_map?: Json
@@ -110,6 +118,7 @@ export type Database = {
           updated_at?: string
           user_id?: string
           voice_settings?: Json
+          weekly_enabled?: boolean
         }
         Relationships: [
           {
