@@ -241,7 +241,7 @@ export function YouTubeChannelsManager({ cities = [], onChange }: Props) {
             <Button
               size="sm"
               variant="outline"
-              onClick={handleConnect}
+              onClick={() => handleConnect("A")}
               disabled={connecting}
               className="w-full gap-1.5 mt-1"
             >
