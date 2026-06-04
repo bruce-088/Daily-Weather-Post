@@ -56,40 +56,55 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const YOUTUBE_CLIENT_ID = Deno.env.get("YOUTUBE_CLIENT_ID")!;
-  const YOUTUBE_CLIENT_SECRET = Deno.env.get("YOUTUBE_CLIENT_SECRET")!;
+  // Phase 12E: dual OAuth — Project A (shorts) and Project B (recaps).
+  const YOUTUBE_CLIENT_ID_A = Deno.env.get("YOUTUBE_CLIENT_ID")!;
+  const YOUTUBE_CLIENT_SECRET_A = Deno.env.get("YOUTUBE_CLIENT_SECRET")!;
+  const YOUTUBE_CLIENT_ID_B = Deno.env.get("YOUTUBE_CLIENT_ID_RECAPS") || "";
+  const YOUTUBE_CLIENT_SECRET_B = Deno.env.get("YOUTUBE_CLIENT_SECRET_RECAPS") || "";
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
   const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const STATE_SECRET = SUPABASE_SERVICE_ROLE_KEY;
 
+  const credsFor = (project: "A" | "B") =>
+    project === "B"
+      ? { id: YOUTUBE_CLIENT_ID_B, secret: YOUTUBE_CLIENT_SECRET_B }
+      : { id: YOUTUBE_CLIENT_ID_A, secret: YOUTUBE_CLIENT_SECRET_A };
+
   try {
     const body = await req.json();
     const { action, code, redirect_uri, state } = body;
-    console.log("YouTube auth action:", action);
+    const requestedProject: "A" | "B" = body?.oauth_project === "B" ? "B" : "A";
+    console.log("YouTube auth action:", action, "project:", requestedProject);
 
     // get_auth_url doesn't need auth
     if (action === "get_auth_url") {
       const auth = await verifyUser(req);
       if (auth.response) return auth.response;
 
+      const creds = credsFor(requestedProject);
+      if (!creds.id || !creds.secret) {
+        return new Response(
+          JSON.stringify({ error: `OAuth Project ${requestedProject} not configured (missing client id/secret)` }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
       const statePayload = {
         nonce: crypto.randomUUID(),
         user_id: auth.userId,
         redirect_uri,
+        oauth_project: requestedProject,
         exp: Date.now() + 10 * 60 * 1000,
       };
       const csrfState = await createSignedState(statePayload, STATE_SECRET);
       const params = new URLSearchParams({
-        client_id: YOUTUBE_CLIENT_ID,
+        client_id: creds.id,
         redirect_uri: redirect_uri,
         response_type: "code",
         scope: "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly",
         // ⚠️ CONTRACT — DO NOT REMOVE THESE THREE PARAMS:
         //   access_type=offline → required for Google to issue a refresh_token
         //   prompt=consent      → guarantees a refresh_token even on re-auth
-        //                         (without it, Google returns no refresh_token
-        //                          if the user previously granted scope, and
-        //                          tokens silently expire every ~1h)
         //   include_granted_scopes=true → preserves prior scopes on re-consent
         access_type: "offline",
         prompt: "select_account consent",
@@ -101,6 +116,7 @@ Deno.serve(async (req) => {
         JSON.stringify({
           url: `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`,
           state: csrfState,
+          oauth_project: requestedProject,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
