@@ -227,77 +227,108 @@ export function CityCommandCenter() {
   return (
     <>
       <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <PlayCircle size={16} className="text-primary" />
-            City Command Center
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-[11px] text-muted-foreground">
-            <strong>Post</strong> runs publish live to connected channels.{" "}
-            <strong>Dev</strong> runs render end-to-end (image, voice, music, caption) but{" "}
-            <em>skip the social upload</em> and never write to post history — use them for safe QA.
-          </p>
-          {cities.length === 0 && (
-            <p className="text-xs text-muted-foreground">No cities found. Add one in City Manager above.</p>
-          )}
-          <div className="space-y-2">
-            {cities.map((c) => {
-              const latest = latestForCity(c.id);
-              const overallStatus: Status = latest?.st.status ?? "idle";
-              return (
-                <div key={c.id} className="rounded-md border bg-card/40 p-3 space-y-2">
-                  <div className="flex items-center gap-2 text-sm font-medium">
-                    <MapPin size={14} className="text-primary" />
-                    {c.name}{c.state ? `, ${c.state}` : ""}
-                  </div>
+        <Collapsible open={mainOpen} onOpenChange={toggleMain}>
+          <CollapsibleCardHeader
+            open={mainOpen}
+            icon={<PlayCircle size={16} className="text-primary" />}
+            title={<span className="text-sm">City Command Center</span>}
+            collapsedHint={
+              <span className="text-[11px] text-muted-foreground">
+                {cities.length} {cities.length === 1 ? "city" : "cities"}
+              </span>
+            }
+          />
+          <CollapsibleContent>
+            <CardContent className="space-y-3">
+              <p className="text-[11px] text-muted-foreground">
+                <strong>Post</strong> runs publish live to connected channels.{" "}
+                <strong>Dev</strong> runs render end-to-end (image, voice, music, caption) but{" "}
+                <em>skip the social upload</em> and never write to post history — use them for safe QA.
+              </p>
+              {cities.length === 0 && (
+                <p className="text-xs text-muted-foreground">No cities found. Add one in City Manager above.</p>
+              )}
+              <div className="space-y-2">
+                {cities.map((c) => {
+                  const latest = latestForCity(c.id);
+                  const overallStatus: Status = latest?.st.status ?? "idle";
+                  const open = isCityOpen(c.id);
+                  return (
+                    <Collapsible
+                      key={c.id}
+                      open={open}
+                      onOpenChange={(o) => toggleCity(c.id, o)}
+                      className="rounded-md border bg-card/40"
+                    >
+                      <CollapsibleTrigger asChild>
+                        <button
+                          type="button"
+                          className="w-full flex items-center justify-between gap-2 p-3 text-left hover:bg-muted/30 transition-colors rounded-md"
+                        >
+                          <div className="flex items-center gap-2 text-sm font-medium min-w-0">
+                            <MapPin size={14} className="text-primary shrink-0" />
+                            <span className="truncate">{c.name}{c.state ? `, ${c.state}` : ""}</span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <StatusDot status={overallStatus} />
+                            <ChevronDown
+                              size={16}
+                              className={`text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
+                            />
+                          </div>
+                        </button>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <div className="px-3 pb-3 space-y-2">
+                          <div className="space-y-1.5">
+                            <div className="text-[10px] uppercase tracking-wide text-amber-500/80 font-semibold">
+                              Post — live to channels
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {renderBtn(c, "post", "daily",   "▶ Post Daily Now")}
+                              {renderBtn(c, "post", "weekly",  "▶ Post Weekly Now")}
+                              {renderBtn(c, "post", "monthly", "▶ Post Monthly Now")}
+                            </div>
+                          </div>
 
-                  <div className="space-y-1.5">
-                    <div className="text-[10px] uppercase tracking-wide text-amber-500/80 font-semibold">
-                      Post — live to channels
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {renderBtn(c, "post", "daily",   "▶ Post Daily Now")}
-                      {renderBtn(c, "post", "weekly",  "▶ Post Weekly Now")}
-                      {renderBtn(c, "post", "monthly", "▶ Post Monthly Now")}
-                    </div>
-                  </div>
+                          <div className="space-y-1.5 pt-1 border-t border-border/40">
+                            <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">
+                              Dev — render only, no upload
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {renderBtn(c, "dev", "daily",   "🛠 Dev: Test Daily")}
+                              {renderBtn(c, "dev", "weekly",  "🛠 Dev: Test Weekly")}
+                              {renderBtn(c, "dev", "monthly", "🛠 Dev: Test Monthly")}
+                            </div>
+                          </div>
 
-                  <div className="space-y-1.5 pt-1 border-t border-border/40">
-                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">
-                      Dev — render only, no upload
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {renderBtn(c, "dev", "daily",   "🛠 Dev: Test Daily")}
-                      {renderBtn(c, "dev", "weekly",  "🛠 Dev: Test Weekly")}
-                      {renderBtn(c, "dev", "monthly", "🛠 Dev: Test Monthly")}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between pt-1">
-                    <StatusDot status={overallStatus} />
-                    {latest?.st.message && (
-                      <span className={`text-[11px] truncate max-w-[55%] ${latest.st.status === "error" ? "text-red-500" : "text-muted-foreground"}`}>
-                        {latest.st.status === "error" ? "❌" : latest.st.status === "done" ? (latest.mode === "dev" ? "🛠" : "✅") : ""} {latest.st.message}
-                      </span>
-                    )}
-                    {latest?.st.url && (
-                      <a
-                        href={latest.st.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-[11px] text-primary inline-flex items-center gap-1 hover:underline"
-                      >
-                        {latest.mode === "dev" ? (<><Eye size={11} /> View Test Result</>) : (<>View <ExternalLink size={11} /></>)}
-                      </a>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </CardContent>
+                          <div className="flex items-center justify-between pt-1">
+                            <StatusDot status={overallStatus} />
+                            {latest?.st.message && (
+                              <span className={`text-[11px] truncate max-w-[55%] ${latest.st.status === "error" ? "text-red-500" : "text-muted-foreground"}`}>
+                                {latest.st.status === "error" ? "❌" : latest.st.status === "done" ? (latest.mode === "dev" ? "🛠" : "✅") : ""} {latest.st.message}
+                              </span>
+                            )}
+                            {latest?.st.url && (
+                              <a
+                                href={latest.st.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-[11px] text-primary inline-flex items-center gap-1 hover:underline"
+                              >
+                                {latest.mode === "dev" ? (<><Eye size={11} /> View Test Result</>) : (<>View <ExternalLink size={11} /></>)}
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </CollapsibleContent>
+        </Collapsible>
       </Card>
 
       <AlertDialog open={!!pendingConfirm} onOpenChange={(o) => !o && setPendingConfirm(null)}>
