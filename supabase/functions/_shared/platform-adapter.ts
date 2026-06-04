@@ -24,8 +24,10 @@ export interface PlatformAdapter {
   /** Check if this platform is connected based on user settings */
   isConnected(settings: Record<string, unknown>): boolean;
 
-  /** Get a valid access token (refreshing if needed) */
-  getValidToken(supabase: any, userId: string, cityId?: string | null): Promise<string | null>;
+  /** Get a valid access token (refreshing if needed).
+   *  opts.contentType is used by YouTube to route between OAuth Project A
+   *  (shorts) and Project B (recaps). Other adapters ignore it. */
+  getValidToken(supabase: any, userId: string, cityId?: string | null, opts?: { contentType?: "short" | "recap" }): Promise<string | null>;
 
   /** Upload video content to the platform */
   uploadVideo(
