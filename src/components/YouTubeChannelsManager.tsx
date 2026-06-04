@@ -64,11 +64,11 @@ export function YouTubeChannelsManager({ cities = [], onChange }: Props) {
 
   useEffect(() => { load(); }, []);
 
-  const handleConnect = async () => {
+  const handleConnect = async (oauthProject: "A" | "B" = "A") => {
     setConnecting(true);
     const redirectUri = `${getOAuthRedirectOrigin()}/youtube/callback`;
     const { data, error } = await supabase.functions.invoke("youtube-auth", {
-      body: { action: "get_auth_url", redirect_uri: redirectUri },
+      body: { action: "get_auth_url", redirect_uri: redirectUri, oauth_project: oauthProject },
     });
     setConnecting(false);
     if (error || data?.error) {
