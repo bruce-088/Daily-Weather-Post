@@ -207,7 +207,7 @@ export function GrowthIntelligenceCard() {
             )}
             <p className="text-[10px] text-muted-foreground pt-1 border-t border-border/50 mt-2">
               {stats!.sample_size} posts analyzed · last computed{" "}
-              {new Date(stats!.computed_at).toLocaleString()}
+              {new Date(stats!.computed_at).toLocaleString(undefined, { year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" })}
             </p>
           </>
         )}
