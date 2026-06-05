@@ -15,8 +15,10 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const MIN_DELTA = 0.15; // 15%
-const MIN_VIEWS = 5;     // floor so we don't crown noise
+// Lowered for early-stage / low-volume channels so the learning loop can crown
+// winners before view counts mature. Revisit once any user crosses ~500 avg views.
+const MIN_DELTA = 0.08; // 8%
+const MIN_VIEWS = 3;     // floor so we don't crown total noise
 
 interface AnalyticsRow {
   post_id: string | null;
