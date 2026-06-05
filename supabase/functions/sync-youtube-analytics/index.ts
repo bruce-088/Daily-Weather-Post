@@ -22,6 +22,20 @@ interface VideoMeta {
   external_id: string;
   created_at: string;
   caption: string | null;
+  city: string | null;
+  city_id: string | null;
+  contentType: "short" | "recap";
+  post_url: string | null;
+  source: string | null;
+}
+
+function classifyContentType(post: { post_url?: string | null; source?: string | null }): "short" | "recap" {
+  const src = (post.source || "").toLowerCase();
+  if (src.includes("recap")) return "recap";
+  const url = (post.post_url || "").toLowerCase();
+  if (url.includes("/shorts/")) return "short";
+  if (url.includes("watch?v=") || url.includes("youtu.be/")) return "recap";
+  return "short";
 }
 
 Deno.serve(async (req) => {
