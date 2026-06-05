@@ -1,13 +1,14 @@
 // sync-youtube-analytics
-// Phase 12-Analytics-D — Enriches post_analytics with YouTube Data API video
-// snippet (tags, title, description) and YouTube Analytics API metrics
+// Phase 12-Analytics-D / F — Enriches post_analytics with YouTube Data API
+// video snippet (tags, title, description) and YouTube Analytics API metrics
 // (averageViewPercentage, CTR, subscribersGained, organic search terms).
 //
-// Triggered nightly via pg_cron (03:00 UTC) and on-demand from the in-app
-// "Sync analytics" button. Fully additive — never touches existing views/likes
-// sync done by sync-youtube-metrics.
+// Phase 12-Analytics-F: routes the Analytics API call by the *actual* channel
+// that owns each video (snippet.channelId) — not by current city mapping. This
+// is required because older recaps/shorts may have been uploaded by a channel
+// that is no longer the active one for that city.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { YouTubeAdapter } from "../_shared/youtube-adapter.ts";
+import { YouTubeAdapter, getYouTubeOAuthCreds } from "../_shared/youtube-adapter.ts";
 import { requireCronOrUser } from "../_shared/auth-helpers.ts";
 
 const corsHeaders = {
@@ -22,20 +23,17 @@ interface VideoMeta {
   external_id: string;
   created_at: string;
   caption: string | null;
-  city: string | null;
-  city_id: string | null;
-  contentType: "short" | "recap";
-  post_url: string | null;
-  source: string | null;
 }
 
-function classifyContentType(post: { post_url?: string | null; source?: string | null }): "short" | "recap" {
-  const src = (post.source || "").toLowerCase();
-  if (src.includes("recap")) return "recap";
-  const url = (post.post_url || "").toLowerCase();
-  if (url.includes("/shorts/")) return "short";
-  if (url.includes("watch?v=") || url.includes("youtu.be/")) return "recap";
-  return "short";
+interface ChannelRow {
+  id: string;
+  user_id: string;
+  access_token: string | null;
+  refresh_token: string | null;
+  token_expires_at: string | null;
+  account_external_id: string | null;
+  account_name: string | null;
+  oauth_project: "A" | "B" | null;
 }
 
 Deno.serve(async (req) => {
@@ -49,7 +47,6 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
-  // backfill=true => 18 months, otherwise last 60 days.
   let backfill = false;
   let scopedUserId: string | null = gate.source === "user" ? (gate.userId ?? null) : null;
   try {
@@ -57,10 +54,7 @@ Deno.serve(async (req) => {
       const body = await req.clone().json().catch(() => null);
       if (body?.backfill) backfill = true;
       if (gate.source === "user" && body?.user_id && body.user_id !== gate.userId) {
-        return new Response(JSON.stringify({ error: "user_id mismatch" }), {
-          status: 403,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return jsonResp({ error: "user_id mismatch" }, 403);
       }
     }
   } catch (_) { /* ignore */ }
@@ -70,7 +64,7 @@ Deno.serve(async (req) => {
 
   let q = supabase
     .from("post_history")
-    .select("id, user_id, external_id, caption, created_at, platform, post_url, city, source")
+    .select("id, user_id, external_id, caption, created_at, platform, post_url")
     .not("external_id", "is", null)
     .gte("created_at", since)
     .or("platform.eq.youtube,platform.ilike.%youtube%,post_url.ilike.%youtube.com%");
@@ -82,19 +76,6 @@ Deno.serve(async (req) => {
     return jsonResp({ error: postsErr.message }, 500);
   }
 
-  // Resolve city names -> city_id (one lookup, cached)
-  const cityNames = Array.from(new Set((posts || []).map((p: any) => (p.city || "").trim()).filter(Boolean)));
-  const cityIdByName = new Map<string, string>();
-  if (cityNames.length > 0) {
-    const { data: cityRows } = await supabase
-      .from("cities")
-      .select("id, name")
-      .in("name", cityNames);
-    for (const c of cityRows || []) {
-      cityIdByName.set((c.name as string).toLowerCase(), c.id as string);
-    }
-  }
-
   const videos: VideoMeta[] = (posts || [])
     .filter((p: any) => p.external_id && p.user_id)
     .map((p: any) => ({
@@ -103,24 +84,15 @@ Deno.serve(async (req) => {
       external_id: p.external_id,
       created_at: p.created_at,
       caption: p.caption,
-      city: p.city ?? null,
-      city_id: cityIdByName.get(String(p.city || "").toLowerCase()) ?? null,
-      contentType: classifyContentType(p),
-      post_url: p.post_url ?? null,
-      source: p.source ?? null,
     }));
 
   console.log(`[sync-youtube-analytics] processing ${videos.length} videos (backfill=${backfill})`);
 
   const adapter = new YouTubeAdapter();
-  // Bucket by (userId, cityId, contentType) so each bucket uses the right channel token.
-  const buckets = new Map<string, { userId: string; cityId: string | null; contentType: "short" | "recap"; videos: VideoMeta[] }>();
+  const byUser = new Map<string, VideoMeta[]>();
   for (const v of videos) {
-    const key = `${v.user_id}|${v.city_id ?? "null"}|${v.contentType}`;
-    if (!buckets.has(key)) {
-      buckets.set(key, { userId: v.user_id, cityId: v.city_id, contentType: v.contentType, videos: [] });
-    }
-    buckets.get(key)!.videos.push(v);
+    if (!byUser.has(v.user_id)) byUser.set(v.user_id, []);
+    byUser.get(v.user_id)!.push(v);
   }
 
   let snippetUpdated = 0;
@@ -128,33 +100,46 @@ Deno.serve(async (req) => {
   let analyticsSkipped = 0;
   let wrongChannel = 0;
   let failed = 0;
-  const bucketResults: Array<Record<string, unknown>> = [];
+  const channelStats: Record<string, { ok: number; forbidden: number; total: number; name?: string }> = {};
 
-  for (const [key, bucket] of buckets.entries()) {
-    const { userId, cityId, contentType, videos: list } = bucket;
-    const label = `bucket[${key} count=${list.length}]`;
+  for (const [userId, list] of byUser.entries()) {
+    // Load all YT channels for this user (both projects).
+    const { data: channelsRows } = await supabase
+      .from("social_accounts")
+      .select("id, user_id, access_token, refresh_token, token_expires_at, account_external_id, account_name, oauth_project")
+      .eq("user_id", userId)
+      .eq("platform", "youtube");
+    const channels = (channelsRows || []) as ChannelRow[];
+    const channelById = new Map<string, ChannelRow>();
+    for (const c of channels) {
+      if (c.account_external_id) channelById.set(c.account_external_id, c);
+    }
 
-    const token = await adapter.getValidToken(supabase, userId, cityId, { contentType });
-    if (!token) {
-      console.warn(`[sync-youtube-analytics] ${label}: no token (city=${cityId} contentType=${contentType})`);
+    // Use any one valid token for snippet fetches (Data API doesn't care
+    // about channel ownership). Prefer Project A; fall back to Project B.
+    const snippetToken =
+      (await adapter.getValidToken(supabase, userId, null, { contentType: "short" }).catch(() => null)) ||
+      (await adapter.getValidToken(supabase, userId, null, { contentType: "recap" }).catch(() => null));
+    if (!snippetToken) {
+      console.warn(`[sync-youtube-analytics] no usable token for user ${userId}`);
       failed += list.length;
-      bucketResults.push({ key, count: list.length, error: "no_token" });
       continue;
     }
 
-    // ---- 1) Snippets ----
+    // ---- 1) Snippets (tags + channelId) in batches of 50 ----
     const idsToMeta = new Map<string, VideoMeta>();
     for (const v of list) idsToMeta.set(v.external_id, v);
     const ids = Array.from(idsToMeta.keys());
-    let bSnippet = 0;
+    // Map video_id -> channelId (UCxxxx)
+    const videoChannel = new Map<string, string>();
 
     for (let i = 0; i < ids.length; i += 50) {
       const chunk = ids.slice(i, i + 50);
       const url = `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${chunk.join(",")}`;
-      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${snippetToken}` } });
       if (!res.ok) {
         const body = await res.text();
-        console.error(`[sync-youtube-analytics] ${label} snippet failed (${res.status}): ${body}`);
+        console.error(`[sync-youtube-analytics] videos.list snippet failed (${res.status}): ${body}`);
         failed += chunk.length;
         continue;
       }
@@ -164,17 +149,80 @@ Deno.serve(async (req) => {
         if (!meta) continue;
         const snip = item.snippet || {};
         const tags: string[] = Array.isArray(snip.tags) ? snip.tags : [];
+        const channelId: string = snip.channelId || "";
+        if (channelId) videoChannel.set(item.id, channelId);
         await upsertAnalytics(supabase, meta, { tags_used: tags });
         snippetUpdated++;
-        bSnippet++;
       }
     }
 
-    // ---- 2) Analytics per-video ----
-    let bAnalytics = 0;
-    let bWrongChannel = 0;
-    let b403Count = 0;
+    // ---- 2) Analytics — route per actual owning channel ----
+    // Cache: channelId -> { token } or null if unroutable.
+    const channelTokenCache = new Map<string, string | null>();
+
+    const getTokenForChannel = async (channelId: string): Promise<string | null> => {
+      if (channelTokenCache.has(channelId)) return channelTokenCache.get(channelId)!;
+      const row = channelById.get(channelId);
+      if (!row || !row.refresh_token) {
+        console.warn(`[sync-youtube-analytics] no social_accounts row with refresh_token for channelId=${channelId}`);
+        channelTokenCache.set(channelId, null);
+        return null;
+      }
+      // Reuse cached access_token if still valid (>5min).
+      const exp = row.token_expires_at ? new Date(row.token_expires_at).getTime() : 0;
+      if (row.access_token && exp > Date.now() + 5 * 60 * 1000) {
+        channelTokenCache.set(channelId, row.access_token);
+        return row.access_token;
+      }
+      const project: "A" | "B" = row.oauth_project === "B" ? "B" : "A";
+      const { id: clientId, secret: clientSecret } = getYouTubeOAuthCreds(project);
+      if (!clientId || !clientSecret) {
+        console.error(`[sync-youtube-analytics] Project ${project} creds missing for refresh`);
+        channelTokenCache.set(channelId, null);
+        return null;
+      }
+      const refreshRes = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: clientId,
+          client_secret: clientSecret,
+          grant_type: "refresh_token",
+          refresh_token: row.refresh_token,
+        }),
+      });
+      const data = await refreshRes.json().catch(() => ({}));
+      if (!data.access_token) {
+        console.error(`[sync-youtube-analytics] refresh failed channel="${row.account_name}" project=${project}: ${JSON.stringify(data)}`);
+        channelTokenCache.set(channelId, null);
+        return null;
+      }
+      const newExp = new Date(Date.now() + (data.expires_in || 3600) * 1000).toISOString();
+      await supabase
+        .from("social_accounts")
+        .update({ access_token: data.access_token, token_expires_at: newExp, updated_at: new Date().toISOString() })
+        .eq("id", row.id);
+      channelTokenCache.set(channelId, data.access_token);
+      return data.access_token;
+    };
+
     for (const v of list) {
+      const channelId = videoChannel.get(v.external_id);
+      if (!channelId) {
+        analyticsSkipped++;
+        continue;
+      }
+      const stat = channelStats[channelId] ||= { ok: 0, forbidden: 0, total: 0, name: channelById.get(channelId)?.account_name ?? undefined };
+      stat.total++;
+
+      const token = await getTokenForChannel(channelId);
+      if (!token) {
+        wrongChannel++;
+        analyticsSkipped++;
+        stat.forbidden++;
+        continue;
+      }
+
       const startDate = v.created_at.slice(0, 10);
       const endDate = new Date().toISOString().slice(0, 10);
       const baseParams = new URLSearchParams({
@@ -183,28 +231,24 @@ Deno.serve(async (req) => {
         endDate,
         filters: `video==${v.external_id}`,
       });
-
-      const metricsList = [
-        "views","likes","comments","shares","subscribersGained",
-        "averageViewPercentage","averageViewDuration","estimatedMinutesWatched",
-      ].join(",");
       const aggParams = new URLSearchParams(baseParams);
-      aggParams.set("metrics", metricsList);
+      aggParams.set("metrics", "views,likes,comments,shares,subscribersGained,averageViewPercentage,averageViewDuration,estimatedMinutesWatched");
       const aggUrl = `https://youtubeanalytics.googleapis.com/v2/reports?${aggParams.toString()}`;
       const aggRes = await fetch(aggUrl, { headers: { Authorization: `Bearer ${token}` } });
 
       if (aggRes.status === 403) {
-        // Wrong channel for this video (or — in the worst case — scope missing).
-        b403Count++;
-        bWrongChannel++;
+        stat.forbidden++;
         wrongChannel++;
         analyticsSkipped++;
-        console.warn(`[sync-youtube-analytics] ${label} video=${v.external_id} 403 (wrong channel or scope)`);
+        if (stat.forbidden <= 3) {
+          const body = await aggRes.text();
+          console.warn(`[sync-youtube-analytics] channel="${stat.name ?? channelId}" video=${v.external_id} 403: ${body.slice(0, 200)}`);
+        }
         continue;
       }
       if (!aggRes.ok) {
         const body = await aggRes.text();
-        console.error(`[sync-youtube-analytics] ${label} analytics failed ${v.external_id} (${aggRes.status}): ${body}`);
+        console.error(`[sync-youtube-analytics] analytics failed ${v.external_id} (${aggRes.status}): ${body}`);
         analyticsSkipped++;
         continue;
       }
@@ -214,33 +258,29 @@ Deno.serve(async (req) => {
       const m: Record<string, number> = {};
       headers.forEach((h, idx) => { m[h] = Number(row[idx] ?? 0); });
 
-      // Search-term traffic
+      // Search-term traffic (organic keywords)
       const ttParams = new URLSearchParams(baseParams);
       ttParams.set("metrics", "views");
       ttParams.set("dimensions", "insightTrafficSourceDetail");
       ttParams.set("filters", `video==${v.external_id};insightTrafficSourceType==YT_SEARCH`);
       ttParams.set("sort", "-views");
       ttParams.set("maxResults", "25");
-      const ttUrl = `https://youtubeanalytics.googleapis.com/v2/reports?${ttParams.toString()}`;
-      const ttRes = await fetch(ttUrl, { headers: { Authorization: `Bearer ${token}` } });
-
+      const ttRes = await fetch(`https://youtubeanalytics.googleapis.com/v2/reports?${ttParams.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       const keywords: string[] = [];
       const rankings: Record<string, number> = {};
       if (ttRes.ok) {
         const ttJson = await ttRes.json();
-        const rows = ttJson.rows || [];
-        rows.forEach((r: any[], i: number) => {
+        (ttJson.rows || []).forEach((r: any[], i: number) => {
           const term = String(r[0] ?? "").trim();
           if (!term) return;
           keywords.push(term);
           rankings[term] = i + 1;
         });
-      } else if (ttRes.status !== 400 && ttRes.status !== 403) {
-        const body = await ttRes.text();
-        console.warn(`[sync-youtube-analytics] ${label} search-term ${v.external_id} (${ttRes.status}): ${body}`);
       }
 
-      const enriched: Record<string, unknown> = {
+      await upsertAnalytics(supabase, v, {
         views: Math.round(m.views || 0),
         likes: Math.round(m.likes || 0),
         comments: Math.round(m.comments || 0),
@@ -251,35 +291,25 @@ Deno.serve(async (req) => {
         keywords_organic: keywords,
         keyword_rankings: rankings,
         analytics_last_synced: new Date().toISOString(),
-      };
-
-      await upsertAnalytics(supabase, v, enriched);
+      });
       analyticsUpdated++;
-      bAnalytics++;
-    }
-
-    const allFailed403 = list.length > 0 && b403Count === list.length;
-    bucketResults.push({
-      key, count: list.length, snippet: bSnippet, analytics: bAnalytics,
-      wrongChannel: bWrongChannel, scopeMissingLikely: allFailed403,
-    });
-    if (allFailed403) {
-      console.warn(`[sync-youtube-analytics] ${label} ALL calls returned 403 — yt-analytics scope likely missing for this channel`);
+      stat.ok++;
     }
   }
 
   console.log(
-    `[sync-youtube-analytics] done. buckets=${buckets.size} snippet=${snippetUpdated} analytics=${analyticsUpdated} skipped=${analyticsSkipped} wrongChannel=${wrongChannel} failed=${failed}`,
+    `[sync-youtube-analytics] done. snippet=${snippetUpdated} analytics=${analyticsUpdated} skipped=${analyticsSkipped} wrongChannel=${wrongChannel} failed=${failed}`,
   );
+  console.log(`[sync-youtube-analytics] per-channel: ${JSON.stringify(channelStats)}`);
+
   return jsonResp({
     processed: videos.length,
-    buckets: buckets.size,
     snippetUpdated,
     analyticsUpdated,
     analyticsSkipped,
     wrongChannel,
     failed,
-    bucketResults,
+    channelStats,
   });
 });
 
