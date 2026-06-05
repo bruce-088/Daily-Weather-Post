@@ -70,7 +70,7 @@ Deno.serve(async (req) => {
 
   let q = supabase
     .from("post_history")
-    .select("id, user_id, external_id, caption, created_at, platform, post_url")
+    .select("id, user_id, external_id, caption, created_at, platform, post_url, city, source")
     .not("external_id", "is", null)
     .gte("created_at", since)
     .or("platform.eq.youtube,platform.ilike.%youtube%,post_url.ilike.%youtube.com%");
@@ -82,6 +82,19 @@ Deno.serve(async (req) => {
     return jsonResp({ error: postsErr.message }, 500);
   }
 
+  // Resolve city names -> city_id (one lookup, cached)
+  const cityNames = Array.from(new Set((posts || []).map((p: any) => (p.city || "").trim()).filter(Boolean)));
+  const cityIdByName = new Map<string, string>();
+  if (cityNames.length > 0) {
+    const { data: cityRows } = await supabase
+      .from("cities")
+      .select("id, name")
+      .in("name", cityNames);
+    for (const c of cityRows || []) {
+      cityIdByName.set((c.name as string).toLowerCase(), c.id as string);
+    }
+  }
+
   const videos: VideoMeta[] = (posts || [])
     .filter((p: any) => p.external_id && p.user_id)
     .map((p: any) => ({
@@ -90,34 +103,50 @@ Deno.serve(async (req) => {
       external_id: p.external_id,
       created_at: p.created_at,
       caption: p.caption,
+      city: p.city ?? null,
+      city_id: cityIdByName.get(String(p.city || "").toLowerCase()) ?? null,
+      contentType: classifyContentType(p),
+      post_url: p.post_url ?? null,
+      source: p.source ?? null,
     }));
 
   console.log(`[sync-youtube-analytics] processing ${videos.length} videos (backfill=${backfill})`);
 
   const adapter = new YouTubeAdapter();
-  const byUser = new Map<string, VideoMeta[]>();
+  // Bucket by (userId, cityId, contentType) so each bucket uses the right channel token.
+  const buckets = new Map<string, { userId: string; cityId: string | null; contentType: "short" | "recap"; videos: VideoMeta[] }>();
   for (const v of videos) {
-    if (!byUser.has(v.user_id)) byUser.set(v.user_id, []);
-    byUser.get(v.user_id)!.push(v);
+    const key = `${v.user_id}|${v.city_id ?? "null"}|${v.contentType}`;
+    if (!buckets.has(key)) {
+      buckets.set(key, { userId: v.user_id, cityId: v.city_id, contentType: v.contentType, videos: [] });
+    }
+    buckets.get(key)!.videos.push(v);
   }
 
   let snippetUpdated = 0;
   let analyticsUpdated = 0;
   let analyticsSkipped = 0;
+  let wrongChannel = 0;
   let failed = 0;
+  const bucketResults: Array<Record<string, unknown>> = [];
 
-  for (const [userId, list] of byUser.entries()) {
-    const token = await adapter.getValidToken(supabase, userId);
+  for (const [key, bucket] of buckets.entries()) {
+    const { userId, cityId, contentType, videos: list } = bucket;
+    const label = `bucket[${key} count=${list.length}]`;
+
+    const token = await adapter.getValidToken(supabase, userId, cityId, { contentType });
     if (!token) {
-      console.warn(`[sync-youtube-analytics] no token for user ${userId}`);
+      console.warn(`[sync-youtube-analytics] ${label}: no token (city=${cityId} contentType=${contentType})`);
       failed += list.length;
+      bucketResults.push({ key, count: list.length, error: "no_token" });
       continue;
     }
 
-    // ---- 1) Pull snippet (tags, title, description) in batches of 50 ----
+    // ---- 1) Snippets ----
     const idsToMeta = new Map<string, VideoMeta>();
     for (const v of list) idsToMeta.set(v.external_id, v);
     const ids = Array.from(idsToMeta.keys());
+    let bSnippet = 0;
 
     for (let i = 0; i < ids.length; i += 50) {
       const chunk = ids.slice(i, i + 50);
@@ -125,7 +154,7 @@ Deno.serve(async (req) => {
       const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) {
         const body = await res.text();
-        console.error(`[sync-youtube-analytics] videos.list snippet failed (${res.status}): ${body}`);
+        console.error(`[sync-youtube-analytics] ${label} snippet failed (${res.status}): ${body}`);
         failed += chunk.length;
         continue;
       }
@@ -137,15 +166,15 @@ Deno.serve(async (req) => {
         const tags: string[] = Array.isArray(snip.tags) ? snip.tags : [];
         await upsertAnalytics(supabase, meta, { tags_used: tags });
         snippetUpdated++;
+        bSnippet++;
       }
     }
 
-    // ---- 2) Per-video YouTube Analytics API call ----
-    // Requires the yt-analytics.readonly scope on the OAuth token. If not
-    // granted (older connections), the call returns 403 and we skip silently.
-    let scopeMissing = false;
+    // ---- 2) Analytics per-video ----
+    let bAnalytics = 0;
+    let bWrongChannel = 0;
+    let b403Count = 0;
     for (const v of list) {
-      if (scopeMissing) { analyticsSkipped++; continue; }
       const startDate = v.created_at.slice(0, 10);
       const endDate = new Date().toISOString().slice(0, 10);
       const baseParams = new URLSearchParams({
@@ -155,16 +184,9 @@ Deno.serve(async (req) => {
         filters: `video==${v.external_id}`,
       });
 
-      // 2a) Aggregate metrics
       const metricsList = [
-        "views",
-        "likes",
-        "comments",
-        "shares",
-        "subscribersGained",
-        "averageViewPercentage",
-        "averageViewDuration",
-        "estimatedMinutesWatched",
+        "views","likes","comments","shares","subscribersGained",
+        "averageViewPercentage","averageViewDuration","estimatedMinutesWatched",
       ].join(",");
       const aggParams = new URLSearchParams(baseParams);
       aggParams.set("metrics", metricsList);
@@ -172,14 +194,17 @@ Deno.serve(async (req) => {
       const aggRes = await fetch(aggUrl, { headers: { Authorization: `Bearer ${token}` } });
 
       if (aggRes.status === 403) {
-        scopeMissing = true;
+        // Wrong channel for this video (or — in the worst case — scope missing).
+        b403Count++;
+        bWrongChannel++;
+        wrongChannel++;
         analyticsSkipped++;
-        console.warn(`[sync-youtube-analytics] yt-analytics scope missing for user ${userId} — skipping remaining`);
+        console.warn(`[sync-youtube-analytics] ${label} video=${v.external_id} 403 (wrong channel or scope)`);
         continue;
       }
       if (!aggRes.ok) {
         const body = await aggRes.text();
-        console.error(`[sync-youtube-analytics] analytics failed ${v.external_id} (${aggRes.status}): ${body}`);
+        console.error(`[sync-youtube-analytics] ${label} analytics failed ${v.external_id} (${aggRes.status}): ${body}`);
         analyticsSkipped++;
         continue;
       }
@@ -189,7 +214,7 @@ Deno.serve(async (req) => {
       const m: Record<string, number> = {};
       headers.forEach((h, idx) => { m[h] = Number(row[idx] ?? 0); });
 
-      // 2b) Search-term traffic (real organic keywords)
+      // Search-term traffic
       const ttParams = new URLSearchParams(baseParams);
       ttParams.set("metrics", "views");
       ttParams.set("dimensions", "insightTrafficSourceDetail");
@@ -199,7 +224,7 @@ Deno.serve(async (req) => {
       const ttUrl = `https://youtubeanalytics.googleapis.com/v2/reports?${ttParams.toString()}`;
       const ttRes = await fetch(ttUrl, { headers: { Authorization: `Bearer ${token}` } });
 
-      let keywords: string[] = [];
+      const keywords: string[] = [];
       const rankings: Record<string, number> = {};
       if (ttRes.ok) {
         const ttJson = await ttRes.json();
@@ -210,21 +235,10 @@ Deno.serve(async (req) => {
           keywords.push(term);
           rankings[term] = i + 1;
         });
-      } else if (ttRes.status !== 400) {
+      } else if (ttRes.status !== 400 && ttRes.status !== 403) {
         const body = await ttRes.text();
-        console.warn(`[sync-youtube-analytics] search-term query ${v.external_id} (${ttRes.status}): ${body}`);
+        console.warn(`[sync-youtube-analytics] ${label} search-term ${v.external_id} (${ttRes.status}): ${body}`);
       }
-
-      // 2c) Impressions / CTR (channel-level call, separate endpoint)
-      // YouTube Analytics impressions + impressionClickThroughRate only
-      // available via the "advertisingOptions" or "trafficSource" reports
-      // — call it per-video with no dimensions.
-      let ctr: number | null = null;
-      const ctrParams = new URLSearchParams(baseParams);
-      ctrParams.set("metrics", "cardImpressions,cardClickRate");
-      // Most channels don't have cards — we'll rely on subscribers/views proxy
-      // when impressions unavailable. Skipping this network call by default to
-      // save quota; rely on aggregated metrics above.
 
       const enriched: Record<string, unknown> = {
         views: Math.round(m.views || 0),
@@ -241,21 +255,31 @@ Deno.serve(async (req) => {
 
       await upsertAnalytics(supabase, v, enriched);
       analyticsUpdated++;
+      bAnalytics++;
+    }
+
+    const allFailed403 = list.length > 0 && b403Count === list.length;
+    bucketResults.push({
+      key, count: list.length, snippet: bSnippet, analytics: bAnalytics,
+      wrongChannel: bWrongChannel, scopeMissingLikely: allFailed403,
+    });
+    if (allFailed403) {
+      console.warn(`[sync-youtube-analytics] ${label} ALL calls returned 403 — yt-analytics scope likely missing for this channel`);
     }
   }
 
   console.log(
-    `[sync-youtube-analytics] done. snippet=${snippetUpdated} analytics=${analyticsUpdated} skipped=${analyticsSkipped} failed=${failed}`,
+    `[sync-youtube-analytics] done. buckets=${buckets.size} snippet=${snippetUpdated} analytics=${analyticsUpdated} skipped=${analyticsSkipped} wrongChannel=${wrongChannel} failed=${failed}`,
   );
   return jsonResp({
     processed: videos.length,
+    buckets: buckets.size,
     snippetUpdated,
     analyticsUpdated,
     analyticsSkipped,
+    wrongChannel,
     failed,
-    note: analyticsSkipped > 0
-      ? "Some users need to reconnect YouTube to grant yt-analytics.readonly scope."
-      : undefined,
+    bucketResults,
   });
 });
 
