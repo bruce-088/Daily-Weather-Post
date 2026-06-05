@@ -15,8 +15,10 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const MIN_DELTA = 0.15; // 15%
-const MIN_VIEWS = 5;     // floor so we don't crown noise
+// Lowered for early-stage / low-volume channels so the learning loop can crown
+// winners before view counts mature. Revisit once any user crosses ~500 avg views.
+const MIN_DELTA = 0.08; // 8%
+const MIN_VIEWS = 3;     // floor so we don't crown total noise
 
 interface AnalyticsRow {
   post_id: string | null;
@@ -241,11 +243,12 @@ Deno.serve(async (req) => {
       : winnerCondition;
 
     // ── AI Visual Optimization guardrails ──
-    // Only persist visual winners that meet BOTH:
-    //   • performance improvement > 15%
-    //   • winning post has at least 100 views
-    if (variable === "visuals" && (deltaPct <= 15 || (winnerViews ?? 0) < 100)) {
-      console.log(`[experiments-resolve] skip visual memory: Δ=${deltaPct.toFixed(1)}% views=${winnerViews} (need >15% & ≥100)`);
+    // Only persist visual winners that clear MIN_DELTA and have meaningful
+    // views. Lowered alongside MIN_VIEWS for early-stage channels.
+    // NOTE: deltaPct is a 0–1 fraction here (e.g. 0.08 = 8%).
+    const VISUAL_MIN_VIEWS = 20;
+    if (variable === "visuals" && (deltaPct < MIN_DELTA || (winnerViews ?? 0) < VISUAL_MIN_VIEWS)) {
+      console.log(`[experiments-resolve] skip visual memory: Δ=${(deltaPct*100).toFixed(1)}% views=${winnerViews} (need ≥${MIN_DELTA*100}% & ≥${VISUAL_MIN_VIEWS})`);
     } else {
       await supabase.from("ai_memory").insert({
         user_id: e.user_id,
