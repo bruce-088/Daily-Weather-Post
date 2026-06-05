@@ -620,6 +620,7 @@ export type Database = {
       }
       post_analytics: {
         Row: {
+          analytics_last_synced: string | null
           avg_percentage_viewed: number | null
           avg_view_duration_sec: number | null
           cinematic: boolean | null
@@ -634,6 +635,8 @@ export type Database = {
           hook_text: string | null
           hook_type: string | null
           id: string
+          keyword_rankings: Json | null
+          keywords_organic: string[] | null
           likes: number
           losing_factors: Json
           performance_score: number | null
@@ -642,10 +645,14 @@ export type Database = {
           posted_at: string | null
           posted_hour: number | null
           score: number | null
+          seo_score: number | null
           shares: number
           subscribers_gained: number | null
+          tags_recommended: string[] | null
+          tags_used: string[] | null
           time_of_day: string | null
           tone: string | null
+          trending_score: number | null
           user_id: string
           views: number
           views_24h: number | null
@@ -653,6 +660,7 @@ export type Database = {
           winning_factors: Json
         }
         Insert: {
+          analytics_last_synced?: string | null
           avg_percentage_viewed?: number | null
           avg_view_duration_sec?: number | null
           cinematic?: boolean | null
@@ -667,6 +675,8 @@ export type Database = {
           hook_text?: string | null
           hook_type?: string | null
           id?: string
+          keyword_rankings?: Json | null
+          keywords_organic?: string[] | null
           likes?: number
           losing_factors?: Json
           performance_score?: number | null
@@ -675,10 +685,14 @@ export type Database = {
           posted_at?: string | null
           posted_hour?: number | null
           score?: number | null
+          seo_score?: number | null
           shares?: number
           subscribers_gained?: number | null
+          tags_recommended?: string[] | null
+          tags_used?: string[] | null
           time_of_day?: string | null
           tone?: string | null
+          trending_score?: number | null
           user_id: string
           views?: number
           views_24h?: number | null
@@ -686,6 +700,7 @@ export type Database = {
           winning_factors?: Json
         }
         Update: {
+          analytics_last_synced?: string | null
           avg_percentage_viewed?: number | null
           avg_view_duration_sec?: number | null
           cinematic?: boolean | null
@@ -700,6 +715,8 @@ export type Database = {
           hook_text?: string | null
           hook_type?: string | null
           id?: string
+          keyword_rankings?: Json | null
+          keywords_organic?: string[] | null
           likes?: number
           losing_factors?: Json
           performance_score?: number | null
@@ -708,10 +725,14 @@ export type Database = {
           posted_at?: string | null
           posted_hour?: number | null
           score?: number | null
+          seo_score?: number | null
           shares?: number
           subscribers_gained?: number | null
+          tags_recommended?: string[] | null
+          tags_used?: string[] | null
           time_of_day?: string | null
           tone?: string | null
+          trending_score?: number | null
           user_id?: string
           views?: number
           views_24h?: number | null
