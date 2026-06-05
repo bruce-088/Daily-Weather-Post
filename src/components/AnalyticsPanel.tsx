@@ -39,6 +39,7 @@ import { toast } from "sonner";
 import { useActiveCity } from "@/hooks/useActiveCity";
 import { GrowthIntelligenceCard } from "@/components/GrowthIntelligenceCard";
 import { ChannelHealthCard } from "@/components/ChannelHealthCard";
+import { SEOInsightsPanel } from "@/components/SEOInsightsPanel";
 
 type AnalyticsRow = {
   id: string;
@@ -280,6 +281,7 @@ export function AnalyticsPanel() {
       <div className="space-y-6">
         <GrowthIntelligenceCard />
         <ChannelHealthCard />
+        <SEOInsightsPanel />
         <Card className="p-8 text-center">
         <BarChart3 className="mx-auto mb-3 text-muted-foreground" size={32} />
         <h3 className="font-display text-lg mb-1">
@@ -303,6 +305,7 @@ export function AnalyticsPanel() {
     <div className="space-y-6">
       <GrowthIntelligenceCard />
       <ChannelHealthCard />
+      <SEOInsightsPanel />
       {/* Header + Sync Now */}
       <div className="flex items-center justify-between">
         <div>
