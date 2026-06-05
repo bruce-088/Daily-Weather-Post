@@ -78,30 +78,11 @@ export function GrowthIntelligenceCard() {
     const { data } = await q;
     const row = ((data as any[]) || [])[0] || null;
 
-    // Recompute voice_lift_pct from post_history to match SmartInsightsCard
-    // (views-based, larger sample = source of truth).
-    let ph = supabase
-      .from("post_history")
-      .select("views_count, voice_status")
-      .eq("user_id", user.id)
-      .in("status", ["success", "posted"])
-      .limit(500);
-    if (activeCity.name) ph = ph.ilike("city", activeCity.name);
-    const { data: phRows } = await ph;
-    const on = (phRows || []).filter((r: any) => r.voice_status === "success").map((r: any) => Number(r.views_count) || 0);
-    const off = (phRows || []).filter((r: any) => r.voice_status !== "success").map((r: any) => Number(r.views_count) || 0);
-    const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
-    let lift: number | null = null;
-    if (on.length >= 3 && off.length >= 3) {
-      const a = mean(on);
-      const b = mean(off);
-      if (b > 0) lift = Math.round(((a - b) / b) * 100);
-      else if (a > 0) lift = 100;
-    }
-    setVoiceSamples(on.length + off.length);
-    setStats(row ? { ...row, voice_lift_pct: lift ?? row.voice_lift_pct } : row);
+    setStats(row);
+    setVoiceSamples(row?.sample_size ?? 0);
     setLoading(false);
   }
+
 
   useEffect(() => {
     setLoading(true);
@@ -226,7 +207,7 @@ export function GrowthIntelligenceCard() {
             )}
             <p className="text-[10px] text-muted-foreground pt-1 border-t border-border/50 mt-2">
               {stats!.sample_size} posts analyzed · last computed{" "}
-              {new Date(stats!.computed_at).toLocaleString()}
+              {new Date(stats!.computed_at).toLocaleString(undefined, { year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" })}
             </p>
           </>
         )}
