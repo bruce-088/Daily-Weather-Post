@@ -181,7 +181,14 @@ export function ChannelHealthCard() {
               className="rounded-md border border-border/50 bg-card/40 p-4 space-y-3"
             >
               <div className="flex items-center justify-between gap-2">
-                <p className="font-display text-sm">{ch.account_name || "YouTube channel"}</p>
+                <div className="min-w-0">
+                  <p className="font-display text-sm truncate">{ch.account_name || "YouTube channel"}</p>
+                  {ch.oauth_project && (
+                    <p className="text-[10px] text-muted-foreground">
+                      {ch.oauth_project.split(" + ").map((p) => (p === "A" ? "Shorts" : p === "B" ? "Recaps" : p)).join(" + ")}
+                    </p>
+                  )}
+                </div>
                 {s?.fetched_at && (
                   <span className="text-[10px] text-muted-foreground">
                     {new Date(s.fetched_at).toLocaleString(undefined, {
