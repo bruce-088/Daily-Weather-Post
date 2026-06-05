@@ -20,8 +20,11 @@ type ChannelStats = {
 type Channel = {
   id: string;
   account_name: string | null;
+  account_external_id: string | null;
+  oauth_project: string | null;
   extra: { channel_stats?: ChannelStats } | null;
 };
+
 
 const fmt = (n: number | null | undefined) =>
   n === null || n === undefined ? "—" : n.toLocaleString();
