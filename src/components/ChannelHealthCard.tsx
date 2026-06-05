@@ -85,11 +85,41 @@ export function ChannelHealthCard() {
     }
     const { data, error } = await supabase
       .from("social_accounts")
-      .select("id, account_name, extra")
+      .select("id, account_name, account_external_id, oauth_project, extra")
       .eq("platform", "youtube")
       .eq("user_id", user.id)
       .order("account_name", { ascending: true });
-    if (!error) setChannels((data as Channel[]) || []);
+    if (!error) {
+      const rows = (data as Channel[]) || [];
+      // Dedupe by account_external_id (same YouTube channel, different OAuth projects).
+      // Prefer the row with non-null subscribers, then most recent fetched_at.
+      const groups = new Map<string, Channel[]>();
+      for (const r of rows) {
+        const key = r.account_external_id || r.id;
+        const arr = groups.get(key) || [];
+        arr.push(r);
+        groups.set(key, arr);
+      }
+      const deduped: Channel[] = [];
+      for (const arr of groups.values()) {
+        arr.sort((a, b) => {
+          const aSubs = a.extra?.channel_stats?.subscribers;
+          const bSubs = b.extra?.channel_stats?.subscribers;
+          const aHas = aSubs !== null && aSubs !== undefined ? 1 : 0;
+          const bHas = bSubs !== null && bSubs !== undefined ? 1 : 0;
+          if (aHas !== bHas) return bHas - aHas;
+          const aTs = a.extra?.channel_stats?.fetched_at || "";
+          const bTs = b.extra?.channel_stats?.fetched_at || "";
+          return bTs.localeCompare(aTs);
+        });
+        // Merge oauth_project labels for subtitle.
+        const projects = Array.from(new Set(arr.map((x) => x.oauth_project).filter(Boolean))) as string[];
+        const winner = { ...arr[0], oauth_project: projects.join(" + ") || arr[0].oauth_project };
+        deduped.push(winner);
+      }
+      setChannels(deduped);
+    }
+
     setLoading(false);
   }, []);
 
