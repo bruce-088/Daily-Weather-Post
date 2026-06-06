@@ -1,5 +1,6 @@
 import type { PlatformAdapter, UploadResult } from "./platform-adapter.ts";
 import { matchAccountByCityName } from "./city-accounts.ts";
+import { buildRotatingTags as _buildRotatingTagsSync } from "./post-variety.ts";
 
 type ResolvedYTAccount = {
   id: string;
