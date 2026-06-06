@@ -245,7 +245,14 @@ export function resolveScene(opts: {
     }
 
     // Tier 2: condition scene
-    const pick = pickConditionScene(condition);
+    // Phase 13C: rotation seed = explicit slideIndex (recap slides) OR a
+    // day-of-year derived integer (daily shorts) so consecutive renders
+    // cycle through the matching scene pool instead of always landing on
+    // the same Unsplash photo.
+    const dayOfYear = Math.floor((Date.now() - new Date(new Date().getUTCFullYear(), 0, 0).getTime()) / 86400000);
+    const sceneSeed = (opts.slideIndex != null ? opts.slideIndex : dayOfYear)
+                     + (city ? city.charCodeAt(0) : 0);
+    const pick = pickConditionScene(condition, sceneSeed);
     if (pick) {
       if (visualStyleHint === "gradient") {
         console.log(`[cinematic] hint=gradient overridden — condition_scene available (label=${pick.label})`);
