@@ -18,6 +18,7 @@ import {
   stripUnverifiedReferences,
 } from "../_shared/location-guard.ts";
 import { getTopPerformingPatterns, buildLearningPromptBlock } from "../_shared/learning-patterns.ts";
+import { injectOpener } from "../_shared/post-variety.ts";
 import { getWinningStyleForCondition, formatRecipeDirective } from "../_shared/winning-recipes.ts";
 
 const corsHeaders = {
