@@ -248,12 +248,13 @@ export function SEOInsightsPanel() {
           {/* Score distribution */}
           <div>
             <div className="text-[11px] text-muted-foreground mb-1.5">SEO Score Distribution</div>
-            <div className="flex items-end gap-1 h-16">
+            <div className="flex items-end gap-1 h-20">
               {distribution.buckets.map((n, i) => (
-                <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                <div key={i} className="flex-1 h-full flex flex-col items-center justify-end gap-1">
+                  <div className="text-[9px] font-mono text-muted-foreground tabular-nums">{n}</div>
                   <div
-                    className="w-full rounded-t bg-primary/70"
-                    style={{ height: `${(n / maxBucket) * 100}%` }}
+                    className="w-full rounded-t bg-primary/70 min-h-[2px]"
+                    style={{ height: `${Math.max((n / maxBucket) * 100, n > 0 ? 4 : 0)}%` }}
                     title={`${n} videos`}
                   />
                   <div className="text-[9px] font-mono text-muted-foreground">
