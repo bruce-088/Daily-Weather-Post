@@ -792,7 +792,7 @@ ${ctaBlock}${antiRepeatBlock ? `\n\n${antiRepeatBlock}` : ""}`;
       caption = injectOpener(caption, {
         city,
         slot: slotForBeacon,
-        condition: weather?.conditions || body.conditions || null,
+        condition: body.condition ?? body.morning_condition ?? body.afternoon_condition ?? null,
       });
     } catch (e) {
       console.warn("[generate-caption] opener rotation failed:", e);
