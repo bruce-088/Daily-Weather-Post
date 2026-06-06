@@ -2440,20 +2440,18 @@ Deno.serve(async (req) => {
         if (caption) caption = sanitizeCityProxies(caption, weather.city);
 
 
-        // ── Location Beacon: ensure first non-empty line is "📍 City · Slot Update" ──
+        // ── Phase 13C: rotating opener (5 templates, seeded by city+slot+date)
+        //    Replaces the legacy "📍 City · Slot Update" static beacon so the
+        //    YouTube algorithm doesn't see identical first lines on every post.
         if (caption) {
           try {
-            const beacon = `📍 ${weather.city} · ${_slotLabel} Update`;
-            const lines = caption.split(/\r?\n/);
-            const firstIdx = lines.findIndex((l) => l.trim().length > 0);
-            if (firstIdx >= 0 && /^\s*📍/.test(lines[firstIdx])) {
-              lines[firstIdx] = beacon;
-              caption = lines.join("\n");
-            } else {
-              caption = `${beacon}\n\n${caption.replace(/^\s+/, "")}`;
-            }
+            caption = injectOpener(caption, {
+              city: weather.city,
+              slot: _slotLabel,
+              condition: weather.condition,
+            });
           } catch (e) {
-            console.warn("[process-scheduled-posts] beacon injection failed:", e);
+            console.warn("[process-scheduled-posts] opener rotation failed:", e);
           }
         }
 
