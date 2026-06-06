@@ -69,18 +69,48 @@ export function SEOInsightsPanel() {
   }, [user?.id, activeCity.name]);
 
   async function handleSync() {
+    if (syncing) return;
     setSyncing(true);
+    const toastId = toast.loading("Syncing YouTube analytics… (1/3)");
+
+    // Hard safety cap so the spinner can never hang forever, even if an
+    // edge function exceeds the gateway timeout or never responds.
+    const SYNC_TIMEOUT_MS = 120_000;
+    const timeout = <T,>(p: Promise<T>, label: string) =>
+      Promise.race<T>([
+        p,
+        new Promise<T>((_, rej) =>
+          setTimeout(() => rej(new Error(`${label} timed out after 120s`)), SYNC_TIMEOUT_MS),
+        ),
+      ]);
+
     try {
-      const a = await supabase.functions.invoke("sync-youtube-analytics", { body: {} });
+      const a = await timeout(
+        supabase.functions.invoke("sync-youtube-analytics", { body: {} }),
+        "sync-youtube-analytics",
+      );
       if (a.error) throw a.error;
-      const b = await supabase.functions.invoke("compute-seo-scores", { body: {} });
+
+      toast.loading("Computing SEO scores… (2/3)", { id: toastId });
+      const b = await timeout(
+        supabase.functions.invoke("compute-seo-scores", { body: {} }),
+        "compute-seo-scores",
+      );
       if (b.error) throw b.error;
-      const c = await supabase.functions.invoke("generate-tag-recommendations", { body: {} });
+
+      toast.loading("Generating tag recommendations… (3/3)", { id: toastId });
+      const c = await timeout(
+        supabase.functions.invoke("generate-tag-recommendations", { body: {} }),
+        "generate-tag-recommendations",
+      );
       if (c.error) throw c.error;
-      toast.success("YouTube SEO analytics refreshed");
+
+      const synced = (a.data as any)?.updated ?? (a.data as any)?.synced ?? "all";
+      toast.success(`YouTube SEO refreshed (${synced} videos)`, { id: toastId });
       await load();
     } catch (e: any) {
-      toast.error(e?.message || "Sync failed");
+      console.error("[SEOInsightsPanel] sync failed:", e);
+      toast.error(e?.message || "Sync failed", { id: toastId });
     } finally {
       setSyncing(false);
     }
