@@ -59,20 +59,48 @@ export interface CinematicSettings {
 
 interface CondScene { match: RegExp; label: string; url: string }
 
+// Phase 13C: each condition now has 3–4 stock scenes so consecutive renders
+// rotate visually instead of reusing the same Unsplash photo every time.
+// All URLs are royalty-free Unsplash with explicit `?auto=format` and a
+// stable photo id so we don't depend on search ranking.
 const CONDITION_SCENES: ReadonlyArray<CondScene> = [
-  { match: /storm|thunder|lightning/i,        label: "storm_clouds", url: "https://images.unsplash.com/photo-1605727216801-e27ce1d0cc28?auto=format&fit=crop&w=1080&q=80" },
-  { match: /rain|drizzle|shower/i,            label: "rainy_sky",    url: "https://images.unsplash.com/photo-1519692933481-e162a57d6721?auto=format&fit=crop&w=1080&q=80" },
-  { match: /snow|sleet|blizzard|flurr/i,      label: "snowy_sky",    url: "https://images.unsplash.com/photo-1483921020237-2ff51e8e4b22?auto=format&fit=crop&w=1080&q=80" },
-  { match: /cloud|overcast|fog|mist|haze/i,   label: "cloudy_sky",   url: "https://images.unsplash.com/photo-1500740516770-92bd004b996e?auto=format&fit=crop&w=1080&q=80" },
-  { match: /clear|sunny|sun\b/i,              label: "bright_sky",   url: "https://images.unsplash.com/photo-1419833173245-f59e1b93f9ee?auto=format&fit=crop&w=1080&q=80" },
+  // Storm / thunder (4)
+  { match: /storm|thunder|lightning/i, label: "storm_clouds_a", url: "https://images.unsplash.com/photo-1605727216801-e27ce1d0cc28?auto=format&fit=crop&w=1080&q=80" },
+  { match: /storm|thunder|lightning/i, label: "storm_clouds_b", url: "https://images.unsplash.com/photo-1538935732373-f7a495fea3f6?auto=format&fit=crop&w=1080&q=80" },
+  { match: /storm|thunder|lightning/i, label: "storm_clouds_c", url: "https://images.unsplash.com/photo-1561485132-59468cd0b553?auto=format&fit=crop&w=1080&q=80" },
+  // Rain (4)
+  { match: /rain|drizzle|shower/i, label: "rainy_sky_a", url: "https://images.unsplash.com/photo-1519692933481-e162a57d6721?auto=format&fit=crop&w=1080&q=80" },
+  { match: /rain|drizzle|shower/i, label: "rainy_sky_b", url: "https://images.unsplash.com/photo-1428592953211-077101b2021b?auto=format&fit=crop&w=1080&q=80" },
+  { match: /rain|drizzle|shower/i, label: "rainy_street",  url: "https://images.unsplash.com/photo-1534274988757-a28bf1a57c17?auto=format&fit=crop&w=1080&q=80" },
+  { match: /rain|drizzle|shower/i, label: "rain_window",   url: "https://images.unsplash.com/photo-1438449805896-28a666819a20?auto=format&fit=crop&w=1080&q=80" },
+  // Snow (2)
+  { match: /snow|sleet|blizzard|flurr/i, label: "snowy_sky_a", url: "https://images.unsplash.com/photo-1483921020237-2ff51e8e4b22?auto=format&fit=crop&w=1080&q=80" },
+  { match: /snow|sleet|blizzard|flurr/i, label: "snowy_sky_b", url: "https://images.unsplash.com/photo-1457269449834-928af64c684d?auto=format&fit=crop&w=1080&q=80" },
+  // Cloudy / fog / overcast (4)
+  { match: /cloud|overcast|fog|mist|haze/i, label: "cloudy_sky_a",  url: "https://images.unsplash.com/photo-1500740516770-92bd004b996e?auto=format&fit=crop&w=1080&q=80" },
+  { match: /cloud|overcast|fog|mist|haze/i, label: "cloudy_sky_b",  url: "https://images.unsplash.com/photo-1499346030926-9a72daac6c63?auto=format&fit=crop&w=1080&q=80" },
+  { match: /cloud|overcast|fog|mist|haze/i, label: "overcast_field", url: "https://images.unsplash.com/photo-1505533321630-975218a5f66f?auto=format&fit=crop&w=1080&q=80" },
+  { match: /cloud|overcast|fog|mist|haze/i, label: "foggy_morning", url: "https://images.unsplash.com/photo-1487621167305-5d248087c724?auto=format&fit=crop&w=1080&q=80" },
+  // Clear / sunny (4)
+  { match: /clear|sunny|sun\b/i, label: "bright_sky_a",   url: "https://images.unsplash.com/photo-1419833173245-f59e1b93f9ee?auto=format&fit=crop&w=1080&q=80" },
+  { match: /clear|sunny|sun\b/i, label: "bright_sky_b",   url: "https://images.unsplash.com/photo-1504370805625-d32c54b16100?auto=format&fit=crop&w=1080&q=80" },
+  { match: /clear|sunny|sun\b/i, label: "sunlit_palms",   url: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1080&q=80" },
+  { match: /clear|sunny|sun\b/i, label: "blue_sky_park",  url: "https://images.unsplash.com/photo-1470770841072-f978cf4d019e?auto=format&fit=crop&w=1080&q=80" },
 ];
 
-export function pickConditionScene(cond?: string | null): { label: string; url: string } | null {
+/**
+ * Pick a condition scene with deterministic rotation. `seed` (e.g. a slide
+ * index or date-derived integer) lets consecutive renders cycle through the
+ * matching pool instead of always returning the first entry — fixes the
+ * "same Unsplash photo every day" visual monotony.
+ */
+export function pickConditionScene(cond?: string | null, seed = 0): { label: string; url: string } | null {
   if (!cond) return null;
-  for (const s of CONDITION_SCENES) {
-    if (s.match.test(cond)) return { label: s.label, url: s.url };
-  }
-  return null;
+  const matches = CONDITION_SCENES.filter((s) => s.match.test(cond));
+  if (matches.length === 0) return null;
+  const idx = Math.abs(seed | 0) % matches.length;
+  const pick = matches[idx];
+  return { label: pick.label, url: pick.url };
 }
 
 // ── Gainesville city-safe scenes (permanent public URLs) ──────────────────
@@ -217,7 +245,14 @@ export function resolveScene(opts: {
     }
 
     // Tier 2: condition scene
-    const pick = pickConditionScene(condition);
+    // Phase 13C: rotation seed = explicit slideIndex (recap slides) OR a
+    // day-of-year derived integer (daily shorts) so consecutive renders
+    // cycle through the matching scene pool instead of always landing on
+    // the same Unsplash photo.
+    const dayOfYear = Math.floor((Date.now() - new Date(new Date().getUTCFullYear(), 0, 0).getTime()) / 86400000);
+    const sceneSeed = (opts.slideIndex != null ? opts.slideIndex : dayOfYear)
+                     + (city ? city.charCodeAt(0) : 0);
+    const pick = pickConditionScene(condition, sceneSeed);
     if (pick) {
       if (visualStyleHint === "gradient") {
         console.log(`[cinematic] hint=gradient overridden — condition_scene available (label=${pick.label})`);

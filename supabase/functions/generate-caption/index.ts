@@ -18,6 +18,7 @@ import {
   stripUnverifiedReferences,
 } from "../_shared/location-guard.ts";
 import { getTopPerformingPatterns, buildLearningPromptBlock } from "../_shared/learning-patterns.ts";
+import { injectOpener } from "../_shared/post-variety.ts";
 import { getWinningStyleForCondition, formatRecipeDirective } from "../_shared/winning-recipes.ts";
 
 const corsHeaders = {
@@ -783,22 +784,18 @@ ${ctaBlock}${antiRepeatBlock ? `\n\n${antiRepeatBlock}` : ""}`;
     } catch (e) {
       console.warn("[generate-caption] handle sanitizer failed:", e);
     }
-    // Prepend (or replace) a city-local timestamp stamp on the first line.
-    // Format: `📍 ${city} · ${H AM/PM} Update`. Fails silently if anything throws.
+    // Phase 13C: rotating opener (5 templates, deterministic seed). Replaces
+    // the legacy static "📍 City · Slot Update" beacon so consecutive posts
+    // don't all start with identical phrasing.
     try {
       const slotForBeacon = body.slot ?? period;
-      const stamp = slotForBeacon ? slotDisplayLabel(slotForBeacon) : getCityLocalStamp(city);
-      const stampLine = `📍 ${city} · ${stamp} Update`;
-      const lines = caption.split(/\r?\n/);
-      const firstIdx = lines.findIndex((l) => l.trim().length > 0);
-      if (firstIdx >= 0 && /^\s*📍/.test(lines[firstIdx])) {
-        lines[firstIdx] = stampLine;
-        caption = lines.join("\n");
-      } else {
-        caption = `${stampLine}\n\n${caption.replace(/^\s+/, "")}`;
-      }
+      caption = injectOpener(caption, {
+        city,
+        slot: slotForBeacon,
+        condition: body.condition ?? body.morning_condition ?? body.afternoon_condition ?? null,
+      });
     } catch (e) {
-      console.warn("[generate-caption] timestamp stamp failed:", e);
+      console.warn("[generate-caption] opener rotation failed:", e);
     }
 
     return new Response(JSON.stringify({ caption, ai_optimized: aiOptimized }), {

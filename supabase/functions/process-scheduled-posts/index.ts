@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildStyleAddendum, normalizeTone, appendVoiceCTA, isWeatherAlert, titleHasTimestamp, slotTimePrefix, slotDisplayLabel, slotPersonalityDirective, rotatingCTA, captionSimilarity, firstContentLine, ensureSlotTitlePrefix, inferSlotFromCityHour, assertSlotTitlePrefix } from "../_shared/caption-style.ts";
+import { injectOpener } from "../_shared/post-variety.ts";
 import { validatePostBundle } from "../_shared/text-sanitizer.ts";
 import { buildHookTitle, generateSkyBriefTitle, getWeatherEmoji } from "../_shared/title-builder.ts";
 import { LOCATION_ACCURACY_RULES, validateCaptionLocation, buildVerifiedLandmarksBlock, stripUnverifiedReferences } from "../_shared/location-guard.ts";
@@ -2439,20 +2440,18 @@ Deno.serve(async (req) => {
         if (caption) caption = sanitizeCityProxies(caption, weather.city);
 
 
-        // ── Location Beacon: ensure first non-empty line is "📍 City · Slot Update" ──
+        // ── Phase 13C: rotating opener (5 templates, seeded by city+slot+date)
+        //    Replaces the legacy "📍 City · Slot Update" static beacon so the
+        //    YouTube algorithm doesn't see identical first lines on every post.
         if (caption) {
           try {
-            const beacon = `📍 ${weather.city} · ${_slotLabel} Update`;
-            const lines = caption.split(/\r?\n/);
-            const firstIdx = lines.findIndex((l) => l.trim().length > 0);
-            if (firstIdx >= 0 && /^\s*📍/.test(lines[firstIdx])) {
-              lines[firstIdx] = beacon;
-              caption = lines.join("\n");
-            } else {
-              caption = `${beacon}\n\n${caption.replace(/^\s+/, "")}`;
-            }
+            caption = injectOpener(caption, {
+              city: weather.city,
+              slot: _slotLabel,
+              condition: weather.condition,
+            });
           } catch (e) {
-            console.warn("[process-scheduled-posts] beacon injection failed:", e);
+            console.warn("[process-scheduled-posts] opener rotation failed:", e);
           }
         }
 
