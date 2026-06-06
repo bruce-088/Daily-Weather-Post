@@ -518,108 +518,97 @@ export class YouTubeAdapter implements PlatformAdapter {
 // --- Dynamic YouTube tag builder (SEO-optimized for Shorts discovery) ---
 // Tags are derived from title + description text so we don't need to change
 // the PlatformAdapter signature or any caller in the posting pipeline.
-// Strategy: evergreen base tags + city + regional + condition + time-of-day,
-// targeting 15–20 tags within YouTube's 500-char combined limit.
+// Phase 13C: now delegates to shared buildRotatingTags so manual + auto
+// posts share one anti-repetition pool. The legacy in-file generator had a
+// city-extraction bug that produced the duplicate-token tag
+// "gainesville weather weather" (and the same on Orlando) — fixed here by
+// reusing the canonical city derived from settings rather than re-extracting
+// from the title.
 function buildYouTubeTags(title: string, description: string): string[] {
   const text = `${title}\n${description}`.toLowerCase();
   const hour = new Date().getHours();
 
   // City extraction from hook title (city is always present, properly cased).
+  // Phase 13C bug #1 fix: never consume a second word that is itself a
+  // common weather noun — otherwise "Gainesville Weather …" gets captured
+  // as a 2-word "city" and the next step emits "gainesville weather weather".
   const skipWords = new Set(["good", "hot", "cold", "cool", "warm", "rain", "storms", "storm",
     "bundle", "calm", "cloudy", "foggy", "grab", "gray", "heads", "tonight",
     "today", "beautiful", "feels", "you", "wet", "snowy", "drive", "crank",
     "chilly", "mild", "sun", "sunny", "tonights", "afternoon", "morning", "evening"]);
+  const secondWordBlocklist = new Set([
+    "weather", "update", "forecast", "today", "tonight", "morning",
+    "afternoon", "evening", "shorts", "now", "alert", "alerts", "skies",
+    "outlook", "watch", "warning",
+  ]);
   let city = "";
   const matches = title.match(/\b[A-Z][a-z]+(?:\s[A-Z][a-z]+)?\b/g) || [];
   for (const m of matches) {
-    const first = m.split(" ")[0].toLowerCase();
-    if (!skipWords.has(first)) { city = m; break; }
+    const parts = m.split(" ");
+    const first = parts[0].toLowerCase();
+    if (skipWords.has(first)) continue;
+    if (parts.length === 2 && secondWordBlocklist.has(parts[1].toLowerCase())) {
+      city = parts[0];
+    } else {
+      city = m;
+    }
+    break;
   }
-  const cityLc = city.toLowerCase();
 
-  // Detect region (Florida default for SkyBriefGNV and FL cities)
+  // Detect slot from hour and rotate via shared helper.
+  const slot = hour >= 4 && hour < 11 ? "morning"
+             : hour >= 11 && hour < 17 ? "afternoon"
+             : "evening";
+
+  // Pull dominant condition from text for the rotation pool.
+  let cond = "";
+  if (/storm|⛈|thunder|tornado|hurricane/.test(text)) cond = "storm";
+  else if (/rain|🌧|☔|drizzle|shower/.test(text)) cond = "rain";
+  else if (/snow|❄️|sleet|blizzard/.test(text)) cond = "snow";
+  else if (/fog|🌫|mist|haze/.test(text)) cond = "fog";
+  else if (/cloud|☁️|🌤|gray skies|overcast/.test(text)) cond = "cloudy";
+  else if (/clear|☀️|sunny|beautiful/.test(text)) cond = "sunny";
+
+  const tempMatch = title.match(/(\d{1,3})°/);
+  const temp = tempMatch ? parseInt(tempMatch[1], 10) : null;
+
   const isFlorida = /gainesville|florida|miami|orlando|tampa|jacksonville|tallahassee|ocala/
     .test(text);
 
-  // 1. Base tags — always include
-  const base: string[] = [
-    "weather update",
-    "daily forecast",
-    "weather shorts",
-    "local weather",
-    "#Shorts",
-  ];
-  if (cityLc) {
-    base.unshift(`${cityLc} weather`);
-    if (isFlorida) base.unshift(`${cityLc} florida`);
-  }
-  if (isFlorida) base.push("florida weather today");
+  // Lazy import (sync) of the shared helper via dynamic call — file lives
+  // alongside us so this is a static relative path.
+  const out = _buildRotatingTagsSync({
+    city: city || "Local",
+    state: isFlorida ? "Florida" : null,
+    slot,
+    condition: cond,
+    highTemp: temp,
+  });
 
-  // 2. Condition tags
-  const cond: string[] = [];
-  if (/clear|☀️|sunny|beautiful/.test(text)) {
-    cond.push("sunny weather", "clear skies", "beautiful day");
-  }
-  if (/cloud|☁️|🌤|gray skies|overcast/.test(text)) {
-    cond.push("cloudy forecast", "overcast skies");
-  }
-  if (/rain|🌧|☔|drizzle|shower/.test(text)) {
-    cond.push("rain forecast", isFlorida ? "rainy day florida" : "rainy day", "storm update");
-  }
-  if (/storm|⛈|thunder|tornado|hurricane/.test(text)) {
-    cond.push("storm update", "severe weather");
-  }
-  if (/snow|❄️|sleet|blizzard/.test(text)) {
-    cond.push("snow forecast", "winter weather");
-  }
-  if (/fog|🌫|mist|haze/.test(text)) {
-    cond.push("foggy weather");
-  }
-
-  // Temperature-based (parse from title — hook titles include "84°" style)
-  const tempMatch = title.match(/(\d{1,3})°/);
-  const temp = tempMatch ? parseInt(tempMatch[1], 10) : NaN;
-  if (!isNaN(temp)) {
-    if (temp > 85) {
-      cond.push("heat wave", isFlorida ? "hot weather florida" : "hot weather", "summer heat");
-    } else if (temp < 55) {
-      cond.push("cold front", "chilly weather", isFlorida ? "florida cold" : "cold weather");
-    }
-  } else {
-    // Fallback to keyword match if no temp present
-    if (/hot|🔥|heat|🌞/.test(text)) cond.push("heat wave", "hot weather");
-    if (/cold|🥶|chilly|🧥|cold front/.test(text)) cond.push("cold front", "chilly weather");
-  }
-
-  // 3. Time-of-day tags
-  const tod: string[] = [];
-  if (hour >= 4 && hour < 11) {
-    tod.push("morning weather", "today's forecast");
-  } else if (hour >= 11 && hour < 17) {
-    tod.push("afternoon update", "midday weather");
-  } else {
-    tod.push("tonight's weather", "evening forecast");
-  }
-
-  // Compose, dedupe (preserve order), cap at 20 tags and stay under YouTube's
-  // 500-char combined limit. YouTube counts ~ tag length + 2 (quotes/comma).
+  // Belt-and-suspenders: dedupe, cap at 480 chars to respect YouTube limit.
   const seen = new Set<string>();
-  const out: string[] = [];
+  const final: string[] = [];
   let charCount = 0;
-  const MAX_TAGS = 20;
   const MAX_CHARS = 480;
-  for (const tag of [...base, ...cond, ...tod]) {
+  for (const tag of out) {
     const t = tag.trim();
     if (!t || seen.has(t.toLowerCase())) continue;
-    const cost = t.length + (t.includes(" ") ? 4 : 2); // quotes if multi-word
+    if (/\b(\w+)\b\s+\b\1\b/i.test(t)) continue; // never let dup-tokens slip through
+    const cost = t.length + (t.includes(" ") ? 4 : 2);
     if (charCount + cost > MAX_CHARS) break;
     seen.add(t.toLowerCase());
-    out.push(t);
+    final.push(t);
     charCount += cost;
-    if (out.length >= MAX_TAGS) break;
+    if (final.length >= 14) break;
   }
-  return out;
+  return final;
 }
+
+// Local import shim — keeps the require-style ordering clean and lets
+// TypeScript resolve the shared helper without a top-level await.
+import { buildRotatingTags as _buildRotatingTagsSync } from "./post-variety.ts";
+
+
 
 // --- City extraction helper (shared by title + description hashtags) ---
 const TITLE_SKIP_WORDS = new Set([
