@@ -605,9 +605,7 @@ function buildYouTubeTags(title: string, description: string): string[] {
   return final;
 }
 
-// Local import shim — keeps the require-style ordering clean and lets
-// TypeScript resolve the shared helper without a top-level await.
-import { buildRotatingTags as _buildRotatingTagsSync } from "./post-variety.ts";
+
 
 
 
