@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildStyleAddendum, normalizeTone, appendVoiceCTA, isWeatherAlert, titleHasTimestamp, slotTimePrefix, slotDisplayLabel, slotPersonalityDirective, rotatingCTA, captionSimilarity, firstContentLine, ensureSlotTitlePrefix, inferSlotFromCityHour, assertSlotTitlePrefix } from "../_shared/caption-style.ts";
+import { injectOpener } from "../_shared/post-variety.ts";
 import { validatePostBundle } from "../_shared/text-sanitizer.ts";
 import { buildHookTitle, generateSkyBriefTitle, getWeatherEmoji } from "../_shared/title-builder.ts";
 import { LOCATION_ACCURACY_RULES, validateCaptionLocation, buildVerifiedLandmarksBlock, stripUnverifiedReferences } from "../_shared/location-guard.ts";
