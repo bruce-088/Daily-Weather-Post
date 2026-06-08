@@ -1225,10 +1225,14 @@ Deno.serve(async (req) => {
     const info = await listUserRecapCitiesDetailed(svc, user_id, "daily_enabled");
     dispatchAudit.push({ user_id, cities: info.cities, skipped: info.skipped, source: info.source });
     if (info.cities.length === 0) {
-      candidateList.push({ user_id });
-    } else {
-      for (const city of info.cities) candidateList.push({ user_id, city });
+      // Phase 13D hotfix: if user has city automations configured but none have
+      // daily_enabled=true, SKIP this user entirely. Previously we pushed a
+      // city-less candidate which silently posted to a default city, bypassing
+      // the Daily toggle in City Command Center.
+      console.log(`[recap] skipping user ${user_id} — no cities with daily_enabled=true (source=${info.source}, skipped=${info.skipped.length})`);
+      continue;
     }
+    for (const city of info.cities) candidateList.push({ user_id, city });
   }
   console.log(`[recap] dispatcher expanded ${userIds.length} users → ${candidateList.length} (user, city) jobs`);
   try {
