@@ -1225,7 +1225,8 @@ Deno.serve(async (req) => {
     const info = await listUserRecapCitiesDetailed(svc, user_id, "weekly_enabled");
     dispatchAudit.push({ user_id, cities: info.cities, skipped: info.skipped, source: info.source });
     if (info.cities.length === 0) {
-      candidateList.push({ user_id });
+      console.log(`[recap] skipping user ${user_id} — no cities with weekly_enabled=true (source=${info.source}, skipped=${info.skipped.length})`);
+      continue; // Phase 13D hotfix: respect weekly_enabled toggle, never fall back
     } else {
       for (const city of info.cities) candidateList.push({ user_id, city });
     }
