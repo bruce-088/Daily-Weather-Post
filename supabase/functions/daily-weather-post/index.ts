@@ -1989,6 +1989,7 @@ Deno.serve(async (req) => {
         debug_trace: persistedTrace,
         visual_metadata: _cinPatch.visual_metadata,
         published_visual_source: _cinPatch.published_visual_source,
+        pinned_comment_id: youtubePinnedCommentId,
       }).select("id").single();
       if (historyError) console.error("Failed to log post history:", historyError);
       else historyRow = _row;
