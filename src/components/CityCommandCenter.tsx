@@ -16,12 +16,17 @@ import {
 import { Loader2, MapPin, PlayCircle, ExternalLink, Wrench, Eye, ChevronDown, Settings2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { FeatureFlags } from "@/lib/featureFlags";
 
 interface RecapToggles { id: string; daily_enabled: boolean; weekly_enabled: boolean; monthly_enabled: boolean; }
 type RecapKey = "daily_enabled" | "weekly_enabled" | "monthly_enabled";
+
+interface PinnedCommentState { id: string; enabled: boolean; text: string; }
+const DEFAULT_PINNED_TEXT = "📍 What's the weather like where you are right now? Drop your city + current conditions below! ⬇️ 🌤️";
+const PINNED_MAX = 280;
 
 interface City { id: string; name: string; state: string | null; }
 type RunType = "daily" | "weekly" | "monthly" | "yearly";
@@ -75,6 +80,8 @@ export function CityCommandCenter() {
   const isCityOpen = (id: string) => cityOpen[id] !== false;
 
   const [toggles, setToggles] = useState<Record<string, RecapToggles>>({});
+  const [pinned, setPinned] = useState<Record<string, PinnedCommentState>>({});
+  const [pinnedSaving, setPinnedSaving] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     (async () => {
@@ -90,9 +97,10 @@ export function CityCommandCenter() {
 
       const { data: autos } = await supabase
         .from("automations")
-        .select("id, city_id, daily_enabled, weekly_enabled, monthly_enabled")
+        .select("id, city_id, daily_enabled, weekly_enabled, monthly_enabled, pinned_comment_enabled, pinned_comment_text")
         .eq("user_id", user.id);
       const map: Record<string, RecapToggles> = {};
+      const pmap: Record<string, PinnedCommentState> = {};
       (autos || []).forEach((a: any) => {
         map[a.city_id] = {
           id: a.id,
@@ -100,8 +108,14 @@ export function CityCommandCenter() {
           weekly_enabled: !!a.weekly_enabled,
           monthly_enabled: !!a.monthly_enabled,
         };
+        pmap[a.city_id] = {
+          id: a.id,
+          enabled: !!a.pinned_comment_enabled,
+          text: a.pinned_comment_text ?? "",
+        };
       });
       setToggles(map);
+      setPinned(pmap);
     })();
   }, []);
 
@@ -143,6 +157,50 @@ export function CityCommandCenter() {
     } catch (e: any) {
       toast.error("Failed to update toggle", { description: e?.message ?? String(e) });
       setToggles((p) => ({ ...p, [city.id]: { ...(p[city.id] as RecapToggles), [key]: !value } }));
+    }
+  };
+
+  // === Pinned Comment (per-city, YouTube Shorts) =============================
+  // Persists to automations.{pinned_comment_enabled, pinned_comment_text}.
+  // YouTube Data API v3 cannot programmatically pin, so the comment is posted
+  // as the channel owner and auto-highlights at top of the Shorts thread.
+  const upsertPinned = async (
+    city: City,
+    patch: Partial<Pick<PinnedCommentState, "enabled" | "text">>,
+  ) => {
+    if (!userId) return;
+    const prev = pinned[city.id];
+    const next: PinnedCommentState = {
+      id: prev?.id ?? "",
+      enabled: patch.enabled ?? prev?.enabled ?? false,
+      text: patch.text ?? prev?.text ?? "",
+    };
+    setPinned((p) => ({ ...p, [city.id]: next }));
+    setPinnedSaving((s) => ({ ...s, [city.id]: true }));
+    try {
+      const payload: Record<string, unknown> = {};
+      if (patch.enabled !== undefined) payload.pinned_comment_enabled = patch.enabled;
+      if (patch.text !== undefined) payload.pinned_comment_text = patch.text || null;
+      if (prev?.id) {
+        const { error } = await supabase.from("automations").update(payload).eq("id", prev.id);
+        if (error) throw error;
+      } else {
+        const { data, error } = await supabase
+          .from("automations")
+          .insert({ user_id: userId, city_id: city.id, ...payload } as any)
+          .select("id")
+          .single();
+        if (error) throw error;
+        setPinned((p) => ({ ...p, [city.id]: { ...next, id: data!.id } }));
+      }
+      if (patch.enabled !== undefined) {
+        toast.success(`Pinned comment ${patch.enabled ? "enabled" : "disabled"} for ${city.name}`);
+      }
+    } catch (e: any) {
+      toast.error("Failed to save pinned comment", { description: e?.message ?? String(e) });
+      if (prev) setPinned((p) => ({ ...p, [city.id]: prev }));
+    } finally {
+      setPinnedSaving((s) => ({ ...s, [city.id]: false }));
     }
   };
 
@@ -364,6 +422,52 @@ export function CityCommandCenter() {
                                       <Switch checked={val} onCheckedChange={(v) => setToggle(c, k, v)} />
                                     </label>
                                   ))}
+                                </div>
+                              </div>
+                            );
+                          })()}
+                          {(() => {
+                            const pc = pinned[c.id];
+                            const enabled = pc?.enabled ?? false;
+                            const text = pc?.text ?? "";
+                            const saving = !!pinnedSaving[c.id];
+                            const remaining = PINNED_MAX - text.length;
+                            return (
+                              <div className="space-y-1.5 rounded-md bg-muted/30 p-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-primary/80 font-semibold">
+                                    <Settings2 size={11} /> YouTube pinned comment
+                                  </div>
+                                  <Switch
+                                    checked={enabled}
+                                    disabled={saving}
+                                    onCheckedChange={(v) => upsertPinned(c, { enabled: v })}
+                                  />
+                                </div>
+                                <Textarea
+                                  value={text}
+                                  placeholder={DEFAULT_PINNED_TEXT}
+                                  maxLength={PINNED_MAX}
+                                  disabled={!enabled || saving}
+                                  onChange={(e) =>
+                                    setPinned((p) => ({
+                                      ...p,
+                                      [c.id]: {
+                                        id: p[c.id]?.id ?? "",
+                                        enabled: p[c.id]?.enabled ?? enabled,
+                                        text: e.target.value.slice(0, PINNED_MAX),
+                                      },
+                                    }))
+                                  }
+                                  onBlur={() => {
+                                    const current = pinned[c.id]?.text ?? "";
+                                    upsertPinned(c, { text: current });
+                                  }}
+                                  className="min-h-[60px] text-[11px] resize-none"
+                                />
+                                <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                                  <span>Posts as channel-owner (auto-highlighted; YouTube API can't true-pin).</span>
+                                  <span className={remaining < 0 ? "text-destructive" : ""}>{remaining}</span>
                                 </div>
                               </div>
                             );

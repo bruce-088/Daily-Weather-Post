@@ -70,6 +70,8 @@ export type Database = {
           monthly_enabled: boolean
           morning_platforms: Json
           morning_time: string
+          pinned_comment_enabled: boolean
+          pinned_comment_text: string | null
           platform_account_map: Json
           timezone: string
           tone: string
@@ -91,6 +93,8 @@ export type Database = {
           monthly_enabled?: boolean
           morning_platforms?: Json
           morning_time?: string
+          pinned_comment_enabled?: boolean
+          pinned_comment_text?: string | null
           platform_account_map?: Json
           timezone?: string
           tone?: string
@@ -112,6 +116,8 @@ export type Database = {
           monthly_enabled?: boolean
           morning_platforms?: Json
           morning_time?: string
+          pinned_comment_enabled?: boolean
+          pinned_comment_text?: string | null
           platform_account_map?: Json
           timezone?: string
           tone?: string
@@ -765,6 +771,7 @@ export type Database = {
           last_synced_at: string | null
           likes_count: number
           next_retry_at: string | null
+          pinned_comment_id: string | null
           platform: string | null
           post_url: string | null
           preview_bundle_id: string | null
@@ -807,6 +814,7 @@ export type Database = {
           last_synced_at?: string | null
           likes_count?: number
           next_retry_at?: string | null
+          pinned_comment_id?: string | null
           platform?: string | null
           post_url?: string | null
           preview_bundle_id?: string | null
@@ -849,6 +857,7 @@ export type Database = {
           last_synced_at?: string | null
           likes_count?: number
           next_retry_at?: string | null
+          pinned_comment_id?: string | null
           platform?: string | null
           post_url?: string | null
           preview_bundle_id?: string | null

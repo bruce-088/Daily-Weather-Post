@@ -471,47 +471,77 @@ export class YouTubeAdapter implements PlatformAdapter {
       throw new Error(`YouTube upload returned no video ID: ${JSON.stringify(result).slice(0, 500)}`);
     }
 
-    // === AUTOMATED FIRST COMMENT ===
-    // Posts a top-level comment on the freshly-uploaded Short. YouTube's API
-    // does NOT expose programmatic pinning, so creators may want to manually
-    // pin this from YouTube Studio. We post regardless so the prompt exists.
+    // === AUTOMATED PINNED / FIRST COMMENT (per-city opt-in) ===
+    // Posts a top-level comment as the channel owner (auto-highlighted at top
+    // of the Shorts comment thread — YouTube Data API v3 has NO public
+    // endpoint to programmatically pin, so this is the closest equivalent).
+    // Gated by automations.pinned_comment_enabled per (user, city). Custom
+    // text from automations.pinned_comment_text overrides the default.
+    let pinnedCommentId: string | null = null;
     try {
-      const cityForComment = explicitCity || extractCityFromTitle(title) || "your area";
-      const commentText = (cityForComment === "your area")
-        ? `🔔 Subscribe for daily weather updates! What's the weather like where you are today?`
-        : `🔔 Subscribe for daily ${cityForComment} weather! What's the weather like where you are today?`;
-      const commentRes = await fetch(
-        "https://www.googleapis.com/youtube/v3/commentThreads?part=snippet",
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${activeToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            snippet: {
-              videoId: result.id,
-              topLevelComment: {
-                snippet: { textOriginal: commentText },
-              },
+      const ctx = this._refreshCtx.get(activeToken) || this._refreshCtx.get(accessToken);
+      let enabled = false;
+      let customText: string | null = null;
+      if (ctx?.supabase && ctx.userId && ctx.cityId) {
+        const { data: auto } = await ctx.supabase
+          .from("automations")
+          .select("pinned_comment_enabled, pinned_comment_text")
+          .eq("user_id", ctx.userId)
+          .eq("city_id", ctx.cityId)
+          .maybeSingle();
+        enabled = !!auto?.pinned_comment_enabled;
+        customText = auto?.pinned_comment_text ?? null;
+      }
+
+      if (enabled) {
+        const cityForComment = explicitCity || extractCityFromTitle(title) || "your area";
+        const defaultText = (cityForComment === "your area")
+          ? `📍 What's the weather like where you are right now? Drop your city + current conditions below! ⬇️ 🌤️`
+          : `📍 What's the weather like where you are right now? Drop your city + current conditions below! ⬇️ 🌤️`;
+        const commentText = (customText && customText.trim().length > 0)
+          ? customText.replace(/\{city\}/gi, cityForComment).slice(0, 9000)
+          : defaultText;
+
+        const commentRes = await fetch(
+          "https://www.googleapis.com/youtube/v3/commentThreads?part=snippet",
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${activeToken}`,
+              "Content-Type": "application/json",
             },
-          }),
-        },
-      );
-      if (commentRes.ok) {
-        console.log(`YouTube first-comment posted on ${result.id}`);
+            body: JSON.stringify({
+              snippet: {
+                videoId: result.id,
+                topLevelComment: {
+                  snippet: { textOriginal: commentText },
+                },
+              },
+            }),
+          },
+        );
+        if (commentRes.ok) {
+          try {
+            const body = await commentRes.json();
+            pinnedCommentId = body?.snippet?.topLevelComment?.id || body?.id || null;
+          } catch { /* ignore parse error */ }
+          console.log(`YouTube pinned-comment posted on ${result.id} (commentId=${pinnedCommentId ?? "?"})`);
+        } else {
+          const errText = await commentRes.text().catch(() => "");
+          console.warn(`YouTube pinned-comment failed (${commentRes.status}): ${errText.slice(0, 200)}`);
+        }
       } else {
-        const errText = await commentRes.text().catch(() => "");
-        console.warn(`YouTube first-comment failed (${commentRes.status}): ${errText.slice(0, 200)}`);
+        console.log(`[youtube-adapter] pinned comment disabled for user=${ctx?.userId ?? "?"} city=${ctx?.cityId ?? "?"} — skipping`);
       }
     } catch (e) {
-      console.warn("YouTube first-comment error:", (e as Error).message);
+      console.warn("YouTube pinned-comment error:", (e as Error).message);
     }
 
     return {
       id: result.id,
       resolved_city_id: resolved?.city_id ?? null,
       account_name: resolved?.account_name ?? null,
+      pinned_comment_id: pinnedCommentId,
     };
   }
 }
