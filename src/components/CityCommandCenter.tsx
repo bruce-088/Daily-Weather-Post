@@ -80,8 +80,6 @@ export function CityCommandCenter() {
   const isCityOpen = (id: string) => cityOpen[id] !== false;
 
   const [toggles, setToggles] = useState<Record<string, RecapToggles>>({});
-
-  const [toggles, setToggles] = useState<Record<string, RecapToggles>>({});
   const [pinned, setPinned] = useState<Record<string, PinnedCommentState>>({});
   const [pinnedSaving, setPinnedSaving] = useState<Record<string, boolean>>({});
 
