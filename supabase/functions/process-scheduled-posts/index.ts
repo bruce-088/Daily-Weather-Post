@@ -3227,6 +3227,7 @@ Deno.serve(async (req) => {
               console.log(`[publish] ${platformName} OK id=${result.id} channel=${acctName} city=${(result as any).resolved_city_id ?? "shared"} post=${post.id}`);
               if (platformName === "youtube") {
                 platformExternalIds["youtube"] = result.id;
+                if ((result as any).pinned_comment_id) youtubePinnedCommentId = (result as any).pinned_comment_id;
                 if (!publishedPostUrl) publishedPostUrl = `https://www.youtube.com/watch?v=${result.id}`;
               } else if (platformName === "tiktok") {
                 platformExternalIds["tiktok"] = result.id;
