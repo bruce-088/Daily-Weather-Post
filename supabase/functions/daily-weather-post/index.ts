@@ -1911,13 +1911,17 @@ Deno.serve(async (req) => {
         for (const a of connectedAdapters) recordResult(a.name, false, reason);
       }
 
+      let youtubePinnedCommentId: string | null = null;
       if (!_validationFailed && status !== "needs_review") for (const adapter of connectedAdapters) {
         console.log(`[title_debug] daily dispatch title for ${adapter.name}:`, title);
         const result = await postToPlatform(adapter.name, supabase, userId, video.data, title, desc, video.mimeType, resolvedCityId, "morning", resolvedCityName);
         if (result.success) {
           platform = adapter.name;
           status = "success";
-          if (adapter.name === "youtube") youtubeVideoId = result.id || null;
+          if (adapter.name === "youtube") {
+            youtubeVideoId = result.id || null;
+            if ((result as any).pinned_comment_id) youtubePinnedCommentId = (result as any).pinned_comment_id;
+          }
           console.log(`${adapter.name} post published! ID: ${result.id}`);
           recordResult(adapter.name, true, undefined, result.id || null);
         } else {
