@@ -16,12 +16,17 @@ import {
 import { Loader2, MapPin, PlayCircle, ExternalLink, Wrench, Eye, ChevronDown, Settings2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { FeatureFlags } from "@/lib/featureFlags";
 
 interface RecapToggles { id: string; daily_enabled: boolean; weekly_enabled: boolean; monthly_enabled: boolean; }
 type RecapKey = "daily_enabled" | "weekly_enabled" | "monthly_enabled";
+
+interface PinnedCommentState { id: string; enabled: boolean; text: string; }
+const DEFAULT_PINNED_TEXT = "📍 What's the weather like where you are right now? Drop your city + current conditions below! ⬇️ 🌤️";
+const PINNED_MAX = 280;
 
 interface City { id: string; name: string; state: string | null; }
 type RunType = "daily" | "weekly" | "monthly" | "yearly";
