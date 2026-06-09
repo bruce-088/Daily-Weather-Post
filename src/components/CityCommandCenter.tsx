@@ -426,6 +426,52 @@ export function CityCommandCenter() {
                               </div>
                             );
                           })()}
+                          {(() => {
+                            const pc = pinned[c.id];
+                            const enabled = pc?.enabled ?? false;
+                            const text = pc?.text ?? "";
+                            const saving = !!pinnedSaving[c.id];
+                            const remaining = PINNED_MAX - text.length;
+                            return (
+                              <div className="space-y-1.5 rounded-md bg-muted/30 p-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-primary/80 font-semibold">
+                                    <Settings2 size={11} /> YouTube pinned comment
+                                  </div>
+                                  <Switch
+                                    checked={enabled}
+                                    disabled={saving}
+                                    onCheckedChange={(v) => upsertPinned(c, { enabled: v })}
+                                  />
+                                </div>
+                                <Textarea
+                                  value={text}
+                                  placeholder={DEFAULT_PINNED_TEXT}
+                                  maxLength={PINNED_MAX}
+                                  disabled={!enabled || saving}
+                                  onChange={(e) =>
+                                    setPinned((p) => ({
+                                      ...p,
+                                      [c.id]: {
+                                        id: p[c.id]?.id ?? "",
+                                        enabled: p[c.id]?.enabled ?? enabled,
+                                        text: e.target.value.slice(0, PINNED_MAX),
+                                      },
+                                    }))
+                                  }
+                                  onBlur={() => {
+                                    const current = pinned[c.id]?.text ?? "";
+                                    upsertPinned(c, { text: current });
+                                  }}
+                                  className="min-h-[60px] text-[11px] resize-none"
+                                />
+                                <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                                  <span>Posts as channel-owner (auto-highlighted; YouTube API can't true-pin).</span>
+                                  <span className={remaining < 0 ? "text-destructive" : ""}>{remaining}</span>
+                                </div>
+                              </div>
+                            );
+                          })()}
                           <div className="space-y-1.5">
 
                             <div className="text-[10px] uppercase tracking-wide text-amber-500/80 font-semibold">
