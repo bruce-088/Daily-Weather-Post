@@ -160,6 +160,50 @@ export function CityCommandCenter() {
     }
   };
 
+  // === Pinned Comment (per-city, YouTube Shorts) =============================
+  // Persists to automations.{pinned_comment_enabled, pinned_comment_text}.
+  // YouTube Data API v3 cannot programmatically pin, so the comment is posted
+  // as the channel owner and auto-highlights at top of the Shorts thread.
+  const upsertPinned = async (
+    city: City,
+    patch: Partial<Pick<PinnedCommentState, "enabled" | "text">>,
+  ) => {
+    if (!userId) return;
+    const prev = pinned[city.id];
+    const next: PinnedCommentState = {
+      id: prev?.id ?? "",
+      enabled: patch.enabled ?? prev?.enabled ?? false,
+      text: patch.text ?? prev?.text ?? "",
+    };
+    setPinned((p) => ({ ...p, [city.id]: next }));
+    setPinnedSaving((s) => ({ ...s, [city.id]: true }));
+    try {
+      const payload: Record<string, unknown> = {};
+      if (patch.enabled !== undefined) payload.pinned_comment_enabled = patch.enabled;
+      if (patch.text !== undefined) payload.pinned_comment_text = patch.text || null;
+      if (prev?.id) {
+        const { error } = await supabase.from("automations").update(payload).eq("id", prev.id);
+        if (error) throw error;
+      } else {
+        const { data, error } = await supabase
+          .from("automations")
+          .insert({ user_id: userId, city_id: city.id, ...payload } as any)
+          .select("id")
+          .single();
+        if (error) throw error;
+        setPinned((p) => ({ ...p, [city.id]: { ...next, id: data!.id } }));
+      }
+      if (patch.enabled !== undefined) {
+        toast.success(`Pinned comment ${patch.enabled ? "enabled" : "disabled"} for ${city.name}`);
+      }
+    } catch (e: any) {
+      toast.error("Failed to save pinned comment", { description: e?.message ?? String(e) });
+      if (prev) setPinned((p) => ({ ...p, [city.id]: prev }));
+    } finally {
+      setPinnedSaving((s) => ({ ...s, [city.id]: false }));
+    }
+  };
+
   const setRun = (cityId: string, mode: Mode, type: RunType, state: RunState) =>
     setRuns((r) => ({ ...r, [runKey(cityId, mode, type)]: state }));
 
