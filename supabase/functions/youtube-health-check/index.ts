@@ -166,10 +166,18 @@ Deno.serve(async (req) => {
         }
 
         // Ping with the freshest token we have (just-refreshed or stored).
-        const { status, httpStatus } = await pingChannel(accessToken);
+        const { status, httpStatus, channelId } = await pingChannel(accessToken);
         summary[status]++;
 
+        // Phase 13E-B: probe youtube.force-ssl scope so missing comment
+        // permission surfaces here instead of silently at post time.
+        let commentScope: "ok" | "missing_scope" | "error" | "skipped" = "skipped";
+        if (status === "healthy" && accessToken && channelId) {
+          commentScope = await probeCommentScope(accessToken, channelId);
+        }
+
         const prevHealth = (ch.extra as any)?.health?.status as Health | undefined;
+        const prevCommentScope = (ch.extra as any)?.health?.comment_scope as string | undefined;
         const newExtra = {
           ...((ch.extra as Record<string, unknown>) || {}),
           health: {
@@ -177,6 +185,7 @@ Deno.serve(async (req) => {
             http_status: httpStatus,
             checked_at: new Date().toISOString(),
             refresh: refreshOutcome,
+            comment_scope: commentScope,
             ...(refreshError ? { refresh_error: refreshError } : {}),
           },
         };
@@ -201,6 +210,23 @@ Deno.serve(async (req) => {
             type: "warning",
             title: "YouTube token needs refresh",
             message: `${accountLabel} token needs refresh. Reconnect in Settings → YouTube Channels.`,
+          });
+        }
+
+        // Notify once when comment scope is missing (until reconnected).
+        if (commentScope === "missing_scope" && prevCommentScope !== "missing_scope") {
+          await supabase.from("notifications").insert({
+            user_id: ch.user_id,
+            type: "warning",
+            title: "YouTube channel needs reconnect for pinned comments",
+            message: `${accountLabel} is missing the comment permission. Open Settings → YouTube Channels, disconnect and reconnect to enable pinned comments.`,
+          });
+          await supabase.from("system_logs").insert({
+            user_id: ch.user_id,
+            type: "youtube_scope_missing",
+            platform: "youtube",
+            message: `${accountLabel} missing youtube.force-ssl scope (commentThreads probe failed)`,
+            context: { social_account_id: ch.id, channel_id: channelId },
           });
         }
       } catch (e) {
