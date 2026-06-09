@@ -22,18 +22,42 @@ type Health = "healthy" | "expired" | "disconnected";
 
 const NEAR_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
 
-async function pingChannel(accessToken: string | null): Promise<{ status: Health; httpStatus: number | null }> {
-  if (!accessToken) return { status: "expired", httpStatus: null };
+async function pingChannel(accessToken: string | null): Promise<{ status: Health; httpStatus: number | null; channelId: string | null }> {
+  if (!accessToken) return { status: "expired", httpStatus: null, channelId: null };
   try {
     const res = await fetch(
       "https://www.googleapis.com/youtube/v3/channels?part=id&mine=true",
       { headers: { Authorization: `Bearer ${accessToken}` } },
     );
-    if (res.status === 200) return { status: "healthy", httpStatus: 200 };
-    if (res.status === 401 || res.status === 403) return { status: "expired", httpStatus: res.status };
-    return { status: "disconnected", httpStatus: res.status };
+    if (res.status === 200) {
+      const body = await res.json().catch(() => ({}));
+      const channelId: string | null = body?.items?.[0]?.id ?? null;
+      return { status: "healthy", httpStatus: 200, channelId };
+    }
+    if (res.status === 401 || res.status === 403) return { status: "expired", httpStatus: res.status, channelId: null };
+    return { status: "disconnected", httpStatus: res.status, channelId: null };
   } catch {
-    return { status: "disconnected", httpStatus: null };
+    return { status: "disconnected", httpStatus: null, channelId: null };
+  }
+}
+
+/** Phase 13E-B: probe youtube.force-ssl scope by listing one comment thread.
+ *  Returns "ok" | "missing_scope" | "error". Cheap (1 unit quota). */
+async function probeCommentScope(accessToken: string, channelId: string): Promise<"ok" | "missing_scope" | "error"> {
+  try {
+    const res = await fetch(
+      `https://www.googleapis.com/youtube/v3/commentThreads?part=id&allThreadsRelatedToChannelId=${encodeURIComponent(channelId)}&maxResults=1`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    if (res.status === 200) return "ok";
+    if (res.status === 401 || res.status === 403) {
+      const body = await res.text().catch(() => "");
+      if (/insufficient|insufficientPermissions|scope/i.test(body)) return "missing_scope";
+      return "missing_scope";
+    }
+    return "error";
+  } catch {
+    return "error";
   }
 }
 
@@ -142,10 +166,18 @@ Deno.serve(async (req) => {
         }
 
         // Ping with the freshest token we have (just-refreshed or stored).
-        const { status, httpStatus } = await pingChannel(accessToken);
+        const { status, httpStatus, channelId } = await pingChannel(accessToken);
         summary[status]++;
 
+        // Phase 13E-B: probe youtube.force-ssl scope so missing comment
+        // permission surfaces here instead of silently at post time.
+        let commentScope: "ok" | "missing_scope" | "error" | "skipped" = "skipped";
+        if (status === "healthy" && accessToken && channelId) {
+          commentScope = await probeCommentScope(accessToken, channelId);
+        }
+
         const prevHealth = (ch.extra as any)?.health?.status as Health | undefined;
+        const prevCommentScope = (ch.extra as any)?.health?.comment_scope as string | undefined;
         const newExtra = {
           ...((ch.extra as Record<string, unknown>) || {}),
           health: {
@@ -153,6 +185,7 @@ Deno.serve(async (req) => {
             http_status: httpStatus,
             checked_at: new Date().toISOString(),
             refresh: refreshOutcome,
+            comment_scope: commentScope,
             ...(refreshError ? { refresh_error: refreshError } : {}),
           },
         };
@@ -177,6 +210,23 @@ Deno.serve(async (req) => {
             type: "warning",
             title: "YouTube token needs refresh",
             message: `${accountLabel} token needs refresh. Reconnect in Settings → YouTube Channels.`,
+          });
+        }
+
+        // Notify once when comment scope is missing (until reconnected).
+        if (commentScope === "missing_scope" && prevCommentScope !== "missing_scope") {
+          await supabase.from("notifications").insert({
+            user_id: ch.user_id,
+            type: "warning",
+            title: "YouTube channel needs reconnect for pinned comments",
+            message: `${accountLabel} is missing the comment permission. Open Settings → YouTube Channels, disconnect and reconnect to enable pinned comments.`,
+          });
+          await supabase.from("system_logs").insert({
+            user_id: ch.user_id,
+            type: "youtube_scope_missing",
+            platform: "youtube",
+            message: `${accountLabel} missing youtube.force-ssl scope (commentThreads probe failed)`,
+            context: { social_account_id: ch.id, channel_id: channelId },
           });
         }
       } catch (e) {

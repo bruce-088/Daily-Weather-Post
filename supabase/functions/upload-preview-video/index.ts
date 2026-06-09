@@ -99,6 +99,7 @@ Deno.serve(async (req) => {
       user_id: userId,
       external_id: result.id ?? null,
       post_url: result.id ? `https://www.youtube.com/watch?v=${result.id}` : null,
+      pinned_comment_id: (result as any).pinned_comment_id ?? null,
     });
 
     // Clean up the preview file

@@ -1770,6 +1770,7 @@ Deno.serve(async (req) => {
     let status = "success";
     let errorMessage: string | null = null;
     let youtubeVideoId: string | null = null;
+    let youtubePinnedCommentId: string | null = null;
     const storedImageUrl: string | null = null;
 
     // Per-platform result tracking (used for grouped notification)
@@ -1917,7 +1918,10 @@ Deno.serve(async (req) => {
         if (result.success) {
           platform = adapter.name;
           status = "success";
-          if (adapter.name === "youtube") youtubeVideoId = result.id || null;
+          if (adapter.name === "youtube") {
+            youtubeVideoId = result.id || null;
+            if ((result as any).pinned_comment_id) youtubePinnedCommentId = (result as any).pinned_comment_id;
+          }
           console.log(`${adapter.name} post published! ID: ${result.id}`);
           recordResult(adapter.name, true, undefined, result.id || null);
         } else {
@@ -1985,6 +1989,7 @@ Deno.serve(async (req) => {
         debug_trace: persistedTrace,
         visual_metadata: _cinPatch.visual_metadata,
         published_visual_source: _cinPatch.published_visual_source,
+        pinned_comment_id: youtubePinnedCommentId,
       }).select("id").single();
       if (historyError) console.error("Failed to log post history:", historyError);
       else historyRow = _row;

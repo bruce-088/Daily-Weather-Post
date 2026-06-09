@@ -3041,6 +3041,7 @@ Deno.serve(async (req) => {
         let publishedPostUrl: string | null = null;
         // Map of platform -> external/post id, used to seed post_analytics rows.
         const platformExternalIds: Record<string, string> = {};
+        let youtubePinnedCommentId: string | null = null;
 
         let videoPostedAny = false;
         const platformErrors: string[] = [];
@@ -3226,6 +3227,7 @@ Deno.serve(async (req) => {
               console.log(`[publish] ${platformName} OK id=${result.id} channel=${acctName} city=${(result as any).resolved_city_id ?? "shared"} post=${post.id}`);
               if (platformName === "youtube") {
                 platformExternalIds["youtube"] = result.id;
+                if ((result as any).pinned_comment_id) youtubePinnedCommentId = (result as any).pinned_comment_id;
                 if (!publishedPostUrl) publishedPostUrl = `https://www.youtube.com/watch?v=${result.id}`;
               } else if (platformName === "tiktok") {
                 platformExternalIds["tiktok"] = result.id;
@@ -3479,6 +3481,7 @@ Deno.serve(async (req) => {
           cinematic_mode: cinematicForced,
           cinematic_trigger: cinematicTrigger,
           voice_name: voiceUrl ? "AI" : null,
+          pinned_comment_id: youtubePinnedCommentId,
         }).select("id").single();
         if (historyErr) {
           console.error(`[process] post_history insert failed for ${post.id}:`, historyErr);

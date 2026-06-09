@@ -17,6 +17,8 @@ export interface PostResult {
   error?: string;
   resolved_city_id?: string | null;
   account_name?: string | null;
+  /** YouTube channel-owner pinned/first comment ID, when posted */
+  pinned_comment_id?: string | null;
 }
 
 export interface PlatformAdapter {
@@ -130,7 +132,7 @@ export async function postToPlatform(
     // caller AFTER it inserts the post_history row, so we can link post_id.
     void performanceMeta; // currently unused in dispatcher; retained for future use
 
-    return { success: true, id: result.id, resolved_city_id: result.resolved_city_id ?? null, account_name: result.account_name ?? null };
+    return { success: true, id: result.id, resolved_city_id: result.resolved_city_id ?? null, account_name: result.account_name ?? null, pinned_comment_id: (result as any).pinned_comment_id ?? null };
   } catch (e) {
     const msg = e instanceof Error ? e.message : `${adapter.name} upload failed`;
     console.error(`${adapter.name} upload error:`, msg);

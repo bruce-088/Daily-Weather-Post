@@ -154,6 +154,7 @@ Deno.serve(async (req) => {
         preview_bundle_id: bundle.id,
         published_visual_source: _cinPatch.published_visual_source,
         visual_metadata: _cinPatch.visual_metadata,
+        pinned_comment_id: platform === "youtube" ? ((r as any).pinned_comment_id ?? null) : null,
       }).select("id").maybeSingle();
 
       // Phase 1 Growth Loop — seed post_performance for successful preview publishes.

@@ -543,6 +543,37 @@ export class YouTubeAdapter implements PlatformAdapter {
         } else {
           const errText = await commentRes.text().catch(() => "");
           console.warn(`YouTube pinned-comment failed (${commentRes.status}): ${errText.slice(0, 200)}`);
+          // Phase 13E-B: surface 401/403 (missing youtube.force-ssl scope or
+          // revoked token) as a system_log entry + user notification so future
+          // scope mismatches stop being silent failures.
+          if ((commentRes.status === 403 || commentRes.status === 401) && ctx?.supabase && ctx.userId) {
+            try {
+              const isScope = /insufficient|insufficientPermissions|scope/i.test(errText);
+              await ctx.supabase.from("system_logs").insert({
+                user_id: ctx.userId,
+                type: "youtube_comment_failed",
+                platform: "youtube",
+                message: `Pinned comment ${commentRes.status} for video ${result.id} (${isScope ? "missing youtube.force-ssl scope" : "request failed"})`,
+                context: {
+                  video_id: result.id,
+                  city_id: ctx.cityId ?? null,
+                  http_status: commentRes.status,
+                  error_excerpt: errText.slice(0, 400),
+                  likely_cause: isScope ? "missing_force_ssl_scope" : "api_error",
+                },
+              });
+              if (isScope) {
+                await ctx.supabase.from("notifications").insert({
+                  user_id: ctx.userId,
+                  type: "warning",
+                  title: "YouTube channel needs reconnect for pinned comments",
+                  message: "Pinned comments require an updated permission. Open Settings → YouTube Channels, disconnect and reconnect the channel to grant comment access.",
+                });
+              }
+            } catch (logErr) {
+              console.warn("[youtube-adapter] failed to log pinned-comment error:", (logErr as Error).message);
+            }
+          }
         }
       } else {
         console.log(`[youtube-adapter] pinned comment disabled for user=${ctx?.userId ?? "?"} city=${ctx?.cityId ?? "?"} — skipping`);
