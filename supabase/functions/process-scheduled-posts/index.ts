@@ -3041,6 +3041,7 @@ Deno.serve(async (req) => {
         let publishedPostUrl: string | null = null;
         // Map of platform -> external/post id, used to seed post_analytics rows.
         const platformExternalIds: Record<string, string> = {};
+        let youtubePinnedCommentId: string | null = null;
 
         let videoPostedAny = false;
         const platformErrors: string[] = [];
