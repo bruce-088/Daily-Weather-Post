@@ -287,7 +287,21 @@ export class YouTubeAdapter implements PlatformAdapter {
     _cityId?: string | null,
     cityName?: string | null,
   ): Promise<UploadResult | null> {
+    // Belt-and-suspenders: even though postToPlatform already strips internal
+    // tracking tags like [auto:afternoon] / [exp:B] / [ab:variant_a], a few
+    // legacy callers and self-heal paths reached this adapter with raw values,
+    // leaking system metadata into public YouTube titles, descriptions, AND
+    // pinned comments (real incident: external_id 914CxaWpKfc had
+    // "📍 Gainesville · Afternoon Update [auto:afternoon] [exp:B]" visible to
+    // viewers). Strip again here so NOTHING with those tokens reaches YouTube.
+    const INTERNAL_TAG_RE = /\s*\[(?:auto|manual|exp|ab|variant|debug|test|pipeline|engine|voice|render|src|timing):[^\]]*\]\s*/gi;
+    const stripInternal = (s: string) =>
+      (s || "").replace(INTERNAL_TAG_RE, " ").replace(/[ \t]{2,}/g, " ").replace(/\s+\n/g, "\n").trim();
+    title = stripInternal(title);
+    description = stripInternal(description);
+
     const shortTitle = appendTitleHashtags(title);
+
 
     // Recover the channel that getValidToken() actually selected so we can
     // build a CTA / subscribe URL that points to the RIGHT channel (not a
@@ -592,13 +606,22 @@ function buildYouTubeTags(title: string, description: string): string[] {
              : "evening";
 
   // Pull dominant condition from text for the rotation pool.
+  // Phase 13E fix: detection must be ACTIVE-condition aware — the bare word
+  // "rain" inside phrases like "0% rain", "no rain", or "10% rain chance"
+  // previously triggered rainy-day / stay-dry tags on totally dry days
+  // (real incident: external_id j45BVdvko1s). Require an unambiguously
+  // active phrase, and skip when the text explicitly negates precipitation.
   let cond = "";
+  const hasNoRain = /\b(0\s*%|no|zero|low|minimal)\s*(?:chance\s+of\s+)?rain\b/i.test(text)
+    || /\brain\s*(?:chance|chances?)\s*:?\s*(?:0|[1-9]|1\d|20)\s*%/i.test(text);
+  const activeRain = /(🌧|☔|drizzle|shower|raining|downpour|wet weather|heavy rain|light rain|rain expected|rain likely|rain moving in|scattered rain|steady rain)/i.test(text);
   if (/storm|⛈|thunder|tornado|hurricane/.test(text)) cond = "storm";
-  else if (/rain|🌧|☔|drizzle|shower/.test(text)) cond = "rain";
+  else if (activeRain && !hasNoRain) cond = "rain";
   else if (/snow|❄️|sleet|blizzard/.test(text)) cond = "snow";
   else if (/fog|🌫|mist|haze/.test(text)) cond = "fog";
   else if (/cloud|☁️|🌤|gray skies|overcast/.test(text)) cond = "cloudy";
   else if (/clear|☀️|sunny|beautiful/.test(text)) cond = "sunny";
+
 
   const tempMatch = title.match(/(\d{1,3})°/);
   const temp = tempMatch ? parseInt(tempMatch[1], 10) : null;
@@ -695,7 +718,10 @@ function buildDescriptionHashtags(title: string, description: string): string {
   // Pick a single dominant condition hashtag
   let condition = "Weather";
   if (/storm|⛈|thunder|tornado|hurricane/.test(text)) condition = "Storm";
-  else if (/rain|🌧|☔|drizzle|shower/.test(text)) condition = "Rain";
+  else if (
+    /(🌧|☔|drizzle|shower|raining|downpour|wet weather|heavy rain|light rain|rain expected|rain likely)/i.test(text)
+    && !/\b(0\s*%|no|zero|low|minimal)\s*(?:chance\s+of\s+)?rain\b/i.test(text)
+  ) condition = "Rain";
   else if (/snow|❄️|sleet|blizzard/.test(text)) condition = "Snow";
   else if (/fog|🌫|mist|haze/.test(text)) condition = "Fog";
   else if (/heat wave|🔥|hot weather|🌞/.test(text) || /\b(8[5-9]|9\d|1\d{2})°/.test(title)) condition = "HeatWave";
