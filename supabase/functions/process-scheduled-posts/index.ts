@@ -3481,6 +3481,7 @@ Deno.serve(async (req) => {
           cinematic_mode: cinematicForced,
           cinematic_trigger: cinematicTrigger,
           voice_name: voiceUrl ? "AI" : null,
+          pinned_comment_id: youtubePinnedCommentId,
         }).select("id").single();
         if (historyErr) {
           console.error(`[process] post_history insert failed for ${post.id}:`, historyErr);
