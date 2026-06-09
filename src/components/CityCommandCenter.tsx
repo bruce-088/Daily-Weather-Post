@@ -81,6 +81,10 @@ export function CityCommandCenter() {
 
   const [toggles, setToggles] = useState<Record<string, RecapToggles>>({});
 
+  const [toggles, setToggles] = useState<Record<string, RecapToggles>>({});
+  const [pinned, setPinned] = useState<Record<string, PinnedCommentState>>({});
+  const [pinnedSaving, setPinnedSaving] = useState<Record<string, boolean>>({});
+
   useEffect(() => {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -95,9 +99,10 @@ export function CityCommandCenter() {
 
       const { data: autos } = await supabase
         .from("automations")
-        .select("id, city_id, daily_enabled, weekly_enabled, monthly_enabled")
+        .select("id, city_id, daily_enabled, weekly_enabled, monthly_enabled, pinned_comment_enabled, pinned_comment_text")
         .eq("user_id", user.id);
       const map: Record<string, RecapToggles> = {};
+      const pmap: Record<string, PinnedCommentState> = {};
       (autos || []).forEach((a: any) => {
         map[a.city_id] = {
           id: a.id,
@@ -105,8 +110,14 @@ export function CityCommandCenter() {
           weekly_enabled: !!a.weekly_enabled,
           monthly_enabled: !!a.monthly_enabled,
         };
+        pmap[a.city_id] = {
+          id: a.id,
+          enabled: !!a.pinned_comment_enabled,
+          text: a.pinned_comment_text ?? "",
+        };
       });
       setToggles(map);
+      setPinned(pmap);
     })();
   }, []);
 
