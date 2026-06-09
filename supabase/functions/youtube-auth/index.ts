@@ -101,7 +101,9 @@ Deno.serve(async (req) => {
         client_id: creds.id,
         redirect_uri: redirect_uri,
         response_type: "code",
-        scope: "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/yt-analytics.readonly",
+        // Phase 13E-B: added youtube.force-ssl so we can post comments
+        // (used for the pinned/first-comment engagement CTA on Shorts).
+        scope: "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/yt-analytics.readonly https://www.googleapis.com/auth/youtube.force-ssl",
         // ⚠️ CONTRACT — DO NOT REMOVE THESE THREE PARAMS:
         //   access_type=offline → required for Google to issue a refresh_token
         //   prompt=consent      → guarantees a refresh_token even on re-auth
