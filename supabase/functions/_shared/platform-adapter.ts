@@ -7,6 +7,8 @@ export interface UploadResult {
   resolved_city_id?: string | null;
   /** account_name / handle of the channel actually used for this upload */
   account_name?: string | null;
+  /** YouTube comment ID of the channel-owner pinned/first comment, when posted */
+  pinned_comment_id?: string | null;
 }
 
 export interface PostResult {
