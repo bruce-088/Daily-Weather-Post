@@ -287,7 +287,21 @@ export class YouTubeAdapter implements PlatformAdapter {
     _cityId?: string | null,
     cityName?: string | null,
   ): Promise<UploadResult | null> {
+    // Belt-and-suspenders: even though postToPlatform already strips internal
+    // tracking tags like [auto:afternoon] / [exp:B] / [ab:variant_a], a few
+    // legacy callers and self-heal paths reached this adapter with raw values,
+    // leaking system metadata into public YouTube titles, descriptions, AND
+    // pinned comments (real incident: external_id 914CxaWpKfc had
+    // "📍 Gainesville · Afternoon Update [auto:afternoon] [exp:B]" visible to
+    // viewers). Strip again here so NOTHING with those tokens reaches YouTube.
+    const INTERNAL_TAG_RE = /\s*\[(?:auto|manual|exp|ab|variant|debug|test|pipeline|engine|voice|render|src|timing):[^\]]*\]\s*/gi;
+    const stripInternal = (s: string) =>
+      (s || "").replace(INTERNAL_TAG_RE, " ").replace(/[ \t]{2,}/g, " ").replace(/\s+\n/g, "\n").trim();
+    title = stripInternal(title);
+    description = stripInternal(description);
+
     const shortTitle = appendTitleHashtags(title);
+
 
     // Recover the channel that getValidToken() actually selected so we can
     // build a CTA / subscribe URL that points to the RIGHT channel (not a
