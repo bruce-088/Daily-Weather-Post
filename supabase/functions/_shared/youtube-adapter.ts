@@ -606,13 +606,22 @@ function buildYouTubeTags(title: string, description: string): string[] {
              : "evening";
 
   // Pull dominant condition from text for the rotation pool.
+  // Phase 13E fix: detection must be ACTIVE-condition aware — the bare word
+  // "rain" inside phrases like "0% rain", "no rain", or "10% rain chance"
+  // previously triggered rainy-day / stay-dry tags on totally dry days
+  // (real incident: external_id j45BVdvko1s). Require an unambiguously
+  // active phrase, and skip when the text explicitly negates precipitation.
   let cond = "";
+  const hasNoRain = /\b(0\s*%|no|zero|low|minimal)\s*(?:chance\s+of\s+)?rain\b/i.test(text)
+    || /\brain\s*(?:chance|chances?)\s*:?\s*(?:0|[1-9]|1\d|20)\s*%/i.test(text);
+  const activeRain = /(🌧|☔|drizzle|shower|raining|downpour|wet weather|heavy rain|light rain|rain expected|rain likely|rain moving in|scattered rain|steady rain)/i.test(text);
   if (/storm|⛈|thunder|tornado|hurricane/.test(text)) cond = "storm";
-  else if (/rain|🌧|☔|drizzle|shower/.test(text)) cond = "rain";
+  else if (activeRain && !hasNoRain) cond = "rain";
   else if (/snow|❄️|sleet|blizzard/.test(text)) cond = "snow";
   else if (/fog|🌫|mist|haze/.test(text)) cond = "fog";
   else if (/cloud|☁️|🌤|gray skies|overcast/.test(text)) cond = "cloudy";
   else if (/clear|☀️|sunny|beautiful/.test(text)) cond = "sunny";
+
 
   const tempMatch = title.match(/(\d{1,3})°/);
   const temp = tempMatch ? parseInt(tempMatch[1], 10) : null;
