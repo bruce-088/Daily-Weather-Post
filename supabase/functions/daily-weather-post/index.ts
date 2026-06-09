@@ -1770,6 +1770,7 @@ Deno.serve(async (req) => {
     let status = "success";
     let errorMessage: string | null = null;
     let youtubeVideoId: string | null = null;
+    let youtubePinnedCommentId: string | null = null;
     const storedImageUrl: string | null = null;
 
     // Per-platform result tracking (used for grouped notification)
