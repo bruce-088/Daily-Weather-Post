@@ -17,6 +17,8 @@ export interface PostResult {
   error?: string;
   resolved_city_id?: string | null;
   account_name?: string | null;
+  /** YouTube channel-owner pinned/first comment ID, when posted */
+  pinned_comment_id?: string | null;
 }
 
 export interface PlatformAdapter {
