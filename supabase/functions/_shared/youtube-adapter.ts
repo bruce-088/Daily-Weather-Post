@@ -718,7 +718,10 @@ function buildDescriptionHashtags(title: string, description: string): string {
   // Pick a single dominant condition hashtag
   let condition = "Weather";
   if (/storm|⛈|thunder|tornado|hurricane/.test(text)) condition = "Storm";
-  else if (/rain|🌧|☔|drizzle|shower/.test(text)) condition = "Rain";
+  else if (
+    /(🌧|☔|drizzle|shower|raining|downpour|wet weather|heavy rain|light rain|rain expected|rain likely)/i.test(text)
+    && !/\b(0\s*%|no|zero|low|minimal)\s*(?:chance\s+of\s+)?rain\b/i.test(text)
+  ) condition = "Rain";
   else if (/snow|❄️|sleet|blizzard/.test(text)) condition = "Snow";
   else if (/fog|🌫|mist|haze/.test(text)) condition = "Fog";
   else if (/heat wave|🔥|hot weather|🌞/.test(text) || /\b(8[5-9]|9\d|1\d{2})°/.test(title)) condition = "HeatWave";
