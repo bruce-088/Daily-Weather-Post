@@ -22,18 +22,42 @@ type Health = "healthy" | "expired" | "disconnected";
 
 const NEAR_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
 
-async function pingChannel(accessToken: string | null): Promise<{ status: Health; httpStatus: number | null }> {
-  if (!accessToken) return { status: "expired", httpStatus: null };
+async function pingChannel(accessToken: string | null): Promise<{ status: Health; httpStatus: number | null; channelId: string | null }> {
+  if (!accessToken) return { status: "expired", httpStatus: null, channelId: null };
   try {
     const res = await fetch(
       "https://www.googleapis.com/youtube/v3/channels?part=id&mine=true",
       { headers: { Authorization: `Bearer ${accessToken}` } },
     );
-    if (res.status === 200) return { status: "healthy", httpStatus: 200 };
-    if (res.status === 401 || res.status === 403) return { status: "expired", httpStatus: res.status };
-    return { status: "disconnected", httpStatus: res.status };
+    if (res.status === 200) {
+      const body = await res.json().catch(() => ({}));
+      const channelId: string | null = body?.items?.[0]?.id ?? null;
+      return { status: "healthy", httpStatus: 200, channelId };
+    }
+    if (res.status === 401 || res.status === 403) return { status: "expired", httpStatus: res.status, channelId: null };
+    return { status: "disconnected", httpStatus: res.status, channelId: null };
   } catch {
-    return { status: "disconnected", httpStatus: null };
+    return { status: "disconnected", httpStatus: null, channelId: null };
+  }
+}
+
+/** Phase 13E-B: probe youtube.force-ssl scope by listing one comment thread.
+ *  Returns "ok" | "missing_scope" | "error". Cheap (1 unit quota). */
+async function probeCommentScope(accessToken: string, channelId: string): Promise<"ok" | "missing_scope" | "error"> {
+  try {
+    const res = await fetch(
+      `https://www.googleapis.com/youtube/v3/commentThreads?part=id&allThreadsRelatedToChannelId=${encodeURIComponent(channelId)}&maxResults=1`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    if (res.status === 200) return "ok";
+    if (res.status === 401 || res.status === 403) {
+      const body = await res.text().catch(() => "");
+      if (/insufficient|insufficientPermissions|scope/i.test(body)) return "missing_scope";
+      return "missing_scope";
+    }
+    return "error";
+  } catch {
+    return "error";
   }
 }
 
