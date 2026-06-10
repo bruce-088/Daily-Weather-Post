@@ -254,6 +254,8 @@ export function resolveScene(opts: {
   /** @deprecated use `visualStyleHint` — kept for backward compat with recap fns */
   mode?: "image" | "video" | "gradient";
   slideIndex?: number;
+  /** Phase 13F-B: time-of-day hint ("morning"/"afternoon"/"evening"/"night"/"sunrise"/"sunset") */
+  timeOfDay?: string | null;
   settings?: CinematicSettings | null;
 }): SceneDecision {
   const { city, condition, mediaUrl, preset } = opts;
