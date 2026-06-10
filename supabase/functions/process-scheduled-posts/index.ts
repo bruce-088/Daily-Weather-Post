@@ -1166,7 +1166,7 @@ async function storeVoiceAudio(supabase: any, userId: string, audio: Uint8Array)
   return signed.signedUrl;
 }
 
-async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null, visualStyle?: string | null, errorSink?: { message?: string; templateConfigError?: boolean; http_status?: number; response_body?: string; failure_branch?: string }): Promise<{ data: Uint8Array; mimeType: string; duration?: number } | { creditExhausted: true; provider: "creatomate"; message?: string } | null> {
+async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: string | null, voiceUrl?: string | null, audioDurationSec?: number | null, visualStyle?: string | null, errorSink?: { message?: string; templateConfigError?: boolean; http_status?: number; response_body?: string; failure_branch?: string }, preferredBackgroundUrl?: string | null): Promise<{ data: Uint8Array; mimeType: string; duration?: number } | { creditExhausted: true; provider: "creatomate"; message?: string } | null> {
   const apiKey = Deno.env.get("CREATOMATE_API_KEY");
   const setErr = (m: string) => { if (errorSink) errorSink.message = m; console.error("[creatomate] error:", m); };
   if (!apiKey) {
@@ -1178,10 +1178,24 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
   const compDuration = computeVideoDuration(audioDurationSec);
   console.log(`Starting Creatomate render for ${weather.city} ${voiceUrl ? "(with voiceover)" : "(no voice)"} — composition ${compDuration.toFixed(2)}s (audio=${audioDurationSec ?? "n/a"}s) — visualStyle=${visualStyle || "default"}`);
   const theme = getWeatherTheme(weather.condition);
-  // AI Visual Optimization — "gradient" / "minimal" styles intentionally skip
-  // the Pexels stock-video background to keep the visual pure (gradient only).
-  const skipStockVideo = visualStyle === "gradient" || visualStyle === "minimal";
-  let videoUrl = skipStockVideo ? null : await fetchPexelsVideoUrl(theme.videoKeyword, weather.city, weather.stateOrRegion);
+  // Phase 13F-B: background priority chain
+  //   1. preferredBackgroundUrl (Cinematic Preset System — condition_scene / city_safe_scene)
+  //   2. Pexels stock video
+  //   3. gradient (last resort)
+  // The old `skipStockVideo` short-circuit on visualStyle === "gradient"|"minimal"
+  // was the root cause of ~90% of renders landing on plain blue: the cinematic
+  // scene URL was computed but never reached Creatomate. We now ALWAYS try a
+  // real image/video first regardless of the canonical visualStyle label.
+  let videoUrl: string | null = null;
+  let backgroundProvenance = "none";
+  if (preferredBackgroundUrl && typeof preferredBackgroundUrl === "string" && /^https?:\/\//i.test(preferredBackgroundUrl)) {
+    videoUrl = preferredBackgroundUrl;
+    backgroundProvenance = "cinematic_preset";
+  }
+  if (!videoUrl) {
+    videoUrl = await fetchPexelsVideoUrl(theme.videoKeyword, weather.city, weather.stateOrRegion);
+    if (videoUrl) backgroundProvenance = "pexels";
+  }
   // ── Pre-render asset validation ──
   // Make sure the background URL is non-empty AND actually reachable. If the
   // HEAD probe fails, we drop it and let Creatomate render the gradient-only
@@ -1194,8 +1208,19 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
     try {
       const probe = await fetch(videoUrl, { method: "HEAD" });
       if (!probe.ok) {
-        console.warn(`[render] background HEAD probe failed (${probe.status}) — falling back to gradient`);
+        console.warn(`[render] background HEAD probe failed (${probe.status}, source=${backgroundProvenance}) — falling back`);
         videoUrl = null;
+        // If the cinematic URL failed, try Pexels as second tier
+        if (backgroundProvenance === "cinematic_preset") {
+          videoUrl = await fetchPexelsVideoUrl(theme.videoKeyword, weather.city, weather.stateOrRegion);
+          if (videoUrl) {
+            backgroundProvenance = "pexels_after_cinematic_fail";
+            try {
+              const p2 = await fetch(videoUrl, { method: "HEAD" });
+              if (!p2.ok) { videoUrl = null; }
+            } catch { videoUrl = null; }
+          }
+        }
       }
     } catch (e) {
       console.warn(`[render] background HEAD probe error — falling back to gradient:`, (e as Error).message);
@@ -1203,9 +1228,10 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
     }
   }
   if (!videoUrl) {
-    console.warn(`[render] Pexels background unavailable (keyword="${theme.videoKeyword}", style="${visualStyle || "default"}") — using safe gradient (${theme.bg1} → ${theme.bg2})`);
+    console.warn(`[render] background unavailable (keyword="${theme.videoKeyword}", style="${visualStyle || "default"}", provenance="${backgroundProvenance}") — using safe gradient (${theme.bg1} → ${theme.bg2})`);
+    backgroundProvenance = "gradient_last_resort";
   } else {
-    console.log(`[render] Pexels background validated for "${theme.videoKeyword}"`);
+    console.log(`[render] background validated provenance=${backgroundProvenance} url=${videoUrl.split("?")[0]}`);
   }
   let source: Record<string, any>;
   try {
