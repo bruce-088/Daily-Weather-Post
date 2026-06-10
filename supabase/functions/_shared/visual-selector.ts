@@ -134,11 +134,14 @@ export function selectContextualVisualStyle(
 
   // ── Final fallback ──────────────────────────────────────────────────────
   if (isCloudy(cond)) {
+    // Phase 13F-B: cloudy/overcast → cinematic (image-driven) instead of
+    // gradient. The cinematic preset chain has cloudy_sky / foggy_morning /
+    // overcast_field scenes that look far better than a flat gradient.
     return {
-      style: "gradient",
-      label: "soft_gradient",
-      reason: `Cloudy/overcast conditions and no performance winner — using soft_gradient.`,
-      source: "fallback",
+      style: "cinematic",
+      label: "cinematic_clouds",
+      reason: `Cloudy/overcast conditions — using cinematic_clouds (image scene) instead of gradient.`,
+      source: "weather",
     };
   }
   return {
