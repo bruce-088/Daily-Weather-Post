@@ -2857,6 +2857,30 @@ Deno.serve(async (req) => {
               recent: decision.recent,
               reason: decision.reason,
             });
+            // Phase 13F-B Fix #4: persist rotation guard decision to
+            // system_logs so we can verify gradient is actually being
+            // demoted vs. silently re-chosen every cycle.
+            try {
+              await supabase.from("system_logs").insert({
+                user_id: post.user_id,
+                type: "visual_rotation_guard",
+                message: `rotation ${decision.forced ? "forced" : "ok"}: ${decision.preferred} → ${decision.style}`,
+                platform: post.platform || null,
+                context: {
+                  scheduled_post_id: post.id,
+                  city: weather.city,
+                  condition: weather.condition,
+                  forced: decision.forced,
+                  preferred: decision.preferred,
+                  chosen: decision.style,
+                  pool_label: decision.pool_label,
+                  recent_window: decision.recent,
+                  reason: decision.reason,
+                },
+              });
+            } catch (logErr) {
+              console.warn("[visual] rotation telemetry log failed:", logErr);
+            }
           } catch (e) {
             console.warn("[visual] rotation guard failed:", e);
           }
