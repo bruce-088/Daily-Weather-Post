@@ -57,14 +57,16 @@ export interface CinematicSettings {
 
 // ── Internal: condition → stock scene map (moved from recap files) ─────────
 
-interface CondScene { match: RegExp; label: string; url: string }
+interface CondScene { match: RegExp; label: string; url: string; cityMatch?: RegExp }
 
-// Phase 13C: each condition now has 3–4 stock scenes so consecutive renders
-// rotate visually instead of reusing the same Unsplash photo every time.
+// Phase 13C/13F-B: each condition has 3–4 stock scenes so consecutive renders
+// rotate visually. Phase 13F-B expanded the library with partly-cloudy,
+// sunrise, sunset, night, and Orlando skyline variants.
 // All URLs are royalty-free Unsplash with explicit `?auto=format` and a
-// stable photo id so we don't depend on search ranking.
+// stable photo id so we don't depend on search ranking. Scenes with a
+// `cityMatch` are only eligible for the matching city.
 const CONDITION_SCENES: ReadonlyArray<CondScene> = [
-  // Storm / thunder (4)
+  // Storm / thunder (3)
   { match: /storm|thunder|lightning/i, label: "storm_clouds_a", url: "https://images.unsplash.com/photo-1605727216801-e27ce1d0cc28?auto=format&fit=crop&w=1080&q=80" },
   { match: /storm|thunder|lightning/i, label: "storm_clouds_b", url: "https://images.unsplash.com/photo-1538935732373-f7a495fea3f6?auto=format&fit=crop&w=1080&q=80" },
   { match: /storm|thunder|lightning/i, label: "storm_clouds_c", url: "https://images.unsplash.com/photo-1561485132-59468cd0b553?auto=format&fit=crop&w=1080&q=80" },
@@ -81,27 +83,54 @@ const CONDITION_SCENES: ReadonlyArray<CondScene> = [
   { match: /cloud|overcast|fog|mist|haze/i, label: "cloudy_sky_b",  url: "https://images.unsplash.com/photo-1499346030926-9a72daac6c63?auto=format&fit=crop&w=1080&q=80" },
   { match: /cloud|overcast|fog|mist|haze/i, label: "overcast_field", url: "https://images.unsplash.com/photo-1505533321630-975218a5f66f?auto=format&fit=crop&w=1080&q=80" },
   { match: /cloud|overcast|fog|mist|haze/i, label: "foggy_morning", url: "https://images.unsplash.com/photo-1487621167305-5d248087c724?auto=format&fit=crop&w=1080&q=80" },
+  // Partly cloudy / scattered (3) — Phase 13F-B
+  { match: /partly|scattered|few clouds|broken/i, label: "partly_cloudy_a", url: "https://images.unsplash.com/photo-1601297183305-6df142704ea2?auto=format&fit=crop&w=1080&q=80" },
+  { match: /partly|scattered|few clouds|broken/i, label: "partly_cloudy_b", url: "https://images.unsplash.com/photo-1534088568595-a066f410bcda?auto=format&fit=crop&w=1080&q=80" },
+  { match: /partly|scattered|few clouds|broken/i, label: "cumulus_field",   url: "https://images.unsplash.com/photo-1517685352821-92cf88aee5a5?auto=format&fit=crop&w=1080&q=80" },
   // Clear / sunny (4)
   { match: /clear|sunny|sun\b/i, label: "bright_sky_a",   url: "https://images.unsplash.com/photo-1419833173245-f59e1b93f9ee?auto=format&fit=crop&w=1080&q=80" },
   { match: /clear|sunny|sun\b/i, label: "bright_sky_b",   url: "https://images.unsplash.com/photo-1504370805625-d32c54b16100?auto=format&fit=crop&w=1080&q=80" },
   { match: /clear|sunny|sun\b/i, label: "sunlit_palms",   url: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1080&q=80" },
   { match: /clear|sunny|sun\b/i, label: "blue_sky_park",  url: "https://images.unsplash.com/photo-1470770841072-f978cf4d019e?auto=format&fit=crop&w=1080&q=80" },
+  // Sunrise (2) — Phase 13F-B (time-of-day matched via injected hint)
+  { match: /sunrise|dawn|morning/i, label: "sunrise_a", url: "https://images.unsplash.com/photo-1494548162494-384bba4ab999?auto=format&fit=crop&w=1080&q=80" },
+  { match: /sunrise|dawn|morning/i, label: "sunrise_b", url: "https://images.unsplash.com/photo-1502082553048-f009c37129b9?auto=format&fit=crop&w=1080&q=80" },
+  // Sunset (2) — Phase 13F-B
+  { match: /sunset|dusk|evening|golden hour/i, label: "sunset_a", url: "https://images.unsplash.com/photo-1495616811223-4d98c6e9c869?auto=format&fit=crop&w=1080&q=80" },
+  { match: /sunset|dusk|evening|golden hour/i, label: "sunset_b", url: "https://images.unsplash.com/photo-1472120435266-53107fd0c44a?auto=format&fit=crop&w=1080&q=80" },
+  // Night (2) — Phase 13F-B
+  { match: /night|nighttime|midnight|stars/i, label: "night_sky_a", url: "https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?auto=format&fit=crop&w=1080&q=80" },
+  { match: /night|nighttime|midnight|stars/i, label: "night_city",  url: "https://images.unsplash.com/photo-1444723121867-7a241cacace9?auto=format&fit=crop&w=1080&q=80" },
+  // Orlando skyline (2) — Phase 13F-B, city-targeted
+  { match: /clear|sunny|sun\b|partly|cloud|sunset|evening/i, cityMatch: /orlando/i, label: "orlando_skyline_a", url: "https://images.unsplash.com/photo-1597466599360-3b9775841aec?auto=format&fit=crop&w=1080&q=80" },
+  { match: /clear|sunny|sun\b|partly|cloud|sunset|evening/i, cityMatch: /orlando/i, label: "orlando_skyline_b", url: "https://images.unsplash.com/photo-1575089976121-8ed7b2a54265?auto=format&fit=crop&w=1080&q=80" },
 ];
 
 /**
- * Pick a condition scene with deterministic rotation. `seed` (e.g. a slide
- * index or date-derived integer) lets consecutive renders cycle through the
- * matching pool instead of always returning the first entry — fixes the
- * "same Unsplash photo every day" visual monotony.
+ * Pick a condition scene with deterministic rotation. `seed` lets consecutive
+ * renders cycle through the matching pool. Phase 13F-B: optional `timeOfDay`
+ * biases toward sunrise/sunset/night scenes; `city` enables city-targeted
+ * entries (e.g. Orlando skyline).
  */
-export function pickConditionScene(cond?: string | null, seed = 0): { label: string; url: string } | null {
-  if (!cond) return null;
-  const matches = CONDITION_SCENES.filter((s) => s.match.test(cond));
+export function pickConditionScene(
+  cond?: string | null,
+  seed = 0,
+  opts?: { timeOfDay?: string | null; city?: string | null },
+): { label: string; url: string } | null {
+  if (!cond && !opts?.timeOfDay) return null;
+  const combined = `${cond || ""} ${opts?.timeOfDay || ""}`.trim();
+  const city = opts?.city || "";
+  const matches = CONDITION_SCENES.filter((s) => {
+    if (!s.match.test(combined)) return false;
+    if (s.cityMatch && !s.cityMatch.test(city)) return false;
+    return true;
+  });
   if (matches.length === 0) return null;
   const idx = Math.abs(seed | 0) % matches.length;
   const pick = matches[idx];
   return { label: pick.label, url: pick.url };
 }
+
 
 // ── Gainesville city-safe scenes (permanent public URLs) ──────────────────
 //
