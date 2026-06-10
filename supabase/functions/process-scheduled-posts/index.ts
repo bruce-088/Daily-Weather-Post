@@ -2975,6 +2975,38 @@ Deno.serve(async (req) => {
         // fallback chain) can read it even when cached/preview-bundle video
         // was reused and the render branch below didn't execute.
         const renderErrorSink: { message?: string; templateConfigError?: boolean } = {};
+        // Phase 13F-B Fix #1: compute the Cinematic Preset decision BEFORE
+        // render so the resolved scene URL (condition_scene / city_safe_scene)
+        // actually reaches Creatomate as the background. Previously this ran
+        // only AFTER the render for metadata and the URL was thrown away —
+        // root cause of ~90% of renders being plain blue gradients.
+        let preRenderCinematicUrl: string | null = null;
+        try {
+          const _preCinSettings = (await loadCinematicSettings(supabase, post.user_id)) || { ...SAFE_CINEMATIC_DEFAULTS };
+          const _preDecision = resolveScene({
+            city: weather.city,
+            condition: weather.condition,
+            mediaUrl: null, // history image is not used as render background here
+            preset: pickPresetForDaily({
+              condition: weather.condition,
+              city: weather.city,
+              slot: (post as any).slot || null,
+              settings: _preCinSettings as any,
+            }),
+            visualStyleHint: visualStyle === "gradient" ? "gradient" : "image",
+            timeOfDay: timePeriod || null,
+            settings: _preCinSettings as any,
+          });
+          if (_preDecision.url) {
+            preRenderCinematicUrl = _preDecision.url;
+            console.log(`[render] cinematic pre-render scene chosen: source=${_preDecision.source} label=${_preDecision.label} url=${_preDecision.url.split("?")[0]}`);
+          } else {
+            console.log(`[render] cinematic pre-render produced no URL (source=${_preDecision.source}) — Pexels/gradient chain will be used`);
+          }
+        } catch (preErr) {
+          console.warn("[render] cinematic pre-render resolution failed (non-fatal):", (preErr as Error).message);
+        }
+
         if (!video) {
           // Try video generation once (with voiceover baked in if available)
           console.log(`RENDER START: City: ${weather.city}, VoiceEnabled: ${voiceUrl ? "True" : "False"}, VisualStyle: ${visualStyle}`);
@@ -2986,7 +3018,7 @@ Deno.serve(async (req) => {
           });
           const rendered = await generateVideoWithFallback({
             weather, timePeriod, voiceUrl, audioDurationSec: voiceAudioDurationSec, visualStyle,
-            creatomate: () => generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec, visualStyle, renderErrorSink),
+            creatomate: () => generateWeatherVideo(weather, timePeriod, voiceUrl, voiceAudioDurationSec, visualStyle, renderErrorSink, preRenderCinematicUrl),
             observability: {
               supabase,
               creatomateErrorSink: renderErrorSink,
