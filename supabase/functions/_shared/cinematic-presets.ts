@@ -283,7 +283,7 @@ export function resolveScene(opts: {
     const dayOfYear = Math.floor((Date.now() - new Date(new Date().getUTCFullYear(), 0, 0).getTime()) / 86400000);
     const sceneSeed = (opts.slideIndex != null ? opts.slideIndex : dayOfYear)
                      + (city ? city.charCodeAt(0) : 0);
-    const pick = pickConditionScene(condition, sceneSeed);
+    const pick = pickConditionScene(condition, sceneSeed, { timeOfDay: opts.timeOfDay ?? null, city });
     if (pick) {
       if (visualStyleHint === "gradient") {
         console.log(`[cinematic] hint=gradient overridden — condition_scene available (label=${pick.label})`);
