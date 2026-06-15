@@ -185,65 +185,64 @@ export class YouTubeAdapter implements PlatformAdapter {
       return null;
     }
 
-    const refreshRes = await fetch("https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: clientId,
-        client_secret: clientSecret,
-        grant_type: "refresh_token",
-        refresh_token: account.refresh_token,
-      }),
+    // Phase 13G-B: project-aware refresh via shared helper + telemetry.
+    // The helper resolves the right OAuth client by oauth_project, so a
+    // Project B account is no longer refreshed with Project A creds.
+    const accountExtra = ((account as any).extra ?? null) as Record<string, unknown> | null;
+    const refreshed = await refreshYouTubeAccessToken(supabase, {
+      id: account.id,
+      user_id: userId,
+      account_name: account.account_name ?? null,
+      refresh_token: account.refresh_token,
+      oauth_project: project,
+      extra: accountExtra,
     });
 
-    const refreshData = await refreshRes.json();
-    if (!refreshData.access_token) {
-      console.error(`[youtube-auth] YouTube Project ${project} token refresh failed:`, JSON.stringify(refreshData));
-      const errorCode = (refreshData?.error || "").toString();
-      if (errorCode === "invalid_grant" || errorCode === "invalid_token") {
-        if (account.id) {
+    if (!refreshed.ok || !refreshed.accessToken || !refreshed.expiresAt) {
+      const errorCode = (refreshed.googleError || "").toString();
+      // Phase 13G-B: failure-streak hardening. Do NOT clear the refresh
+      // token on the first invalid_grant — Google occasionally returns
+      // transient invalid_grant for valid tokens. Only clear after the
+      // streak crosses REFRESH_FAIL_STREAK_THRESHOLD AND has lasted ≥1h.
+      if (account.id) {
+        const failedExtra = mergeHealthOnFailure(accountExtra, refreshed);
+        await supabase
+          .from("social_accounts")
+          .update({ extra: failedExtra, updated_at: new Date().toISOString() })
+          .eq("id", account.id);
+        const newState = readRefreshFailureState(failedExtra);
+        const persistentInvalidGrant =
+          (errorCode === "invalid_grant" || errorCode === "invalid_token") &&
+          shouldClearRefreshToken(newState);
+        if (persistentInvalidGrant) {
+          console.warn(`[youtube-auth] Persistent invalid_grant (streak=${newState.count}, first=${newState.first_failed_at}) — clearing refresh_token for "${account.account_name}"`);
           await supabase
             .from("social_accounts")
             .update({ refresh_token: null, access_token: null })
             .eq("id", account.id);
-        } else if (project === "A") {
-          await supabase
-            .from("weather_settings")
-            .update({ youtube_refresh_token: null })
-            .eq("user_id", userId);
+        } else if (errorCode === "invalid_grant" || errorCode === "invalid_token") {
+          console.warn(`[youtube-auth] Transient ${errorCode} on "${account.account_name}" (streak=${newState.count}/${3}) — keeping refresh_token`);
         }
-        console.warn("[youtube-auth] refresh_token invalidated — reconnect required");
+      } else if (project === "A" && (errorCode === "invalid_grant" || errorCode === "invalid_token")) {
+        // Legacy weather_settings row has no streak storage; preserve prior
+        // immediate-clear behavior for that single legacy code path.
+        await supabase
+          .from("weather_settings")
+          .update({ youtube_refresh_token: null })
+          .eq("user_id", userId);
+        console.warn("[youtube-auth] legacy weather_settings refresh_token invalidated — reconnect required");
       }
       return null;
     }
 
-    const newExpiresAt = new Date(Date.now() + refreshData.expires_in * 1000).toISOString();
+    const newExpiresAt = refreshed.expiresAt;
 
     if (account.id) {
-      // Merge health stamp into extra without clobbering other fields
-      const { data: existing } = await supabase
-        .from("social_accounts")
-        .select("extra")
-        .eq("id", account.id)
-        .maybeSingle();
-      const prevExtra = (existing?.extra ?? {}) as Record<string, unknown>;
-      const prevHealth =
-        typeof prevExtra.health === "object" && prevExtra.health
-          ? (prevExtra.health as Record<string, unknown>)
-          : {};
-      const mergedExtra = {
-        ...prevExtra,
-        health: {
-          ...prevHealth,
-          status: "healthy",
-          refresh: "succeeded",
-          checked_at: new Date().toISOString(),
-        },
-      };
+      const mergedExtra = mergeHealthOnSuccess(accountExtra);
       await supabase
         .from("social_accounts")
         .update({
-          access_token: refreshData.access_token,
+          access_token: refreshed.accessToken,
           token_expires_at: newExpiresAt,
           updated_at: new Date().toISOString(),
           extra: mergedExtra,
@@ -253,17 +252,17 @@ export class YouTubeAdapter implements PlatformAdapter {
       await supabase
         .from("weather_settings")
         .update({
-          youtube_access_token: refreshData.access_token,
+          youtube_access_token: refreshed.accessToken,
           youtube_token_expires_at: newExpiresAt,
         })
         .eq("user_id", userId);
     }
 
     console.log(`[youtube-auth] Project ${project} token refreshed successfully`);
-    const refreshedAccount = { ...account, access_token: refreshData.access_token, token_expires_at: newExpiresAt };
-    this._resolved.set(refreshData.access_token, refreshedAccount);
-    this._refreshCtx.set(refreshData.access_token, { supabase, userId, cityId: cityId ?? null, contentType });
-    return refreshData.access_token;
+    const refreshedAccount = { ...account, access_token: refreshed.accessToken, token_expires_at: newExpiresAt };
+    this._resolved.set(refreshed.accessToken, refreshedAccount);
+    this._refreshCtx.set(refreshed.accessToken, { supabase, userId, cityId: cityId ?? null, contentType });
+    return refreshed.accessToken;
   }
 
   /** Force a fresh access_token by re-running the refresh path. Used by
