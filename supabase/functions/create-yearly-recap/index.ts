@@ -899,31 +899,21 @@ async function stitchSlideshow(
 
 // ───────────────── YouTube upload (reuse pattern) ─────────────────
 
-async function getYouTubeToken(svc: any, userId: string): Promise<string | null> {
-  const { data: s } = await svc.from("weather_settings")
-    .select("youtube_access_token, youtube_refresh_token, youtube_token_expires_at")
-    .eq("user_id", userId).maybeSingle();
-  if (!s?.youtube_refresh_token && !s?.youtube_access_token) return null;
-  const exp = s.youtube_token_expires_at ? new Date(s.youtube_token_expires_at).getTime() : 0;
-  if (s.youtube_access_token && exp > Date.now() + 5 * 60 * 1000) return s.youtube_access_token;
-  if (!s.youtube_refresh_token) return null;
-  const refreshRes = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: Deno.env.get("YOUTUBE_CLIENT_ID")!,
-      client_secret: Deno.env.get("YOUTUBE_CLIENT_SECRET")!,
-      refresh_token: s.youtube_refresh_token,
-      grant_type: "refresh_token",
-    }),
-  });
-  if (!refreshRes.ok) return null;
-  const r = await refreshRes.json();
-  const newExp = new Date(Date.now() + (r.expires_in ?? 3600) * 1000).toISOString();
-  await svc.from("weather_settings")
-    .update({ youtube_access_token: r.access_token, youtube_token_expires_at: newExp })
-    .eq("user_id", userId);
-  return r.access_token;
+// Phase 13G-B: yearly recaps are long-form Project B uploads, but this helper
+// historically hit the legacy weather_settings.youtube_* columns (which hold
+// Project A tokens) and hardcoded YOUTUBE_CLIENT_ID/SECRET (Project A creds).
+// That guaranteed an invalid_client 401 on every refresh attempt for any user
+// who had migrated to Project B for recaps. We now route through the same
+// shared recap-token resolver that weekly/monthly use, which picks the right
+// social_accounts row by oauth_project='B' and refreshes with B's creds.
+import { getRecapYouTubeToken } from "../_shared/recap-youtube-token.ts";
+
+async function getYouTubeToken(svc: any, userId: string, cityName?: string | null): Promise<string | null> {
+  const { token, reason, message } = await getRecapYouTubeToken(svc, userId, cityName ?? null);
+  if (!token) {
+    console.error(`[yearly-recap] getRecapYouTubeToken failed reason=${reason} message=${message}`);
+  }
+  return token;
 }
 
 async function uploadLongFormToYouTube(token: string, videoData: Uint8Array, title: string, description: string): Promise<string | null> {
@@ -1079,7 +1069,7 @@ async function runForUser(
       return { ok: true, detail: "Dev test render complete", preview_url: stitch.url, slides: decisions.length };
     }
 
-    const token = await getYouTubeToken(svc, userId);
+    const token = await getYouTubeToken(svc, userId, city);
     if (!token) {
       await svc.from("post_history").insert({
         user_id: userId, status: "failed", platform: "youtube",
