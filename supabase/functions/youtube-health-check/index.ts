@@ -12,6 +12,12 @@
 //      that's normal (Google access tokens are 1 h) and the refresh_token
 //      handles it silently.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import {
+  refreshYouTubeAccessToken,
+  mergeHealthOnSuccess,
+  mergeHealthOnFailure,
+  type OAuthProject,
+} from "../_shared/youtube-refresh.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
