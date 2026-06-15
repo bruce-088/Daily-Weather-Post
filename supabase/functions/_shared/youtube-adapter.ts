@@ -1,6 +1,13 @@
 import type { PlatformAdapter, UploadResult } from "./platform-adapter.ts";
 import { matchAccountByCityName } from "./city-accounts.ts";
 import { buildRotatingTags as _buildRotatingTagsSync } from "./post-variety.ts";
+import {
+  refreshYouTubeAccessToken,
+  mergeHealthOnSuccess,
+  mergeHealthOnFailure,
+  shouldClearRefreshToken,
+  readRefreshFailureState,
+} from "./youtube-refresh.ts";
 
 type ResolvedYTAccount = {
   id: string;
