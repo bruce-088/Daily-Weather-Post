@@ -95,11 +95,11 @@ export class YouTubeAdapter implements PlatformAdapter {
 
     const { data: allChannels } = await supabase
       .from("social_accounts")
-      .select("id, access_token, refresh_token, token_expires_at, account_name, city_id, account_external_id, oauth_project")
+      .select("id, access_token, refresh_token, token_expires_at, account_name, city_id, account_external_id, oauth_project, extra, user_id")
       .eq("user_id", userId)
       .eq("platform", "youtube")
       .eq("oauth_project", project);
-    const channels = (allChannels || []) as ResolvedYTAccount[];
+    const channels = (allChannels || []) as (ResolvedYTAccount & { extra?: Record<string, unknown> | null; user_id?: string })[];
 
     if (cityId) {
       account = channels.find((c) => c.city_id === cityId) || null;
