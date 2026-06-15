@@ -67,49 +67,11 @@ async function probeCommentScope(accessToken: string, channelId: string): Promis
   }
 }
 
-interface RefreshResult {
-  ok: boolean;
-  accessToken?: string;
-  expiresAt?: string;
-  error?: string;
-  httpStatus?: number;
-}
-
-async function refreshAccessToken(refreshToken: string): Promise<RefreshResult> {
-  const clientId = Deno.env.get("YOUTUBE_CLIENT_ID");
-  const clientSecret = Deno.env.get("YOUTUBE_CLIENT_SECRET");
-  if (!clientId || !clientSecret) {
-    return { ok: false, error: "YOUTUBE_CLIENT_ID/SECRET not configured" };
-  }
-  try {
-    const res = await fetch("https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: clientId,
-        client_secret: clientSecret,
-        grant_type: "refresh_token",
-        refresh_token: refreshToken,
-      }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || data.error || !data.access_token) {
-      return {
-        ok: false,
-        httpStatus: res.status,
-        error: data.error_description || data.error || `refresh http ${res.status}`,
-      };
-    }
-    const expiresIn = typeof data.expires_in === "number" ? data.expires_in : 3600;
-    return {
-      ok: true,
-      accessToken: data.access_token,
-      expiresAt: new Date(Date.now() + expiresIn * 1000).toISOString(),
-    };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
-  }
-}
+// Phase 13G-B: refresh logic moved to _shared/youtube-refresh.ts so the
+// health-check cron, the real-time YouTubeAdapter, and analytics workers
+// all share ONE project-aware code path. The previous local helper hardcoded
+// Project A creds, which caused every Project B (Recaps) refresh to return
+// 401 invalid_client and silently kill the connection.
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
