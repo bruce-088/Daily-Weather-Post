@@ -1069,7 +1069,7 @@ async function runForUser(
       return { ok: true, detail: "Dev test render complete", preview_url: stitch.url, slides: decisions.length };
     }
 
-    const token = await getYouTubeToken(svc, userId);
+    const token = await getYouTubeToken(svc, userId, city);
     if (!token) {
       await svc.from("post_history").insert({
         user_id: userId, status: "failed", platform: "youtube",
