@@ -94,7 +94,7 @@ Deno.serve(async (req) => {
   try {
     const { data: channels, error } = await supabase
       .from("social_accounts")
-      .select("id, user_id, account_name, access_token, refresh_token, token_expires_at, extra")
+      .select("id, user_id, account_name, access_token, refresh_token, token_expires_at, extra, oauth_project")
       .eq("platform", "youtube");
     if (error) throw error;
 
@@ -102,34 +102,54 @@ Deno.serve(async (req) => {
       summary.checked++;
       try {
         const accountLabel = ch.account_name || "YouTube channel";
+        const project: OAuthProject = ch.oauth_project === "B" ? "B" : "A";
         let accessToken: string | null = ch.access_token;
-        let refreshOutcome: "skipped" | "succeeded" | "failed" = "skipped";
+        let refreshOutcome: "skipped" | "succeeded" | "failed" | "misconfigured" = "skipped";
         let refreshError: string | null = null;
+        let updatedExtra: Record<string, unknown> | null = null;
 
         const expiresAtMs = ch.token_expires_at ? new Date(ch.token_expires_at).getTime() : 0;
         const nearExpiry = !expiresAtMs || expiresAtMs - Date.now() < NEAR_EXPIRY_MS;
 
         if (nearExpiry && ch.refresh_token) {
-          console.log(`[health-check] token near expiry for ${accountLabel} — refreshing proactively`);
-          const refreshed = await refreshAccessToken(ch.refresh_token);
+          console.log(`[health-check] token near expiry for ${accountLabel} (project=${project}) — refreshing proactively`);
+          const refreshed = await refreshYouTubeAccessToken(supabase, {
+            id: ch.id,
+            user_id: ch.user_id,
+            account_name: ch.account_name,
+            refresh_token: ch.refresh_token,
+            oauth_project: project,
+            extra: (ch.extra as Record<string, unknown>) ?? null,
+          });
           if (refreshed.ok && refreshed.accessToken && refreshed.expiresAt) {
             accessToken = refreshed.accessToken;
+            updatedExtra = mergeHealthOnSuccess(ch.extra as Record<string, unknown> | null);
             await supabase
               .from("social_accounts")
               .update({
                 access_token: refreshed.accessToken,
                 token_expires_at: refreshed.expiresAt,
                 updated_at: new Date().toISOString(),
+                extra: updatedExtra,
               })
               .eq("id", ch.id);
             refreshOutcome = "succeeded";
             summary.proactive_refreshed++;
-            console.log(`[health-check] proactive refresh succeeded for ${accountLabel}`);
+            console.log(`[health-check] proactive refresh succeeded for ${accountLabel} (project=${project})`);
+          } else if (refreshed.misconfigured) {
+            refreshOutcome = "misconfigured";
+            refreshError = refreshed.errorMessage || "OAuth client not configured";
+            summary.refresh_failed++;
+            console.error(`[health-check] MISCONFIGURED ${accountLabel} (project=${project}) — ${refreshError}`);
           } else {
             refreshOutcome = "failed";
-            refreshError = refreshed.error || "unknown refresh error";
+            refreshError = refreshed.googleError || refreshed.errorMessage || "unknown refresh error";
             summary.refresh_failed++;
-            console.log(`[health-check] refresh FAILED for ${accountLabel} — notifying user (${refreshError})`);
+            updatedExtra = mergeHealthOnFailure(ch.extra as Record<string, unknown> | null, refreshed);
+            // Note: we do NOT clear refresh_token here. Phase 13G-B intentionally
+            // leaves the streak counter accumulate; only YouTubeAdapter clears
+            // tokens after the streak crosses REFRESH_FAIL_STREAK_THRESHOLD.
+            console.log(`[health-check] refresh FAILED for ${accountLabel} (project=${project}) — ${refreshError}`);
           }
         }
 
@@ -146,9 +166,16 @@ Deno.serve(async (req) => {
 
         const prevHealth = (ch.extra as any)?.health?.status as Health | undefined;
         const prevCommentScope = (ch.extra as any)?.health?.comment_scope as string | undefined;
+        // Build extra from the streak-aware merge above when refresh ran,
+        // otherwise from the original row, then layer ping results on top.
+        const baseExtra = (updatedExtra ?? (ch.extra as Record<string, unknown>) ?? {}) as Record<string, unknown>;
+        const baseHealth = (typeof baseExtra.health === "object" && baseExtra.health)
+          ? baseExtra.health as Record<string, unknown>
+          : {};
         const newExtra = {
-          ...((ch.extra as Record<string, unknown>) || {}),
+          ...baseExtra,
           health: {
+            ...baseHealth,
             status,
             http_status: httpStatus,
             checked_at: new Date().toISOString(),
