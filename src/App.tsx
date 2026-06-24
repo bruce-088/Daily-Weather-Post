@@ -65,7 +65,8 @@ const App = () => (
           <Route path="/export-spec" element={<ProtectedRoute><ExportSpec /></ProtectedRoute>} />
           <Route path="/jobs" element={<ProtectedRoute><JobsDashboard /></ProtectedRoute>} />
           <Route path="/admin/health" element={<ProtectedRoute><AdminHealth /></ProtectedRoute>} />
-          <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
+          <Route path="/" element={<Landing />} />
+          <Route path="/dashboard" element={<ProtectedRoute><Index /></ProtectedRoute>} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
