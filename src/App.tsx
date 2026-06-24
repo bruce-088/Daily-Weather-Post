@@ -16,6 +16,7 @@ import NotFound from "./pages/NotFound";
 import ExportSpec from "./pages/ExportSpec";
 import JobsDashboard from "./pages/JobsDashboard";
 import AdminHealth from "./pages/AdminHealth";
+import Landing from "./pages/Landing";
 
 const queryClient = new QueryClient();
 
