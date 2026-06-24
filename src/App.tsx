@@ -16,6 +16,7 @@ import NotFound from "./pages/NotFound";
 import ExportSpec from "./pages/ExportSpec";
 import JobsDashboard from "./pages/JobsDashboard";
 import AdminHealth from "./pages/AdminHealth";
+import Landing from "./pages/Landing";
 
 const queryClient = new QueryClient();
 
@@ -37,7 +38,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   if (loading) return null;
-  if (user) return <Navigate to="/" replace />;
+  if (user) return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 }
 
@@ -64,7 +65,8 @@ const App = () => (
           <Route path="/export-spec" element={<ProtectedRoute><ExportSpec /></ProtectedRoute>} />
           <Route path="/jobs" element={<ProtectedRoute><JobsDashboard /></ProtectedRoute>} />
           <Route path="/admin/health" element={<ProtectedRoute><AdminHealth /></ProtectedRoute>} />
-          <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
+          <Route path="/" element={<Landing />} />
+          <Route path="/dashboard" element={<ProtectedRoute><Index /></ProtectedRoute>} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
