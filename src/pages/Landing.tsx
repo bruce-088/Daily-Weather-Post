@@ -1,9 +1,14 @@
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Cloud, Mic, Film, MapPin, Youtube, BarChart3 } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function Landing() {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (user) return <Navigate to="/dashboard" replace />;
   return (
+
     <div className="dark min-h-screen bg-background text-foreground">
       <header className="border-b border-border/40 backdrop-blur-sm sticky top-0 z-10 bg-background/60">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
