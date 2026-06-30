@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
-import { Download, FileText, RefreshCw, TrendingUp, Trophy, Sparkles } from "lucide-react";
+import { Download, FileText, RefreshCw, TrendingUp, Trophy, Sparkles, ChevronDown } from "lucide-react";
 import { useActiveCity } from "@/hooks/useActiveCity";
 import { format, subDays } from "date-fns";
 import jsPDF from "jspdf";
@@ -471,6 +471,7 @@ export function ExecutiveSummary() {
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState(true);
 
   const cityName = active.name;
 
@@ -498,8 +499,16 @@ export function ExecutiveSummary() {
   return (
     <Card>
       <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
-        <div>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="flex-1 text-left group"
+          aria-expanded={open}
+        >
           <CardTitle className="flex items-center gap-2">
+            <ChevronDown
+              className={`w-4 h-4 text-muted-foreground transition-transform ${open ? "" : "-rotate-90"}`}
+            />
             <TrendingUp className="w-4 h-4 text-primary" />
             Executive Summary
             {cityName && <Badge variant="outline">{cityName}</Badge>}
@@ -507,30 +516,33 @@ export function ExecutiveSummary() {
           <CardDescription>
             Rolled-up performance + growth log insights for the selected city. Exportable as PDF or CSV.
           </CardDescription>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap justify-end">
-          <Select value={String(period)} onValueChange={(v) => setPeriod(Number(v) as Period)}>
-            <SelectTrigger className="w-[120px] h-9">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="7">Last 7 days</SelectItem>
-              <SelectItem value="30">Last 30 days</SelectItem>
-              <SelectItem value="90">Last 90 days</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button size="sm" variant="outline" onClick={load} disabled={loading || !cityName}>
-            <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${loading ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => summary && exportCSV(summary)} disabled={!summary}>
-            <Download className="w-3.5 h-3.5 mr-1.5" /> CSV
-          </Button>
-          <Button size="sm" onClick={() => summary && exportPDF(summary)} disabled={!summary}>
-            <FileText className="w-3.5 h-3.5 mr-1.5" /> PDF
-          </Button>
-        </div>
+        </button>
+        {open && (
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            <Select value={String(period)} onValueChange={(v) => setPeriod(Number(v) as Period)}>
+              <SelectTrigger className="w-[120px] h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="7">Last 7 days</SelectItem>
+                <SelectItem value="30">Last 30 days</SelectItem>
+                <SelectItem value="90">Last 90 days</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button size="sm" variant="outline" onClick={load} disabled={loading || !cityName}>
+              <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${loading ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => summary && exportCSV(summary)} disabled={!summary}>
+              <Download className="w-3.5 h-3.5 mr-1.5" /> CSV
+            </Button>
+            <Button size="sm" onClick={() => summary && exportPDF(summary)} disabled={!summary}>
+              <FileText className="w-3.5 h-3.5 mr-1.5" /> PDF
+            </Button>
+          </div>
+        )}
       </CardHeader>
+      {open && (
       <CardContent className="space-y-5">
         {!cityName && (
           <p className="text-sm text-muted-foreground">
@@ -635,6 +647,7 @@ export function ExecutiveSummary() {
           </>
         )}
       </CardContent>
+      )}
     </Card>
   );
 }
