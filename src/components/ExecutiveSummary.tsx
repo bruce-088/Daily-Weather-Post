@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
-import { Download, FileText, RefreshCw, TrendingUp, Trophy, Sparkles } from "lucide-react";
+import { Download, FileText, RefreshCw, TrendingUp, Trophy, Sparkles, ChevronDown } from "lucide-react";
 import { useActiveCity } from "@/hooks/useActiveCity";
 import { format, subDays } from "date-fns";
 import jsPDF from "jspdf";
