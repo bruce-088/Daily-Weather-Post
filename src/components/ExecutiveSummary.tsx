@@ -647,6 +647,7 @@ export function ExecutiveSummary() {
           </>
         )}
       </CardContent>
+      )}
     </Card>
   );
 }
