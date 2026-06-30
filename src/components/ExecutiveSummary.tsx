@@ -471,6 +471,7 @@ export function ExecutiveSummary() {
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState(true);
 
   const cityName = active.name;
 
