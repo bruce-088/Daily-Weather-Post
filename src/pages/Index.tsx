@@ -1124,6 +1124,7 @@ const Index = () => {
                   </p>
                 </div>
               </div>
+              <ExecutiveSummary />
               <SchedulerAnalytics />
               <SmartInsightsCard />
               <GrowthInsights />
