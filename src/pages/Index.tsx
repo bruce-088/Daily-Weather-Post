@@ -50,6 +50,7 @@ import { GrowthDashboard, OutperformingPosts } from "@/components/GrowthDashboar
 import { GrowthCommandProvider, GrowthStatsCards, GrowthMemoryBank, GrowthWeeklyRecap } from "@/components/GrowthCommandCenter";
 import { GrowthInsights } from "@/components/GrowthInsights";
 import { GrowthLog } from "@/components/GrowthLog";
+import { ExecutiveSummary } from "@/components/ExecutiveSummary";
 import { AiInsightsCard } from "@/components/AiInsightsCard";
 import { useGrowthInsights } from "@/hooks/useGrowthInsights";
 import { VideoPreviewDialog } from "@/components/VideoPreviewDialog";
