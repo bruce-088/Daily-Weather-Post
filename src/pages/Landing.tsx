@@ -1,13 +1,16 @@
-import { Link, Navigate } from "react-router-dom";
+import { Link } from "react-router-dom";
+import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Cloud, Mic, Film, MapPin, Youtube, BarChart3 } from "lucide-react";
-import { useAuth } from "@/hooks/useAuth";
 
 export default function Landing() {
-  const { user, loading } = useAuth();
-  if (loading) return null;
-  if (user) return <Navigate to="/dashboard" replace />;
+  // Public landing page — never redirects. Crawlers and OAuth reviewers must
+  // be able to load `/` directly without any client- or server-side redirect.
+  useEffect(() => {
+    document.title = "SkyBrief — Automated Weather Forecasts for YouTube";
+  }, []);
   return (
+
 
     <div className="dark min-h-screen bg-background text-foreground">
       <header className="border-b border-border/40 backdrop-blur-sm sticky top-0 z-10 bg-background/60">
