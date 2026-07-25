@@ -132,17 +132,17 @@ const PrivacyPolicy = () => {
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-foreground mb-2">4. Data Storage & Security</h2>
+            <h2 className="text-lg font-semibold text-foreground mb-2">5. Data Storage & Security</h2>
             <p>Your data is stored securely by SkyBrief using industry-standard encryption and access controls. API tokens and credentials are stored in encrypted form. We use row-level security to ensure users can only access their own data.</p>
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-foreground mb-2">5. Data Retention</h2>
+            <h2 className="text-lg font-semibold text-foreground mb-2">6. Data Retention</h2>
             <p>We retain your data for as long as your account is active. Post history is retained indefinitely unless you request deletion. When you delete your account, all associated data (including API tokens, settings, and post history) will be permanently removed within 30 days.</p>
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-foreground mb-2">6. Your Rights</h2>
+            <h2 className="text-lg font-semibold text-foreground mb-2">7. Your Rights</h2>
             <ul className="list-disc pl-5 space-y-1">
               <li><strong className="text-foreground">Access:</strong> You can view all data associated with your account through the Service.</li>
               <li><strong className="text-foreground">Deletion:</strong> You can request deletion of your account and all associated data at any time.</li>
@@ -152,22 +152,22 @@ const PrivacyPolicy = () => {
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-foreground mb-2">7. Cookies</h2>
+            <h2 className="text-lg font-semibold text-foreground mb-2">8. Cookies</h2>
             <p>SkyBrief uses essential cookies and local storage for authentication and session management. We do not use tracking or advertising cookies.</p>
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-foreground mb-2">8. Children's Privacy</h2>
+            <h2 className="text-lg font-semibold text-foreground mb-2">9. Children's Privacy</h2>
             <p>SkyBrief is not intended for users under the age of 13. We do not knowingly collect information from children under 13.</p>
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-foreground mb-2">9. Changes to This Policy</h2>
+            <h2 className="text-lg font-semibold text-foreground mb-2">10. Changes to This Policy</h2>
             <p>We may update this Privacy Policy from time to time. We will notify users of material changes via email or in-app notification. Continued use of the Service after changes constitutes acceptance.</p>
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-foreground mb-2">10. Contact</h2>
+            <h2 className="text-lg font-semibold text-foreground mb-2">11. Contact</h2>
             <p>If you have questions about this Privacy Policy or wish to exercise your data rights, please contact SkyBrief at <span className="text-primary">privacy@skybrief.app</span>.</p>
           </section>
         </div>
