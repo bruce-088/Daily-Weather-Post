@@ -20,7 +20,9 @@ const FEATURES: Array<[string, string, string]> = [
   ["Notifications (in-app, realtime)", "✅ Working", "notifications table + realtime subscription."],
   ["Social integrations: TikTok, YouTube, X/Twitter, LinkedIn, Instagram", "✅ Working", "OAuth flows; Instagram via Graph API. YouTube auth hardened: access_type=offline + prompt=consent + include_granted_scopes guarantee a long-lived refresh_token; legacy refresh_token action matches strictly by refresh_token (no city_id=null fallback insert, no cross-channel overwrite); adapter performs ONE auto refresh + retry on 401 from upload init; standardized [youtube-auth] logging."],
   ["Video rendering via Creatomate (with Remotion fallback)", "⚠️ Partial", "Creatomate primary; fallback path is environment-dependent."],
-  ["Export Spec (this document)", "✅ Working", "generate-spec edge function returns live Markdown."],
+  ["Export Spec (this document)", "✅ Working", "generate-spec edge function returns live Markdown. ADMIN-ONLY: requires the `admin` role in public.user_roles (checked via has_role RPC); non-admins get 403. The /export-spec and /admin/health routes are gated by AdminRoute and the nav buttons are hidden for non-admins."],
+  ["Role-Based Access Control", "✅ Working", "public.user_roles table (app_role enum: admin|user) + SECURITY DEFINER has_role() function. Roles are never stored on profile/user tables; role checks are server-side only."],
+
   ["Job Pipeline Dashboard", "✅ Working", "Visual pipeline showing step-by-step job progress per post."],
   ["Duplicate Post Protection", "✅ Working", "DB-level exclusion constraint + runtime dedupe checks."],
   ["City-to-Channel Routing Guard", "✅ Working", "Strict mapping prevents cross-city content contamination."],
