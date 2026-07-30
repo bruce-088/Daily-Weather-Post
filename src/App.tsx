@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import TermsOfService from "./pages/TermsOfService";
@@ -35,12 +36,43 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { user, loading: authLoading } = useAuth();
+  const { isAdmin, loading } = useIsAdmin();
+
+  if (authLoading || loading) {
+    return (
+      <div className="dark min-h-screen bg-background flex items-center justify-center">
+        <div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+
+  if (!user) return <Navigate to="/auth" replace />;
+
+  if (!isAdmin) {
+    return (
+      <div className="dark min-h-screen bg-background flex items-center justify-center px-6">
+        <div className="max-w-md text-center space-y-2">
+          <h1 className="text-2xl font-semibold text-foreground">403 — Forbidden</h1>
+          <p className="text-sm text-muted-foreground">
+            This area is restricted to administrators.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+}
+
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   if (loading) return null;
   if (user) return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 }
+
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -62,9 +94,10 @@ const App = () => (
           <Route path="/youtube/callback" element={<ProtectedRoute><YouTubeCallback /></ProtectedRoute>} />
           <Route path="/twitter/callback" element={<ProtectedRoute><TwitterCallback /></ProtectedRoute>} />
           <Route path="/linkedin/callback" element={<ProtectedRoute><LinkedInCallback /></ProtectedRoute>} />
-          <Route path="/export-spec" element={<ProtectedRoute><ExportSpec /></ProtectedRoute>} />
+          <Route path="/export-spec" element={<AdminRoute><ExportSpec /></AdminRoute>} />
           <Route path="/jobs" element={<ProtectedRoute><JobsDashboard /></ProtectedRoute>} />
-          <Route path="/admin/health" element={<ProtectedRoute><AdminHealth /></ProtectedRoute>} />
+          <Route path="/admin/health" element={<AdminRoute><AdminHealth /></AdminRoute>} />
+
           <Route path="/" element={<Landing />} />
           <Route path="/dashboard" element={<ProtectedRoute><Index /></ProtectedRoute>} />
           <Route path="*" element={<NotFound />} />
