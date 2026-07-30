@@ -386,6 +386,23 @@ Deno.serve(async (req) => {
   const auth = await verifyUser(req);
   if (auth.response) return auth.response;
 
+  // Admin-only: the spec exposes internal architecture details.
+  {
+    const adminClient = createClient(SUPABASE_URL, SERVICE_KEY);
+    const { data: isAdmin, error: roleError } = await adminClient.rpc("has_role", {
+      _user_id: auth.userId,
+      _role: "admin",
+    });
+    if (roleError || !isAdmin) {
+      console.warn(`[generate-spec] Forbidden for user=${auth.userId} roleError=${roleError?.message ?? "none"}`);
+      return new Response(JSON.stringify({ error: "Forbidden: admin role required" }), {
+        status: 403,
+        headers: corsHeaders,
+      });
+    }
+  }
+
+
   console.log(`[generate-spec] Milestone: Business Goals & Scaling Vision section included in spec v${APP_VERSION}`);
 
   try {
