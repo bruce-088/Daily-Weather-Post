@@ -97,6 +97,7 @@ const DEFAULT_SETTINGS: AutomationSettings = {
 
 const Index = () => {
   const { signOut } = useAuth();
+  const { isAdmin } = useIsAdmin();
   useGrowthInsights();
   const navigate = useNavigate();
   const cardRef = useRef<HTMLDivElement>(null);
