@@ -1927,22 +1927,35 @@ Deno.serve(async (req) => {
       // are NOT retried — better to fail loudly than post Gainesville to Orlando.
       if ((post as any).city_id) {
         try {
-          const { data: acct } = await supabase
+          const gateContentType = post.platform === "youtube"
+            ? youtubeContentTypeForPost(post as any)
+            : null;
+          const gateProject = gateContentType ? projectForContentType(gateContentType) : null;
+          let cityAccountQuery = supabase
             .from("social_accounts")
             .select("id, city_id, platform")
             .eq("user_id", post.user_id)
             .eq("platform", post.platform)
-            .eq("city_id", (post as any).city_id)
-            .maybeSingle();
+            .eq("city_id", (post as any).city_id);
+          if (gateProject) cityAccountQuery = cityAccountQuery.eq("oauth_project", gateProject);
+          const { data: cityAccounts, error: cityAccountError } = await cityAccountQuery.limit(2);
+          if (cityAccountError) throw new Error(`[ROUTING_QUERY_FAILED] exact: ${cityAccountError.message}`);
+          if ((cityAccounts?.length ?? 0) > 1) {
+            throw new Error(`[ROUTING_QUERY_MULTIPLE] Multiple ${post.platform} accounts found for project ${gateProject ?? "n/a"}`);
+          }
+          const acct = cityAccounts?.[0] ?? null;
           if (!acct) {
             // Name-based fallback: accept a channel whose account_name contains
             // the post's city name before declaring a routing violation.
-            const { data: userAccts } = await supabase
+            let fallbackAccountQuery = supabase
               .from("social_accounts")
               .select("id, city_id, account_name")
               .eq("user_id", post.user_id)
               .eq("platform", post.platform);
-            const cityNeedle = (post.city || "").trim().toLowerCase();
+            if (gateProject) fallbackAccountQuery = fallbackAccountQuery.eq("oauth_project", gateProject);
+            const { data: userAccts, error: userAcctsError } = await fallbackAccountQuery;
+            if (userAcctsError) throw new Error(`[ROUTING_QUERY_FAILED] fallback: ${userAcctsError.message}`);
+            const cityNeedle = (post.city || "").split(",")[0].trim().toLowerCase();
             const nameMatch = cityNeedle
               ? (userAccts || []).find((a: any) =>
                   (a.account_name || "").toLowerCase().includes(cityNeedle))
@@ -2125,7 +2138,24 @@ Deno.serve(async (req) => {
             }
           }
         } catch (e) {
-          console.warn(`[isolate] check failed for ${post.id} (continuing):`, (e as any)?.message);
+          const message = (e as Error)?.message || "Unknown routing query failure";
+          console.error(`[isolate] check failed for ${post.id} (blocked):`, message);
+          await logEvent(supabase, EventType.RoutingCheckError, "Routing check failed closed", {
+            user_id: post.user_id,
+            platform: post.platform,
+            scheduled_post_id: post.id,
+            city_id: (post as any).city_id,
+            oauth_project: post.platform === "youtube" ? projectForContentType(youtubeContentTypeForPost(post as any)) : null,
+            error_message: message,
+          });
+          await supabase.from("scheduled_posts").update({
+            status: "failed",
+            error_message: message,
+            last_attempt_at: new Date().toISOString(),
+          }).eq("id", post.id);
+          await releaseLock();
+          processed++;
+          continue;
         }
       }
 
