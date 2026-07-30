@@ -2137,6 +2137,8 @@ Deno.serve(async (req) => {
             }
             }
           }
+          }
+          }
         } catch (e) {
           const message = (e as Error)?.message || "Unknown routing query failure";
           console.error(`[isolate] check failed for ${post.id} (blocked):`, message);
