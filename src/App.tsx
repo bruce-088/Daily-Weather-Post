@@ -35,12 +35,43 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { user, loading: authLoading } = useAuth();
+  const { isAdmin, loading } = useIsAdmin();
+
+  if (authLoading || loading) {
+    return (
+      <div className="dark min-h-screen bg-background flex items-center justify-center">
+        <div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+
+  if (!user) return <Navigate to="/auth" replace />;
+
+  if (!isAdmin) {
+    return (
+      <div className="dark min-h-screen bg-background flex items-center justify-center px-6">
+        <div className="max-w-md text-center space-y-2">
+          <h1 className="text-2xl font-semibold text-foreground">403 — Forbidden</h1>
+          <p className="text-sm text-muted-foreground">
+            This area is restricted to administrators.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+}
+
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   if (loading) return null;
   if (user) return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 }
+
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
