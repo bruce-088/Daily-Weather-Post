@@ -157,12 +157,10 @@ Deno.serve(async (req) => {
         const { status, httpStatus, channelId } = await pingChannel(accessToken);
         summary[status]++;
 
-        // Phase 13E-B: probe youtube.force-ssl scope so missing comment
-        // permission surfaces here instead of silently at post time.
-        let commentScope: "ok" | "missing_scope" | "error" | "skipped" = "skipped";
-        if (status === "healthy" && accessToken && channelId) {
-          commentScope = await probeCommentScope(accessToken, channelId);
-        }
+        // Scope contract (Jul 2026): youtube.force-ssl is no longer requested,
+        // so the comment-scope probe is disabled. Re-enable only if force-ssl
+        // is registered in Google Cloud Console and approved.
+        const commentScope: "ok" | "missing_scope" | "error" | "skipped" = "skipped";
 
         const prevHealth = (ch.extra as any)?.health?.status as Health | undefined;
         const prevCommentScope = (ch.extra as any)?.health?.comment_scope as string | undefined;
