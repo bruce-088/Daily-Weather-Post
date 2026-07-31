@@ -101,16 +101,19 @@ Deno.serve(async (req) => {
         client_id: creds.id,
         redirect_uri: redirect_uri,
         response_type: "code",
-        // Phase 13E-B: added youtube.force-ssl so we can post comments
-        // (used for the pinned/first-comment engagement CTA on Shorts).
-        scope: "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/yt-analytics.readonly https://www.googleapis.com/auth/youtube.force-ssl",
-        // ⚠️ CONTRACT — DO NOT REMOVE THESE THREE PARAMS:
+        // ⚠️ SCOPE CONTRACT (Google OAuth verification, Jul 2026):
+        // ONLY the two scopes registered in Google Cloud Console may be
+        // requested. youtube.force-ssl was REMOVED — it is unnecessarily
+        // broad and caused a verification scope mismatch. Pinned comments
+        // are therefore unavailable until force-ssl is registered + approved.
+        scope: "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly",
+        // ⚠️ CONTRACT — DO NOT REMOVE:
         //   access_type=offline → required for Google to issue a refresh_token
         //   prompt=consent      → guarantees a refresh_token even on re-auth
-        //   include_granted_scopes=true → preserves prior scopes on re-consent
+        // include_granted_scopes is intentionally OMITTED so previously
+        // granted scopes (e.g. force-ssl) are not silently re-attached.
         access_type: "offline",
         prompt: "select_account consent",
-        include_granted_scopes: "true",
         state: csrfState,
       });
 
