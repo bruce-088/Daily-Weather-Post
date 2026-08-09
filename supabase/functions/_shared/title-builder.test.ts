@@ -7,7 +7,7 @@
 // Run with:  deno test supabase/functions/_shared/title-builder.test.ts
 
 import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { expandAllTemplates, getWeatherEmoji, buildHookTitle } from "./title-builder.ts";
+import { expandAllTemplates, getWeatherEmoji, buildHookTitle, buildFormulaTitleBody } from "./title-builder.ts";
 import { validatePostBundle, BANNED_FRAGMENTS_STRICT } from "./text-sanitizer.ts";
 
 const FIXTURE_CITIES = ["Orlando", "Gainesville", "Miami", "Tampa"];
@@ -102,3 +102,71 @@ Deno.test("validator DOES block 'Clear Skies' when used as a location slot", () 
   assertEquals(r.failures[0]?.matched, "Clear Skies");
 });
 
+
+// --- Phase 14A: urgency/specificity formula titles ---
+
+Deno.test("formula titles stay under 60 chars with slot prefix and pass validation", () => {
+  const cases: Array<[number, string, number | null, Record<string, unknown>]> = [
+    [96, "Clear", 0, {}],
+    [88, "Clear", 0, { feelsLike: 103 }],
+    [30, "Clear", 0, {}],
+    [78, "Thunderstorm", 80, {}],
+    [72, "Light Rain", 60, {}],
+    [34, "Snow", 40, {}],
+    [85, "Clear", 0, { tomorrowHigh: 70 }],
+    [60, "Clear", 0, { tomorrowHigh: 80 }],
+    [75, "Partly Cloudy", 10, {}],
+  ];
+  for (const city of FIXTURE_CITIES) {
+    for (const [temp, condition, rain, ctx] of cases) {
+      const title = buildHookTitle(city, temp, condition, rain ?? undefined, "morning", "unit-test", ctx);
+      assert(/^\[(8 AM|1 PM|6 PM)\]/.test(title), `Missing slot prefix: ${title}`);
+      assert(title.length <= 60, `Title too long (${title.length}): ${title}`);
+      const r = validatePostBundle({
+        title,
+        description: title,
+        caption: null,
+        voiceScript: null,
+        expectedCity: city,
+      });
+      assertEquals(r.ok, true, `Formula title failed validation: ${title} ${JSON.stringify(r.failures)}`);
+    }
+  }
+});
+
+Deno.test("formula body follows {City}: {Detail} - {Hook} and is condition-aware", () => {
+  const hot = buildFormulaTitleBody("Orlando", 96, "Clear", 0);
+  assertEquals(hot.trigger, "extreme_heat");
+  assert(hot.body.startsWith("Orlando: "), hot.body);
+  assert(hot.body.includes(" - "), hot.body);
+
+  const storm = buildFormulaTitleBody("Gainesville", 80, "Thunderstorm", 85);
+  assertEquals(storm.trigger, "storm");
+
+  const cold = buildFormulaTitleBody("Orlando", 32, "Clear", 0);
+  assertEquals(cold.trigger, "extreme_cold");
+
+  const relief = buildFormulaTitleBody("Orlando", 92, "Clear", 0, { tomorrowHigh: 78 });
+  assertEquals(relief.trigger, "pattern_change");
+
+  const weekend = buildFormulaTitleBody("Orlando", 75, "Clear", 0, {
+    now: new Date("2026-08-07T14:00:00Z"), // Friday
+  });
+  assertEquals(weekend.trigger, "weekend");
+});
+
+Deno.test("no formula title contains banned fragments or location proxies", () => {
+  for (const city of FIXTURE_CITIES) {
+    for (const t of [30, 45, 60, 75, 90, 96]) {
+      for (const condition of FIXTURE_CONDITIONS) {
+        const { body } = buildFormulaTitleBody(city, t, condition, 60, { feelsLike: t + 6, tomorrowHigh: t - 10 });
+        for (const banned of [...BANNED_FRAGMENTS_STRICT, "Weather Update", "Coming Up", "Heads Up", "Clear Skies"]) {
+          assert(
+            !body.toLowerCase().includes(banned.toLowerCase()),
+            `Formula body "${body}" contains banned fragment "${banned}"`,
+          );
+        }
+      }
+    }
+  }
+});
