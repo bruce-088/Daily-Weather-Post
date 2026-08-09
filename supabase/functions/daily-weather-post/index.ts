@@ -1865,7 +1865,12 @@ Deno.serve(async (req) => {
       errorMessage = realRenderError;
       for (const a of connectedAdapters) recordResult(a.name, false, `Video render failed: ${realRenderError}`);
     } else if (userId) {
-      const title = generateSkyBriefTitle(weather.city, weather.temperature, weather.condition, weather.rainChance, "morning");
+      const title = generateSkyBriefTitle(weather.city, weather.temperature, weather.condition, weather.rainChance, "morning", "daily-weather-post", {
+        feelsLike: weather.feelsLike ?? null,
+        tomorrowHigh: weather.tomorrowHigh ?? null,
+        tomorrowLow: weather.tomorrowLow ?? null,
+        tomorrowCondition: weather.tomorrowCondition ?? null,
+      });
       assertSlotTitlePrefix(title, "daily-weather-post:dispatch");
       const desc = caption || "Weather update for " + weather.city + ": " + weather.temperature + "\u00B0F, " + weather.description;
 
@@ -1959,7 +1964,12 @@ Deno.serve(async (req) => {
     };
 
     // Derive title used for posting (re-build deterministically for metadata).
-    const _titleForMeta = generateSkyBriefTitle(weather.city, weather.temperature, weather.condition, weather.rainChance, "morning");
+    const _titleForMeta = generateSkyBriefTitle(weather.city, weather.temperature, weather.condition, weather.rainChance, "morning", "daily-weather-post", {
+        feelsLike: weather.feelsLike ?? null,
+        tomorrowHigh: weather.tomorrowHigh ?? null,
+        tomorrowLow: weather.tomorrowLow ?? null,
+        tomorrowCondition: weather.tomorrowCondition ?? null,
+      });
     assertSlotTitlePrefix(_titleForMeta, "daily-weather-post:metadata");
 
     // ── Cinematic Preset System: tag every published row with the decision so
