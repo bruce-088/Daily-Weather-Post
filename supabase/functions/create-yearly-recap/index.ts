@@ -30,6 +30,7 @@
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { getRenderQualityOptions, logRenderQuality, snapshotTimeFor } from "../_shared/render-quality.ts";
 import {
   pickPresetForRecapSlide,
   resolveScene,
@@ -839,11 +840,16 @@ async function stitchSlideshow(
   }
   console.log(`[yearly-recap] audio mix: voice=${voice ? "yes" : "no"} music=${RECAP_MUSIC_URL ? "yes" : "no"}`);
 
+  // Phase 13K premium quality: frame rate / render scale come from the shared
+  // render-quality tier (env-overridable) instead of being hardcoded.
+  const _quality = getRenderQualityOptions("recap");
+  logRenderQuality("yearly-recap", "recap", _quality);
   const body = {
-    output_format: "mp4",
-    frame_rate: 30,
-    width: 1920, height: 1080,
+    ..._quality,
+    width: 1920,
+    height: 1080,
     duration: totalDuration,
+    snapshot_time: snapshotTimeFor("recap", totalDuration),
     fill_color: "#0f172a",
     elements,
   };
