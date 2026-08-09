@@ -21,6 +21,7 @@ import {
 import { logEvent, EventType, nowMs } from "../_shared/structured-logger.ts";
 import { projectForContentType } from "../_shared/youtube-adapter.ts";
 import { youtubeContentTypeForPost } from "../_shared/youtube-routing.ts";
+import { getRenderQualityOptions, logRenderQuality, snapshotTimeFor, tempAccentColor, PREMIUM_TEXT_SHADOW } from "../_shared/render-quality.ts";
 
 const PROCESS_SCHEDULED_POSTS_BUILD = "phase3-structured-logging-2026-05-23T03:30Z";
 
@@ -643,35 +644,35 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
 
     { type: "shape", track: nt(), time: 0.2, duration: dur(9.8), shape_type: "rectangle", width: 800, height: 200, x: "50%", y: "18%",
       fill_color: "rgba(0,0,0,0.35)", border_radius: "14", enter: { type: "fade", duration: 0.4 } },
-    { type: "text", track: nt(), time: 0.3, duration: dur(9.7), text: weather.city.toUpperCase(), font_family: "Inter", font_weight: "800", font_size: "88", fill_color: "#ffffff",
-      x: "50%", y: "16%", x_alignment: "50%", y_alignment: "50%", shadow: "0px 2px 4px rgba(0,0,0,0.5)", enter: { type: "slide", direction: "up", duration: 0.5 } },
+    { type: "text", track: nt(), time: 0.3, duration: dur(9.7), text: weather.city.toUpperCase(), font_family: "Inter", font_weight: "800", font_size: "96", fill_color: "#ffffff",
+      x: "50%", y: "16%", x_alignment: "50%", y_alignment: "50%", shadow: PREMIUM_TEXT_SHADOW, enter: { type: "slide", direction: "up", duration: 0.5 } },
     { type: "text", track: nt(), time: 0.5, duration: dur(9.5), text: `${weather.stateOrRegion}  ·  ${dateStr}`, font_family: "Inter", font_weight: "500", font_size: "30", fill_color: "rgba(255,255,255,0.65)",
       x: "50%", y: "21%", x_alignment: "50%", y_alignment: "50%", shadow: "0px 2px 4px rgba(0,0,0,0.5)", enter: { type: "fade", duration: 0.5 } },
     { type: "text", track: nt(), time: 0.6, duration: dur(9.4), text: theme.emoji, font_size: "80",
       x: "50%", y: "30%", x_alignment: "50%", y_alignment: "50%", enter: { type: "scale", start_scale: "50%", duration: 0.6 } },
-    { type: "text", track: nt(), time: 0.7, duration: dur(9.3), text: `${weather.temperature}°`, font_family: "Inter", font_weight: "900", font_size: "180", fill_color: "#ffffff",
-      x: "50%", y: "42%", x_alignment: "50%", y_alignment: "50%", shadow: "0px 2px 4px rgba(0,0,0,0.5)", enter: { type: "scale", start_scale: "60%", duration: 0.6 } },
+    { type: "text", track: nt(), time: 0.7, duration: dur(9.3), text: `${weather.temperature}°`, font_family: "Inter", font_weight: "900", font_size: "232", fill_color: tempAccentColor(weather.temperature),
+      x: "50%", y: "42%", x_alignment: "50%", y_alignment: "50%", shadow: PREMIUM_TEXT_SHADOW, enter: { type: "scale", start_scale: "68%", duration: 0.7 } },
     { type: "text", track: nt(), time: 0.9, duration: dur(9.1), text: weather.description.charAt(0).toUpperCase() + weather.description.slice(1),
-      font_family: "Inter", font_weight: "600", font_size: "38", fill_color: theme.accent,
-      x: "50%", y: "51%", x_alignment: "50%", y_alignment: "50%", shadow: "0px 2px 4px rgba(0,0,0,0.5)", enter: { type: "fade", duration: 0.5 } },
+      font_family: "Inter", font_weight: "700", font_size: "44", fill_color: theme.accent,
+      x: "50%", y: "51%", x_alignment: "50%", y_alignment: "50%", shadow: PREMIUM_TEXT_SHADOW, enter: { type: "fade", duration: 0.5 } },
     { type: "shape", track: nt(), time: 1.3, duration: dur(8.7), shape_type: "rectangle", width: 920, height: 260, x: "50%", y: "63%",
       fill_color: "rgba(10,15,30,0.65)", border_radius: "28", border_width: 1, border_color: "rgba(255,255,255,0.10)",
       shadow: "inset 0 1px 0 rgba(255,255,255,0.05)", enter: { type: "scale", start_scale: "92%", duration: 0.5 } },
-    { type: "text", track: nt(), time: 1.5, duration: dur(8.5), text: "HIGH", font_family: "Inter", font_weight: "600", font_size: "22", fill_color: "rgba(255,255,255,0.45)", letter_spacing: "6%",
+    { type: "text", track: nt(), time: 1.5, duration: dur(8.5), text: "HIGH", font_family: "Inter", font_weight: "600", font_size: "26", fill_color: "rgba(255,255,255,0.62)", letter_spacing: "6%",
       x: "17%", y: "58.5%", x_alignment: "50%", y_alignment: "50%", shadow: "0px 2px 4px rgba(0,0,0,0.5)", enter: { type: "fade", duration: 0.3 } },
-    { type: "text", track: nt(), time: 1.5, duration: dur(8.5), text: "LOW", font_family: "Inter", font_weight: "600", font_size: "22", fill_color: "rgba(255,255,255,0.45)", letter_spacing: "6%",
+    { type: "text", track: nt(), time: 1.5, duration: dur(8.5), text: "LOW", font_family: "Inter", font_weight: "600", font_size: "26", fill_color: "rgba(255,255,255,0.62)", letter_spacing: "6%",
       x: "39%", y: "58.5%", x_alignment: "50%", y_alignment: "50%", shadow: "0px 2px 4px rgba(0,0,0,0.5)", enter: { type: "fade", duration: 0.3 } },
-    { type: "text", track: nt(), time: 1.5, duration: dur(8.5), text: "RAIN", font_family: "Inter", font_weight: "600", font_size: "22", fill_color: "rgba(255,255,255,0.45)", letter_spacing: "6%",
+    { type: "text", track: nt(), time: 1.5, duration: dur(8.5), text: "RAIN", font_family: "Inter", font_weight: "600", font_size: "26", fill_color: "rgba(255,255,255,0.62)", letter_spacing: "6%",
       x: "61%", y: "58.5%", x_alignment: "50%", y_alignment: "50%", shadow: "0px 2px 4px rgba(0,0,0,0.5)", enter: { type: "fade", duration: 0.3 } },
-    { type: "text", track: nt(), time: 1.5, duration: dur(8.5), text: "WIND", font_family: "Inter", font_weight: "600", font_size: "22", fill_color: "rgba(255,255,255,0.45)", letter_spacing: "6%",
+    { type: "text", track: nt(), time: 1.5, duration: dur(8.5), text: "WIND", font_family: "Inter", font_weight: "600", font_size: "26", fill_color: "rgba(255,255,255,0.62)", letter_spacing: "6%",
       x: "83%", y: "58.5%", x_alignment: "50%", y_alignment: "50%", shadow: "0px 2px 4px rgba(0,0,0,0.5)", enter: { type: "fade", duration: 0.3 } },
-    { type: "text", track: nt(), time: 1.7, duration: dur(8.3), text: `${hi}°`, font_family: "Inter", font_weight: "700", font_size: "44", fill_color: "#ffffff",
+    { type: "text", track: nt(), time: 1.7, duration: dur(8.3), text: `${hi}°`, font_family: "Inter", font_weight: "800", font_size: "52", fill_color: "#ffffff",
       x: "17%", y: "63.5%", x_alignment: "50%", y_alignment: "50%", shadow: "0px 2px 4px rgba(0,0,0,0.5)", enter: { type: "slide", direction: "up", duration: 0.4 } },
-    { type: "text", track: nt(), time: 1.8, duration: dur(8.2), text: `${lo}°`, font_family: "Inter", font_weight: "700", font_size: "44", fill_color: "#ffffff",
+    { type: "text", track: nt(), time: 1.8, duration: dur(8.2), text: `${lo}°`, font_family: "Inter", font_weight: "800", font_size: "52", fill_color: "#ffffff",
       x: "39%", y: "63.5%", x_alignment: "50%", y_alignment: "50%", shadow: "0px 2px 4px rgba(0,0,0,0.5)", enter: { type: "slide", direction: "up", duration: 0.4 } },
-    { type: "text", track: nt(), time: 1.9, duration: dur(8.1), text: `${weather.rainChance}%`, font_family: "Inter", font_weight: "700", font_size: "44", fill_color: "#ffffff",
+    { type: "text", track: nt(), time: 1.9, duration: dur(8.1), text: `${weather.rainChance}%`, font_family: "Inter", font_weight: "800", font_size: "52", fill_color: "#ffffff",
       x: "61%", y: "63.5%", x_alignment: "50%", y_alignment: "50%", shadow: "0px 2px 4px rgba(0,0,0,0.5)", enter: { type: "slide", direction: "up", duration: 0.4 } },
-    { type: "text", track: nt(), time: 2.0, duration: dur(8.0), text: windSpeed, font_family: "Inter", font_weight: "700", font_size: "44", fill_color: "#ffffff",
+    { type: "text", track: nt(), time: 2.0, duration: dur(8.0), text: windSpeed, font_family: "Inter", font_weight: "800", font_size: "52", fill_color: "#ffffff",
       x: "83%", y: "63.5%", x_alignment: "50%", y_alignment: "50%", shadow: "0px 2px 4px rgba(0,0,0,0.5)", enter: { type: "slide", direction: "up", duration: 0.4 } },
     { type: "shape", track: nt(), time: 1.6, duration: dur(8.4), shape_type: "rectangle", width: 1, height: 80, x: "28%", y: "61.5%", fill_color: "rgba(255,255,255,0.08)", enter: { type: "fade", duration: 0.3 } },
     { type: "shape", track: nt(), time: 1.6, duration: dur(8.4), shape_type: "rectangle", width: 1, height: 80, x: "50%", y: "61.5%", fill_color: "rgba(255,255,255,0.08)", enter: { type: "fade", duration: 0.3 } },
@@ -1260,14 +1261,19 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
     }
   }
 
-  // Medium-quality render: 0.75 scale (810x1440 from a 1080x1920 source)
-  // dramatically cuts Creatomate render time so we stay inside the worker
-  // window. Visually indistinguishable for vertical mobile playback.
+  // Phase 13K premium render: full-scale 1080x1920 at the tier frame rate
+  // (60fps on the premium tier). Shorts are only ~10s, so the extra render
+  // time stays comfortably inside the worker window while text and the hero
+  // temperature come out noticeably sharper. Tier is env-overridable via
+  // RENDER_QUALITY_TIER / SHORTS_FRAME_RATE.
+  const _quality = getRenderQualityOptions("short");
+  logRenderQuality("shorts", "short", _quality);
   const requestBody = JSON.stringify({
-    output_format: "mp4",
-    render_scale: 0.75,
-    frame_rate: 30,
     ...source,
+    // Quality options are spread LAST so they win over any frame_rate baked
+    // into the composition source.
+    ..._quality,
+    snapshot_time: snapshotTimeFor("short", compDuration),
   });
   const root: any = source;
   console.log(`[creatomate] source_valid=true output_format=mp4 elements=${Array.isArray(root.elements) ? root.elements.length : 0} background_video_source=${videoUrl ? "mapped" : "none"}`);
