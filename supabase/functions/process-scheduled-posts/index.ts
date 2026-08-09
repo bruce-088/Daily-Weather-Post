@@ -1269,9 +1269,11 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
   const _quality = getRenderQualityOptions("short");
   logRenderQuality("shorts", "short", _quality);
   const requestBody = JSON.stringify({
+    ...source,
+    // Quality options are spread LAST so they win over any frame_rate baked
+    // into the composition source.
     ..._quality,
     snapshot_time: snapshotTimeFor("short", compDuration),
-    ...source,
   });
   const root: any = source;
   console.log(`[creatomate] source_valid=true output_format=mp4 elements=${Array.isArray(root.elements) ? root.elements.length : 0} background_video_source=${videoUrl ? "mapped" : "none"}`);

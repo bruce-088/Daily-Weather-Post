@@ -11,6 +11,7 @@ import {
   stripUnverifiedReferences,
 } from "../_shared/location-guard.ts";
 import { generateVideoWithFallback } from "../_shared/video-render.ts";
+import { getRenderQualityOptions, logRenderQuality, snapshotTimeFor } from "../_shared/render-quality.ts";
 import { verifyUser } from "../_shared/auth-helpers.ts";
 import {
   pickPresetForDaily,
@@ -1027,7 +1028,16 @@ async function generateWeatherVideo(weather: WeatherResponse, timePeriod?: strin
   // render record and includes it in the input fingerprint, so this guarantees
   // a fresh render_id every call even when weather inputs are identical.
   const renderNonce = `${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
-  const requestBody = JSON.stringify({ output_format: "mp4", metadata: renderNonce, ...source });
+  // Phase 13K premium quality: tier-driven frame rate / render scale, spread
+  // last so they override the composition's own frame_rate.
+  const _quality = getRenderQualityOptions("short");
+  logRenderQuality("daily-weather-post", "short", _quality);
+  const requestBody = JSON.stringify({
+    metadata: renderNonce,
+    ...source,
+    ..._quality,
+    snapshot_time: snapshotTimeFor("short", compDuration),
+  });
   const root: any = source;
   console.log(
     `[render] creatomate_request_sent=true template_id=${(source as any)?.template_id ?? "inline_source"} background_url=${videoUrl ? String(videoUrl).split("?")[0] : "(gradient)"} audio_url=${voiceUrl ? String(voiceUrl).split("?")[0] : "(none)"} audio_dur=${audioDurationSec ?? "n/a"}s comp_dur=${compDuration.toFixed(2)}s`,
