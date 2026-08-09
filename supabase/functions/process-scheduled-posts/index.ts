@@ -651,7 +651,7 @@ function buildCreatomateSource(weather: WeatherResponse, videoUrl?: string | nul
     { type: "text", track: nt(), time: 0.6, duration: dur(9.4), text: theme.emoji, font_size: "80",
       x: "50%", y: "30%", x_alignment: "50%", y_alignment: "50%", enter: { type: "scale", start_scale: "50%", duration: 0.6 } },
     { type: "text", track: nt(), time: 0.7, duration: dur(9.3), text: `${weather.temperature}°`, font_family: "Inter", font_weight: "900", font_size: "232", fill_color: tempAccentColor(weather.temperature),
-      x: "50%", y: "42%", x_alignment: "50%", y_alignment: "50%", shadow: PREMIUM_TEXT_SHADOW, enter: { type: "scale", start_scale: "68%", duration: 0.7, easing: "quadratic-out" } },
+      x: "50%", y: "42%", x_alignment: "50%", y_alignment: "50%", shadow: PREMIUM_TEXT_SHADOW, enter: { type: "scale", start_scale: "68%", duration: 0.7 } },
     { type: "text", track: nt(), time: 0.9, duration: dur(9.1), text: weather.description.charAt(0).toUpperCase() + weather.description.slice(1),
       font_family: "Inter", font_weight: "700", font_size: "44", fill_color: theme.accent,
       x: "50%", y: "51%", x_alignment: "50%", y_alignment: "50%", shadow: PREMIUM_TEXT_SHADOW, enter: { type: "fade", duration: 0.5 } },
