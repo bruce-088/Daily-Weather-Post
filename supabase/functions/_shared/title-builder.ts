@@ -104,6 +104,140 @@ export function expandAllTemplates(inp: TitleTemplateInputs): string[] {
 }
 
 /**
+ * Phase 14A — Urgency & Specificity title formula.
+ *
+ *   {City}: {Specific Detail} - {Hook / Value Prop}
+ *
+ * Body is capped so `[8 AM] ` + body stays under 60 characters for mobile.
+ * Templates deliberately avoid every phrase in BANNED_FRAGMENTS_STRICT /
+ * BANNED_LOCATION_PROXIES ("Weather Update", "Coming Up", "Clear Skies",
+ * "Heads Up", "Not Need", "But Comfortable").
+ */
+export interface TitleContext {
+  feelsLike?: number | null;
+  tomorrowHigh?: number | null;
+  tomorrowLow?: number | null;
+  tomorrowCondition?: string | null;
+  now?: Date;
+}
+
+/** Max characters for the title BODY (slot prefix `[8 AM] ` = 7 chars → ≤60 total). */
+export const TITLE_BODY_BUDGET = 52;
+
+function clampBody(body: string, budget = TITLE_BODY_BUDGET): string {
+  if (body.length <= budget) return body;
+  // Prefer dropping the hook half over truncating mid-word.
+  const dashIdx = body.lastIndexOf(" - ");
+  if (dashIdx > 0 && dashIdx <= budget) return body.slice(0, dashIdx);
+  return body.slice(0, budget - 1).trimEnd() + "…";
+}
+
+/** Weekday in ET (0 = Sunday). */
+function etWeekday(now: Date): number {
+  const s = now.toLocaleDateString("en-US", { weekday: "short", timeZone: "America/New_York" });
+  return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(s);
+}
+
+export interface FormulaTitleResult {
+  body: string;
+  trigger:
+    | "extreme_heat"
+    | "heat"
+    | "extreme_cold"
+    | "cold"
+    | "storm"
+    | "rain"
+    | "snow"
+    | "pattern_change"
+    | "weekend"
+    | "pleasant"
+    | "none";
+}
+
+/**
+ * Deterministic, condition-aware title body. Returns `trigger: "none"` when no
+ * strong signal exists, so callers can fall back to the Phase 10C date-stamped
+ * winner pattern.
+ */
+export function buildFormulaTitleBody(
+  city: string,
+  temp: number,
+  condition: string,
+  rainChance?: number | null,
+  ctx: TitleContext = {},
+): FormulaTitleResult {
+  const now = ctx.now ?? new Date();
+  const t = Math.round(temp);
+  const feels = ctx.feelsLike != null ? Math.round(ctx.feelsLike) : null;
+  const c = (condition || "").toLowerCase();
+  const rain = rainChance ?? null;
+
+  const isStorm = /thunder|storm|tornado|hurricane|squall|hail/.test(c);
+  const isRain = /rain|drizzle|shower/.test(c);
+  const isSnow = /snow|sleet|blizzard|ice/.test(c);
+  const isPleasant = /clear|sun|partly|fair/.test(c) && !isRain && !isStorm;
+
+  const dow = etWeekday(now);
+  const weekendPreview = dow === 4 || dow === 5; // Thu / Fri
+
+  const tHigh = ctx.tomorrowHigh != null ? Math.round(ctx.tomorrowHigh) : null;
+  const delta = tHigh != null ? tHigh - t : 0;
+  const patternChange = tHigh != null && Math.abs(delta) >= 8;
+
+  const mk = (detail: string, hook: string, trigger: FormulaTitleResult["trigger"]) => ({
+    body: clampBody(`${city}: ${detail} - ${hook}`),
+    trigger,
+  });
+
+  // 1. Extreme heat / feels-like heat index
+  if (feels != null && feels >= 100) {
+    return mk(`Feels Like ${feels}°F`, "Stay Cool Tips", "extreme_heat");
+  }
+  if (t >= 95) {
+    return mk(`${t}°F Today`, "Heat Advisory Details", "extreme_heat");
+  }
+  // 2. Severe storms / heavy rain
+  if (isStorm || (rain != null && rain >= 70)) {
+    return mk("Severe Storms", "Timing & Impacts", "storm");
+  }
+  if (isRain || (rain != null && rain > 50)) {
+    return mk(`Rain ${rain != null ? rain + "% Likely" : "Moving In"}`, "Hour-By-Hour Timing", "rain");
+  }
+  // 3. Extreme cold
+  if (t <= 35) {
+    return mk(`${t}°F Freeze Risk`, "What To Protect", "extreme_cold");
+  }
+  if (isSnow) {
+    return mk("Snow Chances", "Timing & Totals", "snow");
+  }
+  // 4. Pattern change (relief / cooling / warm-up)
+  if (patternChange) {
+    return delta <= -8
+      ? mk(`${t}°F Now`, `Relief At ${tHigh}°F Tomorrow`, "pattern_change")
+      : mk("Warm-Up Ahead", `${tHigh}°F By Tomorrow`, "pattern_change");
+  }
+  // 5. Weekend preview (Thu/Fri)
+  if (weekendPreview) {
+    return isPleasant
+      ? mk(`${t}°F & Sunny`, "Weekend Outlook", "weekend")
+      : mk(`${t}°F ${condition}`, "Weekend Outlook", "weekend");
+  }
+  // 6. Hot-but-not-extreme
+  if (t >= 88) {
+    return mk(`${t}°F Hot One`, "When It Peaks", "heat");
+  }
+  if (t <= 45) {
+    return mk(`${t}°F Chill`, "Jacket Or Not", "cold");
+  }
+  // 7. Pleasant
+  if (isPleasant && t >= 68 && t <= 84) {
+    return mk(`Sunny & ${t}°F`, "7-Day Outlook", "pleasant");
+  }
+
+  return { body: buildDateStampedTitle(city, now), trigger: "none" };
+}
+
+/**
  * Runtime title selection. Identical branching to the old per-function
  * implementations in process-scheduled-posts/index.ts and
  * daily-weather-post/index.ts — but the literal pool entries are kept in
@@ -117,6 +251,7 @@ export function buildHookTitle(
   rainChance?: number,
   slot?: string | null,
   callerTag = "title-builder",
+  ctx: TitleContext = {},
 ): string {
   const emoji = getWeatherEmoji(condition);
   const c = (condition || "").toLowerCase();
@@ -193,11 +328,22 @@ export function buildHookTitle(
     pool.push(`${city} Weather Today ${emoji} ${t}° ${condition}`);
   }
 
-  // Phase 10C: 70% weighted selection of the proven date-stamped winner pattern.
-  // Falls back to weather-variety pool 30% of the time to preserve visual variety (Phase 9B).
+  // Phase 14A: urgency/specificity formula wins whenever a strong weather
+  // signal exists (heat, cold, storms, pattern change, weekend preview).
+  // Otherwise fall back to the Phase 10C date-stamped winner (70%) / the
+  // weather-variety pool (30%) so visual variety is preserved.
   const seed = new Date().getDate() * 24 + hour;
-  const useDateStamp = (seed % 10) < 7; // ~70%
-  const baseTitle = useDateStamp ? buildDateStampedTitle(city) : pool[seed % pool.length];
+  const formula = buildFormulaTitleBody(city, temp, condition, rainChance ?? null, ctx);
+  let baseTitle: string;
+  if (formula.trigger !== "none") {
+    baseTitle = formula.body;
+  } else {
+    const useDateStamp = (seed % 10) < 7; // ~70%
+    baseTitle = useDateStamp ? buildDateStampedTitle(city) : pool[seed % pool.length];
+  }
+  console.log(
+    `[title_debug] formula trigger=${formula.trigger} body="${baseTitle}" len=${baseTitle.length}`,
+  );
   const effectiveSlot = slot || "morning";
   try {
     const result = ensureSlotTitlePrefix(baseTitle, effectiveSlot, city);
@@ -227,6 +373,8 @@ export function generateSkyBriefTitle(
   rainChance?: number,
   slot?: string | null,
   callerTag = "title-builder",
+  ctx: TitleContext = {},
 ): string {
-  return buildHookTitle(city, temp, condition, rainChance, slot, callerTag);
+  return buildHookTitle(city, temp, condition, rainChance, slot, callerTag, ctx);
 }
+
